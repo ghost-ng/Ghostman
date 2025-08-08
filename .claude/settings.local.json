@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "WebFetch(domain:www.pythonguis.com)",
+      "WebFetch(domain:stackoverflow.com)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:coderscratchpad.com)",
+      "Bash(dir:*)",
+      "Bash(powershell:*)",
+      "Bash(.venvScriptsActivate.ps1)",
+      "Bash(python:*)",
+      "Bash(\"./venv/Scripts/Activate.ps1\")",
+      "Bash(./venv/Scripts/python.exe ghostman/src/main.py)",
+      "Bash(./venv/Scripts/python.exe -c \"from ghostman.src.services.ai_service import AIService; print(''Import successful'')\")",
+      "Bash(./venv/Scripts/python.exe test_features.py)",
+      "Bash(./venv/Scripts/python.exe test_custom_ai.py:*)",
+      "Bash(venvScriptspython.exe test_themes.py:*)",
+      "Bash(find:*)",
+      "Bash(.venvScriptspython.exe -m ghostman)",
+      "Bash(\"./venv/Scripts/python.exe\" -m ghostman)",
+      "Bash(\"../../venv/Scripts/python.exe\" main.py)",
+      "Bash(\"./venv/Scripts/python.exe\" test_avatar_visibility.py)",
+      "Bash(timeout:*)",
+      "Bash(rm:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": []
+  }
+}
