@@ -1,3 +1,13 @@
+
+
+
+
+IN DEVELOPMENT
+
+
+
+
+
 # Ghostman AI Desktop Assistant
 
 A sleek, privacy-focused AI desktop overlay that brings AI assistance directly to your desktop without requiring admin permissions.
