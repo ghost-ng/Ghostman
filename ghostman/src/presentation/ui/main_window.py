@@ -6,9 +6,9 @@ Provides the avatar interface when in Avatar mode.
 
 import logging
 from typing import Optional
-from PyQt6.QtWidgets import QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QPushButton
-from PyQt6.QtCore import QObject, pyqtSignal, Qt, QPropertyAnimation, QRect, QEasingCurve
-from PyQt6.QtGui import QIcon, QCloseEvent, QPalette, QColor
+from PyQt6.QtWidgets import QMainWindow, QWidget
+from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtGui import QCloseEvent
 
 logger = logging.getLogger("ghostman.main_window")
 
@@ -17,11 +17,7 @@ class MainWindow(QMainWindow):
     """
     Main application window for Avatar mode.
     
-    This is a placeholder implementation that will be expanded with:
-    - Chat interface
-    - AI conversation display
-    - Input controls
-    - Settings access
+    Contains only the avatar widget - REPL is now a separate floating window.
     """
     
     # Signals
@@ -31,9 +27,7 @@ class MainWindow(QMainWindow):
     def __init__(self, app_coordinator):
         super().__init__()
         self.app_coordinator = app_coordinator
-        self.repl_visible = False
-        self.repl_widget = None
-        self.repl_animation = None
+        self.floating_repl = None
         
         self._init_ui()
         self._setup_window()
@@ -41,44 +35,32 @@ class MainWindow(QMainWindow):
         logger.info("MainWindow initialized")
     
     def _init_ui(self):
-        """Initialize the user interface with avatar and REPL."""
+        """Initialize the user interface with only the avatar widget."""
         # Import widgets
         from ..widgets.avatar_widget import AvatarWidget
-        from ..widgets.repl_widget import REPLWidget
+        from ..widgets.floating_repl import FloatingREPLWindow
         
-        # Create main container
-        self.central_widget = QWidget()
-        self.setCentralWidget(self.central_widget)
-        
-        # Create horizontal layout for avatar and REPL
-        self.main_layout = QHBoxLayout(self.central_widget)
-        self.main_layout.setContentsMargins(0, 0, 0, 0)
-        self.main_layout.setSpacing(0)
-        
-        # Create the avatar widget
+        # Create the avatar widget as central widget
         self.avatar_widget = AvatarWidget()
         self.avatar_widget.minimize_requested.connect(self.minimize_requested.emit)
         self.avatar_widget.avatar_clicked.connect(self._toggle_repl)
-        self.main_layout.addWidget(self.avatar_widget)
+        self.setCentralWidget(self.avatar_widget)
         
-        # Create REPL widget (initially hidden)
-        self.repl_widget = REPLWidget()
-        self.repl_widget.minimize_requested.connect(self._hide_repl)
-        self.repl_widget.command_entered.connect(self._on_command_entered)
-        self.repl_widget.setFixedWidth(400)
-        self.repl_widget.hide()
-        self.main_layout.addWidget(self.repl_widget)
+        # Create floating REPL window (initially hidden)
+        self.floating_repl = FloatingREPLWindow()
+        self.floating_repl.closed.connect(self._on_repl_closed)
+        self.floating_repl.command_entered.connect(self._on_command_entered)
         
         # Set window background
         self._set_window_style()
         
-        logger.debug("UI components initialized")
+        logger.debug("UI components initialized - avatar only, REPL is floating")
     
     def _setup_window(self):
         """Setup window properties."""
-        self.setWindowTitle("Ghostman - AI Desktop Assistant")
-        self.setMinimumSize(150, 150)
-        self.resize(200, 200)  # Much smaller window
+        self.setWindowTitle("Spector - AI Assistant")
+        self.setMinimumSize(90, 90)
+        self.resize(120, 120)  # 40% smaller (200 * 0.6 = 120)
         
         # Make window frameless for a cleaner look
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
@@ -114,10 +96,17 @@ class MainWindow(QMainWindow):
             x = screen_geometry.right() - window_geometry.width() - padding
             y = screen_geometry.bottom() - window_geometry.height() - padding
             
+            logger.debug(f'Positioning window: screen={screen_geometry}, window_geometry={window_geometry}')
+            logger.debug(f'Final position: ({x}, {y})')
             self.move(x, y)
     
     def closeEvent(self, event: QCloseEvent):
         """Handle window close event."""
+        # Hide floating REPL if it's visible
+        if self.floating_repl and self.floating_repl.isVisible():
+            self.floating_repl.hide()
+            logger.debug("Floating REPL hidden due to window close")
+        
         # Don't actually close, just minimize to tray
         event.ignore()
         self.hide()
@@ -133,44 +122,53 @@ class MainWindow(QMainWindow):
     
     def minimize_to_tray(self):
         """Minimize the window to system tray."""
+        # Hide floating REPL if it's visible
+        if self.floating_repl and self.floating_repl.isVisible():
+            self.floating_repl.hide()
+            logger.debug("Floating REPL hidden due to minimize to tray")
+        
         self.hide()
         self.minimize_requested.emit()
         logger.debug("Window minimized to tray")
     
     def _toggle_repl(self):
-        """Toggle REPL visibility with animation."""
-        if self.repl_visible:
+        """Toggle floating REPL visibility."""
+        if self.floating_repl.isVisible():
             self._hide_repl()
         else:
             self._show_repl()
     
     def _show_repl(self):
-        """Show the REPL interface."""
-        if not self.repl_visible:
-            # Adjust window size
-            current_size = self.size()
-            new_width = current_size.width() + 400
-            self.resize(new_width, current_size.height())
+        """Show the floating REPL positioned relative to avatar - avatar never moves."""
+        # Get current avatar position and screen info
+        avatar_pos = self.pos()
+        avatar_size = (self.width(), self.height())
+        screen = self.screen()
+        
+        logger.debug(f'Showing floating REPL: avatar at {avatar_pos}, size {avatar_size}')
+        
+        if screen:
+            screen_geometry = screen.availableGeometry()
             
-            # Show REPL
-            self.repl_widget.show()
-            self.repl_visible = True
+            # Position REPL relative to avatar (avatar position unchanged)
+            self.floating_repl.position_relative_to_avatar(
+                avatar_pos, avatar_size, screen_geometry
+            )
             
-            logger.debug("REPL interface shown")
+            # Show and activate the REPL
+            self.floating_repl.show_and_activate()
+            
+            logger.debug(f'Floating REPL shown, avatar remains at: {self.pos()}')
     
     def _hide_repl(self):
-        """Hide the REPL interface."""
-        if self.repl_visible:
-            # Hide REPL
-            self.repl_widget.hide()
-            self.repl_visible = False
-            
-            # Adjust window size
-            current_size = self.size()
-            new_width = current_size.width() - 400
-            self.resize(new_width, current_size.height())
-            
-            logger.debug("REPL interface hidden")
+        """Hide the floating REPL - avatar position completely unaffected."""
+        logger.debug(f'Hiding floating REPL, avatar at: {self.pos()}')
+        self.floating_repl.hide()
+        logger.debug(f'Floating REPL hidden, avatar still at: {self.pos()}')
+    
+    def _on_repl_closed(self):
+        """Handle floating REPL window being closed."""
+        logger.debug(f'Floating REPL closed by user, avatar remains at: {self.pos()}')
     
     def _on_command_entered(self, command: str):
         """Handle command from REPL."""

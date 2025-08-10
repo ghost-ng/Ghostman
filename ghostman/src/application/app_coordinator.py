@@ -182,8 +182,13 @@ class AppCoordinator(QObject):
             logger.debug("Main window shown")
     
     def _hide_main_window(self):
-        """Hide the main window."""
+        """Hide the main window and any floating REPL."""
         if self._main_window:
+            # Hide floating REPL if it's visible
+            if hasattr(self._main_window, 'floating_repl') and self._main_window.floating_repl and self._main_window.floating_repl.isVisible():
+                self._main_window.floating_repl.hide()
+                logger.debug("Floating REPL hidden due to main window hide")
+            
             self._main_window.hide()
             logger.debug("Main window hidden")
     
