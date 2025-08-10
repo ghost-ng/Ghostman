@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
     QLineEdit, QPushButton, QLabel, QFrame
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread, QObject
 from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QColor, QPalette
 
 # Settings import (percent-based opacity)
@@ -167,12 +167,19 @@ class REPLWidget(QWidget):
     
     def _apply_styles(self):
         """(Re)apply stylesheet using current panel opacity for background only."""
+        logger.debug(f"🎨 Applying REPL styles with opacity: {self._panel_opacity:.3f}")
+        
         # Clamp opacity
         alpha = max(0.0, min(1.0, self._panel_opacity))
         panel_bg = f"rgba(30, 30, 30, {alpha:.3f})"
         # Use the same alpha for text areas - no additional reduction
         textedit_bg = f"rgba(20, 20, 20, {alpha:.3f})"
         lineedit_bg = f"rgba(40, 40, 40, {alpha:.3f})"
+        
+        logger.debug(f"🎨 CSS colors generated:")
+        logger.debug(f"  📦 Panel background: {panel_bg}")
+        logger.debug(f"  📝 Text area background: {textedit_bg}")
+        logger.debug(f"  ⌨️  Input background: {lineedit_bg}")
         self.setStyleSheet(f"""
             #repl-root {{
                 background-color: {panel_bg};
@@ -203,13 +210,23 @@ class REPLWidget(QWidget):
         Args:
             opacity: 0.0 (fully transparent) to 1.0 (fully opaque) for panel background.
         """
+        logger.info(f"🎨 REPL panel opacity change requested: {opacity:.3f}")
+        
         if not isinstance(opacity, (float, int)):
+            logger.error(f"❌ Invalid opacity type: {type(opacity)} (expected float/int)")
             return
+            
+        old_val = self._panel_opacity
         new_val = max(0.0, min(1.0, float(opacity)))
+        
         if abs(new_val - self._panel_opacity) < 0.001:
+            logger.debug(f"🎨 Opacity unchanged: {old_val:.3f} -> {new_val:.3f} (difference < 0.001)")
             return
+            
+        logger.info(f"🎨 Applying panel opacity: {old_val:.3f} -> {new_val:.3f}")
         self._panel_opacity = new_val
         self._apply_styles()
+        logger.info(f"✅ REPL panel opacity applied successfully: {new_val:.3f}")
     
     def eventFilter(self, obj, event):
         """Event filter for command input navigation."""
@@ -312,12 +329,8 @@ class REPLWidget(QWidget):
             self.append_output("Use system tray menu to quit application", "warning")
         
         else:
-            # This would be sent to AI
-            self.append_output("Processing with AI...", "system")
-            # Placeholder for AI response
-            QTimer.singleShot(500, lambda: self.append_output(
-                f"AI: I received your message: '{command}'", "response"
-            ))
+            # Send to AI service
+            self._send_to_ai(command)
     
     def append_output(self, text: str, style: str = "normal"):
         """
@@ -353,3 +366,103 @@ class REPLWidget(QWidget):
     def clear_output(self):
         """Clear the output display."""
         self.output_display.clear()
+    
+    def _send_to_ai(self, message: str):
+        """Send message to AI service and handle response."""
+        self.append_output("Processing with AI...", "system")
+        
+        # Disable input while processing
+        self.command_input.setEnabled(False)
+        
+        # Create AI worker thread
+        class AIWorker(QObject):
+            response_received = pyqtSignal(str, bool)  # response, success
+            
+            def __init__(self, message):
+                super().__init__()
+                self.message = message
+            
+            def run(self):
+                try:
+                    from ...infrastructure.ai.ai_service import AIService
+                    
+                    # Get or create AI service instance
+                    ai_service = self._get_ai_service()
+                    
+                    if not ai_service or not ai_service.is_initialized:
+                        self.response_received.emit(
+                            "❌ AI service not available. Please configure AI settings first.", 
+                            False
+                        )
+                        return
+                    
+                    # Send message to AI
+                    result = ai_service.send_message(self.message)
+                    
+                    if result['success']:
+                        self.response_received.emit(result['response'], True)
+                    else:
+                        error_msg = f"❌ AI Error: {result.get('error', 'Unknown error')}"
+                        self.response_received.emit(error_msg, False)
+                        
+                except Exception as e:
+                    logger.error(f"AI worker error: {e}")
+                    self.response_received.emit(f"❌ Error: {str(e)}", False)
+            
+            def _get_ai_service(self):
+                """Get or create AI service instance."""
+                try:
+                    # Try to get global AI service if available
+                    from ...application.app_coordinator import AppCoordinator
+                    # This would require adding AI service to coordinator
+                    # For now, create a new instance
+                    
+                    from ...infrastructure.ai.ai_service import AIService
+                    ai_service = AIService()
+                    
+                    # Initialize with current settings
+                    if ai_service.initialize():
+                        return ai_service
+                    else:
+                        return None
+                        
+                except ImportError:
+                    logger.error("AI service not available")
+                    return None
+                except Exception as e:
+                    logger.error(f"Failed to get AI service: {e}")
+                    return None
+        
+        # Create and start worker thread
+        self.ai_thread = QThread()
+        self.ai_worker = AIWorker(message)
+        self.ai_worker.moveToThread(self.ai_thread)
+        
+        # Connect signals
+        self.ai_thread.started.connect(self.ai_worker.run)
+        self.ai_worker.response_received.connect(self._on_ai_response)
+        self.ai_worker.response_received.connect(self.ai_thread.quit)
+        self.ai_worker.response_received.connect(self.ai_worker.deleteLater)
+        self.ai_thread.finished.connect(self.ai_thread.deleteLater)
+        
+        # Start processing
+        self.ai_thread.start()
+    
+    def _on_ai_response(self, response: str, success: bool):
+        """Handle AI response."""
+        # Re-enable input
+        self.command_input.setEnabled(True)
+        self.command_input.setFocus()
+        
+        # Display response
+        if success:
+            self.append_output(f"🤖 Spector: {response}", "response")
+        else:
+            self.append_output(response, "error")
+        
+        logger.debug(f"AI response displayed: success={success}")
+    
+    def set_ai_service(self, ai_service):
+        """Set the AI service instance (if available from coordinator)."""
+        self._ai_service = ai_service
+        logger.debug("AI service set for REPL widget")

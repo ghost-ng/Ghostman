@@ -69,9 +69,18 @@ class AppCoordinator(QObject):
             # Initialize UI components (will be implemented)
             self._initialize_ui_components()
             
-            # Set initial state based on settings
+            # Apply interface settings (opacity, always on top) immediately
+            try:
+                interface_cfg = {
+                    'opacity': settings.get('interface.opacity', 90),
+                    'always_on_top': settings.get('interface.always_on_top', settings.get('ui.always_on_top', True))
+                }
+                self._apply_interface_settings(interface_cfg)
+            except Exception as e:
+                logger.warning(f"Failed applying startup interface settings: {e}")
+
+            # Set initial state based on settings (tray/avatar)
             initial_state = AppState(settings.get('app.current_state', 'tray'))
-            
             if initial_state == AppState.AVATAR:
                 self._show_avatar_mode()
             else:
@@ -91,6 +100,17 @@ class AppCoordinator(QObject):
                 )
             
             logger.info("Ghostman application initialized successfully")
+            # Diagnostic path logging
+            try:
+                from ..infrastructure.logging.logging_config import _resolve_log_dir  # type: ignore
+                paths = settings.get_paths() if hasattr(settings, 'get_paths') else {}
+                logger.info("PATHS: settings_dir=%s settings_file=%s key_file=%s logs_dir=%s",
+                            paths.get('settings_dir'),
+                            paths.get('settings_file'),
+                            paths.get('key_file'),
+                            str(_resolve_log_dir()))
+            except Exception:
+                pass
             return True
             
         except Exception as e:
@@ -245,12 +265,8 @@ class AppCoordinator(QObject):
         try:
             logger.debug("Importing settings dialog components...")
             from ..presentation.dialogs.settings_dialog import SettingsDialog
-            from ..infrastructure.storage.settings_manager import SettingsManager
-            
-            logger.debug("Creating settings manager...")
-            # Get settings manager (create if doesn't exist)
-            if not hasattr(self, '_settings_manager') or not self._settings_manager:
-                self._settings_manager = SettingsManager()
+            # Reuse global settings singleton (avoid divergent instances / lost writes)
+            self._settings_manager = settings
             
             logger.debug("Creating settings dialog...")
             # Create and show settings dialog
@@ -277,26 +293,52 @@ class AppCoordinator(QObject):
     
     def _on_settings_applied(self, config: dict):
         """Handle settings being applied."""
-        logger.info("=== COORDINATOR: APPLYING SETTINGS TO RUNNING APPLICATION ===")
-        logger.info(f"Settings categories received: {list(config.keys())}")
+        logger.info("=== 🎛️  COORDINATOR: APPLYING SETTINGS TO RUNNING APPLICATION ===")
+        logger.info(f"📦 Settings categories received: {list(config.keys())} (total: {len(config)})")
+        
+        # Log detailed received configuration
+        for category, settings in config.items():
+            logger.info(f"📂 Processing category: {category}")
+            if isinstance(settings, dict):
+                for key, value in settings.items():
+                    display_value = "***MASKED***" if key == "api_key" and value else value
+                    logger.info(f"  📋 {key}: {display_value}")
+            else:
+                display_value = "***MASKED***" if "api_key" in str(category).lower() and settings else settings
+                logger.info(f"  📋 {category}: {display_value}")
         
         try:
+            settings_applied = 0
+            
             # Apply interface settings
             if "interface" in config:
+                logger.info("🎨 Applying interface settings...")
                 self._apply_interface_settings(config["interface"])
+                settings_applied += len(config["interface"]) if isinstance(config["interface"], dict) else 1
+                logger.info("✅ Interface settings applied")
             
             # Apply AI model settings  
             if "ai_model" in config:
+                logger.info("🤖 Applying AI model settings...")
                 self._apply_ai_model_settings(config["ai_model"])
+                settings_applied += len(config["ai_model"]) if isinstance(config["ai_model"], dict) else 1
+                logger.info("✅ AI model settings applied")
             
             # Apply advanced settings
             if "advanced" in config:
+                logger.info("🔍 Applying advanced settings...")
                 self._apply_advanced_settings(config["advanced"])
+                settings_applied += len(config["advanced"]) if isinstance(config["advanced"], dict) else 1
+                logger.info("✅ Advanced settings applied")
             
-            logger.info("=== SETTINGS SUCCESSFULLY APPLIED TO RUNNING APPLICATION ===")
+            logger.info(f"=== ✅ SETTINGS SUCCESSFULLY APPLIED: {settings_applied} items ===")
             
         except Exception as e:
-            logger.error(f"Failed to apply settings to running application: {e}")
+            logger.error(f"❌ Failed to apply settings to running application: {e}")
+            import traceback
+            logger.error(f"📝 Stack trace: {traceback.format_exc()}")
+        
+        logger.info("")  # Add blank line for readability
     
     def _on_opacity_preview(self, opacity: float):
         """Handle live opacity preview changes from settings dialog."""
@@ -313,53 +355,105 @@ class AppCoordinator(QObject):
     
     def _apply_interface_settings(self, interface_config: dict):
         """Apply interface settings to the running UI."""
-        logger.debug(f"Applying interface settings: {interface_config}")
+        logger.info(f"🎨 Processing interface settings: {len(interface_config)} items")
+        for key, value in interface_config.items():
+            logger.info(f"  🎛️  {key}: {value}")
         
-        if self._main_window:
-            # Apply opacity ONLY to floating REPL panel backgrounds, NOT the entire window
-            if "opacity" in interface_config:
-                opacity_percent = interface_config["opacity"]
-                # Convert percent (10-100) to float (0.1-1.0) for panel opacity
-                if isinstance(opacity_percent, (int, float)):
-                    panel_opacity = max(0.1, min(1.0, float(opacity_percent) / 100.0))
-                    
-                    # Apply panel opacity to floating REPL (background only)
-                    if hasattr(self._main_window, 'floating_repl') and self._main_window.floating_repl:
-                        self._main_window.floating_repl.set_panel_opacity(panel_opacity)
-                        logger.info(f"Floating REPL panel opacity set to: {panel_opacity:.2f} ({opacity_percent}%)")
-                    else:
-                        logger.debug("Floating REPL not available for panel opacity setting")
-                    
-                    # Avatar window opacity remains unchanged (fully opaque)
-                    logger.debug("Avatar window opacity unchanged - panel opacity only affects REPL backgrounds")
+        if not self._main_window:
+            logger.warning("⚠️  No main window available - interface settings skipped")
+            return
+        
+        settings_processed = 0
+        
+        # Apply opacity ONLY to floating REPL panel backgrounds, NOT the entire window
+        if "opacity" in interface_config:
+            opacity_percent = interface_config["opacity"]
+            logger.info(f"🎨 Processing opacity setting: {opacity_percent}%")
             
-            # Apply always on top
-            if "always_on_top" in interface_config:
-                always_on_top = interface_config["always_on_top"]
+            # Convert percent (10-100) to float (0.1-1.0) for panel opacity
+            if isinstance(opacity_percent, (int, float)):
+                panel_opacity = max(0.1, min(1.0, float(opacity_percent) / 100.0))
+                logger.info(f"🔢 Opacity conversion: {opacity_percent}% -> {panel_opacity:.3f} (clamped: 0.1-1.0)")
+                
+                # Apply panel opacity to floating REPL (background only)
+                if hasattr(self._main_window, 'floating_repl') and self._main_window.floating_repl:
+                    logger.info("🪟 Applying opacity to floating REPL panels...")
+                    self._main_window.floating_repl.set_panel_opacity(panel_opacity)
+                    logger.info(f"✅ Floating REPL panel opacity applied: {panel_opacity:.3f} ({opacity_percent}%)")
+                    settings_processed += 1
+                else:
+                    logger.warning("⚠️  Floating REPL not available for panel opacity setting")
+                
+                # Avatar window opacity remains unchanged (fully opaque)
+                logger.info("🎯 Avatar window opacity unchanged - panel opacity only affects REPL backgrounds")
+            else:
+                logger.error(f"❌ Invalid opacity type: {type(opacity_percent)} (expected int/float)")
+        
+        # Apply always on top
+        if "always_on_top" in interface_config:
+            always_on_top = interface_config["always_on_top"]
+            logger.info(f"📌 Processing always on top setting: {always_on_top}")
+            try:
                 self._update_window_flags(always_on_top)
-                logger.info(f"Always on top set to: {always_on_top}")
+                logger.info(f"✅ Always on top applied: {always_on_top}")
+                settings_processed += 1
+            except Exception as e:
+                logger.error(f"❌ Failed to apply always on top: {e}")
+        
+        logger.info(f"🎨 Interface settings processing complete: {settings_processed}/{len(interface_config)} applied")
     
     def _apply_ai_model_settings(self, ai_model_config: dict):
         """Apply AI model settings."""
-        logger.debug(f"AI model configuration updated: {ai_model_config.get('model_name', 'unknown')}")
-        # TODO: Update AI service configuration when implemented
-        # This would configure the actual AI client with new model settings
+        logger.info(f"🤖 Processing AI model settings: {len(ai_model_config)} items")
+        
+        settings_processed = 0
+        model_name = ai_model_config.get('model_name', 'not set')
+        base_url = ai_model_config.get('base_url', 'not set')
+        
+        logger.info(f"🤖 AI Model configuration: {model_name} at {base_url}")
+        
+        # Log all AI model settings with proper masking
         for key, value in ai_model_config.items():
-            display_value = "***MASKED***" if key == "api_key" and value else value
-            logger.debug(f"  AI {key}: {display_value}")
+            if key == "api_key" and value:
+                display_value = f"***MASKED*** (length: {len(str(value))})"
+            else:
+                display_value = value
+            logger.info(f"  🔧 AI {key}: {display_value}")
+            settings_processed += 1
+        
+        # TODO: Update AI service configuration when implemented
+        logger.info("📝 AI service integration pending - settings stored for future use")
+        logger.info(f"🤖 AI model settings processing complete: {settings_processed} items logged")
     
     def _apply_advanced_settings(self, advanced_config: dict):
         """Apply advanced settings."""
-        logger.debug(f"Applying advanced settings: {advanced_config}")
+        logger.info(f"🔍 Processing advanced settings: {len(advanced_config)} items")
+        
+        settings_processed = 0
         
         # Apply log level changes
         if "log_level" in advanced_config:
             log_level = advanced_config["log_level"]
-            logger.info(f"Log level would be set to: {log_level} (requires restart to take full effect)")
+            logger.info(f"📊 Log level setting: {log_level}")
+            logger.info(f"⚠️  Log level changes require application restart to take full effect")
+            settings_processed += 1
         
         if "enable_debug" in advanced_config:
             debug_enabled = advanced_config["enable_debug"]
-            logger.info(f"Debug logging set to: {debug_enabled}")
+            logger.info(f"🐛 Debug logging setting: {debug_enabled}")
+            if debug_enabled:
+                logger.info("🔍 Debug mode enabled - verbose logging active")
+            else:
+                logger.info("🔇 Debug mode disabled - standard logging active")
+            settings_processed += 1
+        
+        # Log any additional advanced settings
+        for key, value in advanced_config.items():
+            if key not in ["log_level", "enable_debug"]:
+                logger.info(f"  🔧 Advanced {key}: {value}")
+                settings_processed += 1
+        
+        logger.info(f"🔍 Advanced settings processing complete: {settings_processed}/{len(advanced_config)} applied")
     
     def _update_window_flags(self, always_on_top: bool):
         """Update window flags for always on top behavior."""

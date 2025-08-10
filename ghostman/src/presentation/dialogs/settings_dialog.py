@@ -360,25 +360,102 @@ class SettingsDialog(QDialog):
         """Test the AI model connection."""
         self.test_btn.setEnabled(False)
         self.test_status_label.setText("Testing...")
+        self.test_status_label.setStyleSheet("color: orange;")
         
-        # TODO: Implement actual connection test
-        # For now, just simulate a test
-        from PyQt6.QtCore import QTimer
+        # Get current configuration
+        config = {
+            'model_name': self.model_name_edit.text().strip(),
+            'base_url': self.base_url_edit.text().strip(),
+            'api_key': self.api_key_edit.text().strip(),
+            'temperature': self.temperature_spin.value(),
+            'max_tokens': self.max_tokens_spin.value(),
+        }
         
-        def finish_test():
-            self.test_btn.setEnabled(True)
-            if self.model_name_edit.text() and self.base_url_edit.text():
-                self.test_status_label.setText("✅ Connection successful")
-                self.test_status_label.setStyleSheet("color: green;")
-            else:
-                self.test_status_label.setText("❌ Missing configuration")
-                self.test_status_label.setStyleSheet("color: red;")
+        # Validate required fields
+        if not config['model_name'] or not config['base_url']:
+            self._finish_test(False, "❌ Missing model name or base URL")
+            return
         
-        QTimer.singleShot(1500, finish_test)
+        # Run test in a separate thread to avoid blocking UI
+        from PyQt6.QtCore import QThread, QObject, pyqtSignal
+        
+        class ConnectionTester(QObject):
+            finished = pyqtSignal(bool, str, dict)
+            
+            def __init__(self, config):
+                super().__init__()
+                self.config = config
+            
+            def run(self):
+                try:
+                    from ...infrastructure.ai.ai_service import AIService
+                    
+                    # Create temporary AI service for testing
+                    service = AIService()
+                    success = service.initialize(self.config)
+                    
+                    if success:
+                        # Test the actual connection
+                        result = service.test_connection()
+                        service.shutdown()
+                        
+                        if result['success']:
+                            self.finished.emit(True, "✅ Connection successful", result.get('details', {}))
+                        else:
+                            self.finished.emit(False, f"❌ {result['message']}", {})
+                    else:
+                        self.finished.emit(False, "❌ Failed to initialize AI service", {})
+                        
+                except Exception as e:
+                    logger.error(f"Connection test error: {e}")
+                    self.finished.emit(False, f"❌ Error: {str(e)}", {})
+        
+        # Create worker and thread
+        self.test_thread = QThread()
+        self.test_worker = ConnectionTester(config)
+        self.test_worker.moveToThread(self.test_thread)
+        
+        # Connect signals
+        self.test_thread.started.connect(self.test_worker.run)
+        self.test_worker.finished.connect(self._on_test_finished)
+        self.test_worker.finished.connect(self.test_thread.quit)
+        self.test_worker.finished.connect(self.test_worker.deleteLater)
+        self.test_thread.finished.connect(self.test_thread.deleteLater)
+        
+        # Start the test
+        self.test_thread.start()
         logger.debug("Connection test initiated")
     
+    def _on_test_finished(self, success: bool, message: str, details: dict):
+        """Handle connection test completion."""
+        self._finish_test(success, message)
+        
+        if details and logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"Connection test details: {details}")
+    
+    def _finish_test(self, success: bool, message: str):
+        """Finish the connection test and update UI."""
+        self.test_btn.setEnabled(True)
+        self.test_status_label.setText(message)
+        
+        if success:
+            self.test_status_label.setStyleSheet("color: green; font-weight: bold;")
+        else:
+            self.test_status_label.setStyleSheet("color: red; font-weight: bold;")
+        
+        logger.info(f"Connection test completed: {success} - {message}")
+    
     def _get_config_dir(self) -> str:
-        """Get the configuration directory path."""
+        """Get the configuration directory path (aligned with SettingsManager)."""
+        try:
+            if self.settings_manager and hasattr(self.settings_manager, 'settings_dir'):
+                # settings_dir already points to Ghostman/configs
+                path = str(self.settings_manager.settings_dir)
+                os.makedirs(path, exist_ok=True)
+                return path
+        except Exception:
+            pass
+        # Fallback to previous logic
         app_data = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
         config_dir = os.path.join(app_data, "Ghostman", "configs")
         os.makedirs(config_dir, exist_ok=True)
@@ -486,7 +563,9 @@ class SettingsDialog(QDialog):
         if "base_url" in ai_config:
             self.base_url_edit.setText(str(ai_config["base_url"]))
         if "api_key" in ai_config:
-            self.api_key_edit.setText(str(ai_config["api_key"]))
+            # Use settings.get() to properly decrypt the API key
+            decrypted_key = self.settings_manager.get("ai_model.api_key", "")
+            self.api_key_edit.setText(str(decrypted_key))
         if "temperature" in ai_config:
             try:
                 self.temperature_spin.setValue(float(ai_config["temperature"]))
@@ -557,43 +636,118 @@ class SettingsDialog(QDialog):
     
     def _load_current_settings(self):
         """Load current settings from settings manager."""
+        logger.info("=== 📥 LOADING SETTINGS FROM STORAGE ===")
+        
         # Load existing settings if available
-        current_settings = self.settings_manager.get_all() if self.settings_manager else {}
-        if current_settings:
-            self._apply_config_to_ui(current_settings)
+        if self.settings_manager:
+            try:
+                current_settings = self.settings_manager.get_all()
+                if current_settings:
+                    logger.info(f"📦 Loaded {len(current_settings)} settings categories from storage")
+                    
+                    # Log all loaded settings
+                    for category, settings in current_settings.items():
+                        if isinstance(settings, dict):
+                            logger.info(f"📂 Loaded category: {category} ({len(settings)} items)")
+                            for key, value in settings.items():
+                                display_value = "***MASKED***" if key == "api_key" and value else value
+                                value_type = type(value).__name__
+                                logger.info(f"  📥 {key}: {display_value} (type: {value_type})")
+                        else:
+                            # Handle flat settings structure
+                            display_value = "***MASKED***" if "api_key" in str(category).lower() and settings else settings
+                            logger.info(f"📥 Flat setting: {category} = {display_value}")
+                    
+                    logger.info("🔄 Applying loaded settings to UI...")
+                    self._apply_config_to_ui(current_settings)
+                    logger.info("✅ Settings applied to UI successfully")
+                else:
+                    logger.info("📦 No existing settings found in storage")
+                    self._set_default_values()
+            except Exception as e:
+                logger.error(f"❌ Failed to load settings from storage: {e}")
+                self._set_default_values()
         else:
-            # Set default system prompt
-            default_prompt = "You are Spector, a helpful AI assistant integrated into a desktop overlay application. Be concise, friendly, and helpful."
-            self.system_prompt_edit.setPlainText(default_prompt)
+            logger.warning("⚠️  No settings manager available - using defaults")
+            self._set_default_values()
+        
+        logger.info("=== 📥 SETTINGS LOADING COMPLETE ===")
+        logger.info("")  # Add blank line for readability
+    
+    def _set_default_values(self):
+        """Set default values when no settings are available."""
+        logger.info("🔧 Setting default values...")
+        # Set default system prompt
+        default_prompt = "You are Spector, a helpful AI assistant integrated into a desktop overlay application. Be concise, friendly, and helpful."
+        self.system_prompt_edit.setPlainText(default_prompt)
+        logger.info(f"📝 Set default system prompt (length: {len(default_prompt)})")
+        logger.info(f"🎨 Using default opacity: {self.opacity_percent_spin.value()}%")
+        logger.info("✅ Default values set")
     
     def _apply_settings(self):
         """Apply settings without closing dialog."""
-        logger.debug("=== APPLYING SETTINGS ===")
+        logger.info("=== APPLYING SETTINGS - DETAILED LOG ===")
         config = self._get_current_config()
         self.current_config = config
         
-        # Log all settings being applied
+        # Log all settings being applied with detailed information
+        logger.info(f"Total settings categories: {len(config)}")
         for category, settings in config.items():
-            logger.debug(f"Category: {category}")
+            logger.info(f"📂 Category: {category} ({len(settings)} items)")
             for key, value in settings.items():
                 # Mask API key for logging
-                display_value = "***MASKED***" if key == "api_key" and value else value
-                logger.debug(f"  {key}: {display_value}")
+                if key == "api_key" and value:
+                    display_value = f"***MASKED*** (length: {len(str(value))})"
+                else:
+                    display_value = value
+                    
+                # Add type information for better debugging
+                value_type = type(value).__name__
+                logger.info(f"  🔧 {key}: {display_value} (type: {value_type})")
+        
+        logger.info("=== SETTINGS VALUES CAPTURED ===")
+        
+        # Log validation and conversion details
+        if "interface" in config:
+            opacity = config["interface"].get("opacity", "not set")
+            logger.info(f"🎨 Interface opacity validation: {opacity}% -> {opacity/100.0 if isinstance(opacity, (int, float)) else 'invalid'}")
+        
+        if "ai_model" in config:
+            model_name = config["ai_model"].get("model_name", "not set")
+            base_url = config["ai_model"].get("base_url", "not set")
+            logger.info(f"🤖 AI Model config: {model_name} at {base_url}")
+        
+        if "advanced" in config:
+            log_level = config["advanced"].get("log_level", "not set")
+            debug_enabled = config["advanced"].get("enable_debug", "not set")
+            logger.info(f"🔍 Advanced config: log_level={log_level}, debug={debug_enabled}")
         
         if self.settings_manager:
+            logger.info("💾 SAVING SETTINGS TO STORAGE")
             # Save to settings manager
+            saved_count = 0
             for category, settings in config.items():
                 for key, value in settings.items():
                     full_key = f"{category}.{key}"
-                    self.settings_manager.set(full_key, value)
-                    logger.debug(f"Saved setting: {full_key}")
+                    try:
+                        self.settings_manager.set(full_key, value)
+                        display_value = "***MASKED***" if key == "api_key" and value else value
+                        logger.info(f"  ✅ Saved: {full_key} = {display_value}")
+                        saved_count += 1
+                    except Exception as e:
+                        logger.error(f"  ❌ Failed to save {full_key}: {e}")
+            logger.info(f"💾 Settings storage complete: {saved_count} items saved")
+        else:
+            logger.warning("⚠️  No settings manager available - settings not persisted")
         
         # Emit signal with detailed config
-        logger.info(f"Emitting settings_applied signal with {len(config)} categories")
+        logger.info(f"📡 Emitting settings_applied signal with {len(config)} categories")
+        logger.info("📡 Signal payload categories: " + ", ".join(config.keys()))
         self.settings_applied.emit(config)
         
         QMessageBox.information(self, "Settings Applied", "Settings have been applied successfully.")
-        logger.info("=== SETTINGS APPLICATION COMPLETE ===")
+        logger.info("=== ✅ SETTINGS APPLICATION COMPLETE ===")
+        logger.info("")  # Add blank line for readability
     
     def _ok_clicked(self):
         """Handle OK button click."""

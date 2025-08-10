@@ -10,8 +10,12 @@ import json
 import os
 import sys
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from pathlib import Path
+try:  # Optional import (PyQt may not be present in some tooling contexts)
+    from PyQt6.QtCore import QStandardPaths  # type: ignore
+except Exception:  # pragma: no cover
+    QStandardPaths = None
 
 
 class JSONFormatter(logging.Formatter):
@@ -43,7 +47,40 @@ class JSONFormatter(logging.Formatter):
         return json.dumps(log_entry, ensure_ascii=False)
 
 
-def setup_logging(debug: bool = False, log_dir: str = None) -> None:
+def _resolve_log_dir() -> Path:
+    """Determine the unified log directory under AppData/Ghostman/logs.
+
+    Mirrors SettingsManager path conventions (Ghostman/configs sibling directory).
+    """
+    # Prefer Qt AppDataLocation for consistent cross‑platform behavior
+    base_path: Path | None = None
+    try:
+        if QStandardPaths:
+            base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
+            if base:
+                base_path = Path(base)
+    except Exception:  # pragma: no cover
+        base_path = None
+
+    if base_path is None:
+        # Fallback: LOCALAPPDATA on Windows, ~/.local/share on *nix
+        if os.name == 'nt':
+            base_env = os.environ.get('LOCALAPPDATA', str(Path.home()))
+            base_path = Path(base_env)
+        else:
+            base_path = Path.home() / '.local' / 'share'
+
+    # Avoid double Ghostman nesting
+    if base_path.name.lower() == 'ghostman':
+        ghostman_root = base_path
+    else:
+        ghostman_root = base_path / 'Ghostman'
+    log_dir = ghostman_root / 'logs'
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir
+
+
+def setup_logging(debug: bool = False, log_dir: str | None = None) -> None:
     """
     Setup logging configuration for Ghostman.
     
@@ -52,14 +89,12 @@ def setup_logging(debug: bool = False, log_dir: str = None) -> None:
         log_dir: Directory for log files (defaults to user data dir)
     """
     # Determine log directory
-    if not log_dir:
-        if os.name == 'nt':  # Windows
-            log_dir = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Ghostman', 'logs')
-        else:  # Unix-like
-            log_dir = os.path.join(os.path.expanduser('~'), '.local', 'share', 'ghostman', 'logs')
-    
-    # Create log directory
-    Path(log_dir).mkdir(parents=True, exist_ok=True)
+    if log_dir:
+        log_dir_path = Path(log_dir)
+        log_dir_path.mkdir(parents=True, exist_ok=True)
+    else:
+        log_dir_path = _resolve_log_dir()
+        log_dir = str(log_dir_path)
     
     # Root logger configuration
     root_logger = logging.getLogger()
@@ -78,7 +113,7 @@ def setup_logging(debug: bool = False, log_dir: str = None) -> None:
     root_logger.addHandler(console_handler)
     
     # File handler with JSON format
-    log_file = os.path.join(log_dir, 'ghostman.log')
+    log_file = str(log_dir_path / 'ghostman.log')
     file_handler = logging.handlers.RotatingFileHandler(
         log_file,
         maxBytes=10*1024*1024,  # 10MB
@@ -90,7 +125,7 @@ def setup_logging(debug: bool = False, log_dir: str = None) -> None:
     root_logger.addHandler(file_handler)
     
     # Error file handler
-    error_file = os.path.join(log_dir, 'ghostman_errors.log')
+    error_file = str(log_dir_path / 'ghostman_errors.log')
     error_handler = logging.handlers.RotatingFileHandler(
         error_file,
         maxBytes=5*1024*1024,  # 5MB
@@ -116,7 +151,7 @@ def get_performance_logger() -> logging.Logger:
     return logging.getLogger("ghostman.performance")
 
 
-def log_performance(operation: str, duration: float, metadata: Dict[str, Any] = None):
+def log_performance(operation: str, duration: float, metadata: Optional[Dict[str, Any]] = None):
     """
     Log performance metrics.
     
