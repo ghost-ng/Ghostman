@@ -98,11 +98,11 @@ class EnhancedSystemTray(QObject):
     
     def _create_default_icon(self) -> QIcon:
         """Create a default icon if no icon file is available."""
-        # Try to load icon from assets
+        # Try to load icon from assets - prioritize avatar.png
         icon_paths = [
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", "assets", "avatar.png"),
             os.path.join(os.path.dirname(__file__), "..", "..", "..", "assets", "icon.png"),
-            os.path.join(os.path.dirname(__file__), "..", "..", "..", "assets", "ghost.png"),
-            os.path.join(os.path.dirname(__file__), "..", "..", "..", "assets", "avatar.png")
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", "assets", "ghost.png")
         ]
         
         for icon_path in icon_paths:

@@ -52,8 +52,13 @@ class GhostmanApplication:
         
         # Set application icon (if available)
         try:
+            # Try avatar first, then icon
+            avatar_path = os.path.join(os.path.dirname(__file__), "..", "assets", "avatar.png")
             icon_path = os.path.join(os.path.dirname(__file__), "..", "assets", "icon.png")
-            if os.path.exists(icon_path):
+            
+            if os.path.exists(avatar_path):
+                app.setWindowIcon(QIcon(avatar_path))
+            elif os.path.exists(icon_path):
                 app.setWindowIcon(QIcon(icon_path))
         except Exception as e:
             logger.debug(f"Could not load application icon: {e}")
