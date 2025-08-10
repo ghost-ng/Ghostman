@@ -50,8 +50,8 @@ class REPLWidget(QWidget):
         # Title bar
         title_layout = QHBoxLayout()
         
-        title_label = QLabel("Ghostman REPL")
-        title_label.setStyleSheet("font-weight: bold; font-size: 14px; color: white;")
+        title_label = QLabel("Chat with Spector")
+        title_label.setStyleSheet("font-weight: bold; font-size: 16px; color: white;")
         title_layout.addWidget(title_label)
         
         title_layout.addStretch()
@@ -84,7 +84,8 @@ class REPLWidget(QWidget):
         # Output display
         self.output_display = QTextEdit()
         self.output_display.setReadOnly(True)
-        self.output_display.setFont(QFont("Consolas", 10))
+        self.output_display.setFont(QFont("Consolas", 11))
+        self.output_display.setMinimumHeight(300)
         layout.addWidget(self.output_display, 1)
         
         # Input area
@@ -123,8 +124,8 @@ class REPLWidget(QWidget):
         layout.addLayout(input_layout)
         
         # Initial welcome message
-        self.append_output("Ghostman REPL v1.0", "system")
-        self.append_output("Type 'help' for available commands", "system")
+        self.append_output("Chat with Spector v1.0", "system")
+        self.append_output("Hi! I'm Spector, your AI assistant. Type 'help' for commands.", "system")
         self.append_output("-" * 40, "system")
         
         # Focus on input

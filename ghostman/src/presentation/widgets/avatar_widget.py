@@ -7,9 +7,9 @@ Displays the animated avatar as the main interface.
 import logging
 import os
 from typing import Optional
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QMenu
 from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QRect, QEasingCurve, pyqtSignal, QPoint
-from PyQt6.QtGui import QPixmap, QPainter, QPaintEvent, QMouseEvent
+from PyQt6.QtGui import QPixmap, QPainter, QPaintEvent, QMouseEvent, QAction
 
 logger = logging.getLogger("ghostman.avatar_widget")
 
@@ -34,9 +34,9 @@ class AvatarWidget(QWidget):
         self.avatar_pixmap: Optional[QPixmap] = None
         self.scaled_pixmap: Optional[QPixmap] = None
         self.animation: Optional[QPropertyAnimation] = None
-        self.hover_offset = 0
         self.is_dragging = False
         self.drag_start_pos = QPoint()
+        self.mouse_press_pos = QPoint()
         
         self._init_ui()
         self._load_avatar()
@@ -47,8 +47,9 @@ class AvatarWidget(QWidget):
     def _init_ui(self):
         """Initialize the user interface."""
         # Set widget properties
-        self.setMinimumSize(200, 200)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.setMinimumSize(100, 100)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.setFixedSize(120, 120)  # Match the window size
         
         # Enable mouse tracking for hover effects
         self.setMouseTracking(True)
@@ -56,7 +57,7 @@ class AvatarWidget(QWidget):
         # Set transparent background
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         
-        logger.debug("Avatar UI initialized")
+        logger.debug(f"Avatar UI initialized with size: {self.size()}")
     
     def _load_avatar(self):
         """Load the avatar image."""
@@ -103,53 +104,45 @@ class AvatarWidget(QWidget):
         """Update the scaled pixmap based on widget size."""
         if self.avatar_pixmap and not self.avatar_pixmap.isNull():
             # Scale to fit widget while maintaining aspect ratio
-            size = min(self.width(), self.height())
+            # Leave some padding
+            padding = 10
+            size = min(self.width(), self.height()) - padding
             if size > 0:
                 self.scaled_pixmap = self.avatar_pixmap.scaled(
                     size, size,
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation
                 )
+                logger.debug(f"Scaled pixmap to size: {size}x{size}, widget size: {self.width()}x{self.height()}")
     
     def _setup_animation(self):
-        """Setup floating animation for the avatar."""
-        # Create animation for floating effect
-        self.animation = QPropertyAnimation(self, b"pos")
-        self.animation.setDuration(3000)  # 3 seconds
-        self.animation.setEasingCurve(QEasingCurve.Type.InOutSine)
-        self.animation.setLoopCount(-1)  # Infinite loop
-        
-        # Setup animation timer for subtle movement
-        self.float_timer = QTimer()
-        self.float_timer.timeout.connect(self._update_float_animation)
-        self.float_timer.start(50)  # Update every 50ms
-        
-        self.float_phase = 0
-    
-    def _update_float_animation(self):
-        """Update the floating animation position."""
-        import math
-        self.float_phase += 0.05
-        self.hover_offset = int(math.sin(self.float_phase) * 5)  # Float up and down by 5 pixels
-        self.update()  # Trigger repaint
+        """Setup animation (disabled for now)."""
+        # Animation removed per request
+        pass
     
     def paintEvent(self, event: QPaintEvent):
         """Paint the avatar."""
         if not self.scaled_pixmap:
+            logger.warning("No scaled pixmap available for painting")
             return
         
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        
+        # Get the actual widget rect
+        widget_rect = self.rect()
+        logger.debug(f"Painting avatar in rect: {widget_rect}, scaled pixmap size: {self.scaled_pixmap.size()}")
         
         # Calculate position to center the avatar
-        x = (self.width() - self.scaled_pixmap.width()) // 2
-        y = (self.height() - self.scaled_pixmap.height()) // 2 + self.hover_offset
+        x = (widget_rect.width() - self.scaled_pixmap.width()) // 2
+        y = (widget_rect.height() - self.scaled_pixmap.height()) // 2
         
-        # Draw shadow effect
-        shadow_offset = 10
-        painter.setOpacity(0.3)
-        painter.drawPixmap(x + shadow_offset, y + shadow_offset, self.scaled_pixmap)
+        # Ensure we're not drawing outside the widget
+        x = max(0, x)
+        y = max(0, y)
         
+        # Skip shadow for now to avoid clipping issues
         # Draw the avatar
         painter.setOpacity(1.0)
         painter.drawPixmap(x, y, self.scaled_pixmap)
@@ -159,30 +152,69 @@ class AvatarWidget(QWidget):
     def resizeEvent(self, event):
         """Handle resize events."""
         super().resizeEvent(event)
+        logger.debug(f"Avatar widget resized from {event.oldSize()} to {event.size()}")
         self._update_scaled_pixmap()
+        self.update()  # Force repaint
     
     def mousePressEvent(self, event: QMouseEvent):
         """Handle mouse press events."""
         if event.button() == Qt.MouseButton.LeftButton:
             self.is_dragging = True
             self.drag_start_pos = event.globalPosition().toPoint() - self.window().pos()
-            self.avatar_clicked.emit()
-            logger.debug("Avatar clicked")
+            self.mouse_press_pos = event.position()
+            # Don't emit click immediately - wait for release to distinguish click from drag
+            logger.debug(f"Mouse pressed at {event.position()}, window pos: {self.window().pos()}")
+        elif event.button() == Qt.MouseButton.RightButton:
+            self._show_context_menu(event.globalPosition().toPoint())
     
     def mouseMoveEvent(self, event: QMouseEvent):
         """Handle mouse move events for dragging."""
         if self.is_dragging and event.buttons() == Qt.MouseButton.LeftButton:
             # Move the parent window
             if self.window():
-                self.window().move(event.globalPosition().toPoint() - self.drag_start_pos)
+                new_pos = event.globalPosition().toPoint() - self.drag_start_pos
+                self.window().move(new_pos)
+                logger.debug(f"Dragging window to position: {new_pos}")
     
     def mouseReleaseEvent(self, event: QMouseEvent):
         """Handle mouse release events."""
         if event.button() == Qt.MouseButton.LeftButton:
             self.is_dragging = False
+            
+            # Check if this was a click (minimal movement) rather than a drag
+            distance = (event.position() - self.mouse_press_pos).manhattanLength()
+            logger.debug(f"Mouse released, distance moved: {distance}px")
+            
+            if distance < 5:  # Less than 5 pixels = click
+                logger.debug('Detected click (not drag) - emitting avatar_clicked')
+                self.avatar_clicked.emit()
+            else:
+                logger.debug('Detected drag (not click) - no REPL toggle')
+            
+            logger.debug(f"Mouse released, final window position: {self.window().pos()}")
     
     def mouseDoubleClickEvent(self, event: QMouseEvent):
         """Handle double-click events."""
         if event.button() == Qt.MouseButton.LeftButton:
-            self.minimize_requested.emit()
-            logger.debug("Avatar double-clicked - minimize requested")
+            # Double-click now just triggers avatar click
+            self.avatar_clicked.emit()
+            logger.debug("Avatar double-clicked")
+    
+    def _show_context_menu(self, pos: QPoint):
+        """Show context menu on right-click."""
+        context_menu = QMenu(self)
+        
+        # Add actions
+        minimize_action = QAction("Minimize to Tray", self)
+        minimize_action.triggered.connect(self.minimize_requested.emit)
+        context_menu.addAction(minimize_action)
+        
+        context_menu.addSeparator()
+        
+        about_action = QAction("About Spector", self)
+        about_action.triggered.connect(lambda: logger.info("About Spector clicked"))
+        context_menu.addAction(about_action)
+        
+        # Show the menu
+        context_menu.exec(pos)
+        logger.debug("Context menu shown")

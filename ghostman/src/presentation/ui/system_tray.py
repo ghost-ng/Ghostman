@@ -54,7 +54,7 @@ class EnhancedSystemTray(QObject):
         # Set initial icon
         icon = self._create_default_icon()
         self.tray_icon.setIcon(icon)
-        self.tray_icon.setToolTip("Ghostman - AI Desktop Assistant")
+        self.tray_icon.setToolTip("Spector - AI Assistant")
         
         # Connect tray icon signals
         self.tray_icon.activated.connect(self._on_tray_activated)

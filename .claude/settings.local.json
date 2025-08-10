@@ -28,7 +28,9 @@
       "Bash(\"./venv/Scripts/python.exe\" -m ghostman --debug)",
       "Bash(\"../../venv/Scripts/python.exe\" main.py --debug)",
       "Bash(\"./venv/Scripts/python.exe\" ghostman/src/main.py --debug)",
-      "Bash(\"./venv/Scripts/python.exe\" ghostman/src/main.py)"
+      "Bash(\"./venv/Scripts/python.exe\" ghostman/src/main.py)",
+      "Bash(\"./venv/Scripts/python.exe\" -m py_compile ghostman/src/presentation/ui/main_window.py)",
+      "Bash(git push:*)"
     ],
     "deny": []
   }
