@@ -23,6 +23,7 @@ class MainWindow(QMainWindow):
     # Signals
     minimize_requested = pyqtSignal()
     close_requested = pyqtSignal()
+    settings_requested = pyqtSignal()
     
     def __init__(self, app_coordinator):
         super().__init__()
@@ -44,6 +45,7 @@ class MainWindow(QMainWindow):
         self.avatar_widget = AvatarWidget()
         self.avatar_widget.minimize_requested.connect(self.minimize_requested.emit)
         self.avatar_widget.avatar_clicked.connect(self._toggle_repl)
+        self.avatar_widget.settings_requested.connect(self.settings_requested.emit)
         self.setCentralWidget(self.avatar_widget)
         
         # Create floating REPL window (initially hidden)

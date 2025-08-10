@@ -13,6 +13,12 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QColor, QPalette
 
+# Settings import (percent-based opacity)
+try:
+    from ...infrastructure.storage.settings_manager import settings as _global_settings
+except Exception:  # pragma: no cover
+    _global_settings = None
+
 logger = logging.getLogger("ghostman.repl_widget")
 
 
@@ -33,26 +39,54 @@ class REPLWidget(QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.command_history: List[str] = []
+        self.command_history = []
         self.history_index = -1
         self.current_input = ""
+        # Panel (frame) opacity (only background, not text/content). 0.0 - 1.0
+        # Initialize with default 90% opacity
+        self._panel_opacity = 0.90
         
+        # Load from settings if available
+        self._load_opacity_from_settings()
+        # Assign object name so selective stylesheet rules don't leak globally
+        self.setObjectName("repl-root")
+
         self._init_ui()
-        self._setup_style()
-        
+        self._apply_styles()
         logger.info("REPLWidget initialized")
+    
+    def _load_opacity_from_settings(self):
+        """Load panel opacity from settings manager."""
+        if not _global_settings:
+            return
+            
+        try:
+            # Try new percent-based settings first
+            percent = _global_settings.get('interface.opacity', None)
+            if percent is None:
+                # Backward compatibility with legacy float-based settings
+                legacy_opacity = _global_settings.get('ui.window_opacity', None)
+                if isinstance(legacy_opacity, (int, float)):
+                    if legacy_opacity <= 1.0:
+                        percent = int(round(legacy_opacity * 100))
+                    else:
+                        percent = int(legacy_opacity)
+            
+            if percent is not None:
+                if isinstance(percent, (int, float)):
+                    percent_int = max(10, min(100, int(percent)))
+                    self._panel_opacity = percent_int / 100.0
+                    logger.debug(f"Loaded panel opacity from settings: {percent_int}% -> {self._panel_opacity:.2f}")
+        except Exception as e:
+            logger.warning(f"Failed to load opacity from settings: {e}")
     
     def _init_ui(self):
         """Initialize the user interface."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
         
-        # Title bar
+        # Title bar - just minimize button, no title
         title_layout = QHBoxLayout()
-        
-        title_label = QLabel("Chat with Spector")
-        title_label.setStyleSheet("font-weight: bold; font-size: 16px; color: white;")
-        title_layout.addWidget(title_label)
         
         title_layout.addStretch()
         
@@ -131,31 +165,51 @@ class REPLWidget(QWidget):
         # Focus on input
         self.command_input.setFocus()
     
-    def _setup_style(self):
-        """Setup the widget style."""
-        self.setStyleSheet("""
-            QWidget {
-                background-color: rgba(30, 30, 30, 0.95);
-                border-radius: 10px;
-            }
-            QTextEdit {
-                background-color: rgba(20, 20, 20, 0.8);
+    def _apply_styles(self):
+        """(Re)apply stylesheet using current panel opacity for background only."""
+        # Clamp opacity
+        alpha = max(0.0, min(1.0, self._panel_opacity))
+        panel_bg = f"rgba(30, 30, 30, {alpha:.3f})"
+        # Use the same alpha for text areas - no additional reduction
+        textedit_bg = f"rgba(20, 20, 20, {alpha:.3f})"
+        lineedit_bg = f"rgba(40, 40, 40, {alpha:.3f})"
+        self.setStyleSheet(f"""
+            #repl-root {{
+                background-color: {panel_bg};
+                border-radius: 6px;
+            }}
+            #repl-root QTextEdit {{
+                background-color: {textedit_bg};
                 color: #f0f0f0;
                 border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: 5px;
                 padding: 5px;
-            }
-            QLineEdit {
-                background-color: rgba(40, 40, 40, 0.8);
+            }}
+            #repl-root QLineEdit {{
+                background-color: {lineedit_bg};
                 color: #ffffff;
                 border: 1px solid rgba(255, 255, 255, 0.2);
                 border-radius: 3px;
                 padding: 5px;
-            }
-            QLineEdit:focus {
+            }}
+            #repl-root QLineEdit:focus {{
                 border: 1px solid #4CAF50;
-            }
+            }}
         """)
+
+    def set_panel_opacity(self, opacity: float):
+        """Set the frame (panel) background opacity only.
+
+        Args:
+            opacity: 0.0 (fully transparent) to 1.0 (fully opaque) for panel background.
+        """
+        if not isinstance(opacity, (float, int)):
+            return
+        new_val = max(0.0, min(1.0, float(opacity)))
+        if abs(new_val - self._panel_opacity) < 0.001:
+            return
+        self._panel_opacity = new_val
+        self._apply_styles()
     
     def eventFilter(self, obj, event):
         """Event filter for command input navigation."""

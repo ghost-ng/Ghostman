@@ -47,6 +47,9 @@ class SettingsManager:
             'window_position': {'x': 100, 'y': 100},
             'window_size': {'width': 400, 'height': 600}
         },
+        'interface': {  # new namespace for percent-based values
+            'opacity': 90  # percent (10-100)
+        },
         'ai': {
             'provider': 'openai',
             'model': 'gpt-3.5-turbo',

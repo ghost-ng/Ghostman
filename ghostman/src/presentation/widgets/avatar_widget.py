@@ -28,6 +28,7 @@ class AvatarWidget(QWidget):
     # Signals
     avatar_clicked = pyqtSignal()
     minimize_requested = pyqtSignal()
+    settings_requested = pyqtSignal()
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -203,6 +204,13 @@ class AvatarWidget(QWidget):
     def _show_context_menu(self, pos: QPoint):
         """Show context menu on right-click."""
         context_menu = QMenu(self)
+        
+        # Settings action
+        settings_action = QAction("Settings...", self)
+        settings_action.triggered.connect(self.settings_requested.emit)
+        context_menu.addAction(settings_action)
+        
+        context_menu.addSeparator()
         
         # Add actions
         minimize_action = QAction("Minimize to Tray", self)

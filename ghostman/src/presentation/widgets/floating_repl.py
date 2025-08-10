@@ -11,6 +11,10 @@ from PyQt6.QtCore import Qt, pyqtSignal, QPoint
 from PyQt6.QtGui import QCloseEvent
 
 from .repl_widget import REPLWidget
+try:
+    from ...infrastructure.storage.settings_manager import settings as _global_settings
+except Exception:  # pragma: no cover
+    _global_settings = None
 
 logger = logging.getLogger("ghostman.floating_repl")
 
@@ -41,6 +45,9 @@ class FloatingREPLWindow(QMainWindow):
         # Create REPL widget as central widget
         self.repl_widget = REPLWidget()
         self.setCentralWidget(self.repl_widget)
+
+        # REPL widget already loads its own opacity from settings in its constructor
+        # No need to override it here since REPLWidget._load_opacity_from_settings() handles this
         
         # Connect REPL signals
         self.repl_widget.minimize_requested.connect(self.close)
@@ -50,7 +57,7 @@ class FloatingREPLWindow(QMainWindow):
     
     def _setup_window(self):
         """Setup window properties."""
-        self.setWindowTitle("Chat with Spector")
+        self.setWindowTitle("")  # No window title
         self.setFixedSize(520, 450)  # 500px + padding for REPL content
         
         # Make window frameless and always on top
@@ -60,6 +67,11 @@ class FloatingREPLWindow(QMainWindow):
             Qt.WindowType.Tool  # Prevents it from showing in taskbar
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        
+        # Keep window fully opaque - only panel backgrounds will be transparent via CSS
+        self.setWindowOpacity(1.0)
+    
+        
         
         logger.debug("FloatingREPL window properties configured")
     
@@ -126,3 +138,9 @@ class FloatingREPLWindow(QMainWindow):
             self.repl_widget.command_input.setFocus()
         
         logger.debug("FloatingREPL shown and activated")
+
+    # Public API -----------------------------------------------------
+    def set_panel_opacity(self, opacity: float):
+        """Set only the panel (frame) opacity (content/text remains fully opaque)."""
+        if self.repl_widget:
+            self.repl_widget.set_panel_opacity(opacity)
