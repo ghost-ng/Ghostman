@@ -1,45 +1,174 @@
-#!/usr/bin/env python3
-"""Main entry point for Ghostman application."""
+"""
+Main Entry Point for Ghostman Application.
+
+Initializes the PyQt6 application, sets up logging, and starts the app coordinator.
+"""
 
 import sys
 import os
-from pathlib import Path
-
-# Add the src directory to Python path
-src_dir = Path(__file__).parent
-sys.path.insert(0, str(src_dir))
-
-from PyQt6.QtCore import Qt
+import logging
+import argparse
+from typing import Optional
 from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import QTimer
+from PyQt6.QtGui import QIcon
 
-# Enable high DPI support before creating QApplication
-try:
-    QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
-    QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
-except AttributeError:
-    # Older Qt versions don't have these attributes
-    pass
+# Add project root to Python path
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, project_root)
+
+from ghostman.src.infrastructure.logging.logging_config import setup_logging, get_performance_logger
+from ghostman.src.application.app_coordinator import AppCoordinator
+
+logger = logging.getLogger("ghostman.main")
+perf_logger = get_performance_logger()
+
+
+class GhostmanApplication:
+    """
+    Main application class that manages the Qt application lifecycle.
+    """
+    
+    def __init__(self):
+        self.app: Optional[QApplication] = None
+        self.coordinator: Optional[AppCoordinator] = None
+    
+    def setup_qt_application(self) -> QApplication:
+        """Setup and configure the Qt application."""
+        # Enable high DPI scaling (if available)
+        try:
+            from PyQt6.QtCore import Qt
+            QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
+            QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
+        except (AttributeError, ImportError):
+            logger.debug("High DPI scaling attributes not available")
+        
+        # Create Qt application
+        app = QApplication(sys.argv)
+        app.setApplicationName("Ghostman")
+        app.setApplicationVersion("1.0.0")
+        app.setOrganizationName("Ghostman")
+        app.setQuitOnLastWindowClosed(False)  # Keep running when main window closes
+        
+        # Set application icon (if available)
+        try:
+            icon_path = os.path.join(os.path.dirname(__file__), "..", "assets", "icon.png")
+            if os.path.exists(icon_path):
+                app.setWindowIcon(QIcon(icon_path))
+        except Exception as e:
+            logger.debug(f"Could not load application icon: {e}")
+        
+        logger.info("Qt application configured")
+        return app
+    
+    def initialize_coordinator(self) -> bool:
+        """Initialize the application coordinator."""
+        try:
+            self.coordinator = AppCoordinator()
+            
+            # Connect application shutdown signal
+            self.coordinator.app_shutdown.connect(self.app.quit)
+            
+            # Initialize the coordinator
+            if not self.coordinator.initialize():
+                logger.error("Failed to initialize app coordinator")
+                return False
+            
+            logger.info("App coordinator initialized successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error initializing coordinator: {e}")
+            return False
+    
+    def run(self) -> int:
+        """
+        Run the Ghostman application.
+        
+        Returns:
+            Exit code (0 for success)
+        """
+        try:
+            logger.info("Starting Ghostman application...")
+            
+            # Setup Qt application
+            self.app = self.setup_qt_application()
+            
+            # Initialize coordinator
+            if not self.initialize_coordinator():
+                logger.error("Failed to initialize application")
+                return 1
+            
+            # Start in tray mode
+            self.coordinator.start_in_tray_mode()
+            
+            # Show system tray notification (if implemented)
+            logger.info("Ghostman started successfully - running in system tray")
+            
+            # Start the Qt event loop
+            exit_code = self.app.exec()
+            
+            logger.info(f"Application exited with code: {exit_code}")
+            return exit_code
+            
+        except KeyboardInterrupt:
+            logger.info("Application interrupted by user")
+            return 0
+        except Exception as e:
+            logger.error(f"Unhandled exception in main application: {e}", exc_info=True)
+            return 1
+        finally:
+            # Cleanup
+            if self.coordinator:
+                self.coordinator.shutdown()
+
+
+def parse_arguments():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(description="Ghostman - AI Desktop Assistant")
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug logging"
+    )
+    parser.add_argument(
+        "--log-dir",
+        type=str,
+        help="Custom directory for log files"
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version="Ghostman 1.0.0"
+    )
+    return parser.parse_args()
+
 
 def main():
-    """Main entry point for the application."""
-    from app.application import GhostmanApplication, setup_logging
+    """Main entry point."""
+    # Parse command line arguments
+    args = parse_arguments()
     
     # Setup logging first
-    setup_logging()
+    setup_logging(debug=args.debug, log_dir=args.log_dir)
     
-    try:
-        # Create and run application
-        app = GhostmanApplication()
-        return app.run()
-        
-    except KeyboardInterrupt:
-        print("Application interrupted by user")
-        return 0
-    except Exception as e:
-        print(f"Unhandled exception: {e}")
-        import traceback
-        traceback.print_exc()
-        return 1
+    logger.info("=" * 60)
+    logger.info("GHOSTMAN APPLICATION STARTING")
+    logger.info("=" * 60)
+    logger.info(f"Python version: {sys.version}")
+    logger.info(f"Platform: {sys.platform}")
+    logger.info(f"Debug mode: {args.debug}")
+    
+    # Create and run application
+    app = GhostmanApplication()
+    exit_code = app.run()
+    
+    logger.info("=" * 60)
+    logger.info("GHOSTMAN APPLICATION SHUTDOWN")
+    logger.info("=" * 60)
+    
+    sys.exit(exit_code)
+
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

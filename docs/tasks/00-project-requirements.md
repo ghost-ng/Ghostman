@@ -5,7 +5,7 @@
 **Project Name**: Ghostman  
 **Type**: Desktop AI Overlay Assistant  
 **Platform**: Cross-platform (Windows primary)  
-**Technology Stack**: Python, PyQt6, tkinter (toasts only)  
+**Technology Stack**: Python, PyQt6  
 
 ## Core Vision
 
@@ -21,7 +21,6 @@ Ghostman is a desktop overlay application that provides instant AI assistance wh
 
 ### Technology Requirements
 - **Primary UI**: PyQt6 only (no tkinter for main interface)
-- **Toast Notifications**: tkinter or system native notifications
 - **AI Integration**: OpenAI-compatible API support
 - **Packaging**: Single executable file with PyInstaller
 
@@ -29,19 +28,19 @@ Ghostman is a desktop overlay application that provides instant AI assistance wh
 
 ### 1. UI States and Behavior
 
-#### Avatar State (Minimized)
-- Small avatar widget shown when main interface is closed
-- Draggable to any position on screen
-- Always visible on top of other applications
-- **Left Click**: Opens prompt/response interface
-- **Right Click**: Shows context menu with slide-in animation
-
-#### Main Interface State
-- Prompt/response interface for AI interactions
+#### Maximized Avatar Mode
+- Full chat interface with AI interactions
 - Chat-like interface showing conversation history
 - Input field for user messages
 - Draggable window that stays on top
-- Can be minimized back to avatar state
+- **Left Click**: Minimizes to system tray
+- **Right Click**: Shows context menu
+
+#### Minimized Tray Mode
+- Application runs minimized in system tray
+- System tray icon with context menu
+- **Left Click on Tray**: Opens maximized avatar mode
+- **Right Click on Tray**: Shows context menu with application options
 
 ### 2. Menu System
 
@@ -51,11 +50,13 @@ Ghostman is a desktop overlay application that provides instant AI assistance wh
   - Close application
   - Help documentation
   - About dialog
-- Slide-in animation for menu appearance
 
-#### Main Window Menu Bar
-- Same File menu structure as context menu
-- Standard window controls
+#### System Tray Menu
+- Show Ghostman (restore to maximized avatar mode)
+- Settings
+- Help
+- About
+- Quit
 
 ### 3. Settings System
 
@@ -67,7 +68,6 @@ Ghostman is a desktop overlay application that provides instant AI assistance wh
   - Window opacity
   - Auto-hide timeout
   - Conversation token limits
-  - Toast notification preferences
 
 #### Settings Storage
 - Local configuration file (JSON/TOML)
@@ -88,20 +88,7 @@ Ghostman is a desktop overlay application that provides instant AI assistance wh
 - Export/import conversation history
 - Multiple conversation threads support
 
-### 5. Toast Notification Framework
-
-#### Requirements
-- Cross-platform toast notifications
-- Non-intrusive status updates
-- Configurable display duration
-- Multiple toast types (info, warning, error, success)
-
-#### Implementation
-- tkinter-based custom toasts OR
-- System native notifications (preferred)
-- Integration with PyQt6 main application
-
-### 6. System Integration
+### 5. System Integration
 
 #### System Tray
 - Minimize to system tray/taskbar
@@ -149,10 +136,8 @@ Ghostman is a desktop overlay application that provides instant AI assistance wh
 ### Application Structure
 ```
 Presentation Layer (PyQt6)
-├── Avatar Widget (minimized state)
-├── Main Interface (chat window)
+├── Avatar Widget (maximized mode)
 ├── Settings Dialog
-├── Toast Manager (tkinter)
 └── System Tray Integration
 
 Application Layer
@@ -180,13 +165,12 @@ Infrastructure Layer
 ```
 
 ### Data Flow
-1. User interacts with Avatar or Main Interface
+1. User interacts with Avatar or System Tray
 2. Window Manager handles state transitions
 3. Conversation Manager processes user input
 4. AI Service makes API calls
 5. Response streamed back through UI
 6. Memory Manager handles conversation storage
-7. Toast notifications for status updates
 
 ## Deployment Requirements
 
@@ -229,10 +213,9 @@ Infrastructure Layer
 2. ✅ Main chat interface with AI integration
 3. ✅ Basic settings configuration
 4. ✅ Conversation persistence
-5. ✅ Toast notifications
-6. ✅ System tray integration
-7. ✅ Comprehensive logging system
-8. ✅ Single executable packaging
+5. ✅ System tray integration
+6. ✅ Comprehensive logging system
+7. ✅ Single executable packaging
 
 ### Enhanced Features (Post-MVP)
 - Advanced conversation search

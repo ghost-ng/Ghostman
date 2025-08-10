@@ -23,7 +23,12 @@
       "Bash(\"./venv/Scripts/python.exe\" test_avatar_visibility.py)",
       "Bash(timeout:*)",
       "Bash(rm:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(touch:*)",
+      "Bash(\"./venv/Scripts/python.exe\" -m ghostman --debug)",
+      "Bash(\"../../venv/Scripts/python.exe\" main.py --debug)",
+      "Bash(\"./venv/Scripts/python.exe\" ghostman/src/main.py --debug)",
+      "Bash(\"./venv/Scripts/python.exe\" ghostman/src/main.py)"
     ],
     "deny": []
   }

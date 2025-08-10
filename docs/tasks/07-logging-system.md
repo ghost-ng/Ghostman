@@ -27,7 +27,7 @@ All log files must be stored in the appropriate `%APPDATA%\Ghostman\logs\` direc
 
 ### 1. Application Logs
 - Application startup and shutdown events
-- UI state transitions (avatar ↔ main window)
+- UI state transitions (maximized avatar mode ↔ minimized tray mode)
 - Settings changes and configuration updates
 - Window management operations (positioning, opacity changes)
 
@@ -59,9 +59,9 @@ All log files must be stored in the appropriate `%APPDATA%\Ghostman\logs\` direc
 
 ### 6. System Integration Logs
 - System tray operations
-- Toast notification events
 - Multi-monitor detection and handling
 - Always-on-top behavior management
+- State transition events
 
 ## Implementation Details
 
@@ -555,6 +555,24 @@ class SecurityLogger:
         
         self._log_security_event(event)
     
+    def log_app_state_transition(self, from_state: str, to_state: str, 
+                                trigger: str, user_initiated: bool = True):
+        """Log application state transitions."""
+        event = SecurityEvent(
+            event_type="state_transition",
+            severity="INFO",
+            description=f"Application state changed: {from_state} -> {to_state}",
+            user_context={
+                'from_state': from_state,
+                'to_state': to_state,
+                'trigger': trigger,
+                'user_initiated': user_initiated
+            },
+            timestamp=datetime.utcnow().isoformat()
+        )
+        
+        self._log_security_event(event)
+    
     def _log_security_event(self, event: SecurityEvent):
         """Log security event with appropriate level."""
         log_method = getattr(self.logger, event.severity.lower())
@@ -773,7 +791,7 @@ class AIServiceLogger:
 
 The following documents need to be updated to reference the comprehensive logging system:
 
-1. **Settings System (`03-settings-system.md`)**:
+1. **Settings System (`02-settings-system.md`)**:
    - Add logging level configuration options
    - Include log file management settings
    - Add debug information export functionality

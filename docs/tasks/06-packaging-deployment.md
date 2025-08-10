@@ -112,14 +112,6 @@ a = Analysis(
         'json',
         'toml',
         
-        # Toast notifications
-        'tkinter',
-        'tkinter.ttk',
-        
-        # Desktop notifications (optional)
-        'desktop_notifier',
-        'plyer',
-        
         # Standard library modules that might be missed
         'uuid',
         'pathlib',
@@ -636,10 +628,28 @@ No installation required! Simply run the executable:
 
 ## First Run
 
-1. The application will start minimized as an avatar
-2. Click the avatar to open the main interface
+1. The application will start minimized in the system tray
+2. Click the tray icon to open the maximized avatar mode
 3. Right-click for the context menu
 4. Configure your AI settings in Settings
+
+## Application States
+
+Ghostman operates in two simple states:
+
+### Maximized Avatar Mode
+- Full chat interface with AI interactions
+- Chat-like interface showing conversation history
+- Input field for user messages
+- Draggable window that stays on top
+- Left Click: Minimizes to system tray
+- Right Click: Shows context menu
+
+### Minimized Tray Mode
+- Application runs minimized in system tray
+- System tray icon with context menu
+- Left Click on Tray: Opens maximized avatar mode
+- Right Click on Tray: Shows context menu with application options
 
 ## Requirements
 
@@ -887,4 +897,4 @@ jobs:
         path: dist/Ghostman-*
 ```
 
-This comprehensive packaging and deployment plan provides everything needed to create professional, single-file executables for Ghostman that work reliably without administrator permissions across different platforms.
+This comprehensive packaging and deployment plan provides everything needed to create professional, single-file executables for Ghostman that work reliably without administrator permissions across different platforms with only two application states: maximized avatar mode and minimized tray mode.
