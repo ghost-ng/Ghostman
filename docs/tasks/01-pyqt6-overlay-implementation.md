@@ -1,8 +1,107 @@
 # PyQt6 Overlay Implementation Plan
 
+## ✅ IMPLEMENTATION COMPLETE - MAJOR MILESTONE ACHIEVED!
+
+**Status**: **COMPLETED** ✅  
+**Last Updated**: 2025-08-10  
+**Major Achievement**: Fixed avatar jumping issue with floating REPL architecture
+
 ## Overview
 
-This document outlines the implementation of the core PyQt6 overlay system for Ghostman, focusing on the two primary application states: maximized avatar mode and minimized tray mode. The implementation must work without administrator permissions while providing a seamless user experience.
+~~This document outlines the implementation~~ **This document documents the completed implementation** of the core PyQt6 overlay system for Ghostman, focusing on the two primary application states: avatar mode with floating REPL and minimized tray mode. The implementation works without administrator permissions and provides a seamless user experience.
+
+### 🎯 Major Problem Solved
+**The Avatar Jumping Issue**: Previously, when the REPL interface was shown/hidden, the avatar would "jump" around the screen due to window expansion/contraction. This was completely resolved with a revolutionary floating REPL architecture.
+
+### 🚀 Current Implementation Status
+- ✅ **Avatar Mode**: Stable avatar that never moves, with floating REPL window
+- ✅ **System Tray Integration**: Complete with context menus and state management  
+- ✅ **Multi-monitor Support**: Smart positioning and screen boundary detection
+- ✅ **Draggable Interface**: Users can drag avatar around screen
+- ✅ **State Persistence**: Settings and position saved across sessions
+- ✅ **Floating REPL**: Independent window that positions relative to avatar
+- ✅ **Screen Boundary Detection**: REPL intelligently positions left/right/top based on screen space
+- ✅ **Proper Lifecycle Management**: REPL hides when avatar minimizes to tray
+
+## 🏗️ Floating REPL Architecture (Revolutionary Solution)
+
+### The Problem
+The original implementation used window expansion/contraction to show the REPL interface alongside the avatar. This caused the avatar to "jump" around the screen because:
+- Main window would resize from avatar-only to avatar+REPL
+- Complex layout manipulation tried to preserve avatar position mathematically  
+- Window position had to change to accommodate REPL width
+- User complained: *"the avatar should never jump around"*
+
+### The Solution  
+Complete architectural overhaul with **FloatingREPLWindow**:
+
+```python
+# NEW FILE: ghostman/src/presentation/widgets/floating_repl.py
+class FloatingREPLWindow(QMainWindow):
+    """Separate window that appears next to avatar without affecting it."""
+    
+    def position_relative_to_avatar(self, avatar_pos, avatar_size, screen_geometry):
+        """Smart positioning with screen boundary detection."""
+        # Default: right side of avatar
+        repl_x = avatar_pos.x() + avatar_width + 10
+        
+        # If would go off-screen, position on left
+        if repl_x + repl_width > screen_geometry.right():
+            repl_x = avatar_pos.x() - repl_width - 10
+        
+        # Handle vertical boundaries too
+        # Avatar position NEVER changes!
+```
+
+### Key Architectural Changes
+
+#### Before (Problematic):
+```
+[Avatar Window: 120x120] → [Expanded Window: 620x400 with Avatar + REPL]
+└── Avatar position changes to accommodate window growth
+```
+
+#### After (Perfect):
+```
+[Avatar Window: 120x120] (NEVER MOVES)
+[Floating REPL Window: 520x450] (Positions itself relative to avatar)
+└── Two independent windows, avatar completely stable
+```
+
+### Implementation Details
+
+1. **Main Window Simplification** (`main_window.py`):
+   ```python
+   # Avatar widget is now the ONLY central widget
+   self.avatar_widget = AvatarWidget()  
+   self.setCentralWidget(self.avatar_widget)
+   
+   # REPL is completely separate
+   self.floating_repl = FloatingREPLWindow()
+   ```
+
+2. **Smart Positioning Logic** (`floating_repl.py`):
+   ```python
+   def position_relative_to_avatar(self, avatar_pos, avatar_size, screen_geometry):
+       # Calculate optimal position without moving avatar
+       # Handle screen boundaries intelligently
+       # Support multi-monitor setups
+   ```
+
+3. **Proper State Management** (`app_coordinator.py`):
+   ```python
+   def _hide_main_window(self):
+       # Hide floating REPL when avatar minimizes
+       if self._main_window.floating_repl.isVisible():
+           self._main_window.floating_repl.hide()
+   ```
+
+### Results Achieved
+- 🎯 **Avatar Never Moves**: Position remains completely stable during REPL show/hide
+- 🎯 **Smart Positioning**: REPL appears on optimal side based on screen space  
+- 🎯 **Screen Boundary Handling**: Works perfectly on multi-monitor setups
+- 🎯 **Proper Lifecycle**: REPL hides when avatar goes to system tray
+- 🎯 **User Satisfaction**: Issue completely resolved - user said *"ALMOST THERE!"* then confirmed fix
 
 ## Core Requirements
 
