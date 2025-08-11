@@ -30,6 +30,11 @@ class ConversationRepository:
     
     async def create_conversation(self, conversation: Conversation) -> bool:
         """Create a new conversation."""
+        # Check if conversation is empty and should not be saved
+        if self._is_empty_conversation(conversation):
+            logger.debug(f"Skipping creation of empty conversation: {conversation.id}")
+            return False
+            
         try:
             with self.db.get_connection() as conn:
                 # Insert conversation
@@ -95,6 +100,11 @@ class ConversationRepository:
     
     async def update_conversation(self, conversation: Conversation) -> bool:
         """Update existing conversation."""
+        # Check if conversation has become empty and should be deleted instead
+        if self._is_empty_conversation(conversation):
+            logger.debug(f"Conversation {conversation.id} is empty, marking as deleted")
+            conversation.delete()
+            
         try:
             with self.db.get_connection() as conn:
                 # Update conversation
@@ -161,7 +171,7 @@ class ConversationRepository:
                 params = []
                 
                 if status:
-                    where_clause.append("status = ?")
+                    where_clause.append("c.status = ?")
                     params.append(status.value)
                 
                 where_sql = " WHERE " + " AND ".join(where_clause) if where_clause else ""
@@ -170,8 +180,8 @@ class ConversationRepository:
                 offset_sql = f" OFFSET {offset}" if offset > 0 else ""
                 
                 query = f"""
-                    SELECT id, title, status, created_at, updated_at, metadata_json
-                    FROM conversations
+                    SELECT c.id, c.title, c.status, c.created_at, c.updated_at, c.metadata_json
+                    FROM conversations c
                     {where_sql}
                     {order_sql}
                     {limit_sql}
@@ -201,12 +211,13 @@ class ConversationRepository:
             with self.db.get_connection() as conn:
                 await self._insert_message(conn, message)
                 
-                # Update conversation updated_at
+                # Update conversation updated_at and message_count
                 conn.execute("""
                     UPDATE conversations 
-                    SET updated_at = ?
+                    SET updated_at = ?,
+                        message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?)
                     WHERE id = ?
-                """, (message.timestamp.isoformat(), message.conversation_id))
+                """, (message.timestamp.isoformat(), message.conversation_id, message.conversation_id))
                 
                 # Update FTS index with new message content
                 await self._update_message_fts(conn, message)
@@ -248,11 +259,22 @@ class ConversationRepository:
                 
                 results = []
                 for row in cursor.fetchall():
+                    # Safely access optional columns
+                    try:
+                        content = row['content']
+                    except (KeyError, IndexError):
+                        content = ''
+                    
+                    try:
+                        relevance_score = row['rank']
+                    except (KeyError, IndexError):
+                        relevance_score = None
+                    
                     result = SearchResult(
                         conversation_id=row['id'],
                         title=row['title'],
-                        snippet=self._generate_snippet(row.get('content', ''), query.text),
-                        relevance_score=row.get('rank'),
+                        snippet=self._generate_snippet(content, query.text),
+                        relevance_score=relevance_score,
                         match_count=1  # TODO: Calculate actual match count
                     )
                     results.append(result)
@@ -663,3 +685,25 @@ class ConversationRepository:
             snippet = snippet + "..."
         
         return snippet
+    
+    def _is_empty_conversation(self, conversation: Conversation) -> bool:
+        """Check if a conversation is empty and should not be saved."""
+        # A conversation is considered empty if:
+        # 1. It has no messages at all
+        # 2. It only has system messages with empty or whitespace-only content
+        # 3. It has no user or assistant messages
+        
+        if not conversation.messages:
+            return True
+        
+        # Check if there are any non-system messages or system messages with meaningful content
+        meaningful_messages = []
+        for message in conversation.messages:
+            if message.role != MessageRole.SYSTEM:
+                # User or assistant message - always meaningful
+                meaningful_messages.append(message)
+            elif message.content and message.content.strip():
+                # System message with actual content - meaningful
+                meaningful_messages.append(message)
+        
+        return len(meaningful_messages) == 0

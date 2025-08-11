@@ -125,9 +125,13 @@ class DatabaseManager:
         from ...storage.settings_manager import settings
         
         if db_path is None:
-            # Store in same directory as settings
-            settings_dir = Path(settings.get_paths()['settings_dir'])
-            db_path = settings_dir / "conversations.db"
+            # Store in db subdirectory of Ghostman data directory
+            settings_paths = settings.get_paths()
+            settings_dir = Path(settings_paths['settings_dir'])
+            # Go up one level from configs to Ghostman root, then into db
+            ghostman_root = settings_dir.parent
+            db_dir = ghostman_root / "db"
+            db_path = db_dir / "conversations.db"
         
         self.db_path = db_path
         self._local = threading.local()

@@ -186,35 +186,47 @@ class MainWindow(QMainWindow):
             from ..dialogs.simple_conversation_browser import SimpleConversationBrowser
             from ...infrastructure.conversation_management.integration.conversation_manager import ConversationManager
             
-            # Initialize conversation manager if needed
-            if not hasattr(self, '_conversation_manager') or not self._conversation_manager:
-                self._conversation_manager = ConversationManager()
-                if not self._conversation_manager.initialize():
-                    logger.error("Failed to initialize conversation manager")
-                    from PyQt6.QtWidgets import QMessageBox
-                    QMessageBox.warning(
-                        self,
-                        "Conversations Unavailable",
-                        "Conversation management system could not be initialized."
-                    )
-                    return
-            
-            # Get current conversation ID from REPL if available
+            # Get conversation manager from REPL widget if available (to share same instance)
+            conversation_manager = None
             current_conversation_id = None
+            
             if (self.floating_repl and 
-                hasattr(self.floating_repl, 'repl_widget') and 
+                hasattr(self.floating_repl, 'repl_widget') and
                 self.floating_repl.repl_widget):
+                # Get conversation manager from REPL widget
+                if hasattr(self.floating_repl.repl_widget, 'conversation_manager'):
+                    conversation_manager = self.floating_repl.repl_widget.conversation_manager
+                    logger.info("Using shared conversation manager from REPL widget")
+                # Get current conversation ID
                 current_conversation_id = self.floating_repl.repl_widget.get_current_conversation_id()
             
-            # Create or show conversation browser
+            # If no conversation manager from REPL, create one
+            if not conversation_manager:
+                logger.info("Creating new conversation manager for browser")
+                if not hasattr(self, '_conversation_manager') or not self._conversation_manager:
+                    self._conversation_manager = ConversationManager()
+                    if not self._conversation_manager.initialize():
+                        logger.error("Failed to initialize conversation manager")
+                        from PyQt6.QtWidgets import QMessageBox
+                        QMessageBox.warning(
+                            self,
+                            "Conversations Unavailable",
+                            "Conversation management system could not be initialized."
+                        )
+                        return
+                conversation_manager = self._conversation_manager
+            
+            # Create or show conversation browser with shared conversation manager
             if not self.conversation_browser:
-                self.conversation_browser = SimpleConversationBrowser(parent=self)
+                self.conversation_browser = SimpleConversationBrowser(parent=self, conversation_manager=conversation_manager)
                 self.conversation_browser.conversation_restore_requested.connect(
                     self._restore_conversation_to_repl
                 )
             else:
-                # Update current conversation and refresh
+                # Update current conversation and refresh the list
                 self.conversation_browser.set_current_conversation(current_conversation_id)
+                # Reload conversations to show any new ones
+                self.conversation_browser._load_conversations()
             
             # Show the browser
             self.conversation_browser.show()
@@ -254,9 +266,12 @@ class MainWindow(QMainWindow):
                 hasattr(self.floating_repl, 'repl_widget') and 
                 self.floating_repl.repl_widget):
                 
-                # This would need to be implemented in REPLWidget
-                # For now, just log the action
-                logger.info(f"TODO: Implement conversation loading in REPL widget for {conversation_id}")
+                # Restore the conversation in the REPL widget
+                if hasattr(self.floating_repl.repl_widget, 'restore_conversation'):
+                    self.floating_repl.repl_widget.restore_conversation(conversation_id)
+                    logger.info(f"✅ Conversation {conversation_id} restoration initiated in REPL")
+                else:
+                    logger.error("❌ REPL widget doesn't have restore_conversation method")
                 
                 # Update conversation browser to reflect the change
                 if self.conversation_browser:

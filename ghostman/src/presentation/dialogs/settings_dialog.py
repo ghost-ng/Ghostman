@@ -219,12 +219,9 @@ class SettingsDialog(QDialog):
         logging_layout = QFormLayout(logging_group)
         
         self.log_level_combo = QComboBox()
-        self.log_level_combo.addItems(["DEBUG", "INFO", "WARNING", "ERROR"])
-        self.log_level_combo.setCurrentText("INFO")
-        logging_layout.addRow("Log Level:", self.log_level_combo)
-        
-        self.enable_debug_check = QCheckBox("Enable debug logging")
-        logging_layout.addRow("", self.enable_debug_check)
+        self.log_level_combo.addItems(["Standard", "Detailed"])
+        self.log_level_combo.setCurrentText("Standard")
+        logging_layout.addRow("Logging Mode:", self.log_level_combo)
         
         layout.addWidget(logging_group)
         
@@ -544,8 +541,7 @@ class SettingsDialog(QDialog):
                 "close_to_tray": self.close_to_tray_check.isChecked()
             },
             "advanced": {
-                "log_level": self.log_level_combo.currentText(),
-                "enable_debug": self.enable_debug_check.isChecked()
+                "log_level": self.log_level_combo.currentText()
             }
         }
     
@@ -625,14 +621,12 @@ class SettingsDialog(QDialog):
         # Advanced settings
         advanced_config = config.get("advanced", {})
         if "log_level" in advanced_config:
-            index = self.log_level_combo.findText(str(advanced_config["log_level"]))
-            if index >= 0:
-                self.log_level_combo.setCurrentIndex(index)
-        if "enable_debug" in advanced_config:
-            value = advanced_config["enable_debug"]
-            if isinstance(value, str):
-                value = value.lower() in ('true', '1', 'yes')
-            self.enable_debug_check.setChecked(bool(value))
+            # Map old debug settings to new simplified mode
+            old_value = str(advanced_config["log_level"])
+            if old_value.upper() == "DEBUG" or advanced_config.get("enable_debug", False):
+                self.log_level_combo.setCurrentText("Detailed")
+            else:
+                self.log_level_combo.setCurrentText("Standard")
     
     def _load_current_settings(self):
         """Load current settings from settings manager."""
@@ -719,8 +713,7 @@ class SettingsDialog(QDialog):
         
         if "advanced" in config:
             log_level = config["advanced"].get("log_level", "not set")
-            debug_enabled = config["advanced"].get("enable_debug", "not set")
-            logger.info(f"🔍 Advanced config: log_level={log_level}, debug={debug_enabled}")
+            logger.info(f"🔍 Advanced config: log_level={log_level}")
         
         if self.settings_manager:
             logger.info("💾 SAVING SETTINGS TO STORAGE")

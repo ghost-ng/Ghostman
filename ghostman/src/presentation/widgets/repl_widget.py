@@ -1140,9 +1140,11 @@ class REPLWidget(QWidget):
                 try:
                     # ALWAYS prefer conversation-aware AI service for context persistence
                     ai_service = None
-                    if self.conversation_manager and self.conversation_manager.has_ai_service():
+                    if self.conversation_manager:
+                        # Call get_ai_service() which will initialize it if needed
                         ai_service = self.conversation_manager.get_ai_service()
-                        logger.info("🎯 Using conversation-aware AI service for context persistence")
+                        if ai_service:
+                            logger.info("🎯 Using conversation-aware AI service for context persistence")
                         
                         if ai_service:
                             # Ensure current conversation context is set
@@ -1176,6 +1178,7 @@ class REPLWidget(QWidget):
                         return
                     
                     # Send message to basic AI service (without conversation context)
+                    logger.debug("Sent Message: %s", self.message)
                     result = ai_service.send_message(self.message)
                     
                     if result.get('success', False):
@@ -1334,9 +1337,10 @@ class REPLWidget(QWidget):
                 
                 # Update AI service context if available - CRITICAL for maintaining context
                 if hasattr(conversation, 'messages') and conversation.messages:
-                    # Get conversation-aware AI service from conversation manager
+                    # Get or initialize conversation-aware AI service from conversation manager
                     ai_service = None
-                    if self.conversation_manager and self.conversation_manager.has_ai_service():
+                    if self.conversation_manager:
+                        # Call get_ai_service() which will initialize it if needed
                         ai_service = self.conversation_manager.get_ai_service()
                     
                     if ai_service:

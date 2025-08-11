@@ -47,16 +47,24 @@ class ConversationLoader(QObject):
             # Get all conversations including current one
             conversations = []
             
-            # Get recent conversations from database
-            recent = self.conversation_manager.conversation_service.get_recent_conversations(limit=100)
-            conversations.extend(recent)
+            # Create new event loop for this thread
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             
-            # Get current active conversation if it exists
-            current = self.conversation_manager.get_current_conversation()
-            if current and not any(c.id == current.id for c in conversations):
-                conversations.insert(0, current)
-            
-            self.conversations_loaded.emit(conversations)
+            try:
+                # Get recent conversations from database
+                recent = loop.run_until_complete(
+                    self.conversation_manager.conversation_service.get_recent_conversations(limit=100)
+                )
+                conversations.extend(recent)
+                
+                # Note: Current active conversation is already included in recent conversations
+                
+                self.conversations_loaded.emit(conversations)
+                
+            finally:
+                loop.close()
             
         except Exception as e:
             self.error_occurred.emit(str(e))
@@ -76,9 +84,9 @@ class SimpleConversationBrowser(QDialog):
     
     conversation_restore_requested = pyqtSignal(str)  # conversation_id
     
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, conversation_manager=None):
         super().__init__(parent)
-        self.conversation_manager: Optional[ConversationManager] = None
+        self.conversation_manager: Optional[ConversationManager] = conversation_manager
         self.export_service: Optional[ExportService] = None
         self.conversations: List[Conversation] = []
         self.current_conversation_id: Optional[str] = None
@@ -180,10 +188,20 @@ class SimpleConversationBrowser(QDialog):
             self.status_label.setText("Conversation management not available")
             return
         
+        # Use provided conversation manager or create a new one
+        if self.conversation_manager:
+            logger.info("Using provided conversation manager")
+            # Pass the repository to the export service
+            self.export_service = ExportService(self.conversation_manager.repository)
+            self._load_conversations()
+            return
+        
         try:
+            logger.info("Creating new conversation manager for browser")
             self.conversation_manager = ConversationManager()
             if self.conversation_manager.initialize():
-                self.export_service = ExportService()
+                # Pass the repository to the export service
+                self.export_service = ExportService(self.conversation_manager.repository)
                 self._load_conversations()
             else:
                 self.status_label.setText("Failed to initialize conversation manager")
@@ -257,7 +275,7 @@ class SimpleConversationBrowser(QDialog):
             self.conversations_table.setItem(row, 1, status_item)
             
             # Message count
-            count_item = QTableWidgetItem(str(conversation.message_count))
+            count_item = QTableWidgetItem(str(conversation.get_message_count()))
             self.conversations_table.setItem(row, 2, count_item)
             
             # Updated time
@@ -270,8 +288,8 @@ class SimpleConversationBrowser(QDialog):
         if not self.conversation_manager:
             return False
         
-        current = self.conversation_manager.get_current_conversation()
-        return current and current.id == conversation.id
+        # For now, no specific current conversation highlighting
+        return False
     
     def _get_status_text(self, status) -> str:
         """Get human-readable status text."""
@@ -408,18 +426,31 @@ class SimpleConversationBrowser(QDialog):
             if not filename:
                 return
             
-            # Export conversation
+            # Export conversation using async properly
             self.status_label.setText("Exporting...")
-            exported_path = self.export_service.export_conversation(
-                conversation, format, filename
+            
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            # The export_service.export_conversation expects (conversation, file_path, format)
+            success = loop.run_until_complete(
+                self.export_service.export_conversation(
+                    conversation,  # Pass the conversation object
+                    filename,      # File path
+                    format.value   # Format as string
+                )
             )
             
-            if exported_path:
-                self.status_label.setText(f"Exported to: {exported_path}")
+            if success:
+                self.status_label.setText(f"Exported to: {filename}")
                 QMessageBox.information(
                     self,
                     "Export Complete",
-                    f"Conversation exported successfully to:\n{exported_path}"
+                    f"Conversation exported successfully to:\n{filename}"
                 )
             else:
                 self.status_label.setText("Export failed")

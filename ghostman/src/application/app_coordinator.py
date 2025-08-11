@@ -99,6 +99,10 @@ class AppCoordinator(QObject):
                     2000
                 )
             
+            # Disabled auto-loading of last conversation - user requested not to auto-load
+            # from PyQt6.QtCore import QTimer
+            # QTimer.singleShot(500, self._restore_current_conversation_state)
+            
             logger.info("Ghostman application initialized successfully")
             # Diagnostic path logging
             try:
@@ -162,6 +166,9 @@ class AppCoordinator(QObject):
         
         self.app_shutdown.emit()
         
+        # Save current conversation before shutdown
+        self._save_current_conversation_state()
+        
         # Hide UI components
         if self._main_window:
             self._main_window.hide()
@@ -174,6 +181,59 @@ class AppCoordinator(QObject):
             settings.set('app.current_state', self._state_machine.current_state.value)
         
         logger.info("Ghostman application shutdown complete")
+    
+    def _save_current_conversation_state(self):
+        """Save the currently active conversation ID to settings."""
+        try:
+            if (self._main_window and 
+                hasattr(self._main_window, 'floating_repl') and
+                self._main_window.floating_repl and
+                hasattr(self._main_window.floating_repl, 'repl_widget') and
+                self._main_window.floating_repl.repl_widget):
+                
+                current_conversation_id = self._main_window.floating_repl.repl_widget.get_current_conversation_id()
+                
+                if current_conversation_id:
+                    settings.set('conversation.last_active_id', current_conversation_id)
+                    logger.info(f"💾 Saved active conversation ID: {current_conversation_id}")
+                else:
+                    # Clear any previously saved conversation ID
+                    settings.delete('conversation.last_active_id')
+                    logger.debug("No active conversation to save")
+            else:
+                logger.debug("REPL widget not available to save conversation state")
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to save current conversation state: {e}")
+    
+    def _restore_current_conversation_state(self):
+        """Restore the last active conversation from settings."""
+        try:
+            logger.debug("🔄 Attempting to restore conversation state...")
+            last_active_id = settings.get('conversation.last_active_id')
+            
+            if last_active_id:
+                logger.info(f"📋 Found saved conversation ID: {last_active_id}")
+                
+                if (self._main_window and 
+                    hasattr(self._main_window, 'floating_repl') and
+                    self._main_window.floating_repl and
+                    hasattr(self._main_window.floating_repl, 'repl_widget') and
+                    self._main_window.floating_repl.repl_widget):
+                    
+                    # Restore the conversation in the REPL widget
+                    if hasattr(self._main_window.floating_repl.repl_widget, 'restore_conversation'):
+                        self._main_window.floating_repl.repl_widget.restore_conversation(last_active_id)
+                        logger.info(f"🔄 Restored active conversation: {last_active_id}")
+                    else:
+                        logger.debug("REPL widget doesn't support conversation restoration yet")
+                else:
+                    logger.debug("REPL widget not available for conversation restoration")
+            else:
+                logger.debug("❌ No previous conversation to restore")
+                    
+        except Exception as e:
+            logger.error(f"❌ Failed to restore conversation state: {e}", exc_info=True)
     
     def _on_state_changed(self, event: StateChangeEvent):
         """Handle state change events from the state machine."""
@@ -435,22 +495,17 @@ class AppCoordinator(QObject):
         # Apply log level changes
         if "log_level" in advanced_config:
             log_level = advanced_config["log_level"]
-            logger.info(f"📊 Log level setting: {log_level}")
-            logger.info(f"⚠️  Log level changes require application restart to take full effect")
-            settings_processed += 1
-        
-        if "enable_debug" in advanced_config:
-            debug_enabled = advanced_config["enable_debug"]
-            logger.info(f"🐛 Debug logging setting: {debug_enabled}")
-            if debug_enabled:
-                logger.info("🔍 Debug mode enabled - verbose logging active")
+            logger.info(f"📊 Logging mode: {log_level}")
+            if log_level == "Detailed":
+                logger.info("🔍 Detailed logging mode enabled - verbose logging active")
             else:
-                logger.info("🔇 Debug mode disabled - standard logging active")
+                logger.info("📝 Standard logging mode - normal verbosity")
+            logger.info(f"⚠️  Logging changes require application restart to take full effect")
             settings_processed += 1
         
         # Log any additional advanced settings
         for key, value in advanced_config.items():
-            if key not in ["log_level", "enable_debug"]:
+            if key not in ["log_level"]:
                 logger.info(f"  🔧 Advanced {key}: {value}")
                 settings_processed += 1
         

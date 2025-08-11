@@ -152,13 +152,13 @@ class ConversationManager:
             self._notify_status("error", {"operation": "create_conversation", "error": str(e)})
             return None
     
-    async def get_conversation(self, conversation_id: str) -> Optional[Conversation]:
+    async def get_conversation(self, conversation_id: str, include_messages: bool = True) -> Optional[Conversation]:
         """Get conversation by ID."""
         if not self._initialized:
             return None
         
         try:
-            return await self.conversation_service.get_conversation(conversation_id)
+            return await self.conversation_service.get_conversation(conversation_id, include_messages=include_messages)
         except Exception as e:
             logger.error(f"❌ Failed to get conversation: {e}")
             return None

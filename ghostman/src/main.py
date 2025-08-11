@@ -154,15 +154,24 @@ def main():
     # Parse command line arguments
     args = parse_arguments()
     
-    # Setup logging first
-    setup_logging(debug=args.debug, log_dir=args.log_dir)
+    # Setup logging - check settings for detailed mode first
+    debug_mode = args.debug
+    try:
+        from ghostman.src.infrastructure.storage.settings_manager import settings
+        log_mode = settings.get("advanced.log_level", "Standard")
+        if log_mode == "Detailed":
+            debug_mode = True
+    except Exception:
+        pass  # Use command line arg if settings unavailable
+    
+    setup_logging(debug=debug_mode, log_dir=args.log_dir)
     
     logger.info("=" * 60)
     logger.info("GHOSTMAN APPLICATION STARTING")
     logger.info("=" * 60)
     logger.info(f"Python version: {sys.version}")
     logger.info(f"Platform: {sys.platform}")
-    logger.info(f"Debug mode: {args.debug}")
+    logger.info(f"Debug mode: {debug_mode} (CLI: {args.debug})")
     
     # Create and run application
     app = GhostmanApplication()
