@@ -18,24 +18,32 @@ logger = logging.getLogger("ghostman.export_service")
 class ExportService:
     """Service for exporting conversation data to various formats."""
     
-    def __init__(self, repository: ConversationRepository):
+    def __init__(self, repository: Optional[ConversationRepository] = None):
         """Initialize export service."""
         self.repository = repository
     
     async def export_conversation(
         self,
-        conversation_id: str,
-        format: str,
+        conversation_or_id,  # Can be Conversation object or ID string
         file_path: str,
+        format: str,
         include_metadata: bool = True
     ) -> bool:
         """Export a single conversation to file."""
         try:
-            # Load conversation
-            conversation = await self.repository.get_conversation(conversation_id, include_messages=True)
-            if not conversation:
-                logger.error(f"Conversation not found: {conversation_id}")
-                return False
+            # Handle both conversation object and ID
+            if isinstance(conversation_or_id, str):
+                # It's an ID, load from repository
+                if not self.repository:
+                    logger.error("Repository required for conversation ID")
+                    return False
+                conversation = await self.repository.get_conversation(conversation_or_id, include_messages=True)
+                if not conversation:
+                    logger.error(f"Conversation not found: {conversation_or_id}")
+                    return False
+            else:
+                # It's already a conversation object
+                conversation = conversation_or_id
             
             # Export based on format
             export_format = ExportFormat(format.lower())

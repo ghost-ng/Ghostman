@@ -24,11 +24,13 @@ class MainWindow(QMainWindow):
     minimize_requested = pyqtSignal()
     close_requested = pyqtSignal()
     settings_requested = pyqtSignal()
+    conversations_requested = pyqtSignal()
     
     def __init__(self, app_coordinator):
         super().__init__()
         self.app_coordinator = app_coordinator
         self.floating_repl = None
+        self.conversation_browser = None  # Simple conversation browser
         
         self._init_ui()
         self._setup_window()
@@ -46,6 +48,7 @@ class MainWindow(QMainWindow):
         self.avatar_widget.minimize_requested.connect(self.minimize_requested.emit)
         self.avatar_widget.avatar_clicked.connect(self._toggle_repl)
         self.avatar_widget.settings_requested.connect(self.settings_requested.emit)
+        self.avatar_widget.conversations_requested.connect(self._show_conversations)
         self.setCentralWidget(self.avatar_widget)
         
         # Create floating REPL window (initially hidden)
@@ -176,3 +179,104 @@ class MainWindow(QMainWindow):
         """Handle command from REPL."""
         logger.info(f"REPL command: {command}")
         # This would be connected to AI service
+    
+    def _show_conversations(self):
+        """Show the simple conversation management window."""
+        try:
+            from ..dialogs.simple_conversation_browser import SimpleConversationBrowser
+            from ...infrastructure.conversation_management.integration.conversation_manager import ConversationManager
+            
+            # Initialize conversation manager if needed
+            if not hasattr(self, '_conversation_manager') or not self._conversation_manager:
+                self._conversation_manager = ConversationManager()
+                if not self._conversation_manager.initialize():
+                    logger.error("Failed to initialize conversation manager")
+                    from PyQt6.QtWidgets import QMessageBox
+                    QMessageBox.warning(
+                        self,
+                        "Conversations Unavailable",
+                        "Conversation management system could not be initialized."
+                    )
+                    return
+            
+            # Get current conversation ID from REPL if available
+            current_conversation_id = None
+            if (self.floating_repl and 
+                hasattr(self.floating_repl, 'repl_widget') and 
+                self.floating_repl.repl_widget):
+                current_conversation_id = self.floating_repl.repl_widget.get_current_conversation_id()
+            
+            # Create or show conversation browser
+            if not self.conversation_browser:
+                self.conversation_browser = SimpleConversationBrowser(parent=self)
+                self.conversation_browser.conversation_restore_requested.connect(
+                    self._restore_conversation_to_repl
+                )
+            else:
+                # Update current conversation and refresh
+                self.conversation_browser.set_current_conversation(current_conversation_id)
+            
+            # Show the browser
+            self.conversation_browser.show()
+            self.conversation_browser.raise_()
+            self.conversation_browser.activateWindow()
+            
+            logger.info("Simple conversation browser opened")
+            
+        except ImportError as e:
+            logger.error(f"Conversation management not available: {e}")
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self,
+                "Feature Unavailable",
+                "Conversation management is not yet available."
+            )
+        except Exception as e:
+            logger.error(f"Failed to show conversations: {e}")
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to open conversations:\n{str(e)}"
+            )
+    
+    def _restore_conversation_to_repl(self, conversation_id: str):
+        """Restore a conversation to the REPL."""
+        logger.info(f"Restoring conversation to REPL: {conversation_id}")
+        
+        try:
+            # Show REPL if not visible
+            if not self.floating_repl.isVisible():
+                self._show_repl()
+            
+            # Load conversation in REPL widget
+            if (self.floating_repl and 
+                hasattr(self.floating_repl, 'repl_widget') and 
+                self.floating_repl.repl_widget):
+                
+                # This would need to be implemented in REPLWidget
+                # For now, just log the action
+                logger.info(f"TODO: Implement conversation loading in REPL widget for {conversation_id}")
+                
+                # Update conversation browser to reflect the change
+                if self.conversation_browser:
+                    self.conversation_browser.set_current_conversation(conversation_id)
+                
+                # Show success message
+                from PyQt6.QtWidgets import QMessageBox
+                QMessageBox.information(
+                    self,
+                    "Conversation Restored",
+                    f"Conversation has been loaded into the REPL.\n\nID: {conversation_id[:16]}..."
+                )
+            else:
+                logger.error("REPL widget not available for conversation restore")
+                
+        except Exception as e:
+            logger.error(f"Failed to restore conversation: {e}")
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.critical(
+                self,
+                "Restore Failed",
+                f"Failed to restore conversation:\n{str(e)}"
+            )

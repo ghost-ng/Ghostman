@@ -481,8 +481,8 @@ class REPLWidget(QWidget):
         # Enhanced title bar with conversation management
         self._init_title_bar(layout)
         
-        # Conversation management toolbar
-        self._init_conversation_toolbar(layout)
+        # Remove the conversation management toolbar for cleaner interface
+        # (toolbar functionality moved to avatar context menu)
         
         # Separator
         separator = QFrame()
@@ -497,12 +497,20 @@ class REPLWidget(QWidget):
         self.output_display.setMinimumHeight(300)
         layout.addWidget(self.output_display, 1)
         
-        # Input area
+        # Input area with background styling for prompt
         input_layout = QHBoxLayout()
         
-        # Prompt label
+        # Prompt label with background styling for better visual separation
         prompt_label = QLabel(">>>")
-        prompt_label.setStyleSheet("color: #00ff00; font-family: Consolas; font-size: 11px;")
+        prompt_label.setStyleSheet("""
+            color: #00ff00; 
+            font-family: Consolas; 
+            font-size: 11px;
+            background-color: rgba(0, 255, 0, 0.1);
+            border-radius: 3px;
+            padding: 5px 8px;
+            margin-right: 5px;
+        """)
         input_layout.addWidget(prompt_label)
         
         # Command input
@@ -534,7 +542,7 @@ class REPLWidget(QWidget):
         
         # Initial welcome message
         self.append_output("💬 Ghostman Conversation Manager v2.0", "system")
-        self.append_output("🚀 Enhanced REPL with visual conversation management", "system")
+        self.append_output("🚀 Clean REPL interface - conversation management via avatar menu", "system")
         self.append_output("Type 'help' for commands or start chatting with AI.", "system")
         self.append_output("-" * 50, "system")
         

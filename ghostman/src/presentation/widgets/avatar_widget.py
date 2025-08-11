@@ -29,6 +29,7 @@ class AvatarWidget(QWidget):
     avatar_clicked = pyqtSignal()
     minimize_requested = pyqtSignal()
     settings_requested = pyqtSignal()
+    conversations_requested = pyqtSignal()
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -205,6 +206,13 @@ class AvatarWidget(QWidget):
         """Show context menu on right-click."""
         context_menu = QMenu(self)
         
+        # Conversations action - primary feature
+        conversations_action = QAction("Conversations", self)
+        conversations_action.triggered.connect(self.conversations_requested.emit)
+        context_menu.addAction(conversations_action)
+        
+        context_menu.addSeparator()
+        
         # Settings action
         settings_action = QAction("Settings...", self)
         settings_action.triggered.connect(self.settings_requested.emit)
@@ -219,10 +227,10 @@ class AvatarWidget(QWidget):
         
         context_menu.addSeparator()
         
-        about_action = QAction("About Spector", self)
-        about_action.triggered.connect(lambda: logger.info("About Spector clicked"))
+        about_action = QAction("About Ghostman", self)
+        about_action.triggered.connect(lambda: logger.info("About Ghostman clicked"))
         context_menu.addAction(about_action)
         
         # Show the menu
         context_menu.exec(pos)
-        logger.debug("Context menu shown")
+        logger.debug("Context menu shown with conversations option")

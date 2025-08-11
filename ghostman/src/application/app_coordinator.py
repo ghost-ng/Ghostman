@@ -137,6 +137,7 @@ class AppCoordinator(QObject):
             self._main_window.minimize_requested.connect(self._show_tray_mode)
             self._main_window.close_requested.connect(self._show_tray_mode)
             self._main_window.settings_requested.connect(self._show_settings)
+            # Note: conversations signal is handled directly in MainWindow
             
             logger.debug("UI components initialized successfully")
             
