@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QThread, QObject, QTimer
 from PyQt6.QtGui import QAction, QIcon, QFont
 
-from ...presentation.widgets.repl_widget import REPLWidget
+from ....presentation.widgets.repl_widget import REPLWidget
 from ..integration.conversation_manager import ConversationManager
 
 logger = logging.getLogger("ghostman.conversation_repl")
@@ -135,9 +135,26 @@ class ConversationREPLWidget(REPLWidget):
         layout.addWidget(new_conv_btn)
         
         # Browse conversations button
-        browse_btn = QPushButton("Browse")
-        browse_btn.setToolTip("Browse all conversations")
+        browse_btn = QPushButton("📋 Browse")
+        browse_btn.setToolTip("Open visual conversation browser")
         browse_btn.clicked.connect(self._browse_conversations)
+        browse_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(255, 152, 0, 0.8);
+                color: white;
+                border: none;
+                padding: 4px 10px;
+                border-radius: 3px;
+                font-size: 10px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 152, 0, 1.0);
+            }
+            QPushButton:pressed {
+                background-color: rgba(230, 136, 0, 1.0);
+            }
+        """)
         layout.addWidget(browse_btn)
         
         # Export button
@@ -361,13 +378,40 @@ class ConversationREPLWidget(REPLWidget):
     def _browse_conversations(self):
         """Open conversation browser dialog."""
         self.append_output("🔍 Opening conversation browser...", "info")
-        # TODO: Implement conversation browser dialog
-        # For now, just show a message
-        QMessageBox.information(
-            self, 
-            "Conversation Browser", 
-            "Conversation browser dialog will be implemented in the full UI integration."
-        )
+        
+        if not self.conversation_manager:
+            self.append_output("❌ Conversation manager not available", "error")
+            return
+        
+        try:
+            from .conversation_browser import ConversationBrowserDialog
+            
+            # Create and show the conversation browser
+            browser = ConversationBrowserDialog(self.conversation_manager, self.parent())
+            
+            # Connect signals
+            browser.conversation_loaded.connect(self._on_browser_conversation_loaded)
+            browser.conversation_selected.connect(self._on_browser_conversation_selected)
+            
+            # Show the browser
+            browser.show()
+            browser.raise_()
+            browser.activateWindow()
+            
+            self.append_output("✅ Conversation browser opened", "info")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to open conversation browser: {e}")
+            self.append_output(f"❌ Error opening conversation browser: {e}", "error")
+    
+    def _on_browser_conversation_loaded(self, conversation_id: str):
+        """Handle conversation loaded from browser."""
+        self.append_output(f"📂 Loading conversation from browser: {conversation_id[:8]}...", "info")
+        self._load_conversation(conversation_id)
+    
+    def _on_browser_conversation_selected(self, conversation_id: str):
+        """Handle conversation selected in browser."""
+        self.append_output(f"👆 Selected conversation: {conversation_id[:8]}...", "info")
     
     def _export_current_conversation(self):
         """Export the current conversation."""

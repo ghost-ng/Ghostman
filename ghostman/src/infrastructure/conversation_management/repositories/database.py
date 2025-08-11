@@ -1,14 +1,16 @@
 """
-Database manager for conversation storage using SQLite.
+Database management for conversations.
+
+Provides SQLite database operations for conversation persistence with full-text search,
+proper indexing, and thread-safe operations.
 """
 
 import sqlite3
-import logging
-import json
-from pathlib import Path
-from typing import Optional, Dict, Any, List
-from contextlib import contextmanager
 import threading
+import logging
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Optional
 
 logger = logging.getLogger("ghostman.conversation_db")
 
@@ -17,40 +19,48 @@ class DatabaseManager:
     """Manages SQLite database for conversation storage."""
     
     SCHEMA_VERSION = 1
-    
-    # SQL Schema
     SCHEMA_SQL = """
-    -- Conversations table
+    -- Main conversations table
     CREATE TABLE IF NOT EXISTS conversations (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'active',
+        status TEXT NOT NULL CHECK (status IN ('active', 'archived', 'pinned')),
         created_at TIMESTAMP NOT NULL,
         updated_at TIMESTAMP NOT NULL,
-        metadata_json TEXT DEFAULT '{}',
-        
-        -- Indexes for performance
-        INDEX (status),
-        INDEX (created_at),
-        INDEX (updated_at),
-        INDEX (title)
+        message_count INTEGER DEFAULT 0,
+        model_used TEXT,
+        tags_json TEXT DEFAULT '[]',
+        category TEXT,
+        priority INTEGER DEFAULT 0,
+        is_favorite BOOLEAN DEFAULT 0,
+        metadata_json TEXT DEFAULT '{}'
     );
+    
+    -- Create indexes for conversations table
+    CREATE INDEX IF NOT EXISTS idx_conversations_status ON conversations(status);
+    CREATE INDEX IF NOT EXISTS idx_conversations_created_at ON conversations(created_at);
+    CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON conversations(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_conversations_title ON conversations(title);
+    CREATE INDEX IF NOT EXISTS idx_conversations_category ON conversations(category);
+    CREATE INDEX IF NOT EXISTS idx_conversations_is_favorite ON conversations(is_favorite);
     
     -- Messages table
     CREATE TABLE IF NOT EXISTS messages (
         id TEXT PRIMARY KEY,
         conversation_id TEXT NOT NULL,
-        role TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('system', 'user', 'assistant')),
         content TEXT NOT NULL,
         timestamp TIMESTAMP NOT NULL,
         token_count INTEGER,
         metadata_json TEXT DEFAULT '{}',
         
-        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
-        INDEX (conversation_id),
-        INDEX (role),
-        INDEX (timestamp)
+        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
     );
+    
+    -- Create indexes for messages table
+    CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
+    CREATE INDEX IF NOT EXISTS idx_messages_role ON messages(role);
+    CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
     
     -- Conversation summaries table
     CREATE TABLE IF NOT EXISTS conversation_summaries (
@@ -62,10 +72,12 @@ class DatabaseManager:
         model_used TEXT,
         confidence_score REAL,
         
-        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
-        INDEX (conversation_id),
-        INDEX (generated_at)
+        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
     );
+    
+    -- Create indexes for conversation_summaries table
+    CREATE INDEX IF NOT EXISTS idx_summaries_conversation_id ON conversation_summaries(conversation_id);
+    CREATE INDEX IF NOT EXISTS idx_summaries_generated_at ON conversation_summaries(generated_at);
     
     -- Full-text search virtual table
     CREATE VIRTUAL TABLE IF NOT EXISTS conversations_fts USING fts5(
@@ -84,6 +96,10 @@ class DatabaseManager:
         created_at TIMESTAMP NOT NULL
     );
     
+    -- Create index for tags table
+    CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name);
+    CREATE INDEX IF NOT EXISTS idx_tags_usage_count ON tags(usage_count);
+    
     -- Conversation-tags junction table
     CREATE TABLE IF NOT EXISTS conversation_tags (
         conversation_id TEXT NOT NULL,
@@ -99,6 +115,9 @@ class DatabaseManager:
         version INTEGER PRIMARY KEY,
         applied_at TIMESTAMP NOT NULL
     );
+    
+    -- Insert initial schema version
+    INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (1, datetime('now'));
     """
     
     def __init__(self, db_path: Optional[Path] = None):
@@ -198,55 +217,14 @@ class DatabaseManager:
                 conn.execute("VACUUM")
             logger.info("Database optimized")
         except Exception as e:
-            logger.error(f"Database vacuum failed: {e}")
+            logger.error(f"Failed to vacuum database: {e}")
     
-    def get_stats(self) -> Dict[str, Any]:
-        """Get database statistics."""
-        try:
-            with self.get_connection() as conn:
-                stats = {}
-                
-                # Table counts
-                cursor = conn.execute("SELECT COUNT(*) FROM conversations")
-                stats['conversations'] = cursor.fetchone()[0]
-                
-                cursor = conn.execute("SELECT COUNT(*) FROM messages")
-                stats['messages'] = cursor.fetchone()[0]
-                
-                cursor = conn.execute("SELECT COUNT(*) FROM conversation_summaries")
-                stats['summaries'] = cursor.fetchone()[0]
-                
-                cursor = conn.execute("SELECT COUNT(*) FROM tags")
-                stats['tags'] = cursor.fetchone()[0]
-                
-                # Database file size
-                stats['file_size_bytes'] = self.db_path.stat().st_size
-                
-                # Most used tags
-                cursor = conn.execute("""
-                    SELECT name, usage_count 
-                    FROM tags 
-                    ORDER BY usage_count DESC 
-                    LIMIT 10
-                """)
-                stats['top_tags'] = [dict(row) for row in cursor.fetchall()]
-                
-                return stats
-                
-        except Exception as e:
-            logger.error(f"Failed to get database stats: {e}")
-            return {}
-    
-    def close(self):
-        """Close database connections."""
+    def close_all_connections(self):
+        """Close all thread-local connections."""
         if hasattr(self._local, 'connection'):
-            try:
-                self._local.connection.close()
-                delattr(self._local, 'connection')
-            except Exception as e:
-                logger.warning(f"Error closing database connection: {e}")
-        
-        logger.info("Database connections closed")
+            self._local.connection.close()
+            delattr(self._local, 'connection')
+        logger.debug("Database connections closed")
     
     @property
     def is_initialized(self) -> bool:

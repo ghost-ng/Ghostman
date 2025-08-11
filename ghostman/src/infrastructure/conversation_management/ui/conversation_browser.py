@@ -582,3 +582,34 @@ class ConversationBrowserDialog(QDialog):
         """Show cleanup dialog."""
         # TODO: Implement cleanup dialog
         QMessageBox.information(self, "Cleanup", "Cleanup dialog will be implemented.")
+    
+    # Utility methods for integration
+    def refresh_conversations(self):
+        """Refresh the conversation list."""
+        self._load_conversations()
+    
+    def select_conversation(self, conversation_id: str):
+        """Programmatically select a conversation."""
+        if conversation_id in self.conversation_cards:
+            self._on_card_selected(conversation_id)
+    
+    # Window event handling
+    def closeEvent(self, event):
+        """Handle window close event."""
+        logger.info("Conversation browser closing")
+        event.accept()
+    
+    def showEvent(self, event):
+        """Handle window show event."""
+        super().showEvent(event)
+        # Center the window
+        if QApplication.primaryScreen():
+            screen = QApplication.primaryScreen().geometry()
+            window_geometry = self.frameGeometry()
+            center_point = screen.center()
+            window_geometry.moveCenter(center_point)
+            self.move(window_geometry.topLeft())
+        
+        # Focus the search input
+        if self.search_input:
+            QTimer.singleShot(100, self.search_input.setFocus)
