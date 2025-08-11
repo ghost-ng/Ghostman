@@ -54,16 +54,29 @@ class ConversationContext:
     
     def _trim_context(self):
         """Trim conversation context to stay within limits."""
+        if len(self.messages) <= self.max_messages:
+            return  # No trimming needed
+            
         # Keep system message if it exists
         system_messages = [msg for msg in self.messages if msg.role == 'system']
         other_messages = [msg for msg in self.messages if msg.role != 'system']
         
-        # Trim other messages if needed
-        if len(other_messages) > self.max_messages:
-            # Keep most recent messages
-            other_messages = other_messages[-(self.max_messages-len(system_messages)):]
+        # Calculate how many non-system messages we can keep
+        available_slots = self.max_messages - len(system_messages)
         
+        # Trim other messages if needed, keeping the most recent ones
+        if len(other_messages) > available_slots:
+            # Keep most recent messages (preserve conversation flow)
+            other_messages = other_messages[-available_slots:]
+        
+        # Rebuild messages list with system messages first
         self.messages = system_messages + other_messages
+        
+        # Log the trimming operation
+        from datetime import datetime
+        import logging
+        logger = logging.getLogger("ghostman.ai_service")
+        logger.info(f"🔄 Context trimmed to {len(self.messages)} messages (max: {self.max_messages})")
     
     def to_api_format(self) -> List[Dict[str, str]]:
         """Convert messages to API format."""

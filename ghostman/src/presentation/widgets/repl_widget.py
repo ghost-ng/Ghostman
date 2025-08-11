@@ -208,6 +208,9 @@ class REPLWidget(QWidget):
         self._apply_styles()
         self._init_conversation_manager()
         
+        # Load conversations after UI is fully initialized
+        QTimer.singleShot(100, self._load_conversations_deferred)
+        
         logger.info("Enhanced REPLWidget initialized with conversation management")
     
     def _init_conversation_manager(self):
@@ -220,7 +223,6 @@ class REPLWidget(QWidget):
             self.conversation_manager = ConversationManager()
             if self.conversation_manager.initialize():
                 logger.info("✅ Conversation manager initialized successfully")
-                self._load_conversations()
             else:
                 logger.error("❌ Failed to initialize conversation manager")
                 self.conversation_manager = None
@@ -228,38 +230,56 @@ class REPLWidget(QWidget):
             logger.error(f"❌ Conversation manager initialization failed: {e}")
             self.conversation_manager = None
     
-    async def _load_conversations(self):
-        """Load recent conversations into selector."""
+    def _load_conversations_deferred(self):
+        """Load conversations after UI is fully initialized."""
         if not self.conversation_manager:
+            logger.debug("No conversation manager available for deferred loading")
             return
         
         try:
+            logger.debug("Starting deferred conversation loading...")
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                logger.debug("Event loop is running, creating task for deferred loading...")
+                asyncio.create_task(self._load_conversations())
+            else:
+                logger.debug("Event loop not running, using run_until_complete for deferred loading...")
+                loop.run_until_complete(self._load_conversations())
+            logger.debug("Deferred conversation loading initiated successfully")
+        except Exception as e:
+            logger.error(f"❌ Failed deferred conversation loading: {e}", exc_info=True)
+            # Ensure state is valid
+            self.conversations_list = []
+            self.current_conversation = None
+    
+    async def _load_conversations(self):
+        """Load recent conversations into selector."""
+        if not self.conversation_manager:
+            logger.warning("No conversation manager available for loading conversations")
+            return
+        
+        try:
+            logger.debug("Loading conversations from conversation manager...")
             # Get recent active conversations
             conversations = await self.conversation_manager.get_recent_conversations(limit=20)
+            logger.debug(f"Loaded {len(conversations)} conversations")
             self.conversations_list = conversations
             
-            # Update conversation selector
-            self.conversation_selector.clear()
-            
-            if not conversations:
-                # Create a new default conversation
-                self.conversation_selector.addItem("🆕 New Conversation", None)
-                self._update_status_label(None)
+            # Set current conversation to most recent
+            if conversations:
+                self.current_conversation = conversations[0]
+                logger.debug(f"Set current conversation to most recent: {conversations[0].title}")
             else:
-                for conv in conversations:
-                    display_name = f"{self._get_status_icon(conv)} {conv.title}"
-                    self.conversation_selector.addItem(display_name, conv.id)
-                
-                # Select the most recent conversation
-                if conversations:
-                    self.current_conversation = conversations[0]
-                    self._update_status_label(conversations[0])
-                    self.conversation_selector.setCurrentIndex(0)
+                self.current_conversation = None
+                logger.debug("No conversations found - no current conversation set")
             
             logger.info(f"📋 Loaded {len(conversations)} conversations")
             
         except Exception as e:
-            logger.error(f"❌ Failed to load conversations: {e}")
+            logger.error(f"❌ Failed to load conversations: {e}", exc_info=True)
+            # Ensure state is valid even if conversation loading fails
+            self.conversations_list = []
+            self.current_conversation = None
     
     def _get_status_icon(self, conversation: Optional[Conversation]) -> str:
         """Get status icon for conversation."""
@@ -478,17 +498,8 @@ class REPLWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
         
-        # Enhanced title bar with conversation management
-        self._init_title_bar(layout)
-        
-        # Remove the conversation management toolbar for cleaner interface
-        # (toolbar functionality moved to avatar context menu)
-        
-        # Separator
-        separator = QFrame()
-        separator.setFrameShape(QFrame.Shape.HLine)
-        separator.setStyleSheet("background-color: rgba(255, 255, 255, 0.2);")
-        layout.addWidget(separator)
+        # Title bar completely removed for cleaner interface
+        # All conversation management moved to avatar right-click menu
         
         # Output display
         self.output_display = QTextEdit()
@@ -696,6 +707,17 @@ class REPLWidget(QWidget):
         
         # Load conversation messages in output
         self._load_conversation_messages(conversation)
+        
+        # CRITICAL: Update AI service context when switching conversations
+        if self.conversation_manager and self.conversation_manager.has_ai_service():
+            ai_service = self.conversation_manager.get_ai_service()
+            if ai_service:
+                logger.info(f"🔄 Updating AI service context for conversation switch")
+                
+                # Use the proper method to set conversation and load context
+                ai_service.set_current_conversation(conversation.id)
+                
+                logger.info(f"✅ AI service context updated for conversation: {conversation.id}")
         
         # Reset idle detector for new conversation
         self.idle_detector.reset_activity(conversation.id)
@@ -975,6 +997,7 @@ class REPLWidget(QWidget):
             self.append_output("  history  - Show command history", "info")
             self.append_output("  exit     - Minimize to system tray", "info")
             self.append_output("  quit     - Exit the application", "info")
+            self.append_output("  context  - Show AI context status (debug)", "info")
             self.append_output("\nAny other input will be sent to the AI assistant.", "info")
         
         elif command_lower == "clear":
@@ -995,6 +1018,10 @@ class REPLWidget(QWidget):
         elif command_lower == "quit":
             # Would need to connect to app quit
             self.append_output("Use system tray menu to quit application", "warning")
+        
+        elif command_lower == "context":
+            # Debug command to show AI context status
+            self._show_context_status()
         
         else:
             # Send to AI service
@@ -1035,8 +1062,60 @@ class REPLWidget(QWidget):
         """Clear the output display."""
         self.output_display.clear()
     
+    def _show_context_status(self):
+        """Show AI context status for debugging."""
+        self.append_output("=== AI Context Status ===", "info")
+        
+        # Current conversation info
+        if self.current_conversation:
+            self.append_output(f"Current Conversation: {self.current_conversation.title}", "info")
+            self.append_output(f"Conversation ID: {self.current_conversation.id}", "info")
+            if hasattr(self.current_conversation, 'messages'):
+                self.append_output(f"Messages in DB: {len(self.current_conversation.messages)}", "info")
+        else:
+            self.append_output("Current Conversation: None", "warning")
+        
+        # AI service context info
+        if self.conversation_manager and self.conversation_manager.has_ai_service():
+            ai_service = self.conversation_manager.get_ai_service()
+            if ai_service:
+                self.append_output(f"AI Service Available: Yes", "info")
+                self.append_output(f"AI Current Conversation: {ai_service.get_current_conversation_id()}", "info")
+                self.append_output(f"AI Context Messages: {len(ai_service.conversation.messages)}", "info")
+                self.append_output(f"AI Max Messages: {ai_service.conversation.max_messages}", "info")
+                
+                # Show recent messages in context
+                if ai_service.conversation.messages:
+                    self.append_output("Recent AI Context Messages:", "info")
+                    for i, msg in enumerate(ai_service.conversation.messages[-5:]):  # Last 5 messages
+                        preview = msg.content[:50] + "..." if len(msg.content) > 50 else msg.content
+                        self.append_output(f"  {msg.role}: {preview}", "info")
+                else:
+                    self.append_output("AI Context: Empty", "warning")
+            else:
+                self.append_output("AI Service Available: No", "warning")
+        else:
+            self.append_output("Conversation Manager AI Service: Not Available", "warning")
+        
+        self.append_output("========================", "info")
+    
     def _send_to_ai(self, message: str):
         """Send message to AI service with conversation management."""
+        # Ensure we have an active conversation
+        if not self.current_conversation and self.conversation_manager:
+            logger.info("🆕 Auto-creating conversation for AI interaction")
+            self._create_new_conversation_for_message(message)
+            
+        # Ensure AI service has the correct conversation context
+        if self.current_conversation and self.conversation_manager and self.conversation_manager.has_ai_service():
+            ai_service = self.conversation_manager.get_ai_service()
+            if ai_service:
+                # Make sure the current conversation is set in the AI service
+                current_ai_conversation = ai_service.get_current_conversation_id()
+                if current_ai_conversation != self.current_conversation.id:
+                    logger.info(f"🔄 Syncing AI service conversation context: {current_ai_conversation} -> {self.current_conversation.id}")
+                    ai_service.set_current_conversation(self.current_conversation.id)
+        
         self.append_output("🤖 Processing with AI...", "system")
         
         # Reset idle detector
@@ -1059,26 +1138,34 @@ class REPLWidget(QWidget):
             
             def run(self):
                 try:
-                    # Use conversation-aware AI service if available
+                    # ALWAYS prefer conversation-aware AI service for context persistence
+                    ai_service = None
                     if self.conversation_manager and self.conversation_manager.has_ai_service():
                         ai_service = self.conversation_manager.get_ai_service()
+                        logger.info("🎯 Using conversation-aware AI service for context persistence")
                         
                         if ai_service:
-                            # Set current conversation context
+                            # Ensure current conversation context is set
                             if self.current_conversation:
+                                logger.debug(f"Setting AI service conversation context to: {self.current_conversation.id}")
                                 ai_service.set_current_conversation(self.current_conversation.id)
                             
-                            # Send message with conversation context
-                            result = ai_service.send_message(self.message)
+                            # Send message with full conversation context
+                            result = ai_service.send_message(self.message, save_conversation=True)
                             
                             if result.get('success', False):
+                                logger.info(f"✅ AI response received with context (context size: {len(ai_service.conversation.messages)} messages)")
                                 self.response_received.emit(result['response'], True)
                             else:
                                 error_msg = f"❌ AI Error: {result.get('error', 'Unknown error')}"
+                                logger.error(f"AI service error: {error_msg}")
                                 self.response_received.emit(error_msg, False)
                             return
+                        else:
+                            logger.warning("⚠️  Conversation manager AI service not available")
                     
-                    # Fallback to basic AI service
+                    # Only fallback to basic AI service if conversation manager not available
+                    logger.warning("🔄 Falling back to basic AI service (context may be lost)")
                     ai_service = self._get_basic_ai_service()
                     
                     if not ai_service or not ai_service.is_initialized:
@@ -1088,10 +1175,11 @@ class REPLWidget(QWidget):
                         )
                         return
                     
-                    # Send message to AI
+                    # Send message to basic AI service (without conversation context)
                     result = ai_service.send_message(self.message)
                     
                     if result.get('success', False):
+                        logger.warning("⚠️  Using basic AI service - conversation context may be limited")
                         self.response_received.emit(result['response'], True)
                     else:
                         error_msg = f"❌ AI Error: {result.get('error', 'Unknown error')}"
@@ -1168,18 +1256,160 @@ class REPLWidget(QWidget):
         if conversation_manager and conversation_manager.is_initialized():
             # Reload conversations
             try:
+                logger.debug("Reloading conversations after setting manager...")
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
                     asyncio.create_task(self._load_conversations())
                 else:
                     loop.run_until_complete(self._load_conversations())
+                logger.debug("Conversation reload initiated successfully")
             except Exception as e:
-                logger.error(f"Failed to load conversations after setting manager: {e}")
+                logger.error(f"❌ Failed to load conversations after setting manager: {e}", exc_info=True)
         logger.info("Conversation manager set for REPL widget")
     
     def get_current_conversation_id(self) -> Optional[str]:
         """Get the ID of the currently active conversation."""
-        return self.current_conversation.id if self.current_conversation else None
+        # Don't return ID for empty conversations
+        if self.current_conversation:
+            # Check if conversation has any messages
+            if hasattr(self.current_conversation, 'message_count') and self.current_conversation.message_count > 0:
+                return self.current_conversation.id
+            elif hasattr(self.current_conversation, 'messages') and len(self.current_conversation.messages) > 0:
+                return self.current_conversation.id
+        return None
+    
+    def restore_conversation(self, conversation_id: str):
+        """Restore a specific conversation by ID."""
+        if not self.conversation_manager:
+            logger.warning("Cannot restore conversation - no conversation manager available")
+            return
+            
+        try:
+            logger.debug(f"Attempting to restore conversation: {conversation_id}")
+            
+            # Create async task to load the conversation
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.create_task(self._restore_conversation_async(conversation_id))
+            else:
+                loop.run_until_complete(self._restore_conversation_async(conversation_id))
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to restore conversation {conversation_id}: {e}", exc_info=True)
+    
+    async def _restore_conversation_async(self, conversation_id: str):
+        """Restore conversation asynchronously."""
+        try:
+            # Load the conversation from database with messages
+            conversation = await self.conversation_manager.get_conversation(conversation_id, include_messages=True)
+            
+            if conversation:
+                # Set as current conversation
+                self.current_conversation = conversation
+                logger.info(f"✅ Restored conversation: {conversation.title}")
+                
+                # Load conversation messages into REPL display
+                self.clear_output()
+                self.append_output(f"📂 Restored conversation: {conversation.title}", "system")
+                
+                # Display conversation history
+                if hasattr(conversation, 'messages') and conversation.messages:
+                    logger.info(f"📜 Restoring {len(conversation.messages)} messages")
+                    for message in conversation.messages:
+                        if hasattr(message, 'role') and hasattr(message, 'content'):
+                            if message.role.value == 'user':
+                                self.append_output(f">>> {message.content}", "input")
+                            elif message.role.value == 'assistant':
+                                self.append_output(message.content, "response")
+                            elif message.role.value == 'system':
+                                self.append_output(f"[System] {message.content}", "system")
+                else:
+                    logger.debug("No messages found for conversation")
+                
+                self.append_output("", "system")  # Add spacing
+                self.append_output("💬 Conversation restored. Continue chatting...", "system")
+                
+                # Update idle detector
+                self.idle_detector.reset_activity(conversation_id)
+                
+                # Update AI service context if available - CRITICAL for maintaining context
+                if hasattr(conversation, 'messages') and conversation.messages:
+                    # Get conversation-aware AI service from conversation manager
+                    ai_service = None
+                    if self.conversation_manager and self.conversation_manager.has_ai_service():
+                        ai_service = self.conversation_manager.get_ai_service()
+                    
+                    if ai_service:
+                        logger.info(f"🔄 Setting AI service to restored conversation context")
+                        
+                        # Use the proper method to set conversation and load context
+                        ai_service.set_current_conversation(conversation_id)
+                        
+                        logger.info(f"✅ AI service context restored for conversation: {conversation_id}")
+                    else:
+                        logger.warning("⚠️  No AI service available for context rebuilding")
+                
+            else:
+                logger.warning(f"⚠️  Conversation {conversation_id} not found in database")
+                self.append_output(f"⚠️ Could not restore conversation {conversation_id[:8]}... (not found)", "warning")
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to restore conversation {conversation_id}: {e}", exc_info=True)
+            self.append_output(f"❌ Failed to restore conversation: {str(e)}", "error")
+    
+    def _create_new_conversation_for_message(self, message: str):
+        """Create a new conversation automatically when user starts chatting."""
+        if not self.conversation_manager:
+            return
+            
+        try:
+            # Generate a title from the message (first few words)
+            words = message.strip().split()[:5]  # First 5 words
+            title = " ".join(words)
+            if len(title) > 50:
+                title = title[:47] + "..."
+            elif len(title) < 5:
+                title = f"Chat {datetime.now().strftime('%H:%M')}"
+            
+            logger.debug(f"Creating conversation with title: {title}")
+            
+            # Create conversation synchronously to ensure it's ready for AI processing
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Can't use run_until_complete in running loop, so create task
+                # but this won't block - conversation will be created in background
+                asyncio.create_task(self._create_conversation_async(title, message))
+            else:
+                # Run synchronously
+                conversation = loop.run_until_complete(self._create_conversation_async(title, message))
+                if conversation:
+                    self.current_conversation = conversation
+                    logger.info(f"✅ Auto-created conversation: {conversation.title}")
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to auto-create conversation: {e}", exc_info=True)
+    
+    async def _create_conversation_async(self, title: str, initial_message: str):
+        """Create conversation asynchronously."""
+        try:
+            conversation = await self.conversation_manager.create_conversation(
+                title=title,
+                initial_message=initial_message
+            )
+            
+            if conversation:
+                # Update current conversation if this was called synchronously
+                self.current_conversation = conversation
+                # Add to conversations list
+                if conversation not in self.conversations_list:
+                    self.conversations_list.insert(0, conversation)
+                logger.info(f"✅ Created conversation: {conversation.title}")
+                return conversation
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to create conversation async: {e}")
+        
+        return None
     
     def refresh_conversations(self):
         """Refresh the conversations list from the database."""
@@ -1187,13 +1417,15 @@ class REPLWidget(QWidget):
             return
         
         try:
+            logger.debug("Refreshing conversations list...")
             loop = asyncio.get_event_loop()
             if loop.is_running():
                 asyncio.create_task(self._load_conversations())
             else:
                 loop.run_until_complete(self._load_conversations())
+            logger.debug("Conversation refresh initiated successfully")
         except Exception as e:
-            logger.error(f"Failed to refresh conversations: {e}")
+            logger.error(f"❌ Failed to refresh conversations: {e}", exc_info=True)
     
     def create_new_conversation_with_title(self, title: str):
         """Create a new conversation with a specific title."""

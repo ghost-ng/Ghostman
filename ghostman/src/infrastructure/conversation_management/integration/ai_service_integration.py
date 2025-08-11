@@ -20,21 +20,31 @@ class ConversationContextAdapter:
     @staticmethod
     def to_conversation_context(conversation: Conversation) -> ConversationContext:
         """Convert Conversation to ConversationContext."""
+        import logging
+        logger = logging.getLogger("ghostman.ai_integration")
+        
         context = ConversationContext(
             max_messages=conversation.metadata.custom_fields.get('max_messages', 50),
             max_tokens=conversation.metadata.estimated_tokens or 8000
         )
         
-        # Convert messages
+        # Convert messages with proper error handling
+        converted_count = 0
         for msg in conversation.messages:
-            context_msg = ConversationMessage(
-                role=msg.role.value,
-                content=msg.content,
-                timestamp=msg.timestamp,
-                token_count=msg.token_count
-            )
-            context.messages.append(context_msg)
+            try:
+                context_msg = ConversationMessage(
+                    role=msg.role.value,
+                    content=msg.content,
+                    timestamp=msg.timestamp,
+                    token_count=msg.token_count
+                )
+                context.messages.append(context_msg)
+                converted_count += 1
+            except Exception as e:
+                logger.error(f"Failed to convert message {msg.id}: {e}")
+                continue
         
+        logger.info(f"✅ Converted {converted_count}/{len(conversation.messages)} messages to conversation context")
         return context
     
     @staticmethod
@@ -144,13 +154,18 @@ class ConversationAIService(AIService):
     
     async def _load_conversation_context(self, conversation_id: str):
         """Load conversation messages into current context."""
-        conversation = await self.conversation_service.get_conversation(conversation_id)
+        conversation = await self.conversation_service.get_conversation(conversation_id, include_messages=True)
         if not conversation:
+            logger.error(f"Failed to load conversation {conversation_id} for context")
             return
+        
+        logger.info(f"Loading conversation context: {len(conversation.messages)} messages")
         
         # Convert and load messages
         context = ConversationContextAdapter.to_conversation_context(conversation)
         self.conversation = context
+        
+        logger.info(f"✅ Conversation context loaded: {len(self.conversation.messages)} messages in AI context")
     
     # --- Enhanced Message Handling ---
     
@@ -171,8 +186,16 @@ class ConversationAIService(AIService):
         Returns:
             Dict with response information
         """
+        # Log the request with context info
+        logger.info(f"Sending message with conversation context (current: {self._current_conversation_id})")
+        logger.debug(f"Context before send: {len(self.conversation.messages)} messages")
+        
         # Call parent method
         result = super().send_message(message, stream)
+        
+        # Log the result with updated context info
+        if result.get('success'):
+            logger.info(f"Message sent successfully. Context now has: {len(self.conversation.messages)} messages")
         
         # Save to conversation management if enabled
         if save_conversation and self._auto_save_conversations and result.get('success'):
@@ -281,6 +304,64 @@ class ConversationAIService(AIService):
     def get_current_conversation_id(self) -> Optional[str]:
         """Get the current conversation ID."""
         return self._current_conversation_id
+    
+    def set_current_conversation(self, conversation_id: str):
+        """Set the current conversation ID and load its context."""
+        try:
+            logger.info(f"Setting current conversation to: {conversation_id}")
+            self._current_conversation_id = conversation_id
+            
+            # Load conversation context - try sync first for better reliability
+            try:
+                self._load_conversation_context_sync(conversation_id)
+            except Exception as e:
+                logger.warning(f"Sync context loading failed, trying async: {e}")
+                # Fallback to async
+                import asyncio
+                
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # Schedule the context loading as a task
+                        asyncio.create_task(self._load_conversation_context(conversation_id))
+                    else:
+                        # Run synchronously
+                        loop.run_until_complete(self._load_conversation_context(conversation_id))
+                except RuntimeError:
+                    # No event loop - create one
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    loop.run_until_complete(self._load_conversation_context(conversation_id))
+                    loop.close()
+                
+        except Exception as e:
+            logger.error(f"Failed to set current conversation {conversation_id}: {e}")
+    
+    def _load_conversation_context_sync(self, conversation_id: str):
+        """Load conversation context synchronously using async tools."""
+        import asyncio
+        
+        # Create a new event loop for this operation
+        loop = asyncio.new_event_loop()
+        old_loop = None
+        try:
+            # Check if there's an existing loop
+            try:
+                old_loop = asyncio.get_event_loop()
+            except RuntimeError:
+                pass  # No current loop
+            
+            # Set our new loop
+            asyncio.set_event_loop(loop)
+            
+            # Run the async operation
+            loop.run_until_complete(self._load_conversation_context(conversation_id))
+            
+        finally:
+            # Clean up
+            loop.close()
+            if old_loop:
+                asyncio.set_event_loop(old_loop)
     
     async def get_current_conversation_info(self) -> Optional[Dict[str, Any]]:
         """Get information about the current conversation."""
