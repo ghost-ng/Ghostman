@@ -693,6 +693,7 @@ class REPLWidget(QWidget):
         new_conv_btn.setToolTip("Start new conversation")
         new_conv_btn.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
         new_conv_btn.clicked.connect(self._on_new_conversation_clicked)
+        #new_conv_btn.setFixedSize(40, 40)  
         self._style_title_button(new_conv_btn, add_right_padding=True)
         
         # Create menu for new conversation options
@@ -715,49 +716,56 @@ class REPLWidget(QWidget):
         help_btn = QToolButton()
         help_btn.setText("❓")
         help_btn.setToolTip("Show help")
+        #help_btn.setFixedSize(40, 40)  # Consistent size with other buttons
         help_btn.clicked.connect(self._on_help_clicked)
         self._style_title_button(help_btn)
         title_layout.addWidget(help_btn)
         
         # Settings button
         settings_btn = QToolButton()
-        settings_btn.setText("⚙")  # Use simpler gear character
+        settings_btn.setText("⚙")
+        
         settings_btn.setToolTip("Open settings")
         settings_btn.clicked.connect(self._on_settings_clicked)
+        #settings_btn.setFixedSize(40, 40)
         self._style_title_button(settings_btn)
         title_layout.addWidget(settings_btn)
         
         # Chat/Browse button
         chat_btn = QToolButton()
-        chat_btn.setText("Chat")  # Use text for reliable display
+        chat_btn.setText("💬")  # Use text for reliable display
         chat_btn.setToolTip("Browse conversations (💬)")  # Put emoji in tooltip instead
         chat_btn.clicked.connect(self._on_chat_clicked)
-        # Special styling for chat button with more width
-        chat_btn.setFixedSize(45, 24)  # Wider than normal buttons
-        chat_btn.setStyleSheet("""
-            QToolButton {
+        chat_btn.setStyleSheet(f"""
+            QToolButton {{
                 background-color: rgba(255, 255, 255, 0.15);
                 color: white;
                 border: 1px solid rgba(255, 255, 255, 0.3);
                 border-radius: 4px;
-                font-size: 12px;
-                padding: 2px 6px;
-                font-weight: bold;
-            }
-            QToolButton:hover {
+                font-size: 14px;
+                padding: 1px;
+            }}
+            QToolButton:hover {{
                 background-color: rgba(255, 255, 255, 0.25);
                 border: 1px solid rgba(255, 255, 255, 0.5);
-            }
-            QToolButton:pressed {
+            }}
+            QToolButton:pressed {{
                 background-color: rgba(255, 255, 255, 0.35);
-            }
+            }}
+            QToolButton::menu-indicator {{
+                image: none;
+                width: 0px;
+            }}
         """)
+        # Special styling for chat button with more width
+        #chat_btn.setFixedSize(40, 40)  # Wider than normal buttons
+        #self._style_title_button(chat_btn)
         title_layout.addWidget(chat_btn)
         
         title_layout.addStretch()
         
         # Minimize button (expanded)
-        minimize_btn = QPushButton("_")
+        minimize_btn = QPushButton("__")
         minimize_btn.setFixedSize(28, 24)  # Expanded from 20x20
         minimize_btn.clicked.connect(self.minimize_requested.emit)
         minimize_btn.setStyleSheet("""
