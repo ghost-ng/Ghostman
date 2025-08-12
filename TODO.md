@@ -4,6 +4,9 @@
 - [ ] Review and merge PR #2 (grip-based resize system)
 - [ ] Clean up test files from resize development
 - [ ] Test full application workflow with new resize system
+- [ ] Set REPL preamble to empty when opening app for first time
+- [ ] Test API connection on app start, show error in REPL if not working
+- [ ] Fix conversation export options and test each format
 
 ## ✅ Recently Completed
 - [x] Implement grip-based resize system for frameless windows
@@ -29,7 +32,9 @@
 
 ### Settings & Configuration
 - [ ] Create settings UI dialog
-- [ ] Add theme customization options
+- [ ] Add color theming options for user customization
+- [ ] Add font size increase/decrease setting option
+- [ ] Split system prompt: user-modifiable + hard-coded base prompt
 - [ ] Implement hotkey configuration
 - [ ] Add backup/restore settings functionality
 
