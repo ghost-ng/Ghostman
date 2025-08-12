@@ -11,10 +11,34 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButt
 from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QRect, QEasingCurve, pyqtSignal, QPoint
 from PyQt6.QtGui import QPixmap, QPainter, QPaintEvent, QMouseEvent, QAction
 
+try:
+    from ..ui.resize import AvatarResizableMixin, HitZone
+    from ..ui.resize.simple_arrow_mixin import SimpleAvatarArrowMixin
+    SIMPLE_ARROW_RESIZE_AVAILABLE = True
+    ARROW_RESIZE_AVAILABLE = False  # Disable complex system
+except ImportError:
+    # Fallback if resize system is not available
+    class AvatarResizableMixin:
+        def __init_avatar_resize__(self, *args, **kwargs): pass
+        def enable_resize(self): pass
+        def disable_resize(self): pass
+        def cleanup_resize(self): pass
+    
+    class SimpleAvatarArrowMixin:
+        def __init_simple_avatar_arrows__(self, *args, **kwargs): pass
+        def enable_simple_arrow_resize(self): pass
+        def disable_simple_arrow_resize(self): pass
+        def cleanup_simple_arrow_resize(self): pass
+        def show_resize_arrows(self, auto_hide=None): pass
+    
+    HitZone = None
+    SIMPLE_ARROW_RESIZE_AVAILABLE = False
+    ARROW_RESIZE_AVAILABLE = False
+
 logger = logging.getLogger("ghostman.avatar_widget")
 
 
-class AvatarWidget(QWidget):
+class AvatarWidget(SimpleAvatarArrowMixin, AvatarResizableMixin, QWidget):
     """
     Widget that displays the avatar as the main interface.
     
@@ -31,6 +55,11 @@ class AvatarWidget(QWidget):
     settings_requested = pyqtSignal()
     conversations_requested = pyqtSignal()
     
+    # Resize signals (from mixin)
+    resize_started = pyqtSignal(object)  # HitZone
+    resize_updated = pyqtSignal(object, int, int)  # HitZone, width, height
+    resize_finished = pyqtSignal(object, int, int)  # HitZone, width, height
+    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.avatar_pixmap: Optional[QPixmap] = None
@@ -40,11 +69,124 @@ class AvatarWidget(QWidget):
         self.drag_start_pos = QPoint()
         self.mouse_press_pos = QPoint()
         
+        # Initialize resize functionality - use simple arrow system
+        self._use_simple_arrows = True
+        try:
+            if SIMPLE_ARROW_RESIZE_AVAILABLE and self._use_simple_arrows:
+                self.__init_simple_avatar_arrows__()
+                logger.debug("Initialized simple arrow resize for avatar")
+            else:
+                self.__init_avatar_resize__()
+                logger.debug("Initialized traditional resize for avatar")
+        except Exception as e:
+            logger.warning(f"Failed to initialize resize functionality: {e}")
+            # Fallback to traditional resize
+            try:
+                self.__init_avatar_resize__()
+                self._use_simple_arrows = False
+                logger.debug("Falling back to traditional resize")
+            except Exception as e2:
+                logger.error(f"Failed to initialize any resize system: {e2}")
+        
         self._init_ui()
         self._load_avatar()
         self._setup_animation()
         
+        # Direct arrow resize implementation (bypassing mixin complexity)
+        self._setup_direct_arrows()
+        
         logger.info("AvatarWidget initialized")
+    
+    def _setup_direct_arrows(self):
+        """Setup direct arrow resize functionality (bypassing mixin complexity)."""
+        try:
+            from ..ui.resize.grip_resize import GripResizeManager
+            from ..ui.resize.constraints import SizeConstraints
+            
+            # Create avatar constraints (80x80 to 200x200, square aspect ratio)
+            constraints = SizeConstraints(
+                min_width=80, min_height=80,
+                max_width=200, max_height=200,
+                maintain_aspect_ratio=True
+            )
+            
+            # Create edge grip manager (no full overlay, just small grips)
+            self._direct_arrow_manager = GripResizeManager(self, constraints)
+            self._direct_arrows_enabled = False
+            
+            logger.debug("Direct arrow resize setup complete for avatar")
+            
+        except Exception as e:
+            logger.warning(f"Failed to setup direct arrows for avatar: {e}")
+            self._direct_arrow_manager = None
+            self._direct_arrows_enabled = False
+    
+    def show_resize_arrows(self, auto_hide: bool = True):
+        """Show resize arrows directly."""
+        if hasattr(self, '_direct_arrow_manager') and self._direct_arrow_manager:
+            self._direct_arrow_manager.show_arrows(auto_hide=auto_hide)
+            logger.debug(f"Avatar direct arrows shown (auto_hide={auto_hide})")
+        else:
+            logger.warning("Direct arrow manager not available for avatar")
+    
+    def hide_resize_arrows(self):
+        """Hide resize arrows directly."""
+        if hasattr(self, '_direct_arrow_manager') and self._direct_arrow_manager:
+            self._direct_arrow_manager.hide_arrows()
+            logger.debug("Avatar direct arrows hidden")
+    
+    def enable_direct_arrows(self, enabled: bool = True):
+        """Enable/disable direct arrow functionality."""
+        if hasattr(self, '_direct_arrow_manager') and self._direct_arrow_manager:
+            self._direct_arrows_enabled = enabled
+            if enabled:
+                logger.debug("Avatar direct arrows enabled")
+            else:
+                self.hide_resize_arrows()
+                logger.debug("Avatar direct arrows disabled")
+        else:
+            logger.warning("Direct arrow manager not available for avatar")
+
+    def enable_avatar_resize(self, enabled: bool = True):
+        """Enable or disable resize functionality for the avatar."""
+        try:
+            # Use direct arrow approach that works
+            self.enable_direct_arrows(enabled)
+        except Exception as e:
+            logger.warning(f"Failed to toggle avatar resize: {e}")
+    
+    def toggle_resize_system(self, use_simple_arrows: bool = None):
+        """Toggle between simple arrow and traditional resize systems."""
+        if use_simple_arrows is None:
+            use_simple_arrows = not self._use_simple_arrows
+        
+        if use_simple_arrows == self._use_simple_arrows:
+            return  # Already using the requested system
+        
+        try:
+            # Disable current system
+            if self._use_simple_arrows:
+                self.disable_simple_arrow_resize()
+                self.cleanup_simple_arrow_resize()
+            else:
+                self.disable_resize()
+                self.cleanup_resize()
+            
+            # Enable new system
+            self._use_simple_arrows = use_simple_arrows
+            if use_simple_arrows and SIMPLE_ARROW_RESIZE_AVAILABLE:
+                self.init_avatar_simple_arrows()
+                self.enable_simple_arrow_resize()
+                logger.info("Switched avatar to simple arrow resize")
+            else:
+                self.__init_avatar_resize__()
+                self.enable_resize()
+                self._use_simple_arrows = False
+                logger.info("Switched avatar to traditional resize")
+                
+        except Exception as e:
+            logger.error(f"Failed to toggle resize system: {e}")
+    
     
     def _init_ui(self):
         """Initialize the user interface."""
@@ -161,11 +303,39 @@ class AvatarWidget(QWidget):
     def mousePressEvent(self, event: QMouseEvent):
         """Handle mouse press events."""
         if event.button() == Qt.MouseButton.LeftButton:
-            self.is_dragging = True
-            self.drag_start_pos = event.globalPosition().toPoint() - self.window().pos()
-            self.mouse_press_pos = event.position()
-            # Don't emit click immediately - wait for release to distinguish click from drag
-            logger.debug(f"Mouse pressed at {event.position()}, window pos: {self.window().pos()}")
+            # Check if we're in a resize zone
+            is_in_resize_zone = False
+            
+            if self._use_simple_arrows:
+                # For simple arrow system, check if currently resizing (arrows handle their own events)
+                try:
+                    if hasattr(self, 'is_simple_arrow_resize_enabled'):
+                        # Simple arrows handle their own mouse events, so no conflict with dragging
+                        is_in_resize_zone = False  # Let normal drag behavior work
+                except Exception as e:
+                    logger.debug(f"Error checking simple arrow resize state: {e}")
+            else:
+                # For traditional system, check hit zones
+                try:
+                    if hasattr(self, 'get_resize_status'):
+                        status = self.get_resize_status()
+                        # Check if we're hovering over a resize zone
+                        if hasattr(self, '_resize_manager') and self._resize_manager:
+                            zone = self._resize_manager.get_hit_zone(event.position().toPoint())
+                            is_in_resize_zone = (zone and hasattr(zone, 'value') and zone.value != 'none')
+                except Exception as e:
+                    logger.debug(f"Error checking resize zone: {e}")
+            
+            if not is_in_resize_zone:
+                # Normal drag behavior
+                self.is_dragging = True
+                self.drag_start_pos = event.globalPosition().toPoint() - self.window().pos()
+                self.mouse_press_pos = event.position()
+                logger.debug(f"Mouse pressed for drag at {event.position()}, window pos: {self.window().pos()}")
+            else:
+                # Let resize handle this
+                self.is_dragging = False
+                logger.debug(f"Mouse pressed in resize zone at {event.position()}")
         elif event.button() == Qt.MouseButton.RightButton:
             self._show_context_menu(event.globalPosition().toPoint())
     
@@ -244,3 +414,25 @@ class AvatarWidget(QWidget):
         logger.debug("Emitting conversations_requested signal...")
         self.conversations_requested.emit()
         logger.debug("conversations_requested signal emitted")
+    
+    def closeEvent(self, event):
+        """Handle widget close event."""
+        try:
+            if self._use_simple_arrows:
+                self.cleanup_simple_arrow_resize()
+            else:
+                self.cleanup_resize()
+        except Exception as e:
+            logger.debug(f"Error during resize cleanup: {e}")
+        super().closeEvent(event)
+    
+    def __del__(self):
+        """Cleanup when widget is destroyed."""
+        try:
+            if hasattr(self, '_use_simple_arrows') and self._use_simple_arrows:
+                if hasattr(self, 'cleanup_simple_arrow_resize'):
+                    self.cleanup_simple_arrow_resize()
+            elif hasattr(self, 'cleanup_resize'):
+                self.cleanup_resize()
+        except Exception:
+            pass  # Ignore errors during destruction

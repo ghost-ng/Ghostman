@@ -11,6 +11,30 @@ from PyQt6.QtCore import Qt, pyqtSignal, QPoint
 from PyQt6.QtGui import QCloseEvent
 
 from .repl_widget import REPLWidget
+
+try:
+    from ..ui.resize import REPLResizableMixin, HitZone
+    from ..ui.resize.simple_arrow_mixin import SimpleREPLArrowMixin
+    SIMPLE_ARROW_RESIZE_AVAILABLE = True
+    ARROW_RESIZE_AVAILABLE = False  # Disable complex system
+except ImportError:
+    # Fallback if resize system is not available
+    class REPLResizableMixin:
+        def __init_repl_resize__(self, *args, **kwargs): pass
+        def enable_resize(self): pass
+        def disable_resize(self): pass
+        def cleanup_resize(self): pass
+    
+    class SimpleREPLArrowMixin:
+        def __init_simple_repl_arrows__(self, *args, **kwargs): pass
+        def enable_simple_arrow_resize(self): pass
+        def disable_simple_arrow_resize(self): pass
+        def cleanup_simple_arrow_resize(self): pass
+        def show_resize_arrows(self, auto_hide=None): pass
+    
+    HitZone = None
+    SIMPLE_ARROW_RESIZE_AVAILABLE = False
+    ARROW_RESIZE_AVAILABLE = False
 try:
     from ...infrastructure.storage.settings_manager import settings as _global_settings
 except Exception:  # pragma: no cover
@@ -20,7 +44,7 @@ logger = logging.getLogger("ghostman.floating_repl")
 
 
 
-class FloatingREPLWindow(QMainWindow):
+class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
     """
     Floating REPL window that appears next to the avatar.
     
@@ -32,14 +56,133 @@ class FloatingREPLWindow(QMainWindow):
     closed = pyqtSignal()
     command_entered = pyqtSignal(str)
     
+    # Resize signals (from mixin)
+    resize_started = pyqtSignal(object)  # HitZone
+    resize_updated = pyqtSignal(object, int, int)  # HitZone, width, height
+    resize_finished = pyqtSignal(object, int, int)  # HitZone, width, height
+    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.repl_widget = None
         
+        # Initialize resize functionality - use simple arrow system
+        self._use_simple_arrows = True
+        try:
+            if SIMPLE_ARROW_RESIZE_AVAILABLE and self._use_simple_arrows:
+                self.__init_simple_repl_arrows__()
+                logger.debug("Initialized simple arrow resize for REPL")
+            else:
+                self.__init_repl_resize__()
+                logger.debug("Initialized traditional resize for REPL")
+        except Exception as e:
+            logger.warning(f"Failed to initialize resize functionality: {e}")
+            # Fallback to traditional resize
+            try:
+                self.__init_repl_resize__()
+                self._use_simple_arrows = False
+                logger.debug("Falling back to traditional resize")
+            except Exception as e2:
+                logger.error(f"Failed to initialize any resize system: {e2}")
+        
         self._init_ui()
         self._setup_window()
         
+        # Direct arrow resize implementation (bypassing mixin complexity)
+        self._setup_direct_arrows()
+        
         logger.info("FloatingREPLWindow initialized")
+    
+    def _setup_direct_arrows(self):
+        """Setup direct arrow resize functionality (bypassing mixin complexity)."""
+        try:
+            from ..ui.resize.grip_resize import GripResizeManager
+            from ..ui.resize.constraints import SizeConstraints
+            
+            # Create REPL constraints (minimum 360x320, no maximum)
+            constraints = SizeConstraints(
+                min_width=360, min_height=320,
+                max_width=None, max_height=None
+            )
+            
+            # Create edge grip manager (no full overlay, just small grips)
+            self._direct_arrow_manager = GripResizeManager(self, constraints)
+            self._direct_arrows_enabled = False
+            
+            logger.debug("Direct arrow resize setup complete for REPL")
+            
+        except Exception as e:
+            logger.warning(f"Failed to setup direct arrows for REPL: {e}")
+            self._direct_arrow_manager = None
+            self._direct_arrows_enabled = False
+    
+    def show_resize_arrows(self, auto_hide: bool = True):
+        """Show resize arrows directly."""
+        if hasattr(self, '_direct_arrow_manager') and self._direct_arrow_manager:
+            self._direct_arrow_manager.show_arrows(auto_hide=auto_hide)
+            logger.debug(f"REPL direct arrows shown (auto_hide={auto_hide})")
+        else:
+            logger.warning("Direct arrow manager not available for REPL")
+    
+    def hide_resize_arrows(self):
+        """Hide resize arrows directly."""
+        if hasattr(self, '_direct_arrow_manager') and self._direct_arrow_manager:
+            self._direct_arrow_manager.hide_arrows()
+            logger.debug("REPL direct arrows hidden")
+    
+    def enable_direct_arrows(self, enabled: bool = True):
+        """Enable/disable direct arrow functionality."""
+        if hasattr(self, '_direct_arrow_manager') and self._direct_arrow_manager:
+            self._direct_arrows_enabled = enabled
+            if enabled:
+                # For REPL, make arrows always visible
+                self._direct_arrow_manager.set_always_visible(True)
+                logger.debug("REPL direct arrows enabled (always visible)")
+            else:
+                self.hide_resize_arrows()
+                logger.debug("REPL direct arrows disabled")
+        else:
+            logger.warning("Direct arrow manager not available for REPL")
+
+    def enable_repl_resize(self, enabled: bool = True):
+        """Enable or disable resize functionality for the REPL window."""
+        try:
+            # Use direct arrow approach that works
+            self.enable_direct_arrows(enabled)
+        except Exception as e:
+            logger.warning(f"Failed to toggle REPL resize: {e}")
+    
+    def toggle_resize_system(self, use_simple_arrows: bool = None):
+        """Toggle between simple arrow and traditional resize systems."""
+        if use_simple_arrows is None:
+            use_simple_arrows = not self._use_simple_arrows
+        
+        if use_simple_arrows == self._use_simple_arrows:
+            return  # Already using the requested system
+        
+        try:
+            # Disable current system
+            if self._use_simple_arrows:
+                self.disable_simple_arrow_resize()
+                self.cleanup_simple_arrow_resize()
+            else:
+                self.disable_resize()
+                self.cleanup_resize()
+            
+            # Enable new system
+            self._use_simple_arrows = use_simple_arrows
+            if use_simple_arrows and SIMPLE_ARROW_RESIZE_AVAILABLE:
+                self.__init_simple_repl_arrows__()
+                self.enable_simple_arrow_resize()
+                logger.info("Switched REPL to simple arrow resize")
+            else:
+                self.__init_repl_resize__()
+                self.enable_resize()
+                self._use_simple_arrows = False
+                logger.info("Switched REPL to traditional resize")
+                
+        except Exception as e:
+            logger.error(f"Failed to toggle resize system: {e}")
+    
     
     def _init_ui(self):
         """Initialize the user interface."""
@@ -89,6 +232,15 @@ class FloatingREPLWindow(QMainWindow):
                 logger.debug("Current conversation saved before window close")
             except Exception as e:
                 logger.error(f"Failed to save conversation on close: {e}")
+        
+        # Cleanup resize functionality
+        try:
+            if self._use_simple_arrows:
+                self.cleanup_simple_arrow_resize()
+            else:
+                self.cleanup_resize()
+        except Exception as e:
+            logger.debug(f"Error during resize cleanup: {e}")
         
         self.closed.emit()
         event.accept()
@@ -161,3 +313,14 @@ class FloatingREPLWindow(QMainWindow):
         """Set only the panel (frame) opacity (content/text remains fully opaque)."""
         if self.repl_widget:
             self.repl_widget.set_panel_opacity(opacity)
+    
+    def __del__(self):
+        """Cleanup when widget is destroyed."""
+        try:
+            if hasattr(self, '_use_simple_arrows') and self._use_simple_arrows:
+                if hasattr(self, 'cleanup_simple_arrow_resize'):
+                    self.cleanup_simple_arrow_resize()
+            elif hasattr(self, 'cleanup_resize'):
+                self.cleanup_resize()
+        except Exception:
+            pass  # Ignore errors during destruction
