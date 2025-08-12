@@ -343,6 +343,14 @@ class ConversationService:
             logger.error(f"❌ Failed to generate summary: {e}")
             return False
     
+    async def generate_conversation_title(self, conversation_id: str) -> Optional[str]:
+        """Generate AI title for a conversation."""
+        try:
+            return await self.summary_service.generate_title(conversation_id)
+        except Exception as e:
+            logger.error(f"❌ Failed to generate title: {e}")
+            return None
+    
     async def get_conversation_summary(self, conversation_id: str) -> Optional[str]:
         """Get conversation summary if available."""
         try:

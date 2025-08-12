@@ -36,7 +36,18 @@
       "Bash(git checkout:*)",
       "Bash(venv/Scripts/activate:*)",
       "Bash(\"./venv/Scripts/python.exe\" -m ghostman --help)",
-      "Bash(./venv/Scripts/python.exe -m ghostman)"
+      "Bash(./venv/Scripts/python.exe -m ghostman)",
+      "Bash(./venv/Scripts/pip.exe install sqlalchemy alembic bleach)",
+      "WebFetch(domain:docs.sqlalchemy.org)",
+      "Bash(\"./venv/Scripts/python.exe\" test_new_features.py)",
+      "Bash(\"./venv/Scripts/python.exe\" test_ui_buttons.py)",
+      "Bash(\"./venv/Scripts/python.exe\" test_ui_features.py)",
+      "Bash(venvScripts:*)",
+      "Bash(\"./venv/Scripts/python.exe\" test_edge_resize.py)",
+      "Bash(\"./venv/Scripts/python.exe\" test_conversation_save.py)",
+      "Bash(./venv/Scripts/pip.exe install markdown)",
+      "Bash(\"./venv/Scripts/python.exe\" test_message_count.py)",
+      "Bash(\"./venv/Scripts/python.exe\" test_ai_markdown.py)"
     ],
     "deny": []
   }

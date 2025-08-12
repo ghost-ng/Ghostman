@@ -1,127 +1,30 @@
 """
-Database management for conversations.
+SQLAlchemy database management for conversations.
 
-Provides SQLite database operations for conversation persistence with full-text search,
-proper indexing, and thread-safe operations.
+Provides SQLAlchemy ORM database operations with proper session management,
+connection pooling, and migration support using Alembic.
 """
 
-import sqlite3
-import threading
 import logging
-from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Generator
+from contextlib import contextmanager
+
+from sqlalchemy import create_engine, event
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.pool import StaticPool
+
+from ..models.database_models import Base
 
 logger = logging.getLogger("ghostman.conversation_db")
 
 
 class DatabaseManager:
-    """Manages SQLite database for conversation storage."""
-    
-    SCHEMA_VERSION = 1
-    SCHEMA_SQL = """
-    -- Main conversations table
-    CREATE TABLE IF NOT EXISTS conversations (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        status TEXT NOT NULL CHECK (status IN ('active', 'archived', 'pinned')),
-        created_at TIMESTAMP NOT NULL,
-        updated_at TIMESTAMP NOT NULL,
-        message_count INTEGER DEFAULT 0,
-        model_used TEXT,
-        tags_json TEXT DEFAULT '[]',
-        category TEXT,
-        priority INTEGER DEFAULT 0,
-        is_favorite BOOLEAN DEFAULT 0,
-        metadata_json TEXT DEFAULT '{}'
-    );
-    
-    -- Create indexes for conversations table
-    CREATE INDEX IF NOT EXISTS idx_conversations_status ON conversations(status);
-    CREATE INDEX IF NOT EXISTS idx_conversations_created_at ON conversations(created_at);
-    CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON conversations(updated_at);
-    CREATE INDEX IF NOT EXISTS idx_conversations_title ON conversations(title);
-    CREATE INDEX IF NOT EXISTS idx_conversations_category ON conversations(category);
-    CREATE INDEX IF NOT EXISTS idx_conversations_is_favorite ON conversations(is_favorite);
-    
-    -- Messages table
-    CREATE TABLE IF NOT EXISTS messages (
-        id TEXT PRIMARY KEY,
-        conversation_id TEXT NOT NULL,
-        role TEXT NOT NULL CHECK (role IN ('system', 'user', 'assistant')),
-        content TEXT NOT NULL,
-        timestamp TIMESTAMP NOT NULL,
-        token_count INTEGER,
-        metadata_json TEXT DEFAULT '{}',
-        
-        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
-    );
-    
-    -- Create indexes for messages table
-    CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
-    CREATE INDEX IF NOT EXISTS idx_messages_role ON messages(role);
-    CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
-    
-    -- Conversation summaries table
-    CREATE TABLE IF NOT EXISTS conversation_summaries (
-        id TEXT PRIMARY KEY,
-        conversation_id TEXT NOT NULL UNIQUE,
-        summary TEXT NOT NULL,
-        key_topics_json TEXT DEFAULT '[]',
-        generated_at TIMESTAMP NOT NULL,
-        model_used TEXT,
-        confidence_score REAL,
-        
-        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
-    );
-    
-    -- Create indexes for conversation_summaries table
-    CREATE INDEX IF NOT EXISTS idx_summaries_conversation_id ON conversation_summaries(conversation_id);
-    CREATE INDEX IF NOT EXISTS idx_summaries_generated_at ON conversation_summaries(generated_at);
-    
-    -- Full-text search virtual table
-    CREATE VIRTUAL TABLE IF NOT EXISTS conversations_fts USING fts5(
-        conversation_id UNINDEXED,
-        title,
-        content,
-        tags,
-        category
-    );
-    
-    -- Tags table for normalization
-    CREATE TABLE IF NOT EXISTS tags (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL UNIQUE,
-        usage_count INTEGER DEFAULT 0,
-        created_at TIMESTAMP NOT NULL
-    );
-    
-    -- Create index for tags table
-    CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name);
-    CREATE INDEX IF NOT EXISTS idx_tags_usage_count ON tags(usage_count);
-    
-    -- Conversation-tags junction table
-    CREATE TABLE IF NOT EXISTS conversation_tags (
-        conversation_id TEXT NOT NULL,
-        tag_id INTEGER NOT NULL,
-        
-        PRIMARY KEY (conversation_id, tag_id),
-        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
-        FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
-    );
-    
-    -- Schema version table
-    CREATE TABLE IF NOT EXISTS schema_version (
-        version INTEGER PRIMARY KEY,
-        applied_at TIMESTAMP NOT NULL
-    );
-    
-    -- Insert initial schema version
-    INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (1, datetime('now'));
-    """
+    """Manages SQLAlchemy database for conversation storage."""
     
     def __init__(self, db_path: Optional[Path] = None):
-        """Initialize database manager."""
+        """Initialize SQLAlchemy database manager."""
         from ...storage.settings_manager import settings
         
         if db_path is None:
@@ -134,7 +37,8 @@ class DatabaseManager:
             db_path = db_dir / "conversations.db"
         
         self.db_path = db_path
-        self._local = threading.local()
+        self._engine: Optional[Engine] = None
+        self._session_factory: Optional[sessionmaker] = None
         self._initialized = False
         
         # Ensure database directory exists
@@ -142,93 +46,133 @@ class DatabaseManager:
         
         logger.info(f"Database path: {self.db_path}")
     
-    def _get_connection(self) -> sqlite3.Connection:
-        """Get thread-local database connection."""
-        if not hasattr(self._local, 'connection'):
-            self._local.connection = sqlite3.connect(
-                str(self.db_path),
-                timeout=30.0,
-                check_same_thread=False
-            )
-            # Enable foreign keys
-            self._local.connection.execute("PRAGMA foreign_keys = ON")
-            # Enable WAL mode for better concurrency
-            self._local.connection.execute("PRAGMA journal_mode = WAL")
-            # Row factory for easier access
-            self._local.connection.row_factory = sqlite3.Row
-            
-        return self._local.connection
-    
-    @contextmanager
-    def get_connection(self):
-        """Context manager for database connections."""
-        conn = self._get_connection()
-        try:
-            yield conn
-        except Exception:
-            conn.rollback()
-            raise
-        else:
-            conn.commit()
-    
-    def initialize(self) -> bool:
-        """Initialize database schema."""
-        try:
-            with self.get_connection() as conn:
-                # Execute schema
-                conn.executescript(self.SCHEMA_SQL)
-                
-                # Check/update schema version
-                current_version = self._get_schema_version(conn)
-                if current_version < self.SCHEMA_VERSION:
-                    self._migrate_schema(conn, current_version)
-                
-                self._initialized = True
-                logger.info("✅ Database initialized successfully")
-                return True
-                
-        except Exception as e:
-            logger.error(f"❌ Database initialization failed: {e}")
-            return False
-    
-    def _get_schema_version(self, conn: sqlite3.Connection) -> int:
-        """Get current schema version."""
-        try:
-            cursor = conn.execute("SELECT MAX(version) FROM schema_version")
-            result = cursor.fetchone()
-            return result[0] if result[0] is not None else 0
-        except sqlite3.OperationalError:
-            # Table doesn't exist yet
-            return 0
-    
-    def _migrate_schema(self, conn: sqlite3.Connection, from_version: int):
-        """Migrate database schema."""
-        logger.info(f"Migrating database from version {from_version} to {self.SCHEMA_VERSION}")
+    def _create_engine(self) -> Engine:
+        """Create SQLAlchemy engine with proper SQLite configuration."""
+        # SQLite URL - convert Windows backslashes to forward slashes
+        database_url = f"sqlite:///{str(self.db_path).replace(chr(92), '/')}"
         
-        # Add migration logic here for future schema changes
-        # For now, just update version
-        conn.execute(
-            "INSERT OR REPLACE INTO schema_version (version, applied_at) VALUES (?, datetime('now'))",
-            (self.SCHEMA_VERSION,)
+        engine = create_engine(
+            database_url,
+            echo=False,  # Set to True for SQL debugging
+            poolclass=StaticPool,
+            connect_args={
+                "check_same_thread": False,
+                "timeout": 30.0,
+            },
+            pool_pre_ping=True,  # Verify connections before use
+            pool_recycle=3600,   # Recycle connections every hour
         )
         
-        logger.info("✅ Database migration completed")
+        # Configure SQLite for better performance and data integrity
+        @event.listens_for(engine, "connect")
+        def set_sqlite_pragma(dbapi_connection, connection_record):
+            cursor = dbapi_connection.cursor()
+            # Enable foreign key constraints
+            cursor.execute("PRAGMA foreign_keys=ON")
+            # Enable WAL mode for better concurrency
+            cursor.execute("PRAGMA journal_mode=WAL")
+            # Optimize for speed vs safety (adjust as needed)
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.execute("PRAGMA cache_size=10000")
+            cursor.execute("PRAGMA temp_store=MEMORY")
+            cursor.close()
+        
+        return engine
+    
+    @contextmanager
+    def get_session(self) -> Generator[Session, None, None]:
+        """Context manager for database sessions."""
+        if not self._initialized:
+            raise RuntimeError("Database not initialized. Call initialize() first.")
+        
+        session = self._session_factory()
+        try:
+            yield session
+            session.commit()
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Database session error: {e}")
+            raise
+        finally:
+            session.close()
+    
+    def initialize(self, run_migrations: bool = False) -> bool:
+        """Initialize SQLAlchemy database with optional migrations."""
+        try:
+            # Create engine and session factory
+            self._engine = self._create_engine()
+            self._session_factory = sessionmaker(bind=self._engine)
+            
+            if run_migrations:
+                # Run database migrations using Alembic
+                try:
+                    from ..migrations.migration_manager import MigrationManager
+                    migration_manager = MigrationManager(self)
+                    
+                    if not migration_manager.is_database_up_to_date():
+                        logger.info("Database needs migration, running migrations...")
+                        if not migration_manager.run_migrations():
+                            logger.error("Migration failed, falling back to direct table creation")
+                            Base.metadata.create_all(self._engine)
+                    else:
+                        logger.info("Database is up to date")
+                        
+                except ImportError:
+                    logger.warning("Alembic not available, creating tables directly")
+                    Base.metadata.create_all(self._engine)
+                except Exception as e:
+                    logger.warning(f"Migration failed ({e}), falling back to direct table creation")
+                    Base.metadata.create_all(self._engine)
+            else:
+                # Create tables directly without migrations
+                Base.metadata.create_all(self._engine)
+            
+            # Mark as initialized before testing connection
+            self._initialized = True
+            
+            # Test connection
+            try:
+                with self.get_session() as session:
+                    # Simple query to test the connection using SQLAlchemy
+                    from sqlalchemy import text
+                    session.execute(text("SELECT 1"))
+            except Exception as e:
+                self._initialized = False
+                raise
+            logger.info("✅ SQLAlchemy database initialized successfully")
+            return True
+                
+        except Exception as e:
+            logger.error(f"❌ SQLAlchemy database initialization failed: {e}")
+            return False
+    
+    def get_engine(self) -> Engine:
+        """Get the SQLAlchemy engine."""
+        if not self._engine:
+            raise RuntimeError("Database not initialized. Call initialize() first.")
+        return self._engine
+    
+    def create_session(self) -> Session:
+        """Create a new database session."""
+        if not self._initialized:
+            raise RuntimeError("Database not initialized. Call initialize() first.")
+        return self._session_factory()
     
     def vacuum(self):
         """Optimize database by running VACUUM."""
         try:
-            with self.get_connection() as conn:
+            with self._engine.connect() as conn:
                 conn.execute("VACUUM")
             logger.info("Database optimized")
         except Exception as e:
             logger.error(f"Failed to vacuum database: {e}")
     
     def close_all_connections(self):
-        """Close all thread-local connections."""
-        if hasattr(self._local, 'connection'):
-            self._local.connection.close()
-            delattr(self._local, 'connection')
-        logger.debug("Database connections closed")
+        """Close database engine and all connections."""
+        if self._engine:
+            self._engine.dispose()
+            logger.debug("Database engine disposed")
+        self._initialized = False
     
     @property
     def is_initialized(self) -> bool:

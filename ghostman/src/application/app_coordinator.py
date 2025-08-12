@@ -183,7 +183,7 @@ class AppCoordinator(QObject):
         logger.info("Ghostman application shutdown complete")
     
     def _save_current_conversation_state(self):
-        """Save the currently active conversation ID to settings."""
+        """Save the currently active conversation with auto-generated title."""
         try:
             if (self._main_window and 
                 hasattr(self._main_window, 'floating_repl') and
@@ -194,8 +194,65 @@ class AppCoordinator(QObject):
                 current_conversation_id = self._main_window.floating_repl.repl_widget.get_current_conversation_id()
                 
                 if current_conversation_id:
+                    # Save conversation ID to settings
                     settings.set('conversation.last_active_id', current_conversation_id)
                     logger.info(f"💾 Saved active conversation ID: {current_conversation_id}")
+                    
+                    # Get the AI service integration to save the conversation and generate title
+                    ai_service = None
+                    repl_widget = self._main_window.floating_repl.repl_widget
+                    if hasattr(repl_widget, 'conversation_manager') and repl_widget.conversation_manager:
+                        ai_service = repl_widget.conversation_manager.get_ai_service()
+                    
+                    if ai_service and hasattr(ai_service, 'conversation_service'):
+                        # Use Qt timer to safely handle async operations
+                        from PyQt6.QtCore import QTimer
+                        
+                        def save_with_title():
+                            try:
+                                import asyncio
+                                loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(loop)
+                                try:
+                                    # Save current conversation context first
+                                    loop.run_until_complete(ai_service._save_current_conversation())
+                                    
+                                    # Generate and update title if conversation has substantial content
+                                    conversation = loop.run_until_complete(
+                                        ai_service.conversation_service.get_conversation(current_conversation_id, include_messages=True)
+                                    )
+                                    
+                                    if conversation and len(conversation.messages) >= 2:
+                                        # Check if title is still default/generic
+                                        if conversation.title in ["New Conversation", "Untitled Conversation"] or not conversation.title.strip():
+                                            generated_title = loop.run_until_complete(
+                                                ai_service.conversation_service.generate_conversation_title(current_conversation_id)
+                                            )
+                                            
+                                            if generated_title:
+                                                # Update conversation title
+                                                loop.run_until_complete(
+                                                    ai_service.conversation_service.update_conversation_title(
+                                                        current_conversation_id, generated_title
+                                                    )
+                                                )
+                                                logger.info(f"📝 Generated and saved conversation title: {generated_title}")
+                                            else:
+                                                logger.debug("No title generated - keeping current title")
+                                        else:
+                                            logger.debug(f"Conversation already has custom title: {conversation.title}")
+                                    else:
+                                        logger.debug("Conversation too short for title generation")
+                                        
+                                finally:
+                                    loop.close()
+                            except Exception as e:
+                                logger.error(f"❌ Failed to save conversation with title: {e}")
+                        
+                        # Schedule the save operation
+                        QTimer.singleShot(100, save_with_title)
+                    else:
+                        logger.debug("AI service doesn't support conversation management")
                 else:
                     # Clear any previously saved conversation ID
                     settings.delete('conversation.last_active_id')

@@ -6,8 +6,20 @@ Provides a Read-Eval-Print-Loop interface for interacting with the AI.
 
 import logging
 import asyncio
+import html
+import re
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
+
+# Markdown rendering imports
+try:
+    import markdown
+    from markdown.extensions import codehilite, fenced_code, tables, toc
+    MARKDOWN_AVAILABLE = True
+except ImportError:
+    MARKDOWN_AVAILABLE = False
+    logger = logging.getLogger("ghostman.repl_widget")
+    logger.warning("Markdown library not available - falling back to plain text rendering")
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
     QLineEdit, QPushButton, QLabel, QFrame, QComboBox,
@@ -36,6 +48,328 @@ except Exception:  # pragma: no cover
     MessageRole = None
 
 logger = logging.getLogger("ghostman.repl_widget")
+
+
+class MarkdownRenderer:
+    """
+    Advanced markdown renderer for REPL output with color-coded message types.
+    
+    Features:
+    - Full markdown support (headers, emphasis, code blocks, lists, links, tables)
+    - Preserves existing color scheme for different message types
+    - Optimized for conversational AI interfaces
+    - Graceful fallback to plain text when markdown unavailable
+    - Performance-optimized for long conversations
+    """
+    
+    def __init__(self):
+        """Initialize the markdown renderer with optimized configuration."""
+        self.markdown_available = MARKDOWN_AVAILABLE
+        
+        if self.markdown_available:
+            # Configure markdown processor with AI-friendly extensions
+            self.md_processor = markdown.Markdown(
+                extensions=[
+                    'fenced_code',  # ```code blocks```
+                    'tables',       # Table support
+                    'nl2br',        # Newline to <br>
+                    'toc',          # Table of contents
+                    'attr_list',    # Attribute lists {: .class}
+                ],
+                extension_configs={
+                    'fenced_code': {
+                        'lang_prefix': 'language-',
+                    },
+                    'toc': {
+                        'permalink': False,  # Don't add permalink anchors
+                    }
+                },
+                # Output format optimized for Qt HTML rendering
+                output_format='html5',
+                tab_length=4
+            )
+        
+        # Color scheme for different message types
+        self.color_scheme = {
+            "normal": "#f0f0f0",
+            "input": "#00ff00", 
+            "response": "#00bfff",
+            "system": "#808080",
+            "info": "#ffff00",
+            "warning": "#ffa500",
+            "error": "#ff0000"
+        }
+        
+        # Performance cache for repeated renders (small cache to avoid memory issues)
+        self._render_cache = {}
+        self._cache_max_size = 100
+    
+    def render(self, text: str, style: str = "normal", force_plain: bool = False) -> str:
+        """
+        Render text with markdown formatting and message type styling.
+        
+        Args:
+            text: Input text (markdown or plain text)
+            style: Message type for color coding (normal, input, response, etc.)
+            force_plain: If True, bypass markdown processing
+            
+        Returns:
+            HTML string ready for QTextEdit insertion
+        """
+        # Handle empty or None text
+        if not text or not text.strip():
+            return '<span style="color: #808080;">[Empty message]</span><br>'
+        
+        # Cache key for performance optimization
+        cache_key = f"{hash(text)}{style}{force_plain}"
+        if cache_key in self._render_cache:
+            return self._render_cache[cache_key]
+        
+        base_color = self.color_scheme.get(style, "#f0f0f0")
+        
+        # Determine if we should process as markdown
+        should_process_markdown = (
+            not force_plain and 
+            self.markdown_available and 
+            self._detect_markdown_content(text)
+        )
+        
+        if should_process_markdown:
+            html_content = self._render_markdown_to_html(text, base_color, style)
+        else:
+            # Plain text rendering with basic HTML escaping
+            html_content = self._render_plain_text(text, base_color)
+        
+        # Cache the result (with size management)
+        self._manage_cache(cache_key, html_content)
+        
+        return html_content
+    
+    def _detect_markdown_content(self, text: str) -> bool:
+        """
+        Detect if text contains markdown formatting to optimize processing.
+        
+        Args:
+            text: Input text to analyze
+            
+        Returns:
+            True if markdown formatting detected, False otherwise
+        """
+        # Quick regex patterns for common markdown elements
+        markdown_patterns = [
+            r'\*\*[^\*]+\*\*',       # **bold**
+            r'\*[^\*]+\*',           # *italic*
+            r'__[^_]+__',            # __bold__
+            r'_[^_]+_',              # _italic_
+            r'`[^`]+`',              # `code`
+            r'^```',                 # ```code block
+            r'^#{1,6}\s',           # # Headers
+            r'^\s*[-\*\+]\s',       # - * + lists
+            r'^\s*\d+\.\s',         # 1. numbered lists
+            r'\[([^\]]+)\]\(([^\)]+)\)',  # [link](url)
+            r'^\s*\|.*\|\s*$',      # | table | cells |
+            r'>\s+',                 # > blockquotes
+        ]
+        
+        for pattern in markdown_patterns:
+            if re.search(pattern, text, re.MULTILINE):
+                return True
+        
+        return False
+    
+    def _render_markdown_to_html(self, text: str, base_color: str, style: str) -> str:
+        """
+        Convert markdown to HTML with integrated color styling.
+        
+        Args:
+            text: Markdown text to convert
+            base_color: Base color for the message type
+            style: Message style type
+            
+        Returns:
+            Styled HTML content
+        """
+        try:
+            # Process markdown to HTML
+            html_content = self.md_processor.convert(text)
+            
+            # Apply message-type styling to the HTML
+            styled_html = self._apply_color_styling(html_content, base_color, style)
+            
+            # Clean up and optimize for Qt rendering
+            styled_html = self._optimize_qt_html(styled_html)
+            
+            # Reset markdown processor for next use
+            self.md_processor.reset()
+            
+            return styled_html + '<br>'
+            
+        except Exception as e:
+            logger.warning(f"Markdown rendering failed: {e}, falling back to plain text")
+            return self._render_plain_text(text, base_color)
+    
+    def _apply_color_styling(self, html_content: str, base_color: str, style: str) -> str:
+        """
+        Apply consistent color styling to HTML content based on message type.
+        
+        Args:
+            html_content: HTML content from markdown conversion
+            base_color: Base color for the message type
+            style: Message style type for special handling
+            
+        Returns:
+            HTML with integrated color styling
+        """
+        # Define style-specific color variations
+        style_colors = {
+            'code': self._adjust_color_brightness(base_color, 0.8),
+            'em': self._adjust_color_brightness(base_color, 1.1),
+            'strong': self._adjust_color_brightness(base_color, 1.2),
+            'h1': self._adjust_color_brightness(base_color, 1.3),
+            'h2': self._adjust_color_brightness(base_color, 1.25),
+            'h3': self._adjust_color_brightness(base_color, 1.2),
+            'blockquote': self._adjust_color_brightness(base_color, 0.7),
+            'a': "#4A9EFF"  # Link color that works across all themes
+        }
+        
+        # Wrap entire content with base color
+        styled_html = f'<div style="color: {base_color}; line-height: 1.4;">{html_content}</div>'
+        
+        # Apply specific styling to elements
+        replacements = {
+            '<code>': f'<code style="background-color: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 3px; color: {style_colors["code"]}; font-family: Consolas, Monaco, monospace;">',
+            '<pre>': f'<pre style="background-color: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; border-left: 3px solid {base_color}; margin: 4px 0; overflow-x: auto;">',
+            '<em>': f'<em style="color: {style_colors["em"]}; font-style: italic;">',
+            '<strong>': f'<strong style="color: {style_colors["strong"]}; font-weight: bold;">',
+            '<h1>': f'<h1 style="color: {style_colors["h1"]}; font-size: 1.4em; margin: 8px 0 4px 0; border-bottom: 2px solid {base_color};">',
+            '<h2>': f'<h2 style="color: {style_colors["h2"]}; font-size: 1.3em; margin: 6px 0 3px 0; border-bottom: 1px solid {base_color};">',
+            '<h3>': f'<h3 style="color: {style_colors["h3"]}; font-size: 1.2em; margin: 4px 0 2px 0;">',
+            '<blockquote>': f'<blockquote style="color: {style_colors["blockquote"]}; border-left: 3px solid {base_color}; padding-left: 12px; margin: 4px 0; font-style: italic;">',
+            '<ul>': '<ul style="margin: 4px 0; padding-left: 20px;">',
+            '<ol>': '<ol style="margin: 4px 0; padding-left: 20px;">',
+            '<li>': f'<li style="margin: 2px 0;">',
+            '<table>': f'<table style="border-collapse: collapse; margin: 8px 0; border: 1px solid {base_color};">',
+            '<th>': f'<th style="padding: 4px 8px; border: 1px solid {base_color}; background-color: rgba(255,255,255,0.1); font-weight: bold;">',
+            '<td>': f'<td style="padding: 4px 8px; border: 1px solid {base_color};">',
+        }
+        
+        for old, new in replacements.items():
+            styled_html = styled_html.replace(old, new)
+        
+        # Handle links with special care
+        styled_html = re.sub(
+            r'<a href="([^"]+)">',
+            f'<a href="\\1" style="color: {style_colors["a"]}; text-decoration: underline;">',
+            styled_html
+        )
+        
+        return styled_html
+    
+    def _adjust_color_brightness(self, hex_color: str, factor: float) -> str:
+        """
+        Adjust the brightness of a hex color by a given factor.
+        
+        Args:
+            hex_color: Hex color string (e.g., "#ff0000")
+            factor: Brightness factor (1.0 = no change, >1.0 = brighter, <1.0 = darker)
+            
+        Returns:
+            Adjusted hex color string
+        """
+        try:
+            # Remove # if present
+            hex_color = hex_color.lstrip('#')
+            
+            # Convert to RGB
+            rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+            
+            # Apply brightness factor
+            adjusted_rgb = tuple(min(255, int(c * factor)) for c in rgb)
+            
+            # Convert back to hex
+            return f"#{adjusted_rgb[0]:02x}{adjusted_rgb[1]:02x}{adjusted_rgb[2]:02x}"
+        except (ValueError, IndexError):
+            # Return original color if adjustment fails
+            return hex_color
+    
+    def _optimize_qt_html(self, html_content: str) -> str:
+        """
+        Optimize HTML for Qt's text rendering engine.
+        
+        Args:
+            html_content: Raw HTML content
+            
+        Returns:
+            Optimized HTML for Qt rendering
+        """
+        # Remove problematic HTML elements/attributes that Qt doesn't handle well
+        optimizations = [
+            # Remove unsupported CSS properties
+            (r'\s*white-space:\s*pre-wrap;', ''),
+            (r'\s*word-wrap:\s*break-word;', ''),
+            # Simplify complex selectors
+            (r'<p>\s*</p>', ''),  # Remove empty paragraphs
+            # Ensure proper line spacing
+            (r'</p>\s*<p>', '</p><br><p>'),
+        ]
+        
+        optimized_html = html_content
+        for pattern, replacement in optimizations:
+            optimized_html = re.sub(pattern, replacement, optimized_html, flags=re.IGNORECASE)
+        
+        return optimized_html
+    
+    def _render_plain_text(self, text: str, base_color: str) -> str:
+        """
+        Render plain text with HTML escaping and color styling.
+        
+        Args:
+            text: Plain text to render
+            base_color: Color for the text
+            
+        Returns:
+            HTML-formatted plain text
+        """
+        # HTML escape the text to prevent injection
+        escaped_text = html.escape(text)
+        
+        # Convert newlines to <br> tags
+        escaped_text = escaped_text.replace('\n', '<br>')
+        
+        # Preserve spaces and tabs
+        escaped_text = escaped_text.replace('  ', '&nbsp;&nbsp;')
+        escaped_text = escaped_text.replace('\t', '&nbsp;&nbsp;&nbsp;&nbsp;')
+        
+        return f'<span style="color: {base_color};">{escaped_text}</span><br>'
+    
+    def _manage_cache(self, key: str, content: str):
+        """
+        Manage render cache size to prevent memory bloat.
+        
+        Args:
+            key: Cache key
+            content: Content to cache
+        """
+        # Remove oldest entries if cache is full
+        if len(self._render_cache) >= self._cache_max_size:
+            # Remove roughly 20% of entries (oldest first)
+            keys_to_remove = list(self._render_cache.keys())[:self._cache_max_size // 5]
+            for old_key in keys_to_remove:
+                del self._render_cache[old_key]
+        
+        self._render_cache[key] = content
+    
+    def clear_cache(self):
+        """Clear the render cache to free memory."""
+        self._render_cache.clear()
+    
+    def get_cache_stats(self) -> Dict[str, int]:
+        """Get cache statistics for debugging/monitoring."""
+        return {
+            'cache_size': len(self._render_cache),
+            'cache_max_size': self._cache_max_size,
+            'markdown_available': self.markdown_available
+        }
 
 
 class ConversationCard(QWidget):
@@ -103,7 +437,7 @@ class ConversationCard(QWidget):
         if self.conversation.metadata.tags:
             tags_text = " ".join([f"#{tag}" for tag in list(self.conversation.metadata.tags)[:3]])
             if len(self.conversation.metadata.tags) > 3:
-                tags_text += "..."
+                tags_text += "💬"
             tags_label = QLabel(tags_text)
             tags_label.setStyleSheet("color: #666; font-size: 8px; font-style: italic;")
             layout.addWidget(tags_label)
@@ -210,6 +544,9 @@ class REPLWidget(QWidget):
         
         # Load conversations after UI is fully initialized
         QTimer.singleShot(100, self._load_conversations_deferred)
+        
+        # Load dimensions after UI is fully initialized
+        QTimer.singleShot(200, self._load_window_dimensions)
         
         logger.info("Enhanced REPLWidget initialized with conversation management")
     
@@ -327,49 +664,149 @@ class REPLWidget(QWidget):
         self.status_label.setToolTip(tooltip)
     
     def _init_title_bar(self, parent_layout):
-        """Initialize enhanced title bar with conversation dropdown."""
-        title_layout = QHBoxLayout()
+        """Initialize title bar with new conversation and help buttons."""
+        # Create a frame for the title bar to make it more visible and draggable
+        self.title_frame = QFrame()
+        self.title_frame.setStyleSheet("""
+            QFrame {
+                background-color: rgba(40, 40, 40, 0.8);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 5px;
+                margin: 2px;
+            }
+        """)
         
-        # Conversation selector dropdown
-        self.conversation_selector = QComboBox()
-        self.conversation_selector.setMinimumWidth(200)
-        self.conversation_selector.currentTextChanged.connect(self._on_conversation_selected)
-        self.conversation_selector.setToolTip("Select active conversation")
-        self._style_conversation_selector()
-        title_layout.addWidget(self.conversation_selector)
+        # Enable drag functionality for the title frame
+        self.title_frame.mousePressEvent = self._title_mouse_press
+        self.title_frame.mouseMoveEvent = self._title_mouse_move
+        self.title_frame.mouseReleaseEvent = self._title_mouse_release
+        self._dragging = False
+        self._drag_pos = None
+        
+        title_layout = QHBoxLayout(self.title_frame)
+        title_layout.setContentsMargins(8, 4, 8, 4)
+        title_layout.setSpacing(8)
+        
+        # New conversation button with menu (with extra padding)
+        new_conv_btn = QToolButton()
+        new_conv_btn.setText("➕")
+        new_conv_btn.setToolTip("Start new conversation")
+        new_conv_btn.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        new_conv_btn.clicked.connect(self._on_new_conversation_clicked)
+        self._style_title_button(new_conv_btn, add_right_padding=True)
+        
+        # Create menu for new conversation options
+        new_conv_menu = QMenu(new_conv_btn)
+        
+        # Start new conversation action
+        new_action = QAction("Start New Conversation", new_conv_btn)
+        new_action.triggered.connect(lambda: self._start_new_conversation(save_current=False))
+        new_conv_menu.addAction(new_action)
+        
+        # Start new conversation and save current action
+        save_and_new_action = QAction("Save Current & Start New", new_conv_btn)
+        save_and_new_action.triggered.connect(lambda: self._start_new_conversation(save_current=True))
+        new_conv_menu.addAction(save_and_new_action)
+        
+        new_conv_btn.setMenu(new_conv_menu)
+        title_layout.addWidget(new_conv_btn)
+        
+        # Help button
+        help_btn = QToolButton()
+        help_btn.setText("❓")
+        help_btn.setToolTip("Show help")
+        help_btn.clicked.connect(self._on_help_clicked)
+        self._style_title_button(help_btn)
+        title_layout.addWidget(help_btn)
+        
+        # Settings button
+        settings_btn = QToolButton()
+        settings_btn.setText("⚙")  # Use simpler gear character
+        settings_btn.setToolTip("Open settings")
+        settings_btn.clicked.connect(self._on_settings_clicked)
+        self._style_title_button(settings_btn)
+        title_layout.addWidget(settings_btn)
+        
+        # Chat/Browse button
+        chat_btn = QToolButton()
+        chat_btn.setText("Chat")  # Use text for reliable display
+        chat_btn.setToolTip("Browse conversations (💬)")  # Put emoji in tooltip instead
+        chat_btn.clicked.connect(self._on_chat_clicked)
+        # Special styling for chat button with more width
+        chat_btn.setFixedSize(45, 24)  # Wider than normal buttons
+        chat_btn.setStyleSheet("""
+            QToolButton {
+                background-color: rgba(255, 255, 255, 0.15);
+                color: white;
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                border-radius: 4px;
+                font-size: 12px;
+                padding: 2px 6px;
+                font-weight: bold;
+            }
+            QToolButton:hover {
+                background-color: rgba(255, 255, 255, 0.25);
+                border: 1px solid rgba(255, 255, 255, 0.5);
+            }
+            QToolButton:pressed {
+                background-color: rgba(255, 255, 255, 0.35);
+            }
+        """)
+        title_layout.addWidget(chat_btn)
         
         title_layout.addStretch()
         
-        # Status indicators
-        self.status_label = QLabel("🔥 Active")
-        self.status_label.setStyleSheet("color: #4CAF50; font-weight: bold; font-size: 10px;")
-        self.status_label.setToolTip("Conversation status")
-        title_layout.addWidget(self.status_label)
-        
-        # Minimize button
+        # Minimize button (expanded)
         minimize_btn = QPushButton("_")
-        minimize_btn.setMaximumSize(20, 20)
+        minimize_btn.setFixedSize(28, 24)  # Expanded from 20x20
         minimize_btn.clicked.connect(self.minimize_requested.emit)
         minimize_btn.setStyleSheet("""
             QPushButton {
-                background-color: rgba(255, 255, 255, 0.2);
+                background-color: rgba(255, 255, 255, 0.3);
                 color: white;
-                border: none;
-                border-radius: 3px;
+                border: 1px solid rgba(255, 255, 255, 0.4);
+                border-radius: 4px;
                 font-weight: bold;
+                font-size: 14px;
             }
             QPushButton:hover {
-                background-color: rgba(255, 255, 255, 0.3);
+                background-color: rgba(255, 255, 255, 0.4);
             }
         """)
         title_layout.addWidget(minimize_btn)
         
-        parent_layout.addLayout(title_layout)
+        parent_layout.addWidget(self.title_frame)
     
     def _init_conversation_toolbar(self, parent_layout):
         """Initialize conversation management toolbar."""
         toolbar_layout = QHBoxLayout()
         toolbar_layout.setSpacing(5)
+        
+        # New conversation button with menu
+        new_conv_btn = QToolButton()
+        new_conv_btn.setText("➕")
+        # add padding to right
+        new_conv_btn.setStyleSheet("padding-right: 4px;")
+        new_conv_btn.setToolTip("Start new conversation")
+        new_conv_btn.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        new_conv_btn.clicked.connect(self._on_new_conversation_clicked)
+        self._style_tool_button(new_conv_btn)
+        
+        # Create menu for new conversation options
+        new_conv_menu = QMenu(new_conv_btn)
+        
+        # Start new conversation action
+        new_action = QAction("Start New Conversation", new_conv_btn)
+        new_action.triggered.connect(lambda: self._start_new_conversation(save_current=False))
+        new_conv_menu.addAction(new_action)
+        
+        # Start new conversation and save current action
+        save_and_new_action = QAction("Save Current & Start New", new_conv_btn)
+        save_and_new_action.triggered.connect(lambda: self._start_new_conversation(save_current=True))
+        new_conv_menu.addAction(save_and_new_action)
+        
+        new_conv_btn.setMenu(new_conv_menu)
+        toolbar_layout.addWidget(new_conv_btn)
         
         # Browse conversations button
         browse_btn = QToolButton()
@@ -468,6 +905,32 @@ class REPLWidget(QWidget):
             }
         """)
     
+    def _style_title_button(self, button: QToolButton, add_right_padding: bool = False):
+        """Apply styling to title bar buttons."""
+        button.setFixedSize(32 if add_right_padding else 28, 24)
+        padding = "2px 8px 2px 4px" if add_right_padding else "2px 6px"
+        button.setStyleSheet(f"""
+            QToolButton {{
+                background-color: rgba(255, 255, 255, 0.15);
+                color: white;
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                border-radius: 4px;
+                font-size: 14px;
+                padding: {padding};
+            }}
+            QToolButton:hover {{
+                background-color: rgba(255, 255, 255, 0.25);
+                border: 1px solid rgba(255, 255, 255, 0.5);
+            }}
+            QToolButton:pressed {{
+                background-color: rgba(255, 255, 255, 0.35);
+            }}
+            QToolButton::menu-indicator {{
+                image: none;
+                width: 0px;
+            }}
+        """)
+    
     def _load_opacity_from_settings(self):
         """Load panel opacity from settings manager."""
         if not _global_settings:
@@ -498,8 +961,11 @@ class REPLWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
         
-        # Title bar completely removed for cleaner interface
-        # All conversation management moved to avatar right-click menu
+        # Initialize resize functionality
+        self._init_resize_functionality()
+        
+        # Title bar with new conversation and help buttons
+        self._init_title_bar(layout)
         
         # Output display
         self.output_display = QTextEdit()
@@ -998,6 +1464,8 @@ class REPLWidget(QWidget):
             self.append_output("  exit     - Minimize to system tray", "info")
             self.append_output("  quit     - Exit the application", "info")
             self.append_output("  context  - Show AI context status (debug)", "info")
+            self.append_output("  render_stats - Show markdown rendering statistics", "info")
+            self.append_output("  test_markdown - Test markdown rendering with examples", "info")
             self.append_output("\nAny other input will be sent to the AI assistant.", "info")
         
         elif command_lower == "clear":
@@ -1023,44 +1491,118 @@ class REPLWidget(QWidget):
             # Debug command to show AI context status
             self._show_context_status()
         
+        elif command_lower == "render_stats":
+            # Debug command to show render statistics
+            self._show_render_stats()
+        
+        elif command_lower == "test_markdown":
+            # Debug command to test markdown rendering
+            self._test_markdown_rendering()
+        
         else:
             # Send to AI service
             self._send_to_ai(command)
     
-    def append_output(self, text: str, style: str = "normal"):
+    def append_output(self, text: str, style: str = "normal", force_plain: bool = False):
         """
-        Append text to the output display with styling.
+        Append text to the output display with advanced markdown rendering and styling.
+        
+        Features:
+        - Full markdown support (headers, emphasis, code blocks, lists, links, tables)
+        - Preserves message type color coding
+        - Graceful fallback to plain text rendering
+        - Performance optimized for long conversations
         
         Args:
-            text: Text to append
-            style: Style type (normal, input, response, system, info, warning, error)
+            text: Text to append (supports markdown formatting)
+            style: Style type for color coding (normal, input, response, system, info, warning, error)
+            force_plain: If True, bypasses markdown processing for plain text rendering
         """
+        if not hasattr(self, '_markdown_renderer'):
+            self._markdown_renderer = MarkdownRenderer()
+        
         cursor = self.output_display.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
         
-        # Set color based on style
-        colors = {
-            "normal": "#f0f0f0",
-            "input": "#00ff00",
-            "response": "#00bfff",
-            "system": "#808080",
-            "info": "#ffff00",
-            "warning": "#ffa500",
-            "error": "#ff0000"
-        }
-        
-        color = colors.get(style, "#f0f0f0")
-        
-        # Insert formatted text
-        cursor.insertHtml(f'<span style="color: {color};">{text}</span><br>')
+        # Render content with markdown support
+        try:
+            html_content = self._markdown_renderer.render(text, style, force_plain)
+            
+            # Insert the rendered HTML content
+            cursor.insertHtml(html_content)
+            
+            # Performance optimization: limit document size for very long conversations
+            self._manage_document_size()
+            
+        except Exception as e:
+            logger.error(f"Error rendering output: {e}")
+            # Fallback to simple text rendering
+            color = self._markdown_renderer.color_scheme.get(style, "#f0f0f0")
+            escaped_text = html.escape(str(text))
+            cursor.insertHtml(f'<span style="color: {color};">{escaped_text}</span><br>')
         
         # Auto-scroll to bottom
         self.output_display.setTextCursor(cursor)
         self.output_display.ensureCursorVisible()
     
+    def _manage_document_size(self):
+        """
+        Manage document size for performance in long conversations.
+        Removes older content when document becomes too large.
+        """
+        document = self.output_display.document()
+        block_count = document.blockCount()
+        
+        # If document has more than 1000 blocks, remove the oldest 200
+        if block_count > 1000:
+            cursor = QTextCursor(document)
+            cursor.movePosition(QTextCursor.MoveOperation.Start)
+            
+            # Select first 200 blocks
+            for _ in range(200):
+                cursor.movePosition(QTextCursor.MoveOperation.NextBlock, QTextCursor.MoveMode.KeepAnchor)
+            
+            # Remove selected content and add notice
+            cursor.removeSelectedText()
+            cursor.insertHtml('<span style="color: #808080; font-style: italic;">[Previous messages truncated for performance]</span><br><br>')
+            
+            logger.debug(f"Document size managed: removed 200 blocks, {document.blockCount()} remaining")
+    
     def clear_output(self):
-        """Clear the output display."""
+        """Clear the output display and reset markdown renderer cache."""
         self.output_display.clear()
+        
+        # Clear markdown renderer cache to free memory
+        if hasattr(self, '_markdown_renderer'):
+            self._markdown_renderer.clear_cache()
+    
+    def append_plain_output(self, text: str, style: str = "normal"):
+        """
+        Append text with plain text rendering (bypasses markdown processing).
+        Useful for performance-critical scenarios or when markdown formatting should be ignored.
+        
+        Args:
+            text: Plain text to append
+            style: Style type for color coding
+        """
+        self.append_output(text, style, force_plain=True)
+    
+    def get_render_stats(self) -> Dict[str, Any]:
+        """
+        Get rendering performance statistics for debugging and monitoring.
+        
+        Returns:
+            Dictionary containing render statistics
+        """
+        stats = {
+            'document_blocks': self.output_display.document().blockCount(),
+            'markdown_available': MARKDOWN_AVAILABLE
+        }
+        
+        if hasattr(self, '_markdown_renderer'):
+            stats.update(self._markdown_renderer.get_cache_stats())
+        
+        return stats
     
     def _show_context_status(self):
         """Show AI context status for debugging."""
@@ -1098,6 +1640,79 @@ class REPLWidget(QWidget):
             self.append_output("Conversation Manager AI Service: Not Available", "warning")
         
         self.append_output("========================", "info")
+    
+    def _show_render_stats(self):
+        """Show markdown rendering statistics for debugging."""
+        self.append_output("=== Markdown Rendering Statistics ===", "info")
+        
+        try:
+            stats = self.get_render_stats()
+            
+            self.append_output(f"Document Blocks: {stats['document_blocks']}", "info")
+            self.append_output(f"Markdown Available: {stats['markdown_available']}", "info")
+            
+            if 'cache_size' in stats:
+                self.append_output(f"Render Cache Size: {stats['cache_size']}/{stats['cache_max_size']}", "info")
+                cache_efficiency = (stats['cache_size'] / stats['cache_max_size']) * 100 if stats['cache_max_size'] > 0 else 0
+                self.append_output(f"Cache Efficiency: {cache_efficiency:.1f}%", "info")
+            
+            # Memory usage approximation
+            if hasattr(self, '_markdown_renderer'):
+                renderer = self._markdown_renderer
+                if hasattr(renderer, '_render_cache'):
+                    cache_memory = sum(len(str(content)) for content in renderer._render_cache.values())
+                    self.append_output(f"Approximate Cache Memory: {cache_memory:,} characters", "info")
+        
+        except Exception as e:
+            self.append_output(f"Error getting render stats: {e}", "error")
+        
+        self.append_output("==========================================", "info")
+    
+    def _test_markdown_rendering(self):
+        """Test markdown rendering with comprehensive examples."""
+        self.append_output("=== Markdown Rendering Test ===", "info")
+        
+        # Test different message types with markdown
+        test_cases = [
+            ("# Headers Test", "response"),
+            ("## Secondary Header\n### Tertiary Header", "response"),
+            ("**Bold text** and *italic text*", "response"),
+            ("Here's some `inline code` in a sentence", "response"),
+            ("```python\ndef hello_world():\n    print('Hello, World!')\n```", "response"),
+            ("- List item 1\n- List item 2\n  - Nested item", "response"),
+            ("1. First item\n2. Second item\n3. Third item", "response"),
+            ("> This is a blockquote\n> with multiple lines", "response"),
+            ("[Link text](https://example.com)", "response"),
+            ("| Column 1 | Column 2 |\n|----------|----------|\n| Cell 1   | Cell 2   |", "response"),
+            ("Mixed **bold** with `code` and *italic*", "response"),
+        ]
+        
+        for i, (markdown_text, style) in enumerate(test_cases):
+            self.append_output(f"Test {i+1}:", "info")
+            self.append_output(markdown_text, style)
+            if i < len(test_cases) - 1:
+                self.append_output("", "system")  # Empty line separator
+        
+        # Test different styles
+        self.append_output("Style variations:", "info")
+        test_markdown = "**Bold**, *italic*, and `code` formatting"
+        
+        for style in ["input", "response", "system", "warning", "error"]:
+            self.append_output(f"{style.upper()}: {test_markdown}", style)
+        
+        self.append_output("===============================", "info")
+        
+        # Performance test
+        self.append_output("Performance test - rendering same content 10 times:", "info")
+        import time
+        start_time = time.time()
+        
+        perf_text = "# Performance Test\n**Bold** *italic* `code` [link](http://example.com)\n- Item 1\n- Item 2"
+        for i in range(10):
+            self.append_output(f"Iteration {i+1}: {perf_text}", "system")
+        
+        end_time = time.time()
+        self.append_output(f"Performance test completed in {(end_time - start_time)*1000:.2f}ms", "info")
     
     def _send_to_ai(self, message: str):
         """Send message to AI service with conversation management."""
@@ -1239,11 +1854,36 @@ class REPLWidget(QWidget):
         
         # Display response with appropriate icon
         if success:
-            self.append_output(f"🤖 AI: {response}", "response")
+            # Display AI label first
+            self.append_output("🤖 **AI Response:**", "response")
+            # Display the actual response without prefixing to preserve markdown
+            self.append_output(response, "response")
             
-            # If we have a conversation manager and current conversation,
-            # the response should already be saved via the conversation-aware AI service
-            if not self.conversation_manager and self.current_conversation:
+            # If we have a conversation manager, refresh the conversation data
+            # to update message counts and other metadata
+            if self.conversation_manager and self.current_conversation:
+                # Refresh conversation data to get updated message count
+                try:
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        # Reload the current conversation to get updated message count
+                        updated_conv = loop.run_until_complete(
+                            self.conversation_manager.get_conversation(
+                                self.current_conversation.id, 
+                                include_messages=False
+                            )
+                        )
+                        if updated_conv:
+                            self.current_conversation = updated_conv
+                            self._update_status_label(updated_conv)
+                            logger.debug(f"Refreshed conversation data - message count: {updated_conv.get_message_count()}")
+                    finally:
+                        loop.close()
+                except Exception as e:
+                    logger.error(f"Failed to refresh conversation data: {e}")
+            elif not self.conversation_manager and self.current_conversation:
                 # Manual fallback - add to conversation if needed
                 logger.info("Manual message saving not yet implemented")
         else:
@@ -1476,6 +2116,227 @@ class REPLWidget(QWidget):
         """Set the AI service instance (for backward compatibility)."""
         self._ai_service = ai_service
         logger.debug("AI service set for REPL widget")
+    
+    def _on_new_conversation_clicked(self):
+        """Handle new conversation button click (without menu)."""
+        self._start_new_conversation(save_current=False)
+    
+    def _on_help_clicked(self):
+        """Handle help button click - send help command and display result."""
+        # Send help command to the REPL
+        self.command_input.setText("help")
+        self._on_command_entered()
+    
+    def _on_settings_clicked(self):
+        """Handle settings button click - open settings dialog."""
+        self.settings_requested.emit()
+    
+    def _on_chat_clicked(self):
+        """Handle chat button click - browse conversations."""
+        self.browse_requested.emit()
+    
+    def _start_new_conversation(self, save_current: bool = False):
+        """Start a new conversation with optional saving of current."""
+        try:
+            if not self.conversation_manager:
+                self.append_output("⚠️ Conversation management not available", "error")
+                return
+            
+            # Get AI service for conversation integration
+            ai_service = None
+            if self.conversation_manager:
+                ai_service = self.conversation_manager.get_ai_service()
+            
+            if not ai_service or not hasattr(ai_service, 'conversation_service'):
+                self.append_output("⚠️ AI service doesn't support conversation management", "error")
+                return
+            
+            async def create_new_conversation():
+                try:
+                    current_id = ai_service.get_current_conversation_id()
+                    
+                    if save_current and current_id:
+                        # Save current conversation with generated title
+                        await ai_service._save_current_conversation()
+                        
+                        # Generate title if needed
+                        conversation = await ai_service.conversation_service.get_conversation(current_id, include_messages=True)
+                        if conversation and len(conversation.messages) >= 2:
+                            if conversation.title in ["New Conversation", "Untitled Conversation"] or not conversation.title.strip():
+                                generated_title = await ai_service.conversation_service.generate_conversation_title(current_id)
+                                if generated_title:
+                                    await ai_service.conversation_service.update_conversation_title(current_id, generated_title)
+                                    logger.info(f"Generated title for saved conversation: {generated_title}")
+                    
+                    # Clear REPL output before starting new conversation
+                    self.clear_output()
+                    
+                    # Start new conversation
+                    new_id = await ai_service.start_new_conversation(title="New Conversation")
+                    if new_id:
+                        # Refresh conversation list
+                        await self._load_conversations()
+                        self.append_output("✅ Started new conversation", "system")
+                        if save_current and current_id:
+                            self.append_output("💾 Previous conversation saved with auto-generated title", "system")
+                        
+                        # Add welcome message for new conversation
+                        self.append_output("💬 Ghostman Conversation Manager v2.0", "system")
+                        self.append_output("🚀 New conversation started - type your message or 'help' for commands", "system")
+                    else:
+                        self.append_output("❌ Failed to start new conversation", "error")
+                        
+                except Exception as e:
+                    logger.error(f"Failed to create new conversation: {e}")
+                    self.append_output(f"❌ Error creating new conversation: {e}", "error")
+            
+            # Use Qt timer to safely handle async operations
+            from PyQt6.QtCore import QTimer
+            
+            def run_async():
+                try:
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        loop.run_until_complete(create_new_conversation())
+                    finally:
+                        loop.close()
+                except Exception as e:
+                    logger.error(f"Failed to execute new conversation async: {e}")
+                    self.append_output(f"❌ Error: {e}", "error")
+            
+            QTimer.singleShot(100, run_async)
+            
+        except Exception as e:
+            logger.error(f"New conversation failed: {e}")
+            self.append_output(f"❌ Error: {e}", "error")
+    
+    def _title_mouse_press(self, event):
+        """Handle mouse press on title bar for drag functionality."""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._dragging = True
+            self._drag_pos = event.globalPosition().toPoint()
+    
+    def _title_mouse_move(self, event):
+        """Handle mouse move on title bar for drag functionality."""
+        if self._dragging and self._drag_pos:
+            # Get the floating REPL window
+            floating_repl = self.parent()
+            while floating_repl and not hasattr(floating_repl, 'move'):
+                floating_repl = floating_repl.parent()
+            
+            if floating_repl:
+                # Calculate new position
+                diff = event.globalPosition().toPoint() - self._drag_pos
+                new_pos = floating_repl.pos() + diff
+                floating_repl.move(new_pos)
+                self._drag_pos = event.globalPosition().toPoint()
+    
+    def _title_mouse_release(self, event):
+        """Handle mouse release on title bar for drag functionality."""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._dragging = False
+            self._drag_pos = None
+    
+    def _init_resize_functionality(self):
+        """Load saved window dimensions - resize handled by FloatingREPL window."""
+        # Load saved dimensions
+        self._load_window_dimensions()
+    
+    
+    def _load_window_dimensions(self):
+        """Load window dimensions from settings."""
+        if not _global_settings:
+            return
+            
+        try:
+            width = _global_settings.get('ui.repl_width', 500)
+            height = _global_settings.get('ui.repl_height', 400)
+            
+            # Get the floating REPL window and set its size
+            floating_repl = self.parent()
+            while floating_repl and not hasattr(floating_repl, 'resize'):
+                floating_repl = floating_repl.parent()
+            
+            if floating_repl:
+                floating_repl.resize(width, height)
+                logger.debug(f"Loaded REPL dimensions: {width}x{height}")
+        except Exception as e:
+            logger.warning(f"Failed to load window dimensions: {e}")
+    
+    def _save_window_dimensions(self):
+        """Save current window dimensions to settings."""
+        if not _global_settings:
+            return
+            
+        try:
+            # Get the floating REPL window
+            floating_repl = self.parent()
+            while floating_repl and not hasattr(floating_repl, 'size'):
+                floating_repl = floating_repl.parent()
+            
+            if floating_repl:
+                size = floating_repl.size()
+                _global_settings.set('ui.repl_width', size.width())
+                _global_settings.set('ui.repl_height', size.height())
+                logger.debug(f"Saved REPL dimensions: {size.width()}x{size.height()}")
+        except Exception as e:
+            logger.warning(f"Failed to save window dimensions: {e}")
+    
+# Resize functionality moved to FloatingREPL window with corner grips
+    
+    def save_current_conversation(self):
+        """Save the current conversation."""
+        try:
+            if not self.conversation_manager:
+                logger.warning("No conversation manager available for saving")
+                return
+            
+            # Get AI service for conversation integration
+            ai_service = self.conversation_manager.get_ai_service()
+            if not ai_service or not hasattr(ai_service, 'conversation_service'):
+                logger.warning("AI service doesn't support conversation management")
+                return
+            
+            current_id = ai_service.get_current_conversation_id()
+            if not current_id:
+                logger.info("No current conversation to save")
+                return
+            
+            async def save_conversation():
+                try:
+                    # Save current conversation
+                    await ai_service._save_current_conversation()
+                    
+                    # Generate title if needed
+                    conversation = await ai_service.conversation_service.get_conversation(current_id, include_messages=True)
+                    if conversation and len(conversation.messages) >= 2:
+                        if conversation.title in ["New Conversation", "Untitled Conversation"] or not conversation.title.strip():
+                            generated_title = await ai_service.conversation_service.generate_conversation_title(current_id)
+                            if generated_title:
+                                await ai_service.conversation_service.update_conversation_title(current_id, generated_title)
+                                logger.info(f"Generated title for saved conversation: {generated_title}")
+                    
+                    logger.info(f"Conversation saved successfully: {current_id}")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to save conversation: {e}")
+            
+            # Run async save operation
+            try:
+                import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    loop.run_until_complete(save_conversation())
+                finally:
+                    loop.close()
+            except Exception as e:
+                logger.error(f"Failed to execute save conversation async: {e}")
+                
+        except Exception as e:
+            logger.error(f"Save conversation failed: {e}")
     
     def shutdown(self):
         """Shutdown the enhanced REPL widget."""

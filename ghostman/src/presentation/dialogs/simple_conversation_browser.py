@@ -157,7 +157,7 @@ class SimpleConversationBrowser(QDialog):
         button_layout = QHBoxLayout()
         
         # Restore button
-        self.restore_btn = QPushButton("Restore to REPL")
+        self.restore_btn = QPushButton("Restore")
         self.restore_btn.clicked.connect(self._on_restore_clicked)
         self.restore_btn.setEnabled(False)
         button_layout.addWidget(self.restore_btn)
@@ -167,6 +167,34 @@ class SimpleConversationBrowser(QDialog):
         self.export_btn.clicked.connect(self._on_export_clicked)
         self.export_btn.setEnabled(False)
         button_layout.addWidget(self.export_btn)
+        
+        # Delete button
+        self.delete_btn = QPushButton("Delete")
+        self.delete_btn.clicked.connect(self._on_delete_clicked)
+        self.delete_btn.setEnabled(False)
+        self.delete_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #d32f2f;
+                color: #ffffff;
+                border: 1px solid #b71c1c;
+                padding: 6px 12px;
+                border-radius: 4px;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: #f44336;
+                border-color: #c62828;
+            }
+            QPushButton:pressed {
+                background-color: #b71c1c;
+            }
+            QPushButton:disabled {
+                background-color: #2a2a2a;
+                color: #666666;
+                border-color: #444444;
+            }
+        """)
+        button_layout.addWidget(self.delete_btn)
         
         button_layout.addStretch()
         
@@ -327,6 +355,7 @@ class SimpleConversationBrowser(QDialog):
         
         self.restore_btn.setEnabled(has_selection)
         self.export_btn.setEnabled(has_selection)
+        self.delete_btn.setEnabled(has_selection)
     
     def _on_restore_clicked(self):
         """Handle restore button click."""
@@ -354,6 +383,69 @@ class SimpleConversationBrowser(QDialog):
             self.conversation_restore_requested.emit(conversation.id)
             self.status_label.setText(f"Restored: {conversation.title}")
             logger.info(f"Conversation restore requested: {conversation.id}")
+    
+    def _on_delete_clicked(self):
+        """Handle delete button click."""
+        selected_rows = self.conversations_table.selectionModel().selectedRows()
+        if not selected_rows:
+            return
+        
+        row = selected_rows[0].row()
+        if row < 0 or row >= len(self.conversations):
+            return
+        
+        conversation = self.conversations[row]
+        
+        # Confirm deletion with warning dialog
+        reply = QMessageBox.warning(
+            self,
+            "Delete Conversation",
+            f"Are you sure you want to delete '{conversation.title}'?\n\n"
+            "This action cannot be undone. All messages in this conversation will be permanently removed.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self._delete_conversation(conversation)
+    
+    def _delete_conversation(self, conversation: Conversation):
+        """Delete a conversation from the database."""
+        try:
+            self.status_label.setText(f"Deleting conversation...")
+            
+            # Delete conversation using async properly
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            success = loop.run_until_complete(
+                self.conversation_manager.conversation_service.delete_conversation(conversation.id, permanent=True)
+            )
+            
+            if success:
+                self.status_label.setText(f"Deleted: {conversation.title}")
+                logger.info(f"Conversation deleted: {conversation.id}")
+                
+                # Refresh the conversation list
+                self._load_conversations()
+                
+                QMessageBox.information(
+                    self,
+                    "Conversation Deleted",
+                    f"'{conversation.title}' has been deleted successfully."
+                )
+            else:
+                self.status_label.setText("Delete failed")
+                QMessageBox.warning(self, "Delete Error", "Failed to delete conversation")
+                
+        except Exception as e:
+            logger.error(f"Delete failed: {e}")
+            self.status_label.setText(f"Delete error: {e}")
+            QMessageBox.warning(self, "Delete Error", f"Delete failed:\n{e}")
     
     def _on_export_clicked(self):
         """Handle export button click."""

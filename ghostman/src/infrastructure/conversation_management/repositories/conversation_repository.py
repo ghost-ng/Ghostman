@@ -1,24 +1,31 @@
 """
-Repository for conversation data operations.
+Repository for conversation data operations using SQLAlchemy ORM.
 """
 
-import json
 import logging
-import sqlite3
-from datetime import datetime
-from typing import List, Optional, Dict, Any, Set, Tuple
 import time
+from datetime import datetime, timedelta
+from typing import List, Optional, Dict, Any, Set, Tuple
+from uuid import uuid4
+
+from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy import and_, or_, func, desc, asc, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from ..models.conversation import Conversation, Message, ConversationSummary, ConversationMetadata
 from ..models.enums import ConversationStatus, MessageRole, SortOrder, SearchScope
 from ..models.search import SearchQuery, SearchResult, SearchResults
+from ..models.database_models import (
+    ConversationModel, MessageModel, TagModel, ConversationTagModel,
+    MessageFTSModel, ConversationSummaryModel, sanitize_text, sanitize_html
+)
 from .database import DatabaseManager
 
 logger = logging.getLogger("ghostman.conversation_repo")
 
 
 class ConversationRepository:
-    """Repository for conversation data operations."""
+    """Repository for conversation data operations using SQLAlchemy ORM."""
     
     def __init__(self, db_manager: Optional[DatabaseManager] = None):
         """Initialize repository with database manager."""
@@ -29,130 +36,149 @@ class ConversationRepository:
     # --- Conversation CRUD Operations ---
     
     async def create_conversation(self, conversation: Conversation) -> bool:
-        """Create a new conversation."""
+        """Create a new conversation using SQLAlchemy ORM."""
         # Check if conversation is empty and should not be saved
         if self._is_empty_conversation(conversation):
             logger.debug(f"Skipping creation of empty conversation: {conversation.id}")
             return False
             
         try:
-            with self.db.get_connection() as conn:
-                # Insert conversation
-                conn.execute("""
-                    INSERT INTO conversations (id, title, status, created_at, updated_at, metadata_json)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (
-                    conversation.id,
-                    conversation.title,
-                    conversation.status.value,
-                    conversation.created_at.isoformat(),
-                    conversation.updated_at.isoformat(),
-                    json.dumps(conversation.metadata.to_dict())
-                ))
+            with self.db.get_session() as session:
+                # Create conversation model
+                conv_model = ConversationModel(
+                    id=conversation.id,
+                    title=sanitize_text(conversation.title),
+                    status=conversation.status.value,
+                    created_at=conversation.created_at,
+                    updated_at=conversation.updated_at,
+                    message_count=len(conversation.messages),
+                    metadata=conversation.metadata.to_dict()
+                )
+                session.add(conv_model)
                 
-                # Insert messages
+                # Add messages
                 for message in conversation.messages:
-                    await self._insert_message(conn, message)
+                    message_model = MessageModel(
+                        id=message.id,
+                        conversation_id=message.conversation_id,
+                        role=message.role.value,
+                        content=sanitize_html(message.content),
+                        timestamp=message.timestamp,
+                        token_count=message.token_count,
+                        metadata=message.metadata
+                    )
+                    session.add(message_model)
                 
                 # Update FTS index
-                await self._update_fts_index(conn, conversation)
+                await self._update_fts_index(session, conversation)
                 
                 # Handle tags
-                await self._update_conversation_tags(conn, conversation.id, conversation.metadata.tags)
+                await self._update_conversation_tags(session, conversation.id, conversation.metadata.tags)
                 
                 logger.info(f"✅ Created conversation: {conversation.id}")
                 return True
                 
-        except Exception as e:
+        except SQLAlchemyError as e:
             logger.error(f"❌ Failed to create conversation {conversation.id}: {e}")
             return False
     
     async def get_conversation(self, conversation_id: str, include_messages: bool = True) -> Optional[Conversation]:
-        """Get conversation by ID."""
+        """Get conversation by ID using SQLAlchemy ORM."""
         try:
-            with self.db.get_connection() as conn:
-                # Get conversation
-                cursor = conn.execute("""
-                    SELECT id, title, status, created_at, updated_at, metadata_json
-                    FROM conversations 
-                    WHERE id = ?
-                """, (conversation_id,))
+            with self.db.get_session() as session:
+                query = session.query(ConversationModel).filter(ConversationModel.id == conversation_id)
                 
-                row = cursor.fetchone()
-                if not row:
+                if include_messages:
+                    query = query.options(
+                        selectinload(ConversationModel.messages),
+                        joinedload(ConversationModel.summary)
+                    )
+                
+                conv_model = query.first()
+                if not conv_model:
                     return None
                 
-                # Parse conversation
-                conversation = self._parse_conversation_row(row)
+                # Convert to domain model
+                conversation = conv_model.to_domain_model()
                 
                 if include_messages:
                     # Load messages
-                    conversation.messages = await self._get_conversation_messages(conn, conversation_id)
+                    messages = []
+                    for msg_model in sorted(conv_model.messages, key=lambda m: m.timestamp):
+                        messages.append(msg_model.to_domain_model())
+                    conversation.messages = messages
                     
                     # Load summary
-                    conversation.summary = await self._get_conversation_summary(conn, conversation_id)
+                    if conv_model.summary:
+                        conversation.summary = conv_model.summary.to_domain_model()
                 
                 return conversation
                 
-        except Exception as e:
+        except SQLAlchemyError as e:
             logger.error(f"❌ Failed to get conversation {conversation_id}: {e}")
             return None
     
     async def update_conversation(self, conversation: Conversation) -> bool:
-        """Update existing conversation."""
+        """Update existing conversation using SQLAlchemy ORM."""
         # Check if conversation has become empty and should be deleted instead
         if self._is_empty_conversation(conversation):
             logger.debug(f"Conversation {conversation.id} is empty, marking as deleted")
             conversation.delete()
             
         try:
-            with self.db.get_connection() as conn:
-                # Update conversation
-                conn.execute("""
-                    UPDATE conversations 
-                    SET title = ?, status = ?, updated_at = ?, metadata_json = ?
-                    WHERE id = ?
-                """, (
-                    conversation.title,
-                    conversation.status.value,
-                    conversation.updated_at.isoformat(),
-                    json.dumps(conversation.metadata.to_dict()),
-                    conversation.id
-                ))
+            with self.db.get_session() as session:
+                conv_model = session.query(ConversationModel).filter(
+                    ConversationModel.id == conversation.id
+                ).first()
+                
+                if not conv_model:
+                    logger.warning(f"Conversation {conversation.id} not found for update")
+                    return False
+                
+                # Update conversation fields
+                conv_model.title = sanitize_text(conversation.title)
+                conv_model.status = conversation.status.value
+                conv_model.updated_at = conversation.updated_at
+                conv_model.conversation_metadata = conversation.metadata.to_dict()
+                conv_model.message_count = len(conversation.messages)
                 
                 # Update FTS index
-                await self._update_fts_index(conn, conversation)
+                await self._update_fts_index(session, conversation)
                 
                 # Update tags
-                await self._update_conversation_tags(conn, conversation.id, conversation.metadata.tags)
+                await self._update_conversation_tags(session, conversation.id, conversation.metadata.tags)
                 
                 logger.debug(f"Updated conversation: {conversation.id}")
                 return True
                 
-        except Exception as e:
+        except SQLAlchemyError as e:
             logger.error(f"❌ Failed to update conversation {conversation.id}: {e}")
             return False
     
     async def delete_conversation(self, conversation_id: str, soft_delete: bool = True) -> bool:
-        """Delete conversation (soft delete by default)."""
+        """Delete conversation using SQLAlchemy ORM."""
         try:
-            with self.db.get_connection() as conn:
+            with self.db.get_session() as session:
+                conv_model = session.query(ConversationModel).filter(
+                    ConversationModel.id == conversation_id
+                ).first()
+                
+                if not conv_model:
+                    logger.warning(f"Conversation {conversation_id} not found for deletion")
+                    return False
+                
                 if soft_delete:
                     # Soft delete - just mark as deleted
-                    conn.execute("""
-                        UPDATE conversations 
-                        SET status = ?, updated_at = ?
-                        WHERE id = ?
-                    """, (ConversationStatus.DELETED.value, datetime.now().isoformat(), conversation_id))
+                    conv_model.status = ConversationStatus.DELETED.value
+                    conv_model.updated_at = datetime.utcnow()
                 else:
-                    # Hard delete - remove from database
-                    conn.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
-                    conn.execute("DELETE FROM conversations_fts WHERE conversation_id = ?", (conversation_id,))
+                    # Hard delete - remove from database (cascading will handle related records)
+                    session.delete(conv_model)
                 
                 logger.info(f"{'Soft' if soft_delete else 'Hard'} deleted conversation: {conversation_id}")
                 return True
                 
-        except Exception as e:
+        except SQLAlchemyError as e:
             logger.error(f"❌ Failed to delete conversation {conversation_id}: {e}")
             return False
     
@@ -163,69 +189,74 @@ class ConversationRepository:
         offset: int = 0,
         sort_order: SortOrder = SortOrder.UPDATED_DESC
     ) -> List[Conversation]:
-        """List conversations with optional filtering."""
+        """List conversations with optional filtering using SQLAlchemy ORM."""
         try:
-            with self.db.get_connection() as conn:
-                # Build query
-                where_clause = []
-                params = []
+            with self.db.get_session() as session:
+                query = session.query(ConversationModel)
                 
+                # Apply filters
                 if status:
-                    where_clause.append("c.status = ?")
-                    params.append(status.value)
+                    query = query.filter(ConversationModel.status == status.value)
                 
-                where_sql = " WHERE " + " AND ".join(where_clause) if where_clause else ""
-                order_sql = self._build_order_clause(sort_order)
-                limit_sql = f" LIMIT {limit}" if limit else ""
-                offset_sql = f" OFFSET {offset}" if offset > 0 else ""
+                # Apply sorting
+                query = self._apply_sort_order(query, sort_order)
                 
-                query = f"""
-                    SELECT c.id, c.title, c.status, c.created_at, c.updated_at, c.metadata_json
-                    FROM conversations c
-                    {where_sql}
-                    {order_sql}
-                    {limit_sql}
-                    {offset_sql}
-                """
+                # Apply pagination
+                if offset > 0:
+                    query = query.offset(offset)
+                if limit:
+                    query = query.limit(limit)
                 
-                cursor = conn.execute(query, params)
+                conv_models = query.all()
                 conversations = []
                 
-                for row in cursor.fetchall():
-                    conversation = self._parse_conversation_row(row)
-                    # Load message counts for listing
+                for conv_model in conv_models:
+                    conversation = conv_model.to_domain_model()
                     conversation.messages = []  # Don't load full messages for listing
                     conversations.append(conversation)
                 
                 return conversations
                 
-        except Exception as e:
+        except SQLAlchemyError as e:
             logger.error(f"❌ Failed to list conversations: {e}")
             return []
     
     # --- Message Operations ---
     
     async def add_message(self, message: Message) -> bool:
-        """Add message to conversation."""
+        """Add message to conversation using SQLAlchemy ORM."""
         try:
-            with self.db.get_connection() as conn:
-                await self._insert_message(conn, message)
+            with self.db.get_session() as session:
+                # Create message model
+                message_model = MessageModel(
+                    id=message.id,
+                    conversation_id=message.conversation_id,
+                    role=message.role.value,
+                    content=sanitize_html(message.content),
+                    timestamp=message.timestamp,
+                    token_count=message.token_count,
+                    metadata=message.metadata
+                )
+                session.add(message_model)
                 
                 # Update conversation updated_at and message_count
-                conn.execute("""
-                    UPDATE conversations 
-                    SET updated_at = ?,
-                        message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?)
-                    WHERE id = ?
-                """, (message.timestamp.isoformat(), message.conversation_id, message.conversation_id))
+                conv_model = session.query(ConversationModel).filter(
+                    ConversationModel.id == message.conversation_id
+                ).first()
+                
+                if conv_model:
+                    conv_model.updated_at = message.timestamp
+                    conv_model.message_count = session.query(MessageModel).filter(
+                        MessageModel.conversation_id == message.conversation_id
+                    ).count() + 1  # +1 for the message we're adding
                 
                 # Update FTS index with new message content
-                await self._update_message_fts(conn, message)
+                await self._update_message_fts(session, message)
                 
                 logger.debug(f"Added message to conversation {message.conversation_id}")
                 return True
                 
-        except Exception as e:
+        except SQLAlchemyError as e:
             logger.error(f"❌ Failed to add message: {e}")
             return False
     
@@ -235,56 +266,70 @@ class ConversationRepository:
         limit: Optional[int] = None,
         offset: int = 0
     ) -> List[Message]:
-        """Get messages for a conversation."""
+        """Get messages for a conversation using SQLAlchemy ORM."""
         try:
-            with self.db.get_connection() as conn:
-                return await self._get_conversation_messages(conn, conversation_id, limit, offset)
-        except Exception as e:
+            with self.db.get_session() as session:
+                query = session.query(MessageModel).filter(
+                    MessageModel.conversation_id == conversation_id
+                ).order_by(MessageModel.timestamp.asc())
+                
+                if offset > 0:
+                    query = query.offset(offset)
+                if limit:
+                    query = query.limit(limit)
+                
+                message_models = query.all()
+                return [msg_model.to_domain_model() for msg_model in message_models]
+                
+        except SQLAlchemyError as e:
             logger.error(f"❌ Failed to get messages for {conversation_id}: {e}")
             return []
     
     # --- Search Operations ---
     
     async def search_conversations(self, query: SearchQuery) -> SearchResults:
-        """Search conversations with full-text search and filtering."""
+        """Search conversations using SQLAlchemy ORM with full-text search."""
         start_time = time.time()
         
         try:
-            with self.db.get_connection() as conn:
-                # Build search query
-                sql_query, params = self._build_search_query(query)
+            with self.db.get_session() as session:
+                # Build base query
+                base_query = session.query(ConversationModel)
                 
-                # Execute search
-                cursor = conn.execute(sql_query, params)
+                # Apply text search filters
+                base_query = self._apply_text_filters(base_query, query)
                 
+                # Apply other filters
+                base_query = self._apply_other_filters(base_query, query)
+                
+                # Get total count before pagination
+                total_count = base_query.count()
+                
+                # Apply sorting
+                base_query = self._apply_sort_order(base_query, query.sort_order)
+                
+                # Apply pagination
+                if query.offset > 0:
+                    base_query = base_query.offset(query.offset)
+                if query.limit:
+                    base_query = base_query.limit(query.limit)
+                
+                conv_models = base_query.all()
+                
+                # Convert to search results
                 results = []
-                for row in cursor.fetchall():
-                    # Safely access optional columns
-                    try:
-                        content = row['content']
-                    except (KeyError, IndexError):
-                        content = ''
-                    
-                    try:
-                        relevance_score = row['rank']
-                    except (KeyError, IndexError):
-                        relevance_score = None
+                for conv_model in conv_models:
+                    # Generate snippet from FTS content
+                    snippet = await self._generate_snippet(session, conv_model.id, query.text)
                     
                     result = SearchResult(
-                        conversation_id=row['id'],
-                        title=row['title'],
-                        snippet=self._generate_snippet(content, query.text),
-                        relevance_score=relevance_score,
-                        match_count=1  # TODO: Calculate actual match count
+                        conversation_id=conv_model.id,
+                        title=conv_model.title,
+                        snippet=snippet,
+                        relevance_score=None,  # TODO: Implement relevance scoring
+                        match_count=1
                     )
                     results.append(result)
-                
-                # Get total count
-                count_query = sql_query.replace("SELECT DISTINCT c.*", "SELECT COUNT(DISTINCT c.id)")
-                # Remove ORDER BY and LIMIT for count query
-                count_query = count_query.split(" ORDER BY")[0]
-                cursor = conn.execute(count_query, params)
-                total_count = cursor.fetchone()[0]
                 
                 query_time = (time.time() - start_time) * 1000
                 
@@ -296,403 +341,335 @@ class ConversationRepository:
                     limit=query.limit
                 )
                 
-        except Exception as e:
+        except SQLAlchemyError as e:
             logger.error(f"❌ Search failed: {e}")
             return SearchResults(results=[], total_count=0)
     
     # --- Summary Operations ---
     
     async def save_conversation_summary(self, summary: ConversationSummary) -> bool:
-        """Save conversation summary."""
+        """Save conversation summary using SQLAlchemy ORM."""
         try:
-            with self.db.get_connection() as conn:
-                conn.execute("""
-                    INSERT OR REPLACE INTO conversation_summaries 
-                    (id, conversation_id, summary, key_topics_json, generated_at, model_used, confidence_score)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    summary.id,
-                    summary.conversation_id,
-                    summary.summary,
-                    json.dumps(summary.key_topics),
-                    summary.generated_at.isoformat(),
-                    summary.model_used,
-                    summary.confidence_score
-                ))
+            with self.db.get_session() as session:
+                # Check if summary already exists
+                existing_summary = session.query(ConversationSummaryModel).filter(
+                    ConversationSummaryModel.conversation_id == summary.conversation_id
+                ).first()
+                
+                if existing_summary:
+                    # Update existing summary
+                    existing_summary.summary = sanitize_html(summary.summary)
+                    existing_summary.key_topics = summary.key_topics
+                    existing_summary.generated_at = summary.generated_at
+                    existing_summary.model_used = summary.model_used
+                    existing_summary.confidence_score = summary.confidence_score
+                else:
+                    # Create new summary
+                    summary_model = ConversationSummaryModel(
+                        id=summary.id,
+                        conversation_id=summary.conversation_id,
+                        summary=sanitize_html(summary.summary),
+                        key_topics=summary.key_topics,
+                        generated_at=summary.generated_at,
+                        model_used=summary.model_used,
+                        confidence_score=summary.confidence_score
+                    )
+                    session.add(summary_model)
                 
                 logger.debug(f"Saved summary for conversation {summary.conversation_id}")
                 return True
                 
-        except Exception as e:
+        except SQLAlchemyError as e:
             logger.error(f"❌ Failed to save summary: {e}")
             return False
     
     # --- Tag Operations ---
     
     async def get_all_tags(self, min_usage: int = 1) -> List[Dict[str, Any]]:
-        """Get all tags with usage counts."""
+        """Get all tags with usage counts using SQLAlchemy ORM."""
         try:
-            with self.db.get_connection() as conn:
-                cursor = conn.execute("""
-                    SELECT name, usage_count, created_at
-                    FROM tags 
-                    WHERE usage_count >= ?
-                    ORDER BY usage_count DESC, name ASC
-                """, (min_usage,))
+            with self.db.get_session() as session:
+                tags = session.query(TagModel).filter(
+                    TagModel.usage_count >= min_usage
+                ).order_by(desc(TagModel.usage_count), TagModel.name).all()
                 
-                return [dict(row) for row in cursor.fetchall()]
+                return [
+                    {
+                        'name': tag.name,
+                        'usage_count': tag.usage_count,
+                        'created_at': tag.created_at.isoformat()
+                    }
+                    for tag in tags
+                ]
                 
-        except Exception as e:
+        except SQLAlchemyError as e:
             logger.error(f"❌ Failed to get tags: {e}")
             return []
     
     async def get_conversation_tags(self, conversation_id: str) -> Set[str]:
-        """Get tags for a specific conversation."""
+        """Get tags for a specific conversation using SQLAlchemy ORM."""
         try:
-            with self.db.get_connection() as conn:
-                cursor = conn.execute("""
-                    SELECT t.name
-                    FROM tags t
-                    JOIN conversation_tags ct ON t.id = ct.tag_id
-                    WHERE ct.conversation_id = ?
-                """, (conversation_id,))
+            with self.db.get_session() as session:
+                tags = session.query(TagModel).join(ConversationTagModel).filter(
+                    ConversationTagModel.conversation_id == conversation_id
+                ).all()
                 
-                return {row['name'] for row in cursor.fetchall()}
+                return {tag.name for tag in tags}
                 
-        except Exception as e:
+        except SQLAlchemyError as e:
             logger.error(f"❌ Failed to get tags for {conversation_id}: {e}")
             return set()
     
     # --- Analytics ---
     
     async def get_conversation_stats(self) -> Dict[str, Any]:
-        """Get conversation statistics."""
+        """Get conversation statistics using SQLAlchemy ORM."""
         try:
-            with self.db.get_connection() as conn:
+            with self.db.get_session() as session:
                 stats = {}
                 
                 # Total conversations by status
-                cursor = conn.execute("""
-                    SELECT status, COUNT(*) as count
-                    FROM conversations
-                    GROUP BY status
-                """)
-                stats['by_status'] = dict(cursor.fetchall())
+                status_counts = session.query(
+                    ConversationModel.status,
+                    func.count(ConversationModel.id)
+                ).group_by(ConversationModel.status).all()
+                stats['by_status'] = {status: count for status, count in status_counts}
                 
                 # Messages per day (last 30 days)
-                cursor = conn.execute("""
-                    SELECT DATE(timestamp) as date, COUNT(*) as count
-                    FROM messages
-                    WHERE timestamp >= datetime('now', '-30 days')
-                    GROUP BY DATE(timestamp)
-                    ORDER BY date
-                """)
-                stats['messages_per_day'] = [dict(row) for row in cursor.fetchall()]
+                messages_per_day = session.query(
+                    func.date(MessageModel.timestamp).label('date'),
+                    func.count(MessageModel.id).label('count')
+                ).filter(
+                    MessageModel.timestamp >= datetime.utcnow().replace(
+                        hour=0, minute=0, second=0, microsecond=0
+                    ) - timedelta(days=30)
+                ).group_by(func.date(MessageModel.timestamp)).all()
+                stats['messages_per_day'] = [
+                    {'date': str(date), 'count': count}
+                    for date, count in messages_per_day
+                ]
                 
                 # Most active conversations
-                cursor = conn.execute("""
-                    SELECT c.id, c.title, COUNT(m.id) as message_count
-                    FROM conversations c
-                    LEFT JOIN messages m ON c.id = m.conversation_id
-                    WHERE c.status != 'deleted'
-                    GROUP BY c.id, c.title
-                    ORDER BY message_count DESC
-                    LIMIT 10
-                """)
-                stats['most_active'] = [dict(row) for row in cursor.fetchall()]
-                
-                # Token usage by model
-                cursor = conn.execute("""
-                    SELECT 
-                        JSON_EXTRACT(metadata_json, '$.model_used') as model,
-                        SUM(COALESCE(token_count, 0)) as total_tokens,
-                        COUNT(*) as message_count
-                    FROM messages
-                    WHERE JSON_EXTRACT(metadata_json, '$.model_used') IS NOT NULL
-                    GROUP BY model
-                """)
-                stats['token_usage_by_model'] = [dict(row) for row in cursor.fetchall()]
+                most_active = session.query(
+                    ConversationModel.id,
+                    ConversationModel.title,
+                    func.count(MessageModel.id).label('message_count')
+                ).join(MessageModel, ConversationModel.id == MessageModel.conversation_id
+                ).filter(ConversationModel.status != 'deleted'
+                ).group_by(ConversationModel.id, ConversationModel.title
+                ).order_by(desc(func.count(MessageModel.id))
+                ).limit(10).all()
+                stats['most_active'] = [
+                    {'id': conv_id, 'title': title, 'message_count': count}
+                    for conv_id, title, count in most_active
+                ]
                 
                 return stats
                 
-        except Exception as e:
+        except SQLAlchemyError as e:
             logger.error(f"❌ Failed to get conversation stats: {e}")
             return {}
     
     # --- Helper Methods ---
     
-    async def _insert_message(self, conn: sqlite3.Connection, message: Message):
-        """Insert a message into the database."""
-        conn.execute("""
-            INSERT INTO messages (id, conversation_id, role, content, timestamp, token_count, metadata_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (
-            message.id,
-            message.conversation_id,
-            message.role.value,
-            message.content,
-            message.timestamp.isoformat(),
-            message.token_count,
-            json.dumps(message.metadata)
-        ))
-    
-    async def _get_conversation_messages(
-        self, 
-        conn: sqlite3.Connection, 
-        conversation_id: str,
-        limit: Optional[int] = None,
-        offset: int = 0
-    ) -> List[Message]:
-        """Get messages for a conversation from database."""
-        limit_sql = f" LIMIT {limit}" if limit else ""
-        offset_sql = f" OFFSET {offset}" if offset > 0 else ""
-        
-        cursor = conn.execute(f"""
-            SELECT id, conversation_id, role, content, timestamp, token_count, metadata_json
-            FROM messages
-            WHERE conversation_id = ?
-            ORDER BY timestamp ASC
-            {limit_sql}
-            {offset_sql}
-        """, (conversation_id,))
-        
-        messages = []
-        for row in cursor.fetchall():
-            message = Message(
-                id=row['id'],
-                conversation_id=row['conversation_id'],
-                role=MessageRole(row['role']),
-                content=row['content'],
-                timestamp=datetime.fromisoformat(row['timestamp']),
-                token_count=row['token_count'],
-                metadata=json.loads(row['metadata_json']) if row['metadata_json'] else {}
-            )
-            messages.append(message)
-        
-        return messages
-    
-    async def _get_conversation_summary(self, conn: sqlite3.Connection, conversation_id: str) -> Optional[ConversationSummary]:
-        """Get conversation summary from database."""
-        cursor = conn.execute("""
-            SELECT id, conversation_id, summary, key_topics_json, generated_at, model_used, confidence_score
-            FROM conversation_summaries
-            WHERE conversation_id = ?
-        """, (conversation_id,))
-        
-        row = cursor.fetchone()
-        if not row:
-            return None
-        
-        return ConversationSummary(
-            id=row['id'],
-            conversation_id=row['conversation_id'],
-            summary=row['summary'],
-            key_topics=json.loads(row['key_topics_json']),
-            generated_at=datetime.fromisoformat(row['generated_at']),
-            model_used=row['model_used'],
-            confidence_score=row['confidence_score']
-        )
-    
-    def _parse_conversation_row(self, row: sqlite3.Row) -> Conversation:
-        """Parse conversation from database row."""
-        metadata_dict = json.loads(row['metadata_json']) if row['metadata_json'] else {}
-        
-        return Conversation(
-            id=row['id'],
-            title=row['title'],
-            status=ConversationStatus(row['status']),
-            created_at=datetime.fromisoformat(row['created_at']),
-            updated_at=datetime.fromisoformat(row['updated_at']),
-            metadata=ConversationMetadata.from_dict(metadata_dict)
-        )
-    
-    async def _update_fts_index(self, conn: sqlite3.Connection, conversation: Conversation):
+    async def _update_fts_index(self, session, conversation: Conversation):
         """Update full-text search index for conversation."""
-        # Combine all message content
-        content = " ".join(msg.content for msg in conversation.messages)
-        tags = " ".join(conversation.metadata.tags)
-        category = conversation.metadata.category or ""
-        
-        conn.execute("""
-            INSERT OR REPLACE INTO conversations_fts (conversation_id, title, content, tags, category)
-            VALUES (?, ?, ?, ?, ?)
-        """, (conversation.id, conversation.title, content, tags, category))
+        try:
+            # Combine all message content
+            content = " ".join(sanitize_text(msg.content) for msg in conversation.messages)
+            tags = " ".join(conversation.metadata.tags)
+            category = conversation.metadata.category or ""
+            
+            # Check if FTS entry exists
+            fts_model = session.query(MessageFTSModel).filter(
+                MessageFTSModel.conversation_id == conversation.id
+            ).first()
+            
+            if fts_model:
+                # Update existing entry
+                fts_model.title = sanitize_text(conversation.title)
+                fts_model.content = content
+                fts_model.tags = sanitize_text(tags)
+                fts_model.category = sanitize_text(category)
+            else:
+                # Create new entry
+                fts_model = MessageFTSModel(
+                    conversation_id=conversation.id,
+                    title=sanitize_text(conversation.title),
+                    content=content,
+                    tags=sanitize_text(tags),
+                    category=sanitize_text(category)
+                )
+                session.add(fts_model)
+                
+        except SQLAlchemyError as e:
+            logger.error(f"Failed to update FTS index for {conversation.id}: {e}")
     
-    async def _update_message_fts(self, conn: sqlite3.Connection, message: Message):
+    async def _update_message_fts(self, session, message: Message):
         """Update FTS index with new message content."""
-        # Get existing FTS entry
-        cursor = conn.execute("""
-            SELECT content FROM conversations_fts WHERE conversation_id = ?
-        """, (message.conversation_id,))
-        
-        row = cursor.fetchone()
-        existing_content = row['content'] if row else ""
-        
-        # Append new message content
-        updated_content = f"{existing_content} {message.content}".strip()
-        
-        conn.execute("""
-            UPDATE conversations_fts 
-            SET content = ?
-            WHERE conversation_id = ?
-        """, (updated_content, message.conversation_id))
-    
-    async def _update_conversation_tags(self, conn: sqlite3.Connection, conversation_id: str, tags: Set[str]):
-        """Update tags for a conversation."""
-        # Remove existing tags
-        conn.execute("DELETE FROM conversation_tags WHERE conversation_id = ?", (conversation_id,))
-        
-        for tag_name in tags:
-            # Insert or update tag
-            conn.execute("""
-                INSERT OR IGNORE INTO tags (name, usage_count, created_at) 
-                VALUES (?, 0, ?)
-            """, (tag_name, datetime.now().isoformat()))
+        try:
+            fts_model = session.query(MessageFTSModel).filter(
+                MessageFTSModel.conversation_id == message.conversation_id
+            ).first()
             
-            # Increment usage count
-            conn.execute("""
-                UPDATE tags SET usage_count = usage_count + 1 WHERE name = ?
-            """, (tag_name,))
+            if fts_model:
+                # Append new message content
+                existing_content = fts_model.content or ""
+                fts_model.content = f"{existing_content} {sanitize_text(message.content)}".strip()
             
-            # Get tag ID
-            cursor = conn.execute("SELECT id FROM tags WHERE name = ?", (tag_name,))
-            tag_id = cursor.fetchone()['id']
+        except SQLAlchemyError as e:
+            logger.error(f"Failed to update message FTS for {message.conversation_id}: {e}")
+    
+    async def _update_conversation_tags(self, session, conversation_id: str, tags: Set[str]):
+        """Update tags for a conversation using SQLAlchemy ORM."""
+        try:
+            # Remove existing conversation-tag associations
+            session.query(ConversationTagModel).filter(
+                ConversationTagModel.conversation_id == conversation_id
+            ).delete()
             
-            # Link conversation to tag
-            conn.execute("""
-                INSERT INTO conversation_tags (conversation_id, tag_id) VALUES (?, ?)
-            """, (conversation_id, tag_id))
+            for tag_name in tags:
+                tag_name = sanitize_text(tag_name)
+                if not tag_name:
+                    continue
+                    
+                # Get or create tag
+                tag_model = session.query(TagModel).filter(TagModel.name == tag_name).first()
+                if not tag_model:
+                    tag_model = TagModel(
+                        name=tag_name,
+                        usage_count=0,
+                        created_at=datetime.utcnow()
+                    )
+                    session.add(tag_model)
+                    session.flush()  # Get the ID
+                
+                # Increment usage count
+                tag_model.usage_count += 1
+                
+                # Create conversation-tag association
+                conv_tag = ConversationTagModel(
+                    conversation_id=conversation_id,
+                    tag_id=tag_model.id
+                )
+                session.add(conv_tag)
+                
+        except SQLAlchemyError as e:
+            logger.error(f"Failed to update tags for {conversation_id}: {e}")
     
-    def _build_search_query(self, query: SearchQuery) -> Tuple[str, List[Any]]:
-        """Build SQL search query from SearchQuery object."""
-        params = []
-        joins = []
-        where_conditions = []
+    def _apply_text_filters(self, query, search_query: SearchQuery):
+        """Apply text search filters to query."""
+        if not search_query.text:
+            return query
         
-        # Base query
-        base_select = "SELECT DISTINCT c.*"
-        if query.text and query.scope in [SearchScope.ALL, SearchScope.CONTENT]:
-            joins.append("LEFT JOIN conversations_fts fts ON c.id = fts.conversation_id")
-            base_select = "SELECT DISTINCT c.*, fts.rank"
+        # For SQLite FTS, we'll use LIKE for simple text search
+        # In production, you might want to use SQLite FTS5 or other full-text search
+        search_term = f"%{search_query.text}%"
         
-        # Text search
-        if query.text:
-            if query.scope == SearchScope.TITLE:
-                where_conditions.append("c.title MATCH ?")
-                params.append(query.text)
-            elif query.scope == SearchScope.CONTENT:
-                where_conditions.append("fts.content MATCH ?")
-                params.append(query.text)
-            elif query.scope == SearchScope.ALL:
-                where_conditions.append("(c.title MATCH ? OR fts.content MATCH ?)")
-                params.extend([query.text, query.text])
+        if search_query.scope == SearchScope.TITLE:
+            return query.filter(ConversationModel.title.like(search_term))
+        elif search_query.scope == SearchScope.CONTENT:
+            return query.join(MessageFTSModel).filter(
+                MessageFTSModel.content.like(search_term)
+            )
+        elif search_query.scope == SearchScope.ALL:
+            return query.outerjoin(MessageFTSModel).filter(
+                or_(
+                    ConversationModel.title.like(search_term),
+                    MessageFTSModel.content.like(search_term)
+                )
+            )
         
-        # Status filter
-        if query.status:
-            where_conditions.append("c.status = ?")
-            params.append(query.status.value)
-        
-        # Date filters
-        if query.created_after:
-            where_conditions.append("c.created_at >= ?")
-            params.append(query.created_after.isoformat())
-        
-        if query.created_before:
-            where_conditions.append("c.created_at <= ?")
-            params.append(query.created_before.isoformat())
-        
-        if query.updated_after:
-            where_conditions.append("c.updated_at >= ?")
-            params.append(query.updated_after.isoformat())
-        
-        if query.updated_before:
-            where_conditions.append("c.updated_at <= ?")
-            params.append(query.updated_before.isoformat())
-        
-        # Category filter
-        if query.category:
-            where_conditions.append("JSON_EXTRACT(c.metadata_json, '$.category') = ?")
-            params.append(query.category)
-        
-        # Priority filter  
-        if query.priority is not None:
-            where_conditions.append("JSON_EXTRACT(c.metadata_json, '$.priority') = ?")
-            params.append(query.priority)
-        
-        # Tags filter
-        if query.tags:
-            joins.append("JOIN conversation_tags ct ON c.id = ct.conversation_id")
-            joins.append("JOIN tags t ON ct.tag_id = t.id")
-            placeholders = ",".join("?" * len(query.tags))
-            where_conditions.append(f"t.name IN ({placeholders})")
-            params.extend(query.tags)
-        
-        # Build final query
-        joins_sql = " ".join(joins)
-        where_sql = " WHERE " + " AND ".join(where_conditions) if where_conditions else ""
-        order_sql = self._build_order_clause(query.sort_order)
-        
-        limit_sql = ""
-        if query.limit:
-            limit_sql = f" LIMIT {query.limit}"
-            if query.offset > 0:
-                limit_sql += f" OFFSET {query.offset}"
-        
-        final_query = f"""
-            {base_select}
-            FROM conversations c
-            {joins_sql}
-            {where_sql}
-            {order_sql}
-            {limit_sql}
-        """
-        
-        return final_query.strip(), params
+        return query
     
-    def _build_order_clause(self, sort_order: SortOrder) -> str:
-        """Build ORDER BY clause from sort order."""
-        order_map = {
-            SortOrder.CREATED_ASC: "ORDER BY c.created_at ASC",
-            SortOrder.CREATED_DESC: "ORDER BY c.created_at DESC", 
-            SortOrder.UPDATED_ASC: "ORDER BY c.updated_at ASC",
-            SortOrder.UPDATED_DESC: "ORDER BY c.updated_at DESC",
-            SortOrder.TITLE_ASC: "ORDER BY c.title ASC",
-            SortOrder.TITLE_DESC: "ORDER BY c.title DESC",
-        }
-        return order_map.get(sort_order, "ORDER BY c.updated_at DESC")
+    def _apply_other_filters(self, query, search_query: SearchQuery):
+        """Apply non-text filters to query."""
+        if search_query.status:
+            query = query.filter(ConversationModel.status == search_query.status.value)
+        
+        if search_query.created_after:
+            query = query.filter(ConversationModel.created_at >= search_query.created_after)
+        
+        if search_query.created_before:
+            query = query.filter(ConversationModel.created_at <= search_query.created_before)
+        
+        if search_query.updated_after:
+            query = query.filter(ConversationModel.updated_at >= search_query.updated_after)
+        
+        if search_query.updated_before:
+            query = query.filter(ConversationModel.updated_at <= search_query.updated_before)
+        
+        if search_query.category:
+            query = query.filter(ConversationModel.category == search_query.category)
+        
+        if search_query.priority is not None:
+            query = query.filter(ConversationModel.priority == search_query.priority)
+        
+        if search_query.tags:
+            # Filter by tags using joins
+            query = query.join(ConversationTagModel).join(TagModel).filter(
+                TagModel.name.in_(search_query.tags)
+            )
+        
+        return query
     
-    def _generate_snippet(self, content: str, search_term: Optional[str], max_length: int = 200) -> str:
-        """Generate search result snippet."""
-        if not search_term or not content:
-            return content[:max_length] + "..." if len(content) > max_length else content
-        
-        # Find first occurrence of search term
-        lower_content = content.lower()
-        lower_term = search_term.lower()
-        
-        pos = lower_content.find(lower_term)
-        if pos == -1:
-            return content[:max_length] + "..." if len(content) > max_length else content
-        
-        # Extract snippet around the match
-        start = max(0, pos - max_length // 2)
-        end = min(len(content), start + max_length)
-        
-        snippet = content[start:end]
-        if start > 0:
-            snippet = "..." + snippet
-        if end < len(content):
-            snippet = snippet + "..."
-        
-        return snippet
+    def _apply_sort_order(self, query, sort_order: SortOrder):
+        """Apply sorting to query."""
+        if sort_order == SortOrder.CREATED_ASC:
+            return query.order_by(asc(ConversationModel.created_at))
+        elif sort_order == SortOrder.CREATED_DESC:
+            return query.order_by(desc(ConversationModel.created_at))
+        elif sort_order == SortOrder.UPDATED_ASC:
+            return query.order_by(asc(ConversationModel.updated_at))
+        elif sort_order == SortOrder.UPDATED_DESC:
+            return query.order_by(desc(ConversationModel.updated_at))
+        elif sort_order == SortOrder.TITLE_ASC:
+            return query.order_by(asc(ConversationModel.title))
+        elif sort_order == SortOrder.TITLE_DESC:
+            return query.order_by(desc(ConversationModel.title))
+        else:
+            return query.order_by(desc(ConversationModel.updated_at))
+    
+    async def _generate_snippet(self, session, conversation_id: str, search_term: Optional[str], max_length: int = 200) -> str:
+        """Generate search result snippet from FTS content."""
+        try:
+            fts_model = session.query(MessageFTSModel).filter(
+                MessageFTSModel.conversation_id == conversation_id
+            ).first()
+            
+            if not fts_model or not fts_model.content:
+                return ""
+            
+            content = fts_model.content
+            if not search_term:
+                return content[:max_length] + "..." if len(content) > max_length else content
+            
+            # Find first occurrence of search term
+            lower_content = content.lower()
+            lower_term = search_term.lower()
+            
+            pos = lower_content.find(lower_term)
+            if pos == -1:
+                return content[:max_length] + "..." if len(content) > max_length else content
+            
+            # Extract snippet around the match
+            start = max(0, pos - max_length // 2)
+            end = min(len(content), start + max_length)
+            
+            snippet = content[start:end]
+            if start > 0:
+                snippet = "..." + snippet
+            if end < len(content):
+                snippet = snippet + "..."
+            
+            return snippet
+            
+        except SQLAlchemyError as e:
+            logger.error(f"Failed to generate snippet for {conversation_id}: {e}")
+            return ""
     
     def _is_empty_conversation(self, conversation: Conversation) -> bool:
         """Check if a conversation is empty and should not be saved."""
-        # A conversation is considered empty if:
-        # 1. It has no messages at all
-        # 2. It only has system messages with empty or whitespace-only content
-        # 3. It has no user or assistant messages
-        
         if not conversation.messages:
             return True
         
@@ -700,10 +677,8 @@ class ConversationRepository:
         meaningful_messages = []
         for message in conversation.messages:
             if message.role != MessageRole.SYSTEM:
-                # User or assistant message - always meaningful
                 meaningful_messages.append(message)
             elif message.content and message.content.strip():
-                # System message with actual content - meaningful
                 meaningful_messages.append(message)
         
         return len(meaningful_messages) == 0

@@ -19,6 +19,7 @@ except Exception:  # pragma: no cover
 logger = logging.getLogger("ghostman.floating_repl")
 
 
+
 class FloatingREPLWindow(QMainWindow):
     """
     Floating REPL window that appears next to the avatar.
@@ -58,7 +59,8 @@ class FloatingREPLWindow(QMainWindow):
     def _setup_window(self):
         """Setup window properties."""
         self.setWindowTitle("")  # No window title
-        self.setFixedSize(520, 450)  # 500px + padding for REPL content
+        self.resize(520, 450)  # Default size: 500px + padding for REPL content
+        self.setMinimumSize(300, 250)  # Set minimum size instead of fixed size
         
         # Make window frameless and always on top
         self.setWindowFlags(
@@ -67,6 +69,9 @@ class FloatingREPLWindow(QMainWindow):
             Qt.WindowType.Tool  # Prevents it from showing in taskbar
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        
+        # Enable mouse tracking for cursor changes without button press
+        self.setMouseTracking(True)
         
         # Keep window fully opaque - only panel backgrounds will be transparent via CSS
         self.setWindowOpacity(1.0)
@@ -77,9 +82,21 @@ class FloatingREPLWindow(QMainWindow):
     
     def closeEvent(self, event: QCloseEvent):
         """Handle window close event."""
+        # Save current conversation before closing
+        if self.repl_widget and hasattr(self.repl_widget, 'save_current_conversation'):
+            try:
+                self.repl_widget.save_current_conversation()
+                logger.debug("Current conversation saved before window close")
+            except Exception as e:
+                logger.error(f"Failed to save conversation on close: {e}")
+        
         self.closed.emit()
         event.accept()
         logger.debug("FloatingREPL window closed")
+    
+    # Old eventFilter removed - no longer needed with ResizeGrip widgets
+    
+    # Resize functionality now handled by ResizeGrip widgets
     
     def position_relative_to_avatar(self, avatar_pos: QPoint, avatar_size: tuple, screen_geometry):
         """

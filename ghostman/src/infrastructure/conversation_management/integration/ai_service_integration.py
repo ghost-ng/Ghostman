@@ -200,25 +200,27 @@ class ConversationAIService(AIService):
         # Save to conversation management if enabled
         if save_conversation and self._auto_save_conversations and result.get('success'):
             try:
-                import asyncio
+                # Use Qt's event system to safely schedule the save in the main thread
+                from PyQt6.QtCore import QTimer
                 
-                # Create event loop if none exists
-                try:
-                    loop = asyncio.get_event_loop()
-                except RuntimeError:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
+                def save_conversation():
+                    try:
+                        import asyncio
+                        # Create new event loop for this operation
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            loop.run_until_complete(self._save_current_conversation())
+                        finally:
+                            loop.close()
+                    except Exception as e:
+                        logger.error(f"Failed to save conversation in timer: {e}")
                 
-                # Save conversation asynchronously
-                if loop.is_running():
-                    # If loop is already running, schedule the task
-                    asyncio.create_task(self._save_current_conversation())
-                else:
-                    # Run the save operation
-                    loop.run_until_complete(self._save_current_conversation())
+                # Schedule save to run after a short delay
+                QTimer.singleShot(100, save_conversation)
                     
             except Exception as e:
-                logger.error(f"Failed to save conversation: {e}")
+                logger.error(f"Failed to schedule conversation save: {e}")
         
         return result
     

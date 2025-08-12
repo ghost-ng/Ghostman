@@ -55,6 +55,9 @@ class MainWindow(QMainWindow):
         self.floating_repl = FloatingREPLWindow()
         self.floating_repl.closed.connect(self._on_repl_closed)
         self.floating_repl.command_entered.connect(self._on_command_entered)
+        # Connect REPL widget signals through floating REPL
+        self.floating_repl.repl_widget.settings_requested.connect(self.settings_requested.emit)
+        self.floating_repl.repl_widget.browse_requested.connect(self._show_conversations)
         
         # Set window background
         self._set_window_style()

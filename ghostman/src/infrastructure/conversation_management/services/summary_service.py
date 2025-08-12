@@ -43,6 +43,28 @@ Focus on:
 
 Keep the summary concise but comprehensive enough to understand the conversation's value without reading the full content.
 """
+
+    TITLE_PROMPT_TEMPLATE = """
+Please generate a concise, descriptive title for this conversation based on its content.
+
+Conversation Content:
+{content}
+
+Requirements:
+- Maximum 6 words
+- Capture the main topic or purpose
+- Use active, descriptive language
+- No generic words like "conversation", "chat", "discussion"
+- Focus on what was accomplished or discussed
+
+Examples:
+- "Implement SQLAlchemy Migration System"
+- "Fix PyQt Avatar Jumping"
+- "Debug API Integration Issues"
+- "Create User Authentication Flow"
+
+Respond with ONLY the title, no other text.
+"""
     
     def __init__(self, repository: ConversationRepository):
         """Initialize summary service."""
@@ -115,6 +137,60 @@ Keep the summary concise but comprehensive enough to understand the conversation
             logger.error(f"❌ Summary generation failed for {conversation_id}: {e}")
             return False
     
+    async def generate_title(self, conversation_id: str) -> Optional[str]:
+        """Generate an AI-powered title for a conversation."""
+        try:
+            # Load conversation
+            conversation = await self.repository.get_conversation(conversation_id, include_messages=True)
+            if not conversation or not conversation.messages:
+                logger.warning(f"No conversation found or no messages: {conversation_id}")
+                return None
+            
+            # Skip if conversation is too short
+            user_messages = [msg for msg in conversation.messages if msg.role.value == "user"]
+            if len(user_messages) < 1:
+                logger.info(f"Conversation too short for title generation: {conversation_id}")
+                return None
+            
+            # Get AI service
+            ai_service = await self._get_ai_service()
+            if not ai_service:
+                logger.error("AI service not available for title generation")
+                return None
+            
+            # Prepare content for title generation (first few messages)
+            title_content = self._prepare_content_for_title(conversation)
+            
+            # Generate title prompt
+            prompt = self.TITLE_PROMPT_TEMPLATE.format(content=title_content)
+            
+            # Call AI service
+            logger.info(f"Generating title for conversation: {conversation_id}")
+            result = ai_service.send_message(prompt)
+            
+            if not result.get('success', False):
+                logger.error(f"AI title generation failed: {result.get('error', 'Unknown error')}")
+                return None
+            
+            # Parse response and clean title
+            title = result['response'].strip()
+            title = title.replace('"', '').replace("'", '').strip()
+            
+            # Limit title length
+            if len(title) > 100:
+                title = title[:97] + "..."
+            
+            if title:
+                logger.info(f"✅ Generated title for conversation {conversation_id}: {title}")
+                return title
+            else:
+                logger.warning(f"Empty title generated for conversation: {conversation_id}")
+                return None
+            
+        except Exception as e:
+            logger.error(f"❌ Title generation failed for {conversation_id}: {e}")
+            return None
+    
     async def get_conversation_summary(self, conversation_id: str) -> Optional[ConversationSummary]:
         """Get existing conversation summary."""
         try:
@@ -173,6 +249,28 @@ Keep the summary concise but comprehensive enough to understand the conversation
             content_parts.append(f"{role_label}: {message.content}")
         
         return "\n\n".join(content_parts)
+    
+    def _prepare_content_for_title(self, conversation) -> str:
+        """Prepare conversation content for title generation (first few messages only)."""
+        content_parts = []
+        message_count = 0
+        
+        for message in conversation.messages:
+            # Skip system messages for title
+            if message.role.value == "system":
+                continue
+            
+            # Only use first few messages for title generation
+            if message_count >= 4:
+                break
+            
+            role_label = "User" if message.role.value == "user" else "Assistant"
+            content_parts.append(f"{role_label}: {message.content}")
+            message_count += 1
+        
+        content = "\n\n".join(content_parts)
+        # Limit content length for title generation
+        return content[:1000] + "..." if len(content) > 1000 else content
     
     def _build_summary_prompt(self, conversation, content: str) -> str:
         """Build the AI prompt for summary generation."""
