@@ -275,6 +275,12 @@ class AIService:
             # Prepare API request
             api_messages = self.conversation.to_api_format()
             
+            # Log the full context being sent
+            logger.debug(f"Full conversation context ({len(api_messages)} messages):")
+            for i, msg in enumerate(api_messages):
+                preview = msg['content'][:100] + "..." if len(msg['content']) > 100 else msg['content']
+                logger.debug(f"  Message {i+1} [{msg['role']}]: {preview}")
+            
             # Make API request
             response = self.client.chat_completion(
                 messages=api_messages,
@@ -288,8 +294,16 @@ class AIService:
                 # Extract response content
                 assistant_message = self._extract_response_content(response.data)
                 
+                # Log the AI response
+                preview = assistant_message[:200] + "..." if len(assistant_message) > 200 else assistant_message
+                logger.info(f"AI response received: {preview}")
+                logger.debug(f"Full AI response: {assistant_message}")
+                
                 # Add assistant response to conversation
                 self.conversation.add_message('assistant', assistant_message)
+                
+                # Log conversation state after response
+                logger.debug(f"Conversation now has {len(self.conversation.messages)} messages")
                 
                 # Call response callbacks
                 for callback in self._response_callbacks:

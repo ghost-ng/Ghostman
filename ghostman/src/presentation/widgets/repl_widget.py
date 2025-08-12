@@ -232,12 +232,12 @@ class MarkdownRenderer:
             'a': "#4A9EFF"  # Link color that works across all themes
         }
         
-        # Wrap entire content with base color
-        styled_html = f'<div style="color: {base_color}; line-height: 1.4;">{html_content}</div>'
+        # Wrap entire content with base color and emoji-compatible font
+        styled_html = f'<div style="color: {base_color}; line-height: 1.4; font-family: Segoe UI Emoji, Segoe UI Symbol, Arial Unicode MS, Consolas, sans-serif;">{html_content}</div>'
         
         # Apply specific styling to elements
         replacements = {
-            '<code>': f'<code style="background-color: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 3px; color: {style_colors["code"]}; font-family: Consolas, Monaco, monospace;">',
+            '<code>': f'<code style="background-color: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 3px; color: {style_colors["code"]}; font-family: Segoe UI Emoji, Consolas, Monaco, monospace;">',
             '<pre>': f'<pre style="background-color: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; border-left: 3px solid {base_color}; margin: 4px 0; overflow-x: auto;">',
             '<em>': f'<em style="color: {style_colors["em"]}; font-style: italic;">',
             '<strong>': f'<strong style="color: {style_colors["strong"]}; font-weight: bold;">',
@@ -636,6 +636,10 @@ class REPLWidget(QWidget):
     
     def _update_status_label(self, conversation: Optional[Conversation]):
         """Update status label based on conversation."""
+        # Only update if status_label exists (it may not in simplified UI)
+        if not hasattr(self, 'status_label'):
+            return
+            
         if not conversation:
             self.status_label.setText("🆕 New")
             self.status_label.setStyleSheet("color: #FFA500; font-weight: bold; font-size: 10px;")
@@ -978,7 +982,11 @@ class REPLWidget(QWidget):
         # Output display
         self.output_display = QTextEdit()
         self.output_display.setReadOnly(True)
-        self.output_display.setFont(QFont("Consolas", 11))
+        # Use font stack with emoji support - Segoe UI Emoji for Windows emoji support
+        font = QFont()
+        font.setFamilies(["Segoe UI Emoji", "Consolas", "Monaco", "DejaVu Sans Mono", "monospace"])
+        font.setPointSize(11)
+        self.output_display.setFont(font)
         self.output_display.setMinimumHeight(300)
         layout.addWidget(self.output_display, 1)
         
@@ -989,7 +997,7 @@ class REPLWidget(QWidget):
         prompt_label = QLabel(">>>")
         prompt_label.setStyleSheet("""
             color: #00ff00; 
-            font-family: Consolas; 
+            font-family: Segoe UI Emoji, Consolas, monospace; 
             font-size: 11px;
             background-color: rgba(0, 255, 0, 0.1);
             border-radius: 3px;
@@ -1000,7 +1008,11 @@ class REPLWidget(QWidget):
         
         # Command input
         self.command_input = QLineEdit()
-        self.command_input.setFont(QFont("Consolas", 10))
+        # Use font stack with emoji support for input
+        input_font = QFont()
+        input_font.setFamilies(["Segoe UI Emoji", "Consolas", "Monaco", "DejaVu Sans Mono", "monospace"])
+        input_font.setPointSize(10)
+        self.command_input.setFont(input_font)
         self.command_input.returnPressed.connect(self._on_command_entered)
         self.command_input.installEventFilter(self)
         input_layout.addWidget(self.command_input)
@@ -2023,20 +2035,64 @@ class REPLWidget(QWidget):
             elif len(title) < 5:
                 title = f"Chat {datetime.now().strftime('%H:%M')}"
             
-            logger.debug(f"Creating conversation with title: {title}")
+            logger.debug(f"🆕 Creating conversation with title: {title}")
             
-            # Create conversation synchronously to ensure it's ready for AI processing
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # Can't use run_until_complete in running loop, so create task
-                # but this won't block - conversation will be created in background
-                asyncio.create_task(self._create_conversation_async(title, message))
-            else:
-                # Run synchronously
-                conversation = loop.run_until_complete(self._create_conversation_async(title, message))
-                if conversation:
-                    self.current_conversation = conversation
-                    logger.info(f"✅ Auto-created conversation: {conversation.title}")
+            # CRITICAL: Create conversation synchronously to ensure it's ready for AI processing
+            # This is necessary to avoid race conditions where messages are sent before conversation exists
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # Create new event loop for synchronous operation
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    try:
+                        conversation = new_loop.run_until_complete(self._create_conversation_async(title, message))
+                        if conversation:
+                            self.current_conversation = conversation
+                            logger.info(f"✅ Auto-created conversation synchronously: {conversation.title}")
+                        else:
+                            logger.error("❌ Failed to create conversation - None returned")
+                    finally:
+                        new_loop.close()
+                        asyncio.set_event_loop(loop)  # Restore original loop
+                else:
+                    # Run synchronously
+                    conversation = loop.run_until_complete(self._create_conversation_async(title, message))
+                    if conversation:
+                        self.current_conversation = conversation
+                        logger.info(f"✅ Auto-created conversation: {conversation.title}")
+                    else:
+                        logger.error("❌ Failed to create conversation - None returned")
+                        
+            except Exception as loop_error:
+                logger.error(f"❌ Loop error during conversation creation: {loop_error}")
+                # Fallback: try direct sync creation
+                logger.info("🔄 Attempting fallback conversation creation...")
+                try:
+                    # Create a minimal conversation object for immediate use
+                    from ...infrastructure.conversation_management.models.conversation import Conversation, ConversationMetadata
+                    from ...infrastructure.conversation_management.models.enums import ConversationStatus
+                    from uuid import uuid4
+                    
+                    conversation_id = str(uuid4())
+                    metadata = ConversationMetadata()
+                    temp_conversation = Conversation(
+                        id=conversation_id,
+                        title=title,
+                        status=ConversationStatus.ACTIVE,
+                        created_at=datetime.now(),
+                        updated_at=datetime.now(),
+                        metadata=metadata
+                    )
+                    
+                    self.current_conversation = temp_conversation
+                    logger.info(f"⚡ Created temporary conversation for immediate use: {conversation_id}")
+                    
+                    # Schedule proper database creation in background
+                    asyncio.create_task(self._save_temp_conversation_to_db(temp_conversation, message))
+                    
+                except Exception as fallback_error:
+                    logger.error(f"❌ Fallback conversation creation also failed: {fallback_error}")
                 
         except Exception as e:
             logger.error(f"❌ Failed to auto-create conversation: {e}", exc_info=True)
@@ -2062,6 +2118,39 @@ class REPLWidget(QWidget):
             logger.error(f"❌ Failed to create conversation async: {e}")
         
         return None
+    
+    async def _save_temp_conversation_to_db(self, temp_conversation, initial_message: str):
+        """Save temporary conversation to database in background."""
+        try:
+            logger.debug(f"💾 Saving temporary conversation to database: {temp_conversation.id}")
+            
+            # Create proper conversation in database
+            db_conversation = await self.conversation_manager.create_conversation(
+                title=temp_conversation.title,
+                initial_message=initial_message
+            )
+            
+            if db_conversation:
+                logger.info(f"✅ Saved temporary conversation to database: {db_conversation.id}")
+                
+                # Update the current conversation reference to use the database version
+                self.current_conversation = db_conversation
+                
+                # Update conversations list
+                if db_conversation not in self.conversations_list:
+                    self.conversations_list.insert(0, db_conversation)
+                    
+                # Sync with AI service if available
+                if self.conversation_manager.has_ai_service():
+                    ai_service = self.conversation_manager.get_ai_service()
+                    if ai_service:
+                        ai_service.set_current_conversation(db_conversation.id)
+                        logger.debug(f"🔄 Synced AI service to database conversation: {db_conversation.id}")
+            else:
+                logger.error(f"❌ Failed to save temporary conversation to database")
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to save temporary conversation to database: {e}", exc_info=True)
     
     def refresh_conversations(self):
         """Refresh the conversations list from the database."""

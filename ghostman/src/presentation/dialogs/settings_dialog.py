@@ -52,6 +52,9 @@ class SettingsDialog(QDialog):
         self.resize(600, 500)
         self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.WindowCloseButtonHint)
         
+        # Apply dark theme styling
+        self._apply_dark_theme()
+        
         # Main layout
         layout = QVBoxLayout(self)
         
@@ -84,6 +87,7 @@ class SettingsDialog(QDialog):
         button_layout.addWidget(self.apply_btn)
         
         self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.setObjectName("cancel_btn")
         self.cancel_btn.clicked.connect(self.reject)
         button_layout.addWidget(self.cancel_btn)
         
@@ -488,11 +492,21 @@ class SettingsDialog(QDialog):
                 with open(filename, 'w') as f:
                     json.dump(config, f, indent=2)
                 
-                QMessageBox.information(self, "Success", f"Configuration saved to:\n{filename}")
+                msg_box = QMessageBox(self)
+                msg_box.setWindowTitle("Success")
+                msg_box.setText(f"Configuration saved to:\n{filename}")
+                msg_box.setIcon(QMessageBox.Icon.Information)
+                self._apply_messagebox_theme(msg_box)
+                msg_box.exec()
                 logger.info(f"Configuration saved to: {filename}")
                 
             except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to save configuration:\n{str(e)}")
+                msg_box = QMessageBox(self)
+                msg_box.setWindowTitle("Error")
+                msg_box.setText(f"Failed to save configuration:\n{str(e)}")
+                msg_box.setIcon(QMessageBox.Icon.Critical)
+                self._apply_messagebox_theme(msg_box, button_color="#f44336")
+                msg_box.exec()
                 logger.error(f"Failed to save config: {e}")
     
     def _load_config(self):
@@ -514,11 +528,21 @@ class SettingsDialog(QDialog):
                 
                 self._apply_config_to_ui(config)
                 
-                QMessageBox.information(self, "Success", f"Configuration loaded from:\n{filename}")
+                msg_box = QMessageBox(self)
+                msg_box.setWindowTitle("Success")
+                msg_box.setText(f"Configuration loaded from:\n{filename}")
+                msg_box.setIcon(QMessageBox.Icon.Information)
+                self._apply_messagebox_theme(msg_box)
+                msg_box.exec()
                 logger.info(f"Configuration loaded from: {filename}")
                 
             except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to load configuration:\n{str(e)}")
+                msg_box = QMessageBox(self)
+                msg_box.setWindowTitle("Error")
+                msg_box.setText(f"Failed to load configuration:\n{str(e)}")
+                msg_box.setIcon(QMessageBox.Icon.Critical)
+                self._apply_messagebox_theme(msg_box, button_color="#f44336")
+                msg_box.exec()
                 logger.error(f"Failed to load config: {e}")
     
     def _get_current_config(self) -> Dict[str, Any]:
@@ -738,7 +762,13 @@ class SettingsDialog(QDialog):
         logger.info("📡 Signal payload categories: " + ", ".join(config.keys()))
         self.settings_applied.emit(config)
         
-        QMessageBox.information(self, "Settings Applied", "Settings have been applied successfully.")
+        # Create themed message box
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Settings Applied")
+        msg_box.setText("Settings have been applied successfully.")
+        msg_box.setIcon(QMessageBox.Icon.Information)
+        self._apply_messagebox_theme(msg_box)
+        msg_box.exec()
         logger.info("=== ✅ SETTINGS APPLICATION COMPLETE ===")
         logger.info("")  # Add blank line for readability
     
@@ -759,3 +789,200 @@ class SettingsDialog(QDialog):
         
         # Emit signal for live preview (parent window can connect to this)
         self.opacity_preview_changed.emit(opacity_float)
+    
+    def _apply_messagebox_theme(self, msg_box: QMessageBox, button_color: str = "#4CAF50"):
+        """Apply dark theme styling to a message box."""
+        hover_color = "#45a049" if button_color == "#4CAF50" else "#da190b"
+        
+        msg_box.setStyleSheet(f"""
+            QMessageBox {{
+                background-color: #2b2b2b;
+                color: #ffffff;
+                border: 1px solid #555555;
+            }}
+            QMessageBox QLabel {{
+                color: #ffffff;
+            }}
+            QMessageBox QPushButton {{
+                background-color: {button_color};
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                min-width: 80px;
+            }}
+            QMessageBox QPushButton:hover {{
+                background-color: {hover_color};
+            }}
+        """)
+    
+    def _apply_dark_theme(self):
+        """Apply dark theme styling to the settings dialog."""
+        self.setStyleSheet("""
+            /* Main dialog styling */
+            QDialog {
+                background-color: #2b2b2b;
+                color: #ffffff;
+            }
+            
+            /* Tab widget styling */
+            QTabWidget::pane {
+                border: 1px solid #555555;
+                background-color: #2b2b2b;
+            }
+            QTabWidget::tab-bar {
+                alignment: left;
+            }
+            QTabBar::tab {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                padding: 8px 12px;
+                margin-right: 2px;
+                border: 1px solid #555555;
+                border-bottom: none;
+            }
+            QTabBar::tab:selected {
+                background-color: #4CAF50;
+                font-weight: bold;
+            }
+            QTabBar::tab:hover {
+                background-color: #4a4a4a;
+            }
+            
+            /* Group box styling */
+            QGroupBox {
+                color: #ffffff;
+                font-weight: bold;
+                border: 1px solid #555555;
+                border-radius: 5px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+            
+            /* Label styling */
+            QLabel {
+                color: #ffffff;
+            }
+            
+            /* Input field styling */
+            QLineEdit, QTextEdit, QSpinBox, QDoubleSpinBox {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                padding: 5px;
+            }
+            QLineEdit:focus, QTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {
+                border-color: #4CAF50;
+            }
+            
+            /* ComboBox styling */
+            QComboBox {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                padding: 5px;
+                min-width: 6em;
+            }
+            QComboBox::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 15px;
+                border-left-width: 1px;
+                border-left-color: #555555;
+                border-left-style: solid;
+            }
+            QComboBox::down-arrow {
+                color: #ffffff;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                selection-background-color: #4CAF50;
+                border: 1px solid #555555;
+            }
+            
+            /* CheckBox styling */
+            QCheckBox {
+                color: #ffffff;
+                spacing: 5px;
+            }
+            QCheckBox::indicator {
+                width: 18px;
+                height: 18px;
+            }
+            QCheckBox::indicator:unchecked {
+                background-color: #3c3c3c;
+                border: 1px solid #555555;
+                border-radius: 3px;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #4CAF50;
+                border: 1px solid #4CAF50;
+                border-radius: 3px;
+            }
+            
+            /* Button styling */
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton:pressed {
+                background-color: #3e8e41;
+            }
+            QPushButton:disabled {
+                background-color: #666666;
+                color: #999999;
+            }
+            
+            /* Special button colors */
+            QPushButton[objectName="cancel_btn"] {
+                background-color: #757575;
+            }
+            QPushButton[objectName="cancel_btn"]:hover {
+                background-color: #616161;
+            }
+            
+            /* List widget styling */
+            QListWidget {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                border: 1px solid #555555;
+                border-radius: 4px;
+            }
+            QListWidget::item {
+                padding: 5px;
+                border-bottom: 1px solid #555555;
+            }
+            QListWidget::item:selected {
+                background-color: #4CAF50;
+            }
+            QListWidget::item:hover {
+                background-color: #4a4a4a;
+            }
+            
+            /* Splitter styling */
+            QSplitter::handle {
+                background-color: #555555;
+            }
+            QSplitter::handle:horizontal {
+                width: 2px;
+            }
+            QSplitter::handle:vertical {
+                height: 2px;
+            }
+        """)

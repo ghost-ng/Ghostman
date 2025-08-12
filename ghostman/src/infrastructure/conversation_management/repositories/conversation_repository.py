@@ -2,6 +2,7 @@
 Repository for conversation data operations using SQLAlchemy ORM.
 """
 
+import json
 import logging
 import time
 from datetime import datetime, timedelta
@@ -83,8 +84,10 @@ class ConversationRepository:
             return False
     
     async def get_conversation(self, conversation_id: str, include_messages: bool = True) -> Optional[Conversation]:
-        """Get conversation by ID using SQLAlchemy ORM."""
+        """Get conversation by ID using SQLAlchemy ORM with enhanced logging."""
         try:
+            logger.debug(f"🔍 Fetching conversation {conversation_id} from database (include_messages: {include_messages})")
+            
             with self.db.get_session() as session:
                 query = session.query(ConversationModel).filter(ConversationModel.id == conversation_id)
                 
@@ -96,26 +99,45 @@ class ConversationRepository:
                 
                 conv_model = query.first()
                 if not conv_model:
+                    logger.warning(f"⚠️ Conversation {conversation_id} not found in database")
                     return None
+                
+                logger.debug(f"📋 Found conversation in database: {conv_model.title}")
+                logger.debug(f"📊 Raw message count from database: {len(conv_model.messages) if conv_model.messages else 0}")
                 
                 # Convert to domain model
                 conversation = conv_model.to_domain_model()
                 
                 if include_messages:
-                    # Load messages
+                    # Load messages with detailed logging
                     messages = []
-                    for msg_model in sorted(conv_model.messages, key=lambda m: m.timestamp):
-                        messages.append(msg_model.to_domain_model())
+                    raw_messages = sorted(conv_model.messages, key=lambda m: m.timestamp) if conv_model.messages else []
+                    
+                    logger.debug(f"📝 Processing {len(raw_messages)} messages from database:")
+                    for i, msg_model in enumerate(raw_messages):
+                        try:
+                            domain_message = msg_model.to_domain_model()
+                            messages.append(domain_message)
+                            preview = domain_message.content[:50] + "..." if len(domain_message.content) > 50 else domain_message.content
+                            logger.debug(f"  📨 Message {i+1}: [{domain_message.role.value}] {preview}")
+                        except Exception as msg_error:
+                            logger.error(f"❌ Failed to convert message {i+1}: {msg_error}")
+                    
                     conversation.messages = messages
+                    logger.debug(f"✅ Loaded {len(messages)} messages into conversation object")
                     
                     # Load summary
                     if conv_model.summary:
                         conversation.summary = conv_model.summary.to_domain_model()
+                        logger.debug("📄 Loaded conversation summary")
+                else:
+                    logger.debug("📋 Skipping message loading (include_messages=False)")
                 
+                logger.debug(f"✅ Successfully loaded conversation {conversation_id} with {len(conversation.messages)} messages")
                 return conversation
                 
         except SQLAlchemyError as e:
-            logger.error(f"❌ Failed to get conversation {conversation_id}: {e}")
+            logger.error(f"❌ Failed to get conversation {conversation_id}: {e}", exc_info=True)
             return None
     
     async def update_conversation(self, conversation: Conversation) -> bool:
@@ -224,8 +246,10 @@ class ConversationRepository:
     # --- Message Operations ---
     
     async def add_message(self, message: Message) -> bool:
-        """Add message to conversation using SQLAlchemy ORM."""
+        """Add message to conversation using SQLAlchemy ORM with enhanced logging."""
         try:
+            logger.debug(f"💾 Adding message to conversation {message.conversation_id}: [{message.role.value}] {message.content[:50]}...")
+            
             with self.db.get_session() as session:
                 # Create message model
                 message_model = MessageModel(
@@ -235,9 +259,10 @@ class ConversationRepository:
                     content=sanitize_html(message.content),
                     timestamp=message.timestamp,
                     token_count=message.token_count,
-                    metadata=message.metadata
+                    metadata_json=json.dumps(message.metadata) if message.metadata else '{}'
                 )
                 session.add(message_model)
+                logger.debug(f"📝 Created message model with ID: {message.id}")
                 
                 # Update conversation updated_at and message_count
                 conv_model = session.query(ConversationModel).filter(
@@ -245,19 +270,34 @@ class ConversationRepository:
                 ).first()
                 
                 if conv_model:
-                    conv_model.updated_at = message.timestamp
-                    conv_model.message_count = session.query(MessageModel).filter(
+                    old_count = conv_model.message_count
+                    new_count = session.query(MessageModel).filter(
                         MessageModel.conversation_id == message.conversation_id
                     ).count() + 1  # +1 for the message we're adding
+                    
+                    conv_model.updated_at = message.timestamp
+                    conv_model.message_count = new_count
+                    
+                    logger.debug(f"📊 Updated conversation message count: {old_count} -> {new_count}")
+                else:
+                    logger.warning(f"⚠️ Conversation {message.conversation_id} not found for message count update")
                 
                 # Update FTS index with new message content
                 await self._update_message_fts(session, message)
                 
-                logger.debug(f"Added message to conversation {message.conversation_id}")
+                # Verify the message was added by checking the session
+                session.flush()  # Ensure the message is written to database
+                
+                # Count messages for verification
+                total_messages = session.query(MessageModel).filter(
+                    MessageModel.conversation_id == message.conversation_id
+                ).count()
+                
+                logger.debug(f"✅ Added message to conversation {message.conversation_id} (total messages now: {total_messages})")
                 return True
                 
         except SQLAlchemyError as e:
-            logger.error(f"❌ Failed to add message: {e}")
+            logger.error(f"❌ Failed to add message to conversation {message.conversation_id}: {e}", exc_info=True)
             return False
     
     async def get_conversation_messages(
