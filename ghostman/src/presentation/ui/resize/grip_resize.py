@@ -34,24 +34,18 @@ class EdgeGrip(QLabel):
         
     def _setup_ui(self):
         """Setup the grip widget UI."""
-        # Set size based on grip type
+        # Set size based on grip type (edges only)
         if self.direction in ['top', 'bottom']:
             self.setFixedSize(20, 6)  # Horizontal edge
         elif self.direction in ['left', 'right']:
             self.setFixedSize(6, 20)  # Vertical edge
-        else:
-            self.setFixedSize(8, 8)   # Corner
         
         # Set cursor for resize direction
         cursor_map = {
             'top': Qt.CursorShape.SizeVerCursor,
             'bottom': Qt.CursorShape.SizeVerCursor,
             'left': Qt.CursorShape.SizeHorCursor,
-            'right': Qt.CursorShape.SizeHorCursor,
-            'top-left': Qt.CursorShape.SizeFDiagCursor,
-            'top-right': Qt.CursorShape.SizeBDiagCursor,
-            'bottom-left': Qt.CursorShape.SizeBDiagCursor,
-            'bottom-right': Qt.CursorShape.SizeFDiagCursor
+            'right': Qt.CursorShape.SizeHorCursor
         }
         self.setCursor(cursor_map.get(self.direction, Qt.CursorShape.ArrowCursor))
         
@@ -147,12 +141,9 @@ class GripResizeManager(QWidget):
         self._setup_positioning()
         
     def _create_grips(self):
-        """Create grip widgets for edges and corners."""
-        # 8 grips: 4 edges + 4 corners
-        directions = [
-            'top', 'bottom', 'left', 'right',
-            'top-left', 'top-right', 'bottom-left', 'bottom-right'
-        ]
+        """Create grip widgets for edges only."""
+        # 4 grips: edges only (no corners)
+        directions = ['top', 'bottom', 'left', 'right']
         
         for direction in directions:
             # Make grips direct children of the parent widget
@@ -180,19 +171,12 @@ class GripResizeManager(QWidget):
         parent_size = self.parent_widget.size()
         w, h = parent_size.width(), parent_size.height()
         
-        # Position grips on edges and corners
+        # Position grips on edges only
         positions = {
-            # Edges
             'top': QPoint(w//2 - 10, 0),
             'bottom': QPoint(w//2 - 10, h - 6),
             'left': QPoint(0, h//2 - 10),
-            'right': QPoint(w - 6, h//2 - 10),
-            
-            # Corners
-            'top-left': QPoint(0, 0),
-            'top-right': QPoint(w - 8, 0),
-            'bottom-left': QPoint(0, h - 8),
-            'bottom-right': QPoint(w - 8, h - 8)
+            'right': QPoint(w - 6, h//2 - 10)
         }
         
         # Position grips
