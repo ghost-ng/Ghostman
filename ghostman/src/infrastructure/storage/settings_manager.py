@@ -55,6 +55,24 @@ class SettingsManager:
         'interface': {  # new namespace for percent-based values
             'opacity': 90  # percent (10-100)
         },
+        'resize': {
+            'enabled': True,  # Master enable/disable for resize functionality
+            'border_width': 8,  # Resize border width in pixels
+            'enable_cursor_changes': True,  # Show resize cursors
+            'avatar': {
+                'enabled': True,
+                'border_width': 6,  # Smaller border for avatar
+                'min_size': {'width': 80, 'height': 80},
+                'max_size': {'width': 200, 'height': 200},
+                'maintain_aspect_ratio': True
+            },
+            'repl': {
+                'enabled': True,
+                'border_width': 8,
+                'min_size': {'width': 360, 'height': 320},
+                'max_size': {'width': None, 'height': None}  # Unlimited
+            }
+        },
         'ai': {
             'provider': 'openai',
             'model': 'gpt-3.5-turbo',
@@ -406,6 +424,65 @@ class SettingsManager:
         self._settings = self.DEFAULT_SETTINGS.copy()
         self.save()
         logger.info("Settings reset to defaults")
+    
+    # Resize-specific helper methods
+    def get_resize_config(self, widget_type: str = None) -> Dict[str, Any]:
+        """
+        Get resize configuration for a specific widget type or global.
+        
+        Args:
+            widget_type: 'avatar', 'repl', or None for global settings
+            
+        Returns:
+            Dictionary containing resize configuration
+        """
+        base_config = {
+            'enabled': self.get('resize.enabled', True),
+            'border_width': self.get('resize.border_width', 8),
+            'enable_cursor_changes': self.get('resize.enable_cursor_changes', True),
+        }
+        
+        if widget_type:
+            widget_config = self.get(f'resize.{widget_type}', {})
+            base_config.update(widget_config)
+        
+        return base_config
+    
+    def set_resize_config(self, config: Dict[str, Any], widget_type: str = None):
+        """
+        Set resize configuration for a specific widget type or global.
+        
+        Args:
+            config: Configuration dictionary to set
+            widget_type: 'avatar', 'repl', or None for global settings
+        """
+        if widget_type:
+            # Set widget-specific config
+            for key, value in config.items():
+                self.set(f'resize.{widget_type}.{key}', value)
+        else:
+            # Set global config
+            for key, value in config.items():
+                self.set(f'resize.{key}', value)
+    
+    def is_resize_enabled(self, widget_type: str = None) -> bool:
+        """
+        Check if resize is enabled globally and for a specific widget type.
+        
+        Args:
+            widget_type: 'avatar', 'repl', or None for global check only
+            
+        Returns:
+            True if resize is enabled
+        """
+        global_enabled = self.get('resize.enabled', True)
+        if not global_enabled:
+            return False
+        
+        if widget_type:
+            return self.get(f'resize.{widget_type}.enabled', True)
+        
+        return True
 
 
 # Global settings instance

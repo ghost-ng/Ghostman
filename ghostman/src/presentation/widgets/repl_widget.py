@@ -766,6 +766,15 @@ class REPLWidget(QWidget):
         #self._style_title_button(chat_btn)
         title_layout.addWidget(chat_btn)
         
+        # Move/Resize arrow toggle button
+        self.move_btn = QToolButton()
+        self.move_btn.setText("✥")  # Four arrows symbol
+        self.move_btn.setToolTip("Toggle resize arrows")
+        self.move_btn.setCheckable(True)  # Make it a toggle button
+        self.move_btn.clicked.connect(self._on_move_toggle_clicked)
+        self._style_title_button(self.move_btn)
+        title_layout.addWidget(self.move_btn)
+        
         title_layout.addStretch()
         
         # Minimize button (expanded)
@@ -2231,6 +2240,39 @@ class REPLWidget(QWidget):
     def _on_chat_clicked(self):
         """Handle chat button click - browse conversations."""
         self.browse_requested.emit()
+    
+    def _on_move_toggle_clicked(self):
+        """Handle move/resize arrow toggle button click."""
+        # Get the parent floating REPL window
+        parent_window = self.parent()
+        while parent_window and not hasattr(parent_window, '_direct_arrow_manager'):
+            parent_window = parent_window.parent()
+        
+        if parent_window and hasattr(parent_window, '_direct_arrow_manager'):
+            if self.move_btn.isChecked():
+                # Show grips - resize mode ON
+                parent_window.show_resize_arrows(auto_hide=False)  # Compatibility method
+                # Style button as active/pressed
+                self.move_btn.setStyleSheet("""
+                    QToolButton {
+                        background-color: rgba(255, 215, 0, 0.8);
+                        color: black;
+                        border: 2px solid rgba(255, 255, 255, 0.8);
+                        border-radius: 4px;
+                        padding: 4px;
+                        font-weight: bold;
+                    }
+                    QToolButton:hover {
+                        background-color: rgba(255, 215, 0, 0.9);
+                    }
+                """)
+                print("🔘 Move mode ON - edge grips visible, REPL fully clickable")
+            else:
+                # Hide grips - normal mode restored
+                parent_window.hide_resize_arrows()  # Compatibility method
+                # Reset to normal styling
+                self._style_title_button(self.move_btn)
+                print("🔘 Move mode OFF - grips hidden, normal control")
     
     def _start_new_conversation(self, save_current: bool = False):
         """Start a new conversation with optional saving of current."""
