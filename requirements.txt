@@ -1,0 +1,22 @@
+# Core dependencies for Ghostman
+PyQt6>=6.4.0
+cryptography>=3.4.8
+
+# Database dependencies
+sqlalchemy>=2.0.0
+alembic>=1.12.0
+bleach>=6.0.0
+
+# AI service dependencies
+httpx>=0.24.0
+openai>=1.0.0
+# Note: OpenAI SDK is optional - the custom client can work without it
+
+# Development and testing dependencies
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-qt>=4.2.0
+
+# Optional dependencies for enhanced functionality
+# anthropic>=0.7.0  # For native Anthropic API support (alternative to OpenAI-compatible)
+# requests>=2.28.0  # Alternative HTTP client (httpx is preferred)

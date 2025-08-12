@@ -24,11 +24,13 @@ class MainWindow(QMainWindow):
     minimize_requested = pyqtSignal()
     close_requested = pyqtSignal()
     settings_requested = pyqtSignal()
+    conversations_requested = pyqtSignal()
     
     def __init__(self, app_coordinator):
         super().__init__()
         self.app_coordinator = app_coordinator
         self.floating_repl = None
+        self.conversation_browser = None  # Simple conversation browser
         
         self._init_ui()
         self._setup_window()
@@ -46,12 +48,16 @@ class MainWindow(QMainWindow):
         self.avatar_widget.minimize_requested.connect(self.minimize_requested.emit)
         self.avatar_widget.avatar_clicked.connect(self._toggle_repl)
         self.avatar_widget.settings_requested.connect(self.settings_requested.emit)
+        self.avatar_widget.conversations_requested.connect(self._show_conversations)
         self.setCentralWidget(self.avatar_widget)
         
         # Create floating REPL window (initially hidden)
         self.floating_repl = FloatingREPLWindow()
         self.floating_repl.closed.connect(self._on_repl_closed)
         self.floating_repl.command_entered.connect(self._on_command_entered)
+        # Connect REPL widget signals through floating REPL
+        self.floating_repl.repl_widget.settings_requested.connect(self.settings_requested.emit)
+        self.floating_repl.repl_widget.browse_requested.connect(self._show_conversations)
         
         # Set window background
         self._set_window_style()
@@ -176,3 +182,267 @@ class MainWindow(QMainWindow):
         """Handle command from REPL."""
         logger.info(f"REPL command: {command}")
         # This would be connected to AI service
+    
+    def _show_conversations(self):
+        """Show the simple conversation management window."""
+        try:
+            from ..dialogs.simple_conversation_browser import SimpleConversationBrowser
+            from ...infrastructure.conversation_management.integration.conversation_manager import ConversationManager
+            
+            # Get conversation manager from REPL widget if available (to share same instance)
+            conversation_manager = None
+            current_conversation_id = None
+            
+            if (self.floating_repl and 
+                hasattr(self.floating_repl, 'repl_widget') and
+                self.floating_repl.repl_widget):
+                # Get conversation manager from REPL widget
+                if hasattr(self.floating_repl.repl_widget, 'conversation_manager'):
+                    conversation_manager = self.floating_repl.repl_widget.conversation_manager
+                    logger.info("Using shared conversation manager from REPL widget")
+                # Get current conversation ID
+                current_conversation_id = self.floating_repl.repl_widget.get_current_conversation_id()
+            
+            # If no conversation manager from REPL, create one
+            if not conversation_manager:
+                logger.info("Creating new conversation manager for browser")
+                if not hasattr(self, '_conversation_manager') or not self._conversation_manager:
+                    self._conversation_manager = ConversationManager()
+                    if not self._conversation_manager.initialize():
+                        logger.error("Failed to initialize conversation manager")
+                        from PyQt6.QtWidgets import QMessageBox
+                        
+                        msg_box = QMessageBox(self)
+                        msg_box.setWindowTitle("Conversations Unavailable")
+                        msg_box.setText("Conversation management system could not be initialized.")
+                        msg_box.setIcon(QMessageBox.Icon.Warning)
+                        msg_box.setStyleSheet("""
+                            QMessageBox {
+                                background-color: #2b2b2b;
+                                color: #ffffff;
+                                border: 1px solid #555555;
+                            }
+                            QMessageBox QLabel {
+                                color: #ffffff;
+                            }
+                            QMessageBox QPushButton {
+                                background-color: #ff9800;
+                                color: white;
+                                border: none;
+                                padding: 8px 16px;
+                                border-radius: 4px;
+                                min-width: 80px;
+                            }
+                            QMessageBox QPushButton:hover {
+                                background-color: #f57c00;
+                            }
+                        """)
+                        msg_box.exec()
+                        return
+                conversation_manager = self._conversation_manager
+            
+            # Create or show conversation browser with shared conversation manager
+            if not self.conversation_browser:
+                self.conversation_browser = SimpleConversationBrowser(parent=self, conversation_manager=conversation_manager)
+                self.conversation_browser.conversation_restore_requested.connect(
+                    self._restore_conversation_to_repl
+                )
+            else:
+                # Update current conversation and refresh the list
+                self.conversation_browser.set_current_conversation(current_conversation_id)
+                # Reload conversations to show any new ones
+                self.conversation_browser._load_conversations()
+            
+            # Show the browser
+            self.conversation_browser.show()
+            self.conversation_browser.raise_()
+            self.conversation_browser.activateWindow()
+            
+            logger.info("Simple conversation browser opened")
+            
+        except ImportError as e:
+            logger.error(f"Conversation management not available: {e}")
+            from PyQt6.QtWidgets import QMessageBox
+            
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("Feature Unavailable")
+            msg_box.setText("Conversation management is not yet available.")
+            msg_box.setIcon(QMessageBox.Icon.Warning)
+            msg_box.setStyleSheet("""
+                QMessageBox {
+                    background-color: #2b2b2b;
+                    color: #ffffff;
+                    border: 1px solid #555555;
+                }
+                QMessageBox QLabel {
+                    color: #ffffff;
+                }
+                QMessageBox QPushButton {
+                    background-color: #ff9800;
+                    color: white;
+                    border: none;
+                    padding: 8px 16px;
+                    border-radius: 4px;
+                    min-width: 80px;
+                }
+                QMessageBox QPushButton:hover {
+                    background-color: #f57c00;
+                }
+            """)
+            msg_box.exec()
+        except Exception as e:
+            logger.error(f"Failed to show conversations: {e}")
+            from PyQt6.QtWidgets import QMessageBox
+            
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("Error")
+            msg_box.setText(f"Failed to open conversations:\n{str(e)}")
+            msg_box.setIcon(QMessageBox.Icon.Critical)
+            msg_box.setStyleSheet("""
+                QMessageBox {
+                    background-color: #2b2b2b;
+                    color: #ffffff;
+                    border: 1px solid #555555;
+                }
+                QMessageBox QLabel {
+                    color: #ffffff;
+                }
+                QMessageBox QPushButton {
+                    background-color: #f44336;
+                    color: white;
+                    border: none;
+                    padding: 8px 16px;
+                    border-radius: 4px;
+                    min-width: 80px;
+                }
+                QMessageBox QPushButton:hover {
+                    background-color: #da190b;
+                }
+            """)
+            msg_box.exec()
+    
+    def _restore_conversation_to_repl(self, conversation_id: str):
+        """Restore a conversation to the REPL."""
+        logger.info(f"Restoring conversation to REPL: {conversation_id}")
+        
+        try:
+            # Show REPL if not visible
+            if not self.floating_repl.isVisible():
+                self._show_repl()
+            
+            # Load conversation in REPL widget
+            if (self.floating_repl and 
+                hasattr(self.floating_repl, 'repl_widget') and 
+                self.floating_repl.repl_widget):
+                
+                # Restore the conversation in the REPL widget
+                if hasattr(self.floating_repl.repl_widget, 'restore_conversation'):
+                    self.floating_repl.repl_widget.restore_conversation(conversation_id)
+                    logger.info(f"✅ Conversation {conversation_id} restoration initiated in REPL")
+                else:
+                    logger.error("❌ REPL widget doesn't have restore_conversation method")
+                
+                # Update conversation browser to reflect the change
+                if self.conversation_browser:
+                    self.conversation_browser.set_current_conversation(conversation_id)
+                
+                # Show success message with conversation details
+                from PyQt6.QtWidgets import QMessageBox
+                
+                # Get conversation details for better message
+                try:
+                    conversation_manager = getattr(self.floating_repl.repl_widget, 'conversation_manager', None)
+                    if conversation_manager:
+                        import asyncio
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            conversation = loop.run_until_complete(
+                                conversation_manager.get_conversation(conversation_id, include_messages=False)
+                            )
+                            if conversation:
+                                title = conversation.title or "Untitled Conversation"
+                                message = f"Conversation '{title}' has been loaded into the REPL."
+                            else:
+                                message = "Conversation has been loaded into the REPL."
+                        finally:
+                            loop.close()
+                    else:
+                        message = "Conversation has been loaded into the REPL."
+                except Exception as e:
+                    logger.warning(f"Could not get conversation details for message: {e}")
+                    message = "Conversation has been loaded into the REPL."
+                
+                # Create themed message box
+                msg_box = QMessageBox(self)
+                msg_box.setWindowTitle("Conversation Restored")
+                msg_box.setText(message)
+                msg_box.setIcon(QMessageBox.Icon.Information)
+                
+                # Apply dark theme styling
+                msg_box.setStyleSheet("""
+                    QMessageBox {
+                        background-color: #2b2b2b;
+                        color: #ffffff;
+                        border: 1px solid #555555;
+                    }
+                    QMessageBox QLabel {
+                        color: #ffffff;
+                    }
+                    QMessageBox QPushButton {
+                        background-color: #4CAF50;
+                        color: white;
+                        border: none;
+                        padding: 8px 16px;
+                        border-radius: 4px;
+                        min-width: 80px;
+                    }
+                    QMessageBox QPushButton:hover {
+                        background-color: #45a049;
+                    }
+                    QMessageBox QPushButton:pressed {
+                        background-color: #3e8e41;
+                    }
+                """)
+                
+                msg_box.exec()
+            else:
+                logger.error("REPL widget not available for conversation restore")
+                
+        except Exception as e:
+            logger.error(f"Failed to restore conversation: {e}")
+            from PyQt6.QtWidgets import QMessageBox
+            
+            # Create themed error message box
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("Restore Failed")
+            msg_box.setText(f"Failed to restore conversation:\n{str(e)}")
+            msg_box.setIcon(QMessageBox.Icon.Critical)
+            
+            # Apply dark theme styling
+            msg_box.setStyleSheet("""
+                QMessageBox {
+                    background-color: #2b2b2b;
+                    color: #ffffff;
+                    border: 1px solid #555555;
+                }
+                QMessageBox QLabel {
+                    color: #ffffff;
+                }
+                QMessageBox QPushButton {
+                    background-color: #f44336;
+                    color: white;
+                    border: none;
+                    padding: 8px 16px;
+                    border-radius: 4px;
+                    min-width: 80px;
+                }
+                QMessageBox QPushButton:hover {
+                    background-color: #da190b;
+                }
+                QMessageBox QPushButton:pressed {
+                    background-color: #b71c1c;
+                }
+            """)
+            
+            msg_box.exec()
