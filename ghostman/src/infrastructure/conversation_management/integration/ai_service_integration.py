@@ -118,8 +118,14 @@ class ConversationAIService(AIService):
             self.conversation_service.set_active_conversation(conversation.id)
             
             # Clear current context and reload from conversation
+            logger.info(f"🔍 NEW CONVERSATION - Before clear: {len(self.conversation.messages)} messages")
             self.conversation.clear()
+            logger.info(f"🔍 NEW CONVERSATION - After clear: {len(self.conversation.messages)} messages")
+            
             await self._load_conversation_context(conversation.id)
+            logger.info(f"🔍 NEW CONVERSATION - After load: {len(self.conversation.messages)} messages")
+            logger.info(f"🔍 NEW CONVERSATION - Conversation ID: {conversation.id}")
+            logger.info(f"🔍 NEW CONVERSATION - Current active ID: {self._current_conversation_id}")
             
             logger.info(f"✅ Started new conversation: {conversation.id}")
             return conversation.id
@@ -239,6 +245,11 @@ class ConversationAIService(AIService):
         
         # Call parent method
         result = super().send_message(message, stream)
+        
+        # Debug: Log what the parent method returned
+        logger.info(f"🔍 CONVERSATION AI SERVICE - Parent result: success={result.get('success')}")
+        logger.info(f"🔍 CONVERSATION AI SERVICE - Parent response length: {len(result.get('response', '')) if result.get('response') else 0}")
+        logger.info(f"🔍 CONVERSATION AI SERVICE - Parent response content: '{result.get('response', '')}'")
         
         # Log the result with updated context info
         if result.get('success'):

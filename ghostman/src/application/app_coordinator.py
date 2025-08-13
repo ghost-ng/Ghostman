@@ -449,6 +449,13 @@ class AppCoordinator(QObject):
                 settings_applied += len(config["advanced"]) if isinstance(config["advanced"], dict) else 1
                 logger.info("✅ Advanced settings applied")
             
+            # Apply font settings
+            if "fonts" in config:
+                logger.info("🔤 Applying font settings...")
+                self._apply_font_settings(config["fonts"])
+                settings_applied += len(config["fonts"]) if isinstance(config["fonts"], dict) else 1
+                logger.info("✅ Font settings applied")
+            
             logger.info(f"=== ✅ SETTINGS SUCCESSFULLY APPLIED: {settings_applied} items ===")
             
         except Exception as e:
@@ -567,6 +574,30 @@ class AppCoordinator(QObject):
                 settings_processed += 1
         
         logger.info(f"🔍 Advanced settings processing complete: {settings_processed}/{len(advanced_config)} applied")
+    
+    def _apply_font_settings(self, fonts_config: dict):
+        """Apply font settings to the UI."""
+        logger.info(f"🔤 Processing font settings: {len(fonts_config)} categories")
+        
+        settings_processed = 0
+        
+        # Process each font category
+        for font_type, font_config in fonts_config.items():
+            if isinstance(font_config, dict):
+                logger.info(f"  📝 {font_type} font: {font_config}")
+                settings_processed += 1
+        
+        # Refresh fonts in REPL widget if available
+        if self._floating_repl and hasattr(self._floating_repl, 'repl_widget'):
+            repl_widget = self._floating_repl.repl_widget
+            if hasattr(repl_widget, 'refresh_fonts'):
+                try:
+                    repl_widget.refresh_fonts()
+                    logger.info("🔤 REPL fonts refreshed successfully")
+                except Exception as e:
+                    logger.error(f"Failed to refresh REPL fonts: {e}")
+        
+        logger.info(f"🔤 Font settings processing complete: {settings_processed}/{len(fonts_config)} applied")
     
     def _update_window_flags(self, always_on_top: bool):
         """Update window flags for always on top behavior."""

@@ -31,6 +31,8 @@ from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QColor, QPalette, QIcon, 
 
 # Import startup service for preamble
 from ...application.startup_service import startup_service
+# Import font service for font configuration
+from ...application.font_service import font_service
 
 # Settings import (percent-based opacity)
 try:
@@ -100,7 +102,8 @@ class MarkdownRenderer:
             "system": "#808080",
             "info": "#ffff00",
             "warning": "#ffa500",
-            "error": "#ff0000"
+            "error": "#ff0000",
+            "divider": "#666666"
         }
         
         # Performance cache for repeated renders (small cache to avoid memory issues)
@@ -235,12 +238,16 @@ class MarkdownRenderer:
             'a': "#4A9EFF"  # Link color that works across all themes
         }
         
-        # Wrap entire content with base color and emoji-compatible font
-        styled_html = f'<div style="color: {base_color}; line-height: 1.4; font-family: Segoe UI Emoji, Segoe UI Symbol, Arial Unicode MS, Consolas, sans-serif;">{html_content}</div>'
+        # Get appropriate font based on message style
+        font_type = 'user_input' if style == 'input' else 'ai_response'
+        font_css = font_service.get_css_font_style(font_type)
+        
+        # Wrap entire content with base color and font configuration
+        styled_html = f'<div style="color: {base_color}; line-height: 1.4; {font_css};">{html_content}</div>'
         
         # Apply specific styling to elements
         replacements = {
-            '<code>': f'<code style="background-color: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 3px; color: {style_colors["code"]}; font-family: Segoe UI Emoji, Consolas, Monaco, monospace;">',
+            '<code>': f'<code style="background-color: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 3px; color: {style_colors["code"]}; font-family: Consolas, Monaco, monospace;">',
             '<pre>': f'<pre style="background-color: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; border-left: 3px solid {base_color}; margin: 4px 0; overflow-x: auto;">',
             '<em>': f'<em style="color: {style_colors["em"]}; font-style: italic;">',
             '<strong>': f'<strong style="color: {style_colors["strong"]}; font-weight: bold;">',
@@ -1029,11 +1036,9 @@ class REPLWidget(QWidget):
         # Output display
         self.output_display = QTextEdit()
         self.output_display.setReadOnly(True)
-        # Use font stack with emoji support - Segoe UI Emoji for Windows emoji support
-        font = QFont()
-        font.setFamilies(["Segoe UI Emoji", "Consolas", "Monaco", "DejaVu Sans Mono", "monospace"])
-        font.setPointSize(11)
-        self.output_display.setFont(font)
+        # Use font service for AI response font (default for output display)
+        ai_font = font_service.create_qfont('ai_response')
+        self.output_display.setFont(ai_font)
         self.output_display.setMinimumHeight(300)
         layout.addWidget(self.output_display, 1)
         
@@ -1041,8 +1046,8 @@ class REPLWidget(QWidget):
         input_layout = QHBoxLayout()
         
         # Prompt label with background styling for better visual separation
-        prompt_label = QLabel(">>>")
-        prompt_label.setStyleSheet("""
+        self.prompt_label = QLabel(">>>")
+        self.prompt_label.setStyleSheet("""
             color: #00ff00; 
             font-family: Segoe UI Emoji, Consolas, monospace; 
             font-size: 11px;
@@ -1051,14 +1056,12 @@ class REPLWidget(QWidget):
             padding: 5px 8px;
             margin-right: 5px;
         """)
-        input_layout.addWidget(prompt_label)
+        input_layout.addWidget(self.prompt_label)
         
         # Command input
         self.command_input = QLineEdit()
-        # Use font stack with emoji support for input
-        input_font = QFont()
-        input_font.setFamilies(["Segoe UI Emoji", "Consolas", "Monaco", "DejaVu Sans Mono", "monospace"])
-        input_font.setPointSize(10)
+        # Use font service for user input font
+        input_font = font_service.create_qfont('user_input')
         self.command_input.setFont(input_font)
         self.command_input.returnPressed.connect(self._on_command_entered)
         self.command_input.installEventFilter(self)
@@ -1152,6 +1155,122 @@ class REPLWidget(QWidget):
         self._panel_opacity = new_val
         self._apply_styles()
         logger.info(f"✅ REPL panel opacity applied successfully: {new_val:.3f}")
+    
+    def refresh_fonts(self):
+        """Refresh fonts from font service when settings change."""
+        try:
+            # Clear font service cache to get latest settings
+            font_service.clear_cache()
+            
+            # Update output display font (AI response font)
+            ai_font = font_service.create_qfont('ai_response')
+            self.output_display.setFont(ai_font)
+            
+            # Update input font (user input font)
+            input_font = font_service.create_qfont('user_input')
+            self.command_input.setFont(input_font)
+            
+            # Clear markdown renderer cache so it uses new fonts
+            if hasattr(self, '_markdown_renderer'):
+                self._markdown_renderer.clear_cache()
+            
+            # Re-render existing content with new fonts
+            self._refresh_existing_output()
+            
+            logger.info("✅ Fonts refreshed from settings")
+            
+        except Exception as e:
+            logger.error(f"Failed to refresh fonts: {e}")
+    
+    def _refresh_existing_output(self):
+        """Re-render all existing output with current font settings."""
+        try:
+            # Get current cursor position to restore later
+            cursor = self.output_display.textCursor()
+            current_position = cursor.position()
+            
+            # Get the document and clear all content
+            document = self.output_display.document()
+            
+            # Store the current conversation for re-rendering
+            if hasattr(self, 'conversation') and self.conversation:
+                # Clear the output display
+                self.output_display.clear()
+                
+                # Re-render all messages with new font settings
+                for message in self.conversation.messages:
+                    role_icon = "👤" if message.role.value == "user" else "🤖"
+                    role_name = "You" if message.role.value == "user" else "AI"
+                    style = "input" if message.role.value == "user" else "response"
+                    
+                    timestamp = message.timestamp.strftime("%H:%M")
+                    self.append_output(f"[{timestamp}] {role_icon} {role_name}: {message.content}", style)
+                
+                # Scroll to bottom
+                scrollbar = self.output_display.verticalScrollBar()
+                scrollbar.setValue(scrollbar.maximum())
+                
+                logger.debug("Existing REPL content re-rendered with new fonts")
+            else:
+                # Just update the document font if no conversation to re-render
+                ai_font = font_service.create_qfont('ai_response')
+                document.setDefaultFont(ai_font)
+                logger.debug("Output display default font updated")
+                
+        except Exception as e:
+            logger.error(f"Failed to refresh existing output: {e}")
+    
+    def _set_processing_mode(self, processing: bool):
+        """Set the UI to processing mode with spinner or normal mode."""
+        try:
+            if processing:
+                # Show spinner in prompt label
+                self.prompt_label.setText("⠋")  # Spinner character
+                self.prompt_label.setStyleSheet("""
+                    color: #ff8c00; 
+                    font-family: Segoe UI Emoji, Consolas, monospace; 
+                    font-size: 11px;
+                    background-color: rgba(255, 140, 0, 0.1);
+                    border-radius: 3px;
+                    padding: 5px 8px;
+                    margin-right: 5px;
+                """)
+                
+                # Optionally add animation (requires QTimer)
+                if not hasattr(self, '_spinner_timer'):
+                    from PyQt6.QtCore import QTimer
+                    self._spinner_timer = QTimer()
+                    self._spinner_timer.timeout.connect(self._update_spinner)
+                    self._spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+                    self._spinner_index = 0
+                
+                self._spinner_timer.start(100)  # Update every 100ms
+            else:
+                # Stop spinner animation and restore normal prompt
+                if hasattr(self, '_spinner_timer'):
+                    self._spinner_timer.stop()
+                
+                self.prompt_label.setText(">>>")
+                self.prompt_label.setStyleSheet("""
+                    color: #00ff00; 
+                    font-family: Segoe UI Emoji, Consolas, monospace; 
+                    font-size: 11px;
+                    background-color: rgba(0, 255, 0, 0.1);
+                    border-radius: 3px;
+                    padding: 5px 8px;
+                    margin-right: 5px;
+                """)
+        except Exception as e:
+            logger.error(f"Failed to set processing mode: {e}")
+    
+    def _update_spinner(self):
+        """Update the spinner animation."""
+        try:
+            if hasattr(self, '_spinner_chars') and hasattr(self, '_spinner_index'):
+                self._spinner_index = (self._spinner_index + 1) % len(self._spinner_chars)
+                self.prompt_label.setText(self._spinner_chars[self._spinner_index])
+        except Exception as e:
+            logger.error(f"Failed to update spinner: {e}")
     
     def eventFilter(self, obj, event):
         """Event filter for command input navigation."""
@@ -1369,10 +1488,12 @@ class REPLWidget(QWidget):
         
         self.is_summarizing = True
         
-        # Show progress indicator
-        self.summary_progress.setVisible(True)
-        self.summary_notification.setText("🧪 Generating summary...")
-        self.summary_notification.setVisible(True)
+        # Show progress indicator (with safety check)
+        if hasattr(self, 'summary_progress'):
+            self.summary_progress.setVisible(True)
+        if hasattr(self, 'summary_notification'):
+            self.summary_notification.setText("🧪 Generating summary...")
+            self.summary_notification.setVisible(True)
         
         logger.info("🔄 Starting background summarization...")
         
@@ -1434,14 +1555,16 @@ class REPLWidget(QWidget):
             self.summarization_queue.remove(conversation_id)
         
         if success:
-            self.summary_notification.setText("✅ Summary generated")
+            if hasattr(self, 'summary_notification'):
+                self.summary_notification.setText("✅ Summary generated")
             logger.info(f"✅ Summary generated for conversation: {conversation_id}")
             
             # Update conversation data if it's the current one
             if self.current_conversation and self.current_conversation.id == conversation_id:
                 self._refresh_current_conversation()
         else:
-            self.summary_notification.setText("❌ Summary failed")
+            if hasattr(self, 'summary_notification'):
+                self.summary_notification.setText("❌ Summary failed")
             logger.warning(f"❌ Summary generation failed for conversation: {conversation_id}")
         
         # Hide progress after delay
@@ -1454,8 +1577,10 @@ class REPLWidget(QWidget):
     
     def _hide_summary_notification(self):
         """Hide summary notification and progress bar."""
-        self.summary_progress.setVisible(False)
-        self.summary_notification.setVisible(False)
+        if hasattr(self, 'summary_progress'):
+            self.summary_progress.setVisible(False)
+        if hasattr(self, 'summary_notification'):
+            self.summary_notification.setVisible(False)
     
     def _refresh_current_conversation(self):
         """Refresh current conversation data from database."""
@@ -1503,6 +1628,9 @@ class REPLWidget(QWidget):
         # Reset history navigation
         self.history_index = -1
         self.current_input = ""
+        
+        # Add light grey divider before user input reflection
+        self.append_output("--------------------------------------------------", "divider")
         
         # Display command in output
         self.append_output(f">>> {command}", "input")
@@ -1795,7 +1923,8 @@ class REPLWidget(QWidget):
                     logger.info(f"🔄 Syncing AI service conversation context: {current_ai_conversation} -> {self.current_conversation.id}")
                     ai_service.set_current_conversation(self.current_conversation.id)
         
-        self.append_output("🤖 Processing with AI...", "system")
+        # Show spinner in prompt instead of "Processing with AI..." message
+        self._set_processing_mode(True)
         
         # Reset idle detector
         self.idle_detector.reset_activity(
@@ -1835,8 +1964,11 @@ class REPLWidget(QWidget):
                             result = ai_service.send_message(self.message, save_conversation=True)
                             
                             if result.get('success', False):
+                                response_content = result['response']
                                 logger.info(f"✅ AI response received with context (context size: {len(ai_service.conversation.messages)} messages)")
-                                self.response_received.emit(result['response'], True)
+                                logger.info(f"🔍 AI WORKER SUCCESS - Response length: {len(response_content) if response_content else 0}")
+                                logger.info(f"🔍 AI WORKER SUCCESS - Response content: '{response_content}'")
+                                self.response_received.emit(response_content, True)
                             else:
                                 error_msg = f"❌ AI Error: {result.get('error', 'Unknown error')}"
                                 logger.error(f"AI service error: {error_msg}")
@@ -1861,8 +1993,11 @@ class REPLWidget(QWidget):
                     result = ai_service.send_message(self.message)
                     
                     if result.get('success', False):
+                        response_content = result['response']
                         logger.warning("⚠️  Using basic AI service - conversation context may be limited")
-                        self.response_received.emit(result['response'], True)
+                        logger.info(f"🔍 BASIC AI WORKER SUCCESS - Response length: {len(response_content) if response_content else 0}")
+                        logger.info(f"🔍 BASIC AI WORKER SUCCESS - Response content: '{response_content}'")
+                        self.response_received.emit(response_content, True)
                     else:
                         error_msg = f"❌ AI Error: {result.get('error', 'Unknown error')}"
                         self.response_received.emit(error_msg, False)
@@ -1907,7 +2042,12 @@ class REPLWidget(QWidget):
     
     def _on_ai_response(self, response: str, success: bool):
         """Handle AI response with conversation management."""
-        # Re-enable input
+        # Log all AI responses for debugging
+        logger.info(f"🔍 AI RESPONSE RECEIVED: success={success}, length={len(response) if response else 0}")
+        logger.info(f"🔍 AI RESPONSE CONTENT: '{response}'")
+        
+        # Restore normal prompt and re-enable input
+        self._set_processing_mode(False)
         self.command_input.setEnabled(True)
         self.command_input.setFocus()
         
@@ -1918,6 +2058,11 @@ class REPLWidget(QWidget):
         
         # Display response with appropriate icon
         if success:
+            # Debug: Check response content
+            if not response or not response.strip():
+                logger.warning(f"Empty AI response received: '{response}'")
+                response = "[No response content received]"
+            
             # Display AI label first
             self.append_output("🤖 **AI Response:**", "response")
             # Display the actual response without prefixing to preserve markdown

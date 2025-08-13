@@ -335,29 +335,42 @@ class AIService:
     def _extract_response_content(self, api_response: Dict[str, Any]) -> str:
         """Extract the text content from an API response."""
         try:
+            # Debug: Log the full API response structure
+            logger.info(f"🔍 EXTRACTING RESPONSE CONTENT - Raw API response keys: {list(api_response.keys())}")
+            logger.info(f"🔍 EXTRACTING RESPONSE CONTENT - Full API response: {api_response}")
+            
             # Standard OpenAI format
             if 'choices' in api_response and api_response['choices']:
                 choice = api_response['choices'][0]
+                logger.info(f"🔍 EXTRACTING - Found choices format, choice keys: {list(choice.keys())}")
                 if 'message' in choice:
-                    return choice['message'].get('content', '')
+                    content = choice['message'].get('content', '')
+                    logger.info(f"🔍 EXTRACTING - Extracted from message.content: '{content}'")
+                    return content
                 elif 'text' in choice:
-                    return choice['text']
+                    content = choice['text']
+                    logger.info(f"🔍 EXTRACTING - Extracted from text: '{content}'")
+                    return content
             
             # Anthropic Claude format
             if 'content' in api_response:
                 content = api_response['content']
+                logger.info(f"🔍 EXTRACTING - Found content format, type: {type(content)}")
                 if isinstance(content, list) and content:
-                    return content[0].get('text', '')
+                    extracted = content[0].get('text', '')
+                    logger.info(f"🔍 EXTRACTING - Extracted from content[0].text: '{extracted}'")
+                    return extracted
                 elif isinstance(content, str):
+                    logger.info(f"🔍 EXTRACTING - Extracted from content string: '{content}'")
                     return content
             
             # Fallback - try to find any text content
             response_str = str(api_response)
-            logger.warning(f"Unrecognized response format, returning as string: {response_str[:100]}...")
+            logger.warning(f"🔍 EXTRACTING - Unrecognized response format, returning as string: {response_str[:100]}...")
             return response_str
             
         except Exception as e:
-            logger.error(f"Failed to extract response content: {e}")
+            logger.error(f"🔍 EXTRACTING - Failed to extract response content: {e}")
             return "Sorry, I couldn't process the response properly."
     
     def update_config(self, config: Dict[str, Any]) -> bool:
