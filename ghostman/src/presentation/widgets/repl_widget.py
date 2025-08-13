@@ -542,6 +542,13 @@ class REPLWidget(QWidget):
         self.summarization_queue: List[str] = []  # conversation IDs
         self.is_summarizing = False
         
+        # Autosave functionality
+        self.autosave_timer = QTimer()
+        self.autosave_timer.timeout.connect(self._autosave_current_conversation)
+        self.autosave_interval = 60000  # 1 minute in milliseconds
+        self.last_autosave_time = None
+        self.autosave_enabled = True
+        
         # Load from settings if available
         self._load_opacity_from_settings()
         
@@ -1359,6 +1366,9 @@ class REPLWidget(QWidget):
         self.current_conversation = conversation
         self._update_status_label(conversation)
         
+        # Start autosave timer for the new conversation
+        self._start_autosave_timer()
+        
         # Load conversation messages in output
         self._load_conversation_messages(conversation)
         
@@ -1699,6 +1709,9 @@ class REPLWidget(QWidget):
         else:
             # Send to AI service
             self._send_to_ai(command)
+            
+            # Trigger autosave after user sends a message
+            self._trigger_autosave_soon()
     
     def append_output(self, text: str, style: str = "normal", force_plain: bool = False):
         """
@@ -2174,6 +2187,9 @@ class REPLWidget(QWidget):
                 self.current_conversation = conversation
                 logger.info(f"✅ Restored conversation: {conversation.title}")
                 
+                # Start autosave timer for the restored conversation
+                self._start_autosave_timer()
+                
                 # Update AI service context
                 if self.conversation_manager and self.conversation_manager.has_ai_service():
                     ai_service = self.conversation_manager.get_ai_service()
@@ -2381,6 +2397,60 @@ class REPLWidget(QWidget):
         except Exception as e:
             logger.error(f"Failed to delete conversations: {e}")
             self.append_output(f"❌ Failed to delete conversations: {str(e)}", "error")
+    
+    def _autosave_current_conversation(self):
+        """Autosave the current conversation if it has messages."""
+        try:
+            if not self.autosave_enabled or not self.current_conversation:
+                return
+            
+            # Check if there are messages to save
+            if not self._has_unsaved_messages():
+                return
+            
+            # Check if enough time has passed since last autosave
+            now = datetime.now()
+            if (self.last_autosave_time and 
+                (now - self.last_autosave_time).total_seconds() < 30):  # Min 30 seconds between autosaves
+                return
+            
+            logger.info(f"💾 Autosaving conversation: {self.current_conversation.title}")
+            
+            # Perform autosave asynchronously
+            asyncio.create_task(self._perform_autosave())
+            
+        except Exception as e:
+            logger.error(f"Failed to autosave conversation: {e}")
+    
+    async def _perform_autosave(self):
+        """Perform the actual autosave operation."""
+        try:
+            if self.conversation_manager and self.conversation_manager.has_ai_service():
+                ai_service = self.conversation_manager.get_ai_service()
+                if ai_service and hasattr(ai_service, '_save_current_conversation'):
+                    await ai_service._save_current_conversation()
+                    self.last_autosave_time = datetime.now()
+                    logger.debug(f"✅ Autosaved conversation: {self.current_conversation.id}")
+        except Exception as e:
+            logger.error(f"Failed to perform autosave: {e}")
+    
+    def _start_autosave_timer(self):
+        """Start the autosave timer."""
+        if self.autosave_enabled and not self.autosave_timer.isActive():
+            self.autosave_timer.start(self.autosave_interval)
+            logger.debug(f"📅 Autosave timer started (interval: {self.autosave_interval/1000}s)")
+    
+    def _stop_autosave_timer(self):
+        """Stop the autosave timer."""
+        if self.autosave_timer.isActive():
+            self.autosave_timer.stop()
+            logger.debug("⏹️ Autosave timer stopped")
+    
+    def _trigger_autosave_soon(self):
+        """Trigger autosave after a short delay (e.g., after user sends a message)."""
+        if self.autosave_enabled and self.current_conversation:
+            # Use a single-shot timer for immediate autosave after user interaction
+            QTimer.singleShot(5000, self._autosave_current_conversation)  # 5 seconds delay
     
     def _create_new_conversation_for_message(self, message: str):
         """Create a new conversation automatically when user starts chatting."""
@@ -2837,6 +2907,11 @@ class REPLWidget(QWidget):
             # Stop idle detector
             if hasattr(self, 'idle_detector'):
                 self.idle_detector.check_timer.stop()
+            
+            # Stop autosave timer
+            if hasattr(self, 'autosave_timer'):
+                self._stop_autosave_timer()
+                logger.debug("Autosave timer stopped during shutdown")
             
             # Stop any running AI threads
             if hasattr(self, 'ai_thread') and self.ai_thread.isRunning():
