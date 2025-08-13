@@ -24,7 +24,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
     QLineEdit, QPushButton, QLabel, QFrame, QComboBox,
     QToolButton, QMenu, QProgressBar, QListWidget,
-    QListWidgetItem, QApplication, QMessageBox
+    QListWidgetItem, QApplication, QMessageBox, QDialog
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread, QObject, QSize, pyqtSlot
 from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QColor, QPalette, QIcon, QPixmap, QAction
@@ -1346,9 +1346,14 @@ class REPLWidget(QWidget):
         
         logger.info(f"🔄 Switching to conversation: {conversation.title}")
         
-        # Save current conversation state if needed
+        # Save current conversation state if needed and mark as inactive
         if self.current_conversation:
             self.idle_detector.reset_activity(conversation.id)
+            # Mark previous conversation as inactive
+            asyncio.create_task(self._update_conversation_status(self.current_conversation.id, ConversationStatus.PINNED))
+        
+        # Mark new conversation as active
+        asyncio.create_task(self._update_conversation_status(conversation.id, ConversationStatus.ACTIVE))
         
         # Switch to new conversation
         self.current_conversation = conversation
@@ -2152,15 +2157,31 @@ class REPLWidget(QWidget):
     async def _restore_conversation_async(self, conversation_id: str):
         """Restore conversation asynchronously."""
         try:
+            # Save current conversation if it has messages
+            if self.current_conversation and self._has_unsaved_messages():
+                await self._save_current_conversation_before_switch()
+            
             # Load the conversation from database with messages
             conversation = await self.conversation_manager.get_conversation(conversation_id, include_messages=True)
             
             if conversation:
-                # Set as current conversation
+                # Mark previous conversation as inactive and new one as active
+                if self.current_conversation:
+                    await self._update_conversation_status(self.current_conversation.id, ConversationStatus.PINNED)
+                await self._update_conversation_status(conversation.id, ConversationStatus.ACTIVE)
+                
+                # Set as current conversation and update AI context
                 self.current_conversation = conversation
                 logger.info(f"✅ Restored conversation: {conversation.title}")
                 
-                # Load conversation messages into REPL display
+                # Update AI service context
+                if self.conversation_manager and self.conversation_manager.has_ai_service():
+                    ai_service = self.conversation_manager.get_ai_service()
+                    if ai_service:
+                        ai_service.set_current_conversation(conversation.id)
+                        logger.info(f"🔄 AI service context updated for restored conversation")
+                
+                # Clear REPL and load conversation messages
                 self.clear_output()
                 self.append_output(f"📂 Restored conversation: {conversation.title}", "system")
                 
@@ -2209,6 +2230,157 @@ class REPLWidget(QWidget):
         except Exception as e:
             logger.error(f"❌ Failed to restore conversation {conversation_id}: {e}", exc_info=True)
             self.append_output(f"❌ Failed to restore conversation: {str(e)}", "error")
+    
+    def _has_unsaved_messages(self) -> bool:
+        """Check if current conversation has unsaved messages."""
+        if not self.current_conversation:
+            return False
+        
+        # Check if there's content in the REPL that hasn't been saved
+        output_text = self.output_display.toPlainText().strip()
+        if not output_text:
+            return False
+        
+        # Basic check - if there's user input or AI responses beyond just system messages
+        lines = output_text.split('\n')
+        user_messages = [line for line in lines if line.strip().startswith('>>>')]
+        return len(user_messages) > 0
+    
+    async def _save_current_conversation_before_switch(self):
+        """Save current conversation before switching to another."""
+        try:
+            if self.conversation_manager and self.conversation_manager.has_ai_service():
+                ai_service = self.conversation_manager.get_ai_service()
+                if ai_service and hasattr(ai_service, '_save_current_conversation'):
+                    await ai_service._save_current_conversation()
+                    logger.info(f"💾 Saved current conversation before switch: {self.current_conversation.id}")
+        except Exception as e:
+            logger.error(f"Failed to save current conversation before switch: {e}")
+    
+    async def _update_conversation_status(self, conversation_id: str, status: 'ConversationStatus'):
+        """Update conversation status in database."""
+        try:
+            if self.conversation_manager:
+                await self.conversation_manager.update_conversation_status(conversation_id, status)
+                logger.debug(f"Updated conversation {conversation_id[:8]}... status to {status.value}")
+        except Exception as e:
+            logger.error(f"Failed to update conversation status: {e}")
+    
+    def show_bulk_delete_dialog(self):
+        """Show dialog for bulk deletion of conversations with multi-select."""
+        if not self.conversations_list:
+            QMessageBox.information(self, "No Conversations", "No conversations available to delete.")
+            return
+        
+        # Create dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Delete Conversations")
+        dialog.setModal(True)
+        dialog.resize(500, 400)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Instructions
+        instruction_label = QLabel("Select conversations to delete (hold Ctrl/Cmd for multiple selections):")
+        instruction_label.setWordWrap(True)
+        layout.addWidget(instruction_label)
+        
+        # List widget for multi-selection
+        conversation_list = QListWidget()
+        conversation_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
+        
+        # Populate with conversations
+        for conversation in self.conversations_list:
+            if conversation.id != getattr(self.current_conversation, 'id', None):  # Don't allow deleting current conversation
+                status_icon = self._get_status_icon(conversation)
+                item_text = f"{status_icon} {conversation.title} ({conversation.created_at.strftime('%Y-%m-%d %H:%M')})"
+                item = QListWidgetItem(item_text)
+                item.setData(Qt.ItemDataRole.UserRole, conversation.id)
+                conversation_list.addItem(item)
+        
+        layout.addWidget(conversation_list)
+        
+        # Warning label
+        warning_label = QLabel("⚠️ This action cannot be undone. Deleted conversations will be permanently removed.")
+        warning_label.setStyleSheet("color: #ff6b6b; font-weight: bold;")
+        warning_label.setWordWrap(True)
+        layout.addWidget(warning_label)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(dialog.reject)
+        
+        delete_btn = QPushButton("Delete Selected")
+        delete_btn.setStyleSheet("background-color: #ff6b6b; color: white; font-weight: bold;")
+        delete_btn.clicked.connect(lambda: self._handle_bulk_delete(dialog, conversation_list))
+        
+        button_layout.addWidget(cancel_btn)
+        button_layout.addWidget(delete_btn)
+        layout.addLayout(button_layout)
+        
+        dialog.exec()
+    
+    def _handle_bulk_delete(self, dialog: 'QDialog', conversation_list: QListWidget):
+        """Handle bulk deletion of selected conversations."""
+        selected_items = conversation_list.selectedItems()
+        
+        if not selected_items:
+            QMessageBox.warning(dialog, "No Selection", "Please select at least one conversation to delete.")
+            return
+        
+        # Get conversation IDs and titles
+        selected_conversations = []
+        for item in selected_items:
+            conv_id = item.data(Qt.ItemDataRole.UserRole)
+            conv_title = item.text()
+            selected_conversations.append((conv_id, conv_title))
+        
+        # Confirmation dialog
+        count = len(selected_conversations)
+        titles_preview = "\n".join([f"• {title}" for _, title in selected_conversations[:5]])
+        if count > 5:
+            titles_preview += f"\n... and {count - 5} more"
+        
+        reply = QMessageBox.question(
+            dialog,
+            "Confirm Deletion",
+            f"Are you sure you want to delete {count} conversation{'s' if count > 1 else ''}?\n\n{titles_preview}\n\n⚠️ This action cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            # Perform deletion
+            asyncio.create_task(self._delete_conversations_async([conv_id for conv_id, _ in selected_conversations]))
+            dialog.accept()
+    
+    async def _delete_conversations_async(self, conversation_ids: list):
+        """Delete multiple conversations asynchronously."""
+        try:
+            if not self.conversation_manager:
+                logger.error("No conversation manager available for deletion")
+                return
+            
+            deleted_count = 0
+            for conv_id in conversation_ids:
+                try:
+                    await self.conversation_manager.delete_conversation(conv_id)
+                    deleted_count += 1
+                    logger.info(f"Deleted conversation: {conv_id}")
+                except Exception as e:
+                    logger.error(f"Failed to delete conversation {conv_id}: {e}")
+            
+            # Refresh conversations list
+            await self._load_conversations()
+            
+            # Update UI
+            self.append_output(f"✅ Deleted {deleted_count} conversation{'s' if deleted_count != 1 else ''}", "system")
+            
+        except Exception as e:
+            logger.error(f"Failed to delete conversations: {e}")
+            self.append_output(f"❌ Failed to delete conversations: {str(e)}", "error")
     
     def _create_new_conversation_for_message(self, message: str):
         """Create a new conversation automatically when user starts chatting."""
