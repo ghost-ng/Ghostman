@@ -8,7 +8,10 @@ import logging
 from typing import Optional
 from PyQt6.QtWidgets import QMainWindow, QWidget
 from PyQt6.QtCore import pyqtSignal, Qt
-from PyQt6.QtGui import QCloseEvent
+from PyQt6.QtGui import QCloseEvent, QMouseEvent
+
+# Import window state management
+from ...application.window_state import save_window_state, load_window_state
 
 logger = logging.getLogger("ghostman.main_window")
 
@@ -93,20 +96,86 @@ class MainWindow(QMainWindow):
         """)
     
     def _center_window(self):
-        """Position the window near the lower right corner."""
-        screen = self.screen()
-        if screen:
-            screen_geometry = screen.availableGeometry()
-            window_geometry = self.frameGeometry()
+        """Position the window using saved position or default to bottom right corner."""
+        try:
+            # Load saved window state
+            window_state = load_window_state('avatar')
+            saved_position = window_state['position']
+            saved_size = window_state['size']
             
-            # Position near lower right with some padding
-            padding = 50
-            x = screen_geometry.right() - window_geometry.width() - padding
-            y = screen_geometry.bottom() - window_geometry.height() - padding
+            # Apply saved size
+            self.resize(saved_size['width'], saved_size['height'])
             
-            logger.debug(f'Positioning window: screen={screen_geometry}, window_geometry={window_geometry}')
-            logger.debug(f'Final position: ({x}, {y})')
-            self.move(x, y)
+            screen = self.screen()
+            if screen:
+                screen_geometry = screen.availableGeometry()
+                
+                # If no saved position, use bottom-right default
+                if saved_position is None:
+                    logger.info("No saved avatar position - using bottom-right default")
+                    window_geometry = self.frameGeometry()
+                    padding = 50
+                    x = screen_geometry.right() - window_geometry.width() - padding
+                    y = screen_geometry.bottom() - window_geometry.height() - padding
+                else:
+                    # Use saved position if valid
+                    x, y = saved_position['x'], saved_position['y']
+                    
+                    # Validate position is on screen
+                    if (x < screen_geometry.left() or x > screen_geometry.right() - 100 or
+                        y < screen_geometry.top() or y > screen_geometry.bottom() - 100):
+                        
+                        logger.info("Saved avatar position is off-screen, using bottom-right default")
+                        # Fall back to bottom-right default
+                        window_geometry = self.frameGeometry()
+                        padding = 50
+                        x = screen_geometry.right() - window_geometry.width() - padding
+                        y = screen_geometry.bottom() - window_geometry.height() - padding
+                
+                logger.debug(f'Positioning avatar window at: ({x}, {y}), size: {saved_size}')
+                self.move(x, y)
+                
+        except Exception as e:
+            logger.error(f"Failed to load avatar window position, using bottom-right default: {e}")
+            # Fall back to bottom-right positioning
+            screen = self.screen()
+            if screen:
+                screen_geometry = screen.availableGeometry()
+                window_geometry = self.frameGeometry()
+                
+                padding = 50
+                x = screen_geometry.right() - window_geometry.width() - padding
+                y = screen_geometry.bottom() - window_geometry.height() - padding
+                
+                logger.debug(f'Using bottom-right default positioning: ({x}, {y})')
+                self.move(x, y)
+    
+    def save_current_window_state(self):
+        """Save current window position and size."""
+        try:
+            pos = self.pos()
+            size = self.size()
+            save_window_state('avatar', pos.x(), pos.y(), size.width(), size.height())
+        except Exception as e:
+            logger.error(f"Failed to save avatar window state: {e}")
+    
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        """Save window state when mouse is released (after move/resize)."""
+        super().mouseReleaseEvent(event)
+        # Save state after any mouse operation that could have moved/resized the window
+        self.save_current_window_state()
+    
+    def resizeEvent(self, event):
+        """Save window state when resized."""
+        super().resizeEvent(event)
+        # Save state after resize
+        self.save_current_window_state()
+    
+    def moveEvent(self, event):
+        """Save window state when moved."""
+        super().moveEvent(event)
+        # Save state after move
+        self.save_current_window_state()
     
     def closeEvent(self, event: QCloseEvent):
         """Handle window close event."""
