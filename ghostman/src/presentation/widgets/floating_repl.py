@@ -8,9 +8,11 @@ import logging
 from typing import Optional
 from PyQt6.QtWidgets import QWidget, QMainWindow
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint
-from PyQt6.QtGui import QCloseEvent
+from PyQt6.QtGui import QCloseEvent, QMouseEvent
 
 from .repl_widget import REPLWidget
+# Import window state management
+from ...application.window_state import save_window_state, load_window_state
 
 try:
     from ..ui.resize import REPLResizableMixin, HitZone
@@ -223,6 +225,33 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
         
         logger.debug("FloatingREPL window properties configured")
     
+    def save_current_window_state(self):
+        """Save current REPL window position and size."""
+        try:
+            pos = self.pos()
+            size = self.size()
+            save_window_state('repl', pos.x(), pos.y(), size.width(), size.height())
+        except Exception as e:
+            logger.error(f"Failed to save REPL window state: {e}")
+    
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        """Save window state when mouse is released (after move/resize)."""
+        super().mouseReleaseEvent(event)
+        # Save state after any mouse operation that could have moved/resized the window
+        self.save_current_window_state()
+    
+    def resizeEvent(self, event):
+        """Save window state when resized."""
+        super().resizeEvent(event)
+        # Save state after resize
+        self.save_current_window_state()
+    
+    def moveEvent(self, event):
+        """Save window state when moved."""
+        super().moveEvent(event)
+        # Save state after move
+        self.save_current_window_state()
+    
     def closeEvent(self, event: QCloseEvent):
         """Handle window close event."""
         # Save current conversation before closing
@@ -252,13 +281,43 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
     
     def position_relative_to_avatar(self, avatar_pos: QPoint, avatar_size: tuple, screen_geometry):
         """
-        Position the REPL window relative to the avatar.
+        Position the REPL window using saved position or relative to avatar.
         
         Args:
             avatar_pos: Current position of the avatar window
             avatar_size: Size of the avatar window (width, height)
             screen_geometry: Available screen geometry
         """
+        try:
+            # Load saved window state
+            window_state = load_window_state('repl')
+            saved_position = window_state['position']
+            saved_size = window_state['size']
+            
+            # Apply saved size
+            self.resize(saved_size['width'], saved_size['height'])
+            
+            # Use saved position if available and valid, otherwise position relative to avatar
+            if saved_position and 'x' in saved_position and 'y' in saved_position:
+                repl_x, repl_y = saved_position['x'], saved_position['y']
+                
+                # Validate saved position is still on screen
+                if (repl_x >= screen_geometry.left() and 
+                    repl_x + self.width() <= screen_geometry.right() and
+                    repl_y >= screen_geometry.top() and 
+                    repl_y + self.height() <= screen_geometry.bottom()):
+                    
+                    logger.debug(f'Using saved REPL position: ({repl_x}, {repl_y}), size: {saved_size}')
+                    final_pos = QPoint(repl_x, repl_y)
+                    self.move(final_pos)
+                    return
+                else:
+                    logger.info("Saved REPL position is off-screen, positioning relative to avatar")
+            
+        except Exception as e:
+            logger.error(f"Failed to load REPL position, using relative positioning: {e}")
+        
+        # Fall back to relative positioning
         avatar_width, avatar_height = avatar_size
         repl_width = self.width()
         repl_height = self.height()
@@ -267,7 +326,7 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
         repl_x = avatar_pos.x() + avatar_width + 10  # 10px gap
         repl_y = avatar_pos.y()
         
-        logger.debug(f'Positioning REPL: avatar at {avatar_pos}, size {avatar_size}')
+        logger.debug(f'Positioning REPL relative to avatar: avatar at {avatar_pos}, size {avatar_size}')
         logger.debug(f'Initial REPL position: ({repl_x}, {repl_y}), screen: {screen_geometry}')
         
         # Check if REPL would go off the right edge of screen

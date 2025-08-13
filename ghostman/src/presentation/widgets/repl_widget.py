@@ -29,6 +29,9 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread, QObject, QSize, pyqtSlot
 from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QColor, QPalette, QIcon, QPixmap, QAction
 
+# Import startup service for preamble
+from ...application.startup_service import startup_service
+
 # Settings import (percent-based opacity)
 try:
     from ...infrastructure.storage.settings_manager import settings as _global_settings
@@ -567,8 +570,43 @@ class REPLWidget(QWidget):
             logger.error(f"❌ Conversation manager initialization failed: {e}")
             self.conversation_manager = None
     
+    def _perform_startup_tasks(self):
+        """Perform application startup tasks and display preamble."""
+        try:
+            logger.info("Performing startup tasks...")
+            
+            # Perform startup tasks
+            startup_result = startup_service.perform_startup_tasks()
+            
+            # Display the appropriate preamble
+            preamble = startup_result.get('preamble', '')
+            if preamble:
+                # Split preamble into lines and display each one
+                for line in preamble.split('\n'):
+                    if line.strip():  # Only display non-empty lines
+                        self.append_output(line, "system")
+            else:
+                # Empty preamble for first run - display nothing
+                logger.info("First run detected - showing empty preamble")
+            
+            # Add separator if preamble was shown
+            if preamble:
+                self.append_output("-" * 50, "system")
+            
+            logger.info(f"Startup tasks completed - first_run: {startup_result.get('first_run')}, api_status: {startup_result.get('api_status')}")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to perform startup tasks: {e}")
+            # Fallback to basic welcome message
+            self.append_output("💬 Ghostman AI Assistant", "system")
+            self.append_output("Type your message or 'help' for commands", "system")
+            self.append_output("-" * 50, "system")
+    
     def _load_conversations_deferred(self):
         """Load conversations after UI is fully initialized."""
+        # Perform startup tasks first
+        self._perform_startup_tasks()
+        
         if not self.conversation_manager:
             logger.debug("No conversation manager available for deferred loading")
             return
@@ -1046,11 +1084,8 @@ class REPLWidget(QWidget):
         
         layout.addLayout(input_layout)
         
-        # Initial welcome message
-        self.append_output("💬 Ghostman Conversation Manager v2.0", "system")
-        self.append_output("🚀 Clean REPL interface - conversation management via avatar menu", "system")
-        self.append_output("Type 'help' for commands or start chatting with AI.", "system")
-        self.append_output("-" * 50, "system")
+        # Initial startup and preamble - will be set after startup tasks complete
+        # This will be replaced by _display_startup_preamble() called from _load_conversations_deferred
         
         # Focus on input
         self.command_input.setFocus()
