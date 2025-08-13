@@ -17,6 +17,9 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QStandardPaths
 from PyQt6.QtGui import QFont, QIcon
 
+# Import font service for font configuration
+from ...application.font_service import font_service
+
 logger = logging.getLogger("ghostman.settings_dialog")
 
 
@@ -65,6 +68,7 @@ class SettingsDialog(QDialog):
         # Add tabs
         self._create_ai_model_tab()
         self._create_interface_tab()
+        self._create_font_tab()
         self._create_advanced_tab()
         
         # Buttons layout
@@ -212,6 +216,118 @@ class SettingsDialog(QDialog):
 
         layout.addStretch()
         self.tab_widget.addTab(tab, "Interface")
+    
+    def _create_font_tab(self):
+        """Create Font settings tab."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        # AI Response Font Group
+        ai_font_group = QGroupBox("AI Response Font")
+        ai_font_layout = QFormLayout(ai_font_group)
+
+        # AI Response Font Family
+        self.ai_font_family_combo = QComboBox()
+        self.ai_font_family_combo.setEditable(False)
+        available_fonts = font_service.get_available_fonts()
+        self.ai_font_family_combo.addItems(available_fonts)
+        ai_font_layout.addRow("Font Family:", self.ai_font_family_combo)
+
+        # AI Response Font Size
+        self.ai_font_size_spin = QSpinBox()
+        self.ai_font_size_spin.setRange(6, 72)
+        self.ai_font_size_spin.setValue(11)
+        ai_font_layout.addRow("Font Size:", self.ai_font_size_spin)
+
+        # AI Response Font Weight
+        self.ai_font_weight_combo = QComboBox()
+        self.ai_font_weight_combo.addItems(["normal", "bold"])
+        ai_font_layout.addRow("Font Weight:", self.ai_font_weight_combo)
+
+        # AI Response Font Style
+        self.ai_font_style_combo = QComboBox()
+        self.ai_font_style_combo.addItems(["normal", "italic"])
+        ai_font_layout.addRow("Font Style:", self.ai_font_style_combo)
+
+        layout.addWidget(ai_font_group)
+
+        # User Input Font Group
+        user_font_group = QGroupBox("User Input Font")
+        user_font_layout = QFormLayout(user_font_group)
+
+        # User Input Font Family
+        self.user_font_family_combo = QComboBox()
+        self.user_font_family_combo.setEditable(False)
+        self.user_font_family_combo.addItems(available_fonts)
+        user_font_layout.addRow("Font Family:", self.user_font_family_combo)
+
+        # User Input Font Size
+        self.user_font_size_spin = QSpinBox()
+        self.user_font_size_spin.setRange(6, 72)
+        self.user_font_size_spin.setValue(10)
+        user_font_layout.addRow("Font Size:", self.user_font_size_spin)
+
+        # User Input Font Weight
+        self.user_font_weight_combo = QComboBox()
+        self.user_font_weight_combo.addItems(["normal", "bold"])
+        user_font_layout.addRow("Font Weight:", self.user_font_weight_combo)
+
+        # User Input Font Style
+        self.user_font_style_combo = QComboBox()
+        self.user_font_style_combo.addItems(["normal", "italic"])
+        user_font_layout.addRow("Font Style:", self.user_font_style_combo)
+
+        layout.addWidget(user_font_group)
+
+        # Font Preview Group
+        preview_group = QGroupBox("Preview")
+        preview_layout = QVBoxLayout(preview_group)
+
+        self.ai_preview_label = QLabel("AI Response: This is how AI responses will look.")
+        self.ai_preview_label.setStyleSheet("padding: 10px; border: 1px solid #555; background-color: #2a2a2a;")
+        preview_layout.addWidget(self.ai_preview_label)
+
+        self.user_preview_label = QLabel("User Input: This is how your input will look.")
+        self.user_preview_label.setStyleSheet("padding: 10px; border: 1px solid #555; background-color: #2a2a2a;")
+        preview_layout.addWidget(self.user_preview_label)
+
+        layout.addWidget(preview_group)
+
+        # Connect font change events to preview updates
+        self.ai_font_family_combo.currentTextChanged.connect(self._update_font_previews)
+        self.ai_font_size_spin.valueChanged.connect(self._update_font_previews)
+        self.ai_font_weight_combo.currentTextChanged.connect(self._update_font_previews)
+        self.ai_font_style_combo.currentTextChanged.connect(self._update_font_previews)
+        
+        self.user_font_family_combo.currentTextChanged.connect(self._update_font_previews)
+        self.user_font_size_spin.valueChanged.connect(self._update_font_previews)
+        self.user_font_weight_combo.currentTextChanged.connect(self._update_font_previews)
+        self.user_font_style_combo.currentTextChanged.connect(self._update_font_previews)
+
+        layout.addStretch()
+        self.tab_widget.addTab(tab, "Fonts")
+    
+    def _update_font_previews(self):
+        """Update font preview labels when font settings change."""
+        try:
+            # Create AI response font
+            ai_font = QFont()
+            ai_font.setFamily(self.ai_font_family_combo.currentText())
+            ai_font.setPointSize(self.ai_font_size_spin.value())
+            ai_font.setBold(self.ai_font_weight_combo.currentText() == "bold")
+            ai_font.setItalic(self.ai_font_style_combo.currentText() == "italic")
+            self.ai_preview_label.setFont(ai_font)
+            
+            # Create user input font
+            user_font = QFont()
+            user_font.setFamily(self.user_font_family_combo.currentText())
+            user_font.setPointSize(self.user_font_size_spin.value())
+            user_font.setBold(self.user_font_weight_combo.currentText() == "bold")
+            user_font.setItalic(self.user_font_style_combo.currentText() == "italic")
+            self.user_preview_label.setFont(user_font)
+            
+        except Exception as e:
+            logger.error(f"Failed to update font previews: {e}")
     
     def _create_advanced_tab(self):
         """Create Advanced settings tab."""
@@ -564,6 +680,20 @@ class SettingsDialog(QDialog):
                 "start_minimized": self.start_minimized_check.isChecked(),
                 "close_to_tray": self.close_to_tray_check.isChecked()
             },
+            "fonts": {
+                "ai_response": {
+                    "family": self.ai_font_family_combo.currentText(),
+                    "size": self.ai_font_size_spin.value(),
+                    "weight": self.ai_font_weight_combo.currentText(),
+                    "style": self.ai_font_style_combo.currentText()
+                },
+                "user_input": {
+                    "family": self.user_font_family_combo.currentText(),
+                    "size": self.user_font_size_spin.value(),
+                    "weight": self.user_font_weight_combo.currentText(),
+                    "style": self.user_font_style_combo.currentText()
+                }
+            },
             "advanced": {
                 "log_level": self.log_level_combo.currentText()
             }
@@ -641,6 +771,48 @@ class SettingsDialog(QDialog):
             if isinstance(value, str):
                 value = value.lower() in ('true', '1', 'yes')
             self.close_to_tray_check.setChecked(bool(value))
+        
+        # Font settings
+        fonts_config = config.get("fonts", {})
+        
+        # AI Response Font
+        ai_font_config = fonts_config.get("ai_response", {})
+        if "family" in ai_font_config:
+            font_family = ai_font_config["family"]
+            index = self.ai_font_family_combo.findText(font_family)
+            if index >= 0:
+                self.ai_font_family_combo.setCurrentIndex(index)
+        if "size" in ai_font_config:
+            self.ai_font_size_spin.setValue(ai_font_config["size"])
+        if "weight" in ai_font_config:
+            weight_index = self.ai_font_weight_combo.findText(ai_font_config["weight"])
+            if weight_index >= 0:
+                self.ai_font_weight_combo.setCurrentIndex(weight_index)
+        if "style" in ai_font_config:
+            style_index = self.ai_font_style_combo.findText(ai_font_config["style"])
+            if style_index >= 0:
+                self.ai_font_style_combo.setCurrentIndex(style_index)
+        
+        # User Input Font
+        user_font_config = fonts_config.get("user_input", {})
+        if "family" in user_font_config:
+            font_family = user_font_config["family"]
+            index = self.user_font_family_combo.findText(font_family)
+            if index >= 0:
+                self.user_font_family_combo.setCurrentIndex(index)
+        if "size" in user_font_config:
+            self.user_font_size_spin.setValue(user_font_config["size"])
+        if "weight" in user_font_config:
+            weight_index = self.user_font_weight_combo.findText(user_font_config["weight"])
+            if weight_index >= 0:
+                self.user_font_weight_combo.setCurrentIndex(weight_index)
+        if "style" in user_font_config:
+            style_index = self.user_font_style_combo.findText(user_font_config["style"])
+            if style_index >= 0:
+                self.user_font_style_combo.setCurrentIndex(style_index)
+        
+        # Update font previews after loading
+        self._update_font_previews()
         
         # Advanced settings
         advanced_config = config.get("advanced", {})
@@ -756,6 +928,17 @@ class SettingsDialog(QDialog):
             logger.info(f"💾 Settings storage complete: {saved_count} items saved")
         else:
             logger.warning("⚠️  No settings manager available - settings not persisted")
+        
+        # Update font service with new font settings
+        if "fonts" in config:
+            fonts_config = config["fonts"]
+            if "ai_response" in fonts_config:
+                ai_font = fonts_config["ai_response"]
+                font_service.update_font_config('ai_response', **ai_font)
+            if "user_input" in fonts_config:
+                user_font = fonts_config["user_input"]
+                font_service.update_font_config('user_input', **user_font)
+            logger.info("✅ Font service updated with new font settings")
         
         # Emit signal with detailed config
         logger.info(f"📡 Emitting settings_applied signal with {len(config)} categories")

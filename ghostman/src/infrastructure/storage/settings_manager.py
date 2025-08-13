@@ -55,6 +55,20 @@ class SettingsManager:
         'interface': {  # new namespace for percent-based values
             'opacity': 90  # percent (10-100)
         },
+        'fonts': {
+            'ai_response': {
+                'family': 'Segoe UI',  # Font family for AI responses
+                'size': 11,            # Font size in points
+                'weight': 'normal',    # Font weight: normal, bold
+                'style': 'normal'      # Font style: normal, italic
+            },
+            'user_input': {
+                'family': 'Consolas',  # Font family for user input
+                'size': 10,            # Font size in points  
+                'weight': 'normal',    # Font weight: normal, bold
+                'style': 'normal'      # Font style: normal, italic
+            }
+        },
         'resize': {
             'enabled': True,  # Master enable/disable for resize functionality
             'border_width': 8,  # Resize border width in pixels
