@@ -140,7 +140,7 @@ class StartupService:
                 preamble_lines.append(custom_preamble)
             else:
                 # Default preamble
-                preamble_lines.append("💬 Ghostman AI Assistant")
+                preamble_lines.append("💬 I am Spector your AI Assistant")
                 preamble_lines.append("Type your message or 'help' for commands")
         
         return "\n".join(preamble_lines)
