@@ -57,6 +57,7 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
     # Signals
     closed = pyqtSignal()
     command_entered = pyqtSignal(str)
+    window_moved = pyqtSignal(QPoint)
     
     # Resize signals (from mixin)
     resize_started = pyqtSignal(object)  # HitZone
@@ -153,7 +154,7 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
         except Exception as e:
             logger.warning(f"Failed to toggle REPL resize: {e}")
     
-    def toggle_resize_system(self, use_simple_arrows: bool = None):
+    def toggle_resize_system(self, use_simple_arrows: Optional[bool] = None):
         """Toggle between simple arrow and traditional resize systems."""
         if use_simple_arrows is None:
             use_simple_arrows = not self._use_simple_arrows
@@ -251,6 +252,10 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
         super().moveEvent(event)
         # Save state after move
         self.save_current_window_state()
+        try:
+            self.window_moved.emit(self.pos())
+        except Exception:
+            pass
     
     def closeEvent(self, event: QCloseEvent):
         """Handle window close event."""
@@ -354,6 +359,18 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
         self.move(final_pos)
         
         logger.debug(f'FloatingREPL positioned at: {final_pos}')
+
+    def move_attached(self, avatar_pos: QPoint, offset: QPoint, screen_geometry):
+        """Move REPL based on avatar position plus offset, clamped to screen."""
+        try:
+            target = avatar_pos + offset
+            x = max(screen_geometry.left() + 5, min(target.x(), screen_geometry.right() - self.width() - 5))
+            y = max(screen_geometry.top() + 5, min(target.y(), screen_geometry.bottom() - self.height() - 5))
+            final = QPoint(x, y)
+            self.move(final)
+            logger.debug(f"REPL moved (attached) to: {final} (offset {offset})")
+        except Exception as e:
+            logger.error(f"Failed move_attached: {e}")
     
     def show_and_activate(self):
         """Show the window and bring it to front."""
