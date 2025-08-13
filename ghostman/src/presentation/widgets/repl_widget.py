@@ -24,10 +24,10 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
     QLineEdit, QPushButton, QLabel, QFrame, QComboBox,
     QToolButton, QMenu, QProgressBar, QListWidget,
-    QListWidgetItem, QApplication, QMessageBox, QDialog
+    QListWidgetItem, QApplication, QMessageBox, QDialog, QCheckBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread, QObject, QSize, pyqtSlot
-from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QColor, QPalette, QIcon, QPixmap, QAction
+from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QTextCharFormat, QColor, QPalette, QIcon, QPixmap, QAction
 
 # Import startup service for preamble
 from ...application.startup_service import startup_service
@@ -868,6 +868,30 @@ class REPLWidget(QWidget):
         )
         self.attach_btn.clicked.connect(self._on_attach_toggle_clicked)
         title_layout.addWidget(self.attach_btn)
+        
+        # Search button
+        search_btn = QToolButton()
+        search_btn.setText("🔍")
+        search_btn.setToolTip("Search conversations (Ctrl+F)")
+        search_btn.clicked.connect(self._toggle_search)
+        search_btn.setStyleSheet("""
+            QToolButton {
+                background-color: rgba(255, 255, 255, 0.15);
+                color: white;
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                border-radius: 4px;
+                font-size: 14px;
+                padding: 2px 6px;
+            }
+            QToolButton:hover {
+                background-color: rgba(255, 255, 255, 0.25);
+                border: 1px solid rgba(255, 255, 255, 0.5);
+            }
+            QToolButton:pressed {
+                background-color: rgba(255, 255, 255, 0.35);
+            }
+        """)
+        title_layout.addWidget(search_btn)
 
         # Move/Resize arrow toggle button
         self.move_btn = QToolButton()
@@ -901,6 +925,114 @@ class REPLWidget(QWidget):
         
         parent_layout.addWidget(self.title_frame)
 
+    def _init_search_bar(self, parent_layout):
+        """Initialize in-conversation search bar."""
+        # Search bar frame (initially hidden)
+        self.search_frame = QFrame()
+        self.search_frame.setVisible(False)
+        self.search_frame.setStyleSheet("""
+            QFrame {
+                background-color: rgba(40, 40, 40, 0.9);
+                border: 1px solid rgba(255, 165, 0, 0.5);
+                border-radius: 4px;
+                margin: 2px;
+            }
+        """)
+        
+        search_layout = QHBoxLayout(self.search_frame)
+        search_layout.setContentsMargins(8, 4, 8, 4)
+        search_layout.setSpacing(6)
+        
+        # Search icon/label
+        search_icon = QLabel("🔍")
+        search_layout.addWidget(search_icon)
+        
+        # Search input
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search in conversation...")
+        self.search_input.textChanged.connect(self._on_search_text_changed)
+        self.search_input.returnPressed.connect(self._search_next)
+        search_layout.addWidget(self.search_input)
+        
+        # Search navigation buttons
+        self.search_prev_btn = QPushButton("↑")
+        self.search_prev_btn.setToolTip("Previous match")
+        self.search_prev_btn.setFixedSize(30, 25)
+        self.search_prev_btn.clicked.connect(self._search_previous)
+        search_layout.addWidget(self.search_prev_btn)
+        
+        self.search_next_btn = QPushButton("↓")
+        self.search_next_btn.setToolTip("Next match")
+        self.search_next_btn.setFixedSize(30, 25)
+        self.search_next_btn.clicked.connect(self._search_next)
+        search_layout.addWidget(self.search_next_btn)
+        
+        # Search results label
+        self.search_status_label = QLabel("0/0")
+        self.search_status_label.setMinimumWidth(40)
+        self.search_status_label.setStyleSheet("color: #888; font-size: 10px;")
+        search_layout.addWidget(self.search_status_label)
+        
+        # Close search button
+        close_search_btn = QPushButton("✕")
+        close_search_btn.setToolTip("Close search")
+        close_search_btn.setFixedSize(25, 25)
+        close_search_btn.clicked.connect(self._close_search)
+        search_layout.addWidget(close_search_btn)
+        
+        # Style search buttons
+        button_style = """
+            QPushButton {
+                background-color: rgba(255, 255, 255, 0.1);
+                color: white;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 3px;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.2);
+                border-color: rgba(255, 255, 255, 0.4);
+            }
+            QPushButton:pressed {
+                background-color: rgba(255, 255, 255, 0.3);
+            }
+            QPushButton:disabled {
+                background-color: rgba(255, 255, 255, 0.05);
+                color: #666;
+                border-color: rgba(255, 255, 255, 0.1);
+            }
+        """
+        self.search_prev_btn.setStyleSheet(button_style)
+        self.search_next_btn.setStyleSheet(button_style)
+        close_search_btn.setStyleSheet(button_style)
+        
+        # Search input styling
+        self.search_input.setStyleSheet("""
+            QLineEdit {
+                background-color: rgba(30, 30, 30, 0.8);
+                color: #ffffff;
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                padding: 4px 6px;
+                border-radius: 3px;
+                font-size: 11px;
+            }
+            QLineEdit:focus {
+                border-color: #FFA500;
+                background-color: rgba(40, 40, 40, 0.9);
+            }
+        """)
+        
+        # Initialize search state
+        self.current_search_matches = []
+        self.current_search_index = -1
+        self.current_search_query = ""
+        self.search_timer = QTimer()
+        self.search_timer.setSingleShot(True)
+        self.search_timer.timeout.connect(self._perform_conversation_search)
+        self.search_debounce_ms = 300  # Faster debounce for in-conversation search
+        
+        parent_layout.addWidget(self.search_frame)
+    
     def _on_attach_toggle_clicked(self):
         """Emit attach toggle request with current state and update tooltip/icon."""
         attached = self.attach_btn.isChecked()
@@ -1115,6 +1247,9 @@ class REPLWidget(QWidget):
         self.output_display.setFont(ai_font)
         self.output_display.setMinimumHeight(300)
         layout.addWidget(self.output_display, 1)
+        
+        # In-conversation search bar (initially hidden)
+        self._init_search_bar(layout)
         
         # Input area with background styling for prompt
         input_layout = QHBoxLayout()
@@ -1362,6 +1497,20 @@ class REPLWidget(QWidget):
                 return True
         
         return super().eventFilter(obj, event)
+    
+    def keyPressEvent(self, event):
+        """Handle global keyboard shortcuts."""
+        # Ctrl+F to open search
+        if event.key() == Qt.Key.Key_F and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            self._toggle_search()
+            return
+        
+        # Escape to close search if open
+        elif event.key() == Qt.Key.Key_Escape and self.search_frame.isVisible():
+            self._close_search()
+            return
+        
+        super().keyPressEvent(event)
     
     def _navigate_history(self, direction: int):
         """Navigate through command history."""
@@ -2991,6 +3140,250 @@ class REPLWidget(QWidget):
                 
         except Exception as e:
             logger.error(f"Save conversation failed: {e}")
+    
+    def _toggle_search(self):
+        """Toggle search bar visibility."""
+        try:
+            if not hasattr(self, 'search_frame') or not self.search_frame:
+                logger.warning("Search bar not initialized")
+                return
+            
+            if self.search_frame.isVisible():
+                self._close_search()
+            else:
+                # Show search bar and focus on search input
+                self.search_frame.setVisible(True)
+                if hasattr(self, 'search_input'):
+                    self.search_input.setFocus()
+                    self.search_input.selectAll()
+                logger.debug("Search bar opened")
+                
+        except Exception as e:
+            logger.error(f"Failed to toggle search: {e}")
+    
+    def _close_search(self):
+        """Close search bar and clear highlights."""
+        try:
+            if hasattr(self, 'search_frame'):
+                self.search_frame.setVisible(False)
+            
+            # Clear search highlights in conversation display
+            if hasattr(self, 'output_display'):
+                # Clear highlights by refreshing the conversation display
+                self._clear_search_highlights()
+            
+            # Clear search input
+            if hasattr(self, 'search_input'):
+                self.search_input.clear()
+            
+            # Reset search state
+            self.current_search_matches = []
+            self.current_search_index = -1
+            self.current_search_query = ""
+            
+            logger.debug("Search closed and highlights cleared")
+            
+        except Exception as e:
+            logger.error(f"Failed to close search: {e}")
+    
+    def _search_next(self):
+        """Navigate to next search match."""
+        try:
+            if not self.current_search_matches or len(self.current_search_matches) == 0:
+                return
+            
+            # Move to next match
+            self.current_search_index = (self.current_search_index + 1) % len(self.current_search_matches)
+            
+            # Scroll to and highlight current match
+            self._highlight_current_match()
+            
+            # Update search status
+            self.search_status_label.setText(
+                f"{self.current_search_index + 1} of {len(self.current_search_matches)}"
+            )
+            
+            logger.debug(f"Moved to search match {self.current_search_index + 1}/{len(self.current_search_matches)}")
+            
+        except Exception as e:
+            logger.error(f"Failed to navigate to next search match: {e}")
+    
+    def _search_previous(self):
+        """Navigate to previous search match."""
+        try:
+            if not self.current_search_matches or len(self.current_search_matches) == 0:
+                return
+            
+            # Move to previous match
+            self.current_search_index = (self.current_search_index - 1) % len(self.current_search_matches)
+            
+            # Scroll to and highlight current match
+            self._highlight_current_match()
+            
+            # Update search status
+            self.search_status_label.setText(
+                f"{self.current_search_index + 1} of {len(self.current_search_matches)}"
+            )
+            
+            logger.debug(f"Moved to search match {self.current_search_index + 1}/{len(self.current_search_matches)}")
+            
+        except Exception as e:
+            logger.error(f"Failed to navigate to previous search match: {e}")
+    
+    def _perform_conversation_search(self):
+        """Perform search in the current conversation display."""
+        try:
+            if not hasattr(self, 'search_input') or not self.search_input:
+                return
+            
+            query = self.search_input.text().strip()
+            if not query:
+                self._clear_search_highlights()
+                return
+            
+            self.current_search_query = query
+            
+            # Search in conversation display content
+            self._find_matches_in_conversation(query)
+            
+            # Update search navigation
+            if self.current_search_matches:
+                self.current_search_index = 0
+                self._highlight_current_match()
+                
+                # Update search status
+                self.search_status_label.setText(
+                    f"1 of {len(self.current_search_matches)}"
+                )
+            else:
+                self.current_search_index = -1
+                self.search_status_label.setText("No matches")
+            
+            logger.debug(f"Search completed: {len(self.current_search_matches)} matches for '{query}'")
+            
+        except Exception as e:
+            logger.error(f"Failed to perform conversation search: {e}")
+    
+    def _find_matches_in_conversation(self, query: str):
+        """Find all matches of query in current conversation display."""
+        try:
+            self.current_search_matches = []
+            
+            if not hasattr(self, 'output_display') or not self.output_display:
+                return
+            
+            # Get the conversation display text
+            cursor = self.output_display.textCursor()
+            cursor.movePosition(cursor.MoveOperation.Start)
+            
+            # Get full document text
+            document = self.output_display.document()
+            full_text = document.toPlainText()
+            
+            # Simple search for current conversation (case-insensitive by default)
+            import re
+            
+            # Create case-insensitive pattern for simple search
+            pattern = re.compile(re.escape(query), re.IGNORECASE)
+            
+            # Find all matches
+            for match in pattern.finditer(full_text):
+                start_pos = match.start()
+                end_pos = match.end()
+                
+                # Convert to QTextCursor positions
+                cursor.setPosition(start_pos)
+                start_cursor = QTextCursor(cursor)
+                cursor.setPosition(end_pos, cursor.MoveMode.KeepAnchor)
+                end_cursor = QTextCursor(cursor)
+                
+                self.current_search_matches.append({
+                    'start': start_pos,
+                    'end': end_pos,
+                    'text': match.group(),
+                    'cursor': QTextCursor(cursor)
+                })
+            
+            logger.debug(f"Found {len(self.current_search_matches)} matches for '{query}'")
+            
+        except Exception as e:
+            logger.error(f"Failed to find matches in conversation: {e}")
+    
+    def _highlight_current_match(self):
+        """Highlight the current search match and scroll to it."""
+        try:
+            if not self.current_search_matches or self.current_search_index < 0:
+                return
+            
+            match = self.current_search_matches[self.current_search_index]
+            
+            # Clear previous highlights
+            self._clear_search_highlights()
+            
+            # Create highlight format
+            highlight_format = QTextCharFormat()
+            highlight_format.setBackground(QColor("#ffff00"))  # Yellow background
+            highlight_format.setForeground(QColor("#000000"))  # Black text
+            
+            # Apply highlight to current match
+            cursor = self.output_display.textCursor()
+            cursor.setPosition(match['start'])
+            cursor.setPosition(match['end'], cursor.MoveMode.KeepAnchor)
+            cursor.setCharFormat(highlight_format)
+            
+            # Scroll to the match
+            self.output_display.setTextCursor(cursor)
+            self.output_display.ensureCursorVisible()
+            
+            logger.debug(f"Highlighted match at position {match['start']}-{match['end']}")
+            
+        except Exception as e:
+            logger.error(f"Failed to highlight current match: {e}")
+    
+    def _clear_search_highlights(self):
+        """Clear all search highlights from conversation display."""
+        try:
+            if not hasattr(self, 'output_display') or not self.output_display:
+                return
+            
+            # Reset all text formatting to default
+            cursor = self.output_display.textCursor()
+            cursor.select(cursor.SelectionType.Document)
+            
+            # Apply default format
+            default_format = QTextCharFormat()
+            cursor.setCharFormat(default_format)
+            
+            # Move cursor to start
+            cursor.movePosition(cursor.MoveOperation.Start)
+            self.output_display.setTextCursor(cursor)
+            
+            logger.debug("Search highlights cleared")
+            
+        except Exception as e:
+            logger.error(f"Failed to clear search highlights: {e}")
+    
+    def _on_search_text_changed(self, text: str):
+        """Handle search input text changes with debouncing."""
+        try:
+            # Stop any pending search
+            if hasattr(self, 'search_timer'):
+                self.search_timer.stop()
+            
+            # Clear matches if search is empty
+            if not text.strip():
+                self.current_search_matches = []
+                self.current_search_index = -1
+                self._clear_search_highlights()
+                self.search_status_label.setText("0/0")
+                return
+            
+            # Start debounce timer for search-as-you-type
+            if hasattr(self, 'search_timer'):
+                self.search_timer.start(300)  # 300ms debounce
+            
+        except Exception as e:
+            logger.error(f"Failed to handle search text change: {e}")
     
     def shutdown(self):
         """Shutdown the enhanced REPL widget."""
