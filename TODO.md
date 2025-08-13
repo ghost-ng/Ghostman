@@ -6,11 +6,17 @@
 - [x] Test full application workflow with new resize system
 - [x] Set REPL preamble to empty when opening app for first time
 - [x] Test API connection on app start, show error in REPL if not working
-- [ ] Fix conversation export options and test each format
+- [x] Fix conversation export options and test each format
+- [x] Add HTML export option with markdown-to-HTML conversion
+- [x] Fix single message export issue (now exports all messages)
 - [ ] Add search feature in saved conversations dialog
 - [ ] Add search feature in main REPL widget
 
 ## ✅ Recently Completed
+- [x] Fix conversation export options and test each format (JSON, TXT, Markdown, HTML)
+- [x] Add HTML export option with professional markdown-to-HTML conversion
+- [x] Fix single message export issue - now exports all conversation messages
+- [x] Implement markdown-it-py for rich HTML formatting in exports
 - [x] Fix conversation status management (bulletproof active/pinned status)
 - [x] Add comprehensive cleanup system for app shutdown
 - [x] Save unsaved messages to active conversation on exit
