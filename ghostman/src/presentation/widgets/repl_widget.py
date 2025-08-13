@@ -954,6 +954,13 @@ class REPLWidget(QWidget):
         self.search_input.returnPressed.connect(self._search_next)
         search_layout.addWidget(self.search_input)
         
+        # Regex checkbox
+        self.regex_checkbox = QCheckBox(".*")
+        self.regex_checkbox.setToolTip("Use regular expressions")
+        self.regex_checkbox.setFixedSize(35, 25)
+        self.regex_checkbox.stateChanged.connect(self._on_regex_toggled)
+        search_layout.addWidget(self.regex_checkbox)
+        
         # Search navigation buttons
         self.search_prev_btn = QPushButton("↑")
         self.search_prev_btn.setToolTip("Previous match")
@@ -1005,6 +1012,30 @@ class REPLWidget(QWidget):
         self.search_prev_btn.setStyleSheet(button_style)
         self.search_next_btn.setStyleSheet(button_style)
         close_search_btn.setStyleSheet(button_style)
+        
+        # Style regex checkbox
+        self.regex_checkbox.setStyleSheet("""
+            QCheckBox {
+                color: white;
+                spacing: 2px;
+                font-size: 10px;
+                font-weight: bold;
+            }
+            QCheckBox::indicator {
+                width: 14px;
+                height: 14px;
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                border-radius: 2px;
+                background-color: rgba(30, 30, 30, 0.8);
+            }
+            QCheckBox::indicator:checked {
+                background-color: #FFA500;
+                border-color: #FFA500;
+            }
+            QCheckBox::indicator:hover {
+                border-color: rgba(255, 255, 255, 0.5);
+            }
+        """)
         
         # Search input styling
         self.search_input.setStyleSheet("""
@@ -3280,11 +3311,22 @@ class REPLWidget(QWidget):
             document = self.output_display.document()
             full_text = document.toPlainText()
             
-            # Simple search for current conversation (case-insensitive by default)
+            # Search for current conversation with optional regex support
             import re
             
-            # Create case-insensitive pattern for simple search
-            pattern = re.compile(re.escape(query), re.IGNORECASE)
+            try:
+                if hasattr(self, 'regex_checkbox') and self.regex_checkbox.isChecked():
+                    # Use regex pattern directly
+                    pattern = re.compile(query, re.IGNORECASE)
+                else:
+                    # Escape special characters for literal search
+                    pattern = re.compile(re.escape(query), re.IGNORECASE)
+            except re.error as e:
+                # Invalid regex pattern - show error in status
+                if hasattr(self, 'search_status_label'):
+                    self.search_status_label.setText(f"Invalid regex: {str(e)[:20]}...")
+                logger.warning(f"Invalid regex pattern '{query}': {e}")
+                return
             
             # Find all matches
             for match in pattern.finditer(full_text):
@@ -3384,6 +3426,24 @@ class REPLWidget(QWidget):
             
         except Exception as e:
             logger.error(f"Failed to handle search text change: {e}")
+    
+    def _on_regex_toggled(self):
+        """Handle regex checkbox toggle - re-search if there's a query."""
+        try:
+            if self.search_input.text().strip():
+                # Re-perform search with new regex setting
+                self._perform_conversation_search()
+            
+            # Update placeholder text to reflect mode
+            if self.regex_checkbox.isChecked():
+                self.search_input.setPlaceholderText("Search with regex pattern...")
+            else:
+                self.search_input.setPlaceholderText("Search in conversation...")
+                
+            logger.debug(f"Regex mode toggled: {self.regex_checkbox.isChecked()}")
+            
+        except Exception as e:
+            logger.error(f"Failed to handle regex toggle: {e}")
     
     def shutdown(self):
         """Shutdown the enhanced REPL widget."""
