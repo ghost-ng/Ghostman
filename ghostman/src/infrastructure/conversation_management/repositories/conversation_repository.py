@@ -722,3 +722,32 @@ class ConversationRepository:
                 meaningful_messages.append(message)
         
         return len(meaningful_messages) == 0
+    
+    async def update_all_conversations_status(self, new_status: ConversationStatus, exclude_statuses: List[ConversationStatus] = None) -> bool:
+        """
+        Update status for all conversations, optionally excluding certain statuses.
+        This is used for atomic operations like setting only one conversation as active.
+        """
+        try:
+            from sqlalchemy import update
+            
+            with self.db.get_session() as session:
+                # Build query to update all conversations
+                query = update(ConversationModel).values(status=new_status.value, updated_at=datetime.now())
+                
+                # Exclude certain statuses if specified
+                if exclude_statuses:
+                    exclude_values = [status.value for status in exclude_statuses]
+                    query = query.where(~ConversationModel.status.in_(exclude_values))
+                
+                result = session.execute(query)
+                session.commit()
+                
+                updated_count = result.rowcount
+                logger.info(f"✅ Updated {updated_count} conversations to status: {new_status.value}")
+                
+                return True
+                
+        except SQLAlchemyError as e:
+            logger.error(f"❌ Failed to update all conversations status: {e}")
+            return False

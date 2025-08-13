@@ -398,6 +398,58 @@ class ConversationManager:
             except Exception as e:
                 logger.error(f"Status callback error: {e}")
     
+    # --- Status Management ---
+    
+    async def update_conversation_status(self, conversation_id: str, status: 'ConversationStatus') -> bool:
+        """Update conversation status."""
+        if not self._initialized:
+            return False
+        
+        try:
+            # Update via the conversation service
+            success = await self.conversation_service.update_conversation_status(conversation_id, status)
+            if success:
+                self._notify_status("conversation_status_updated", {
+                    "conversation_id": conversation_id,
+                    "status": status.value
+                })
+                logger.debug(f"Updated conversation {conversation_id[:8]}... status to {status.value}")
+            return success
+        except Exception as e:
+            logger.error(f"❌ Failed to update conversation status: {e}")
+            return False
+    
+    def set_conversation_active_simple(self, conversation_id: str) -> bool:
+        """
+        Simple, bulletproof way to set a conversation as active.
+        No async, no complex logic, just works.
+        """
+        if not self._initialized:
+            return False
+        
+        # Use the simple status service
+        if not hasattr(self, '_simple_status'):
+            from ..services.simple_status_service import SimpleStatusService
+            self._simple_status = SimpleStatusService(self.db_manager)
+        
+        success = self._simple_status.set_conversation_active(conversation_id)
+        if success:
+            self._notify_status("conversation_activated", {
+                "conversation_id": conversation_id
+            })
+        return success
+    
+    def get_active_conversation_id_simple(self) -> Optional[str]:
+        """Get active conversation ID - simple way."""
+        if not self._initialized:
+            return None
+            
+        if not hasattr(self, '_simple_status'):
+            from ..services.simple_status_service import SimpleStatusService
+            self._simple_status = SimpleStatusService(self.db_manager)
+        
+        return self._simple_status.get_active_conversation_id()
+    
     # --- Utilities ---
     
     def get_active_conversation_id(self) -> Optional[str]:

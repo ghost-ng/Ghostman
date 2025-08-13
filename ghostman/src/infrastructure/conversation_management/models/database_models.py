@@ -76,6 +76,7 @@ class ConversationModel(Base):
         CheckConstraint("priority BETWEEN -1 AND 1", name='check_priority'),
         Index('idx_conversations_status_updated', 'status', 'updated_at'),
         Index('idx_conversations_category_status', 'category', 'status'),
+        Index('idx_conversations_status_only', 'status'),  # Fast status lookups
     )
     
     @validates('title')

@@ -138,6 +138,57 @@ class ConversationService:
             logger.error(f"❌ Failed to update conversation title: {e}")
             return False
     
+    async def update_conversation_status(self, conversation_id: str, status: 'ConversationStatus') -> bool:
+        """Update conversation status."""
+        try:
+            conversation = await self.get_conversation(conversation_id, include_messages=False)
+            if not conversation:
+                return False
+            
+            conversation.status = status
+            conversation.updated_at = datetime.now()
+            success = await self.repository.update_conversation(conversation)
+            
+            if success:
+                # Notify callbacks
+                for callback in self._conversation_updated_callbacks:
+                    try:
+                        callback(conversation)
+                    except Exception as e:
+                        logger.error(f"Conversation updated callback error: {e}")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to update conversation status: {e}")
+            return False
+    
+    async def set_conversation_as_active(self, conversation_id: str) -> bool:
+        """
+        DEPRECATED: Use ConversationManager.set_conversation_active_simple() instead.
+        
+        Set a conversation as active and ensure all others are pinned.
+        This is an atomic operation that prevents multiple active conversations.
+        """
+        try:
+            logger.info(f"🔄 Setting conversation {conversation_id[:8]}... as active")
+            
+            # First, set all conversations to pinned
+            await self.repository.update_all_conversations_status(ConversationStatus.PINNED, 
+                                                                 exclude_statuses=[ConversationStatus.DELETED, ConversationStatus.ARCHIVED])
+            
+            # Then, set the target conversation as active
+            success = await self.update_conversation_status(conversation_id, ConversationStatus.ACTIVE)
+            
+            if success:
+                logger.info(f"✅ Conversation {conversation_id[:8]}... is now active, all others are pinned")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to set conversation as active: {e}")
+            return False
+    
     async def add_message_to_conversation(
         self,
         conversation_id: str,

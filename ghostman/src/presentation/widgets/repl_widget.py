@@ -518,6 +518,7 @@ class REPLWidget(QWidget):
     export_requested = pyqtSignal(str)  # conversation_id
     browse_requested = pyqtSignal()
     settings_requested = pyqtSignal()
+    attach_toggle_requested = pyqtSignal(bool)
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -649,20 +650,31 @@ class REPLWidget(QWidget):
         
         try:
             logger.debug("Loading conversations from conversation manager...")
-            # Get recent active conversations
-            conversations = await self.conversation_manager.get_recent_conversations(limit=20)
+            # Get recent conversations (all statuses) for the conversation UI
+            conversations = await self.conversation_manager.list_conversations(limit=20)
             logger.debug(f"Loaded {len(conversations)} conversations")
             self.conversations_list = conversations
             
-            # Set current conversation to most recent
+            # Set current conversation to the active one (if any), otherwise most recent
+            self.current_conversation = None
             if conversations:
-                self.current_conversation = conversations[0]
-                logger.debug(f"Set current conversation to most recent: {conversations[0].title}")
+                # Find the active conversation
+                active_conversations = [c for c in conversations if c.status == ConversationStatus.ACTIVE]
+                if active_conversations:
+                    self.current_conversation = active_conversations[0]
+                    logger.debug(f"Set current conversation to active: {self.current_conversation.title}")
+                else:
+                    # If no active conversation, set the most recent as current
+                    self.current_conversation = conversations[0] 
+                    logger.debug(f"No active conversation found, set current to most recent: {conversations[0].title}")
             else:
-                self.current_conversation = None
                 logger.debug("No conversations found - no current conversation set")
             
             logger.info(f"📋 Loaded {len(conversations)} conversations")
+            
+            # Simple UI refresh
+            if hasattr(self, '_refresh_conversation_selector'):
+                QTimer.singleShot(50, self._refresh_conversation_selector)
             
         except Exception as e:
             logger.error(f"❌ Failed to load conversations: {e}", exc_info=True)
@@ -818,6 +830,45 @@ class REPLWidget(QWidget):
         #self._style_title_button(chat_btn)
         title_layout.addWidget(chat_btn)
         
+        # Attach (snap to avatar) toggle button
+        self.attach_btn = QToolButton()
+        self.attach_btn.setText("🔗")  # Link icon when attached
+        self.attach_btn.setToolTip("Attach REPL to avatar (toggle)")
+        self.attach_btn.setCheckable(True)
+        # Initialize from settings if available
+        try:
+            from ...infrastructure.storage.settings_manager import settings as _settings
+            initial_attached = bool(_settings.get('interface.repl_attached', False))
+            self.attach_btn.setChecked(initial_attached)
+        except Exception:
+            initial_attached = False
+        # Style: highlight when checked
+        self.attach_btn.setStyleSheet(
+            """
+            QToolButton {
+                background-color: rgba(255, 255, 255, 0.15);
+                color: white;
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                border-radius: 4px;
+                font-size: 14px;
+                padding: 2px 6px;
+            }
+            QToolButton:hover {
+                background-color: rgba(255, 255, 255, 0.25);
+                border: 1px solid rgba(255, 255, 255, 0.5);
+            }
+            QToolButton:pressed {
+                background-color: rgba(255, 255, 255, 0.35);
+            }
+            QToolButton:checked {
+                background-color: rgba(76, 175, 80, 0.5); /* green tint when attached */
+                border: 1px solid rgba(76, 175, 80, 0.8);
+            }
+            """
+        )
+        self.attach_btn.clicked.connect(self._on_attach_toggle_clicked)
+        title_layout.addWidget(self.attach_btn)
+
         # Move/Resize arrow toggle button
         self.move_btn = QToolButton()
         self.move_btn.setText("✥")  # Four arrows symbol
@@ -849,6 +900,22 @@ class REPLWidget(QWidget):
         title_layout.addWidget(minimize_btn)
         
         parent_layout.addWidget(self.title_frame)
+
+    def _on_attach_toggle_clicked(self):
+        """Emit attach toggle request with current state and update tooltip/icon."""
+        attached = self.attach_btn.isChecked()
+        # Update visual feedback
+        self.attach_btn.setText("🔗" if attached else "⛓")
+        self.attach_btn.setToolTip("Attached to avatar" if attached else "Detached from avatar")
+        # Emit to parent window to handle positioning/persistence
+        self.attach_toggle_requested.emit(attached)
+
+    def set_attach_state(self, attached: bool):
+        """Externally update the attach button state and visuals."""
+        if hasattr(self, 'attach_btn'):
+            self.attach_btn.setChecked(bool(attached))
+            self.attach_btn.setText("🔗" if attached else "⛓")
+            self.attach_btn.setToolTip("Attached to avatar" if attached else "Detached from avatar")
     
     def _init_conversation_toolbar(self, parent_layout):
         """Initialize conversation management toolbar."""
@@ -2174,15 +2241,17 @@ class REPLWidget(QWidget):
             if self.current_conversation and self._has_unsaved_messages():
                 await self._save_current_conversation_before_switch()
             
+            # Simple atomic database operation: set this conversation as active, all others as pinned
+            success = self.conversation_manager.set_conversation_active_simple(conversation_id)
+            if not success:
+                logger.error(f"❌ Failed to set conversation {conversation_id} as active in database")
+                self.append_output("❌ Failed to restore conversation", "error")
+                return
+            
             # Load the conversation from database with messages
             conversation = await self.conversation_manager.get_conversation(conversation_id, include_messages=True)
             
             if conversation:
-                # Mark previous conversation as inactive and new one as active
-                if self.current_conversation:
-                    await self._update_conversation_status(self.current_conversation.id, ConversationStatus.PINNED)
-                await self._update_conversation_status(conversation.id, ConversationStatus.ACTIVE)
-                
                 # Set as current conversation and update AI context
                 self.current_conversation = conversation
                 logger.info(f"✅ Restored conversation: {conversation.title}")
@@ -2221,24 +2290,6 @@ class REPLWidget(QWidget):
                 # Update idle detector
                 self.idle_detector.reset_activity(conversation_id)
                 
-                # Update AI service context if available - CRITICAL for maintaining context
-                if hasattr(conversation, 'messages') and conversation.messages:
-                    # Get or initialize conversation-aware AI service from conversation manager
-                    ai_service = None
-                    if self.conversation_manager:
-                        # Call get_ai_service() which will initialize it if needed
-                        ai_service = self.conversation_manager.get_ai_service()
-                    
-                    if ai_service:
-                        logger.info(f"🔄 Setting AI service to restored conversation context")
-                        
-                        # Use the proper method to set conversation and load context
-                        ai_service.set_current_conversation(conversation_id)
-                        
-                        logger.info(f"✅ AI service context restored for conversation: {conversation_id}")
-                    else:
-                        logger.warning("⚠️  No AI service available for context rebuilding")
-                
             else:
                 logger.warning(f"⚠️  Conversation {conversation_id} not found in database")
                 self.append_output(f"⚠️ Could not restore conversation {conversation_id[:8]}... (not found)", "warning")
@@ -2274,13 +2325,55 @@ class REPLWidget(QWidget):
             logger.error(f"Failed to save current conversation before switch: {e}")
     
     async def _update_conversation_status(self, conversation_id: str, status: 'ConversationStatus'):
-        """Update conversation status in database."""
+        """Update conversation status in database and refresh UI."""
         try:
             if self.conversation_manager:
                 await self.conversation_manager.update_conversation_status(conversation_id, status)
                 logger.debug(f"Updated conversation {conversation_id[:8]}... status to {status.value}")
+                
+                # Update the conversation object in our local list
+                for i, conv in enumerate(self.conversations_list):
+                    if conv.id == conversation_id:
+                        # Update the status in the local object
+                        conv.status = status
+                        break
+                
+                # Refresh the conversation selector UI
+                self._refresh_conversation_selector()
+                
         except Exception as e:
             logger.error(f"Failed to update conversation status: {e}")
+    
+    def _refresh_conversation_selector(self):
+        """Refresh the conversation selector dropdown with updated status icons."""
+        try:
+            if not self.conversations_list:
+                return
+            
+            # Store current selection
+            current_id = None
+            if self.conversation_selector.currentIndex() >= 0:
+                current_id = self.conversation_selector.itemData(self.conversation_selector.currentIndex())
+            
+            # Clear and rebuild the selector
+            self.conversation_selector.clear()
+            
+            # Add "New Conversation" option
+            self.conversation_selector.addItem("🆕 New Conversation", None)
+            
+            # Add all conversations with updated status icons
+            for i, conversation in enumerate(self.conversations_list):
+                display_name = f"{self._get_status_icon(conversation)} {conversation.title}"
+                self.conversation_selector.addItem(display_name, conversation.id)
+                
+                # Restore selection if this was the previously selected conversation
+                if conversation.id == current_id:
+                    self.conversation_selector.setCurrentIndex(i + 1)  # +1 because of "New Conversation" item
+            
+            logger.debug("Conversation selector refreshed with updated status icons")
+            
+        except Exception as e:
+            logger.error(f"Failed to refresh conversation selector: {e}")
     
     def show_bulk_delete_dialog(self):
         """Show dialog for bulk deletion of conversations with multi-select."""

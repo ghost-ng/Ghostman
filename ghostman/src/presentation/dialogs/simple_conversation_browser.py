@@ -53,13 +53,14 @@ class ConversationLoader(QObject):
             asyncio.set_event_loop(loop)
             
             try:
-                # Get recent conversations from database
+                # Get all conversations from database (like REPL widget does)
                 recent = loop.run_until_complete(
-                    self.conversation_manager.conversation_service.get_recent_conversations(limit=100)
+                    self.conversation_manager.list_conversations(limit=100)
                 )
                 conversations.extend(recent)
                 
-                # Note: Current active conversation is already included in recent conversations
+                # Just display conversations as they are in the database
+                logger.debug(f"Loaded conversations with database statuses")
                 
                 self.conversations_loaded.emit(conversations)
                 
@@ -373,16 +374,19 @@ class SimpleConversationBrowser(QDialog):
         reply = QMessageBox.question(
             self,
             "Restore Conversation",
-            f"Restore '{conversation.title}' to REPL?\n\n"
-            "This will replace the current conversation.",
+            f"Switch to '{conversation.title}'?\n\n"
+            "This will become your active conversation and any current unsaved messages will be saved first.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )
         
         if reply == QMessageBox.StandardButton.Yes:
             self.conversation_restore_requested.emit(conversation.id)
-            self.status_label.setText(f"Restored: {conversation.title}")
+            self.status_label.setText(f"Switched to: {conversation.title}")
             logger.info(f"Conversation restore requested: {conversation.id}")
+            
+            # Simple refresh after a short delay (let the database update complete)
+            QTimer.singleShot(300, self._load_conversations)
     
     def _on_delete_clicked(self):
         """Handle delete button click."""
