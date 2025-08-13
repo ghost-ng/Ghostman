@@ -493,6 +493,12 @@ class SimpleConversationBrowser(QDialog):
         md_btn.clicked.connect(dialog.accept)
         layout.addWidget(md_btn)
         
+        # HTML button
+        html_btn = QPushButton("HTML (.html)")
+        html_btn.clicked.connect(lambda: self._export_conversation(conversation, ExportFormat.HTML))
+        html_btn.clicked.connect(dialog.accept)
+        layout.addWidget(html_btn)
+        
         # Cancel button
         cancel_btn = QPushButton("Cancel")
         cancel_btn.clicked.connect(dialog.reject)
@@ -507,7 +513,8 @@ class SimpleConversationBrowser(QDialog):
             ext_map = {
                 ExportFormat.TXT: "txt",
                 ExportFormat.JSON: "json", 
-                ExportFormat.MARKDOWN: "md"
+                ExportFormat.MARKDOWN: "md",
+                ExportFormat.HTML: "html"
             }
             ext = ext_map.get(format, "txt")
             
@@ -532,12 +539,22 @@ class SimpleConversationBrowser(QDialog):
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
             
+            # Load the full conversation with all messages
+            full_conversation = loop.run_until_complete(
+                self.conversation_manager.get_conversation(conversation.id, include_messages=True)
+            )
+            
+            if not full_conversation:
+                self.status_label.setText("Failed to load conversation")
+                QMessageBox.warning(self, "Export Failed", "Could not load conversation data")
+                return
+            
             # The export_service.export_conversation expects (conversation, file_path, format)
             success = loop.run_until_complete(
                 self.export_service.export_conversation(
-                    conversation,  # Pass the conversation object
-                    filename,      # File path
-                    format.value   # Format as string
+                    full_conversation,  # Pass the full conversation with all messages
+                    filename,           # File path
+                    format.value        # Format as string
                 )
             )
             

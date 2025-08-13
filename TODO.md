@@ -1,14 +1,22 @@
 # Ghostman TODO
 
 ## 🚀 Current Sprint
-- [ ] Review and merge PR #2 (grip-based resize system)
-- [ ] Clean up test files from resize development
-- [ ] Test full application workflow with new resize system
-- [ ] Set REPL preamble to empty when opening app for first time
-- [ ] Test API connection on app start, show error in REPL if not working
+- [x] Review and merge PR #2 (grip-based resize system)
+- [x] Clean up test files from resize development
+- [x] Test full application workflow with new resize system
+- [x] Set REPL preamble to empty when opening app for first time
+- [x] Test API connection on app start, show error in REPL if not working
 - [ ] Fix conversation export options and test each format
+- [ ] Add search feature in saved conversations dialog
+- [ ] Add search feature in main REPL widget
 
 ## ✅ Recently Completed
+- [x] Fix conversation status management (bulletproof active/pinned status)
+- [x] Add comprehensive cleanup system for app shutdown
+- [x] Save unsaved messages to active conversation on exit
+- [x] Implement SimpleStatusService for direct SQL status updates
+- [x] Add database indexing for performance
+- [x] Fix user-friendly confirmation dialogs
 - [x] Implement grip-based resize system for frameless windows
 - [x] Add move toggle button (✥) to REPL title bar
 - [x] Fix click-blocking issues with resize overlays

@@ -45,8 +45,17 @@ class ExportService:
                 # It's already a conversation object
                 conversation = conversation_or_id
             
-            # Export based on format
-            export_format = ExportFormat(format.lower())
+            # Export based on format - normalize format string
+            format_map = {
+                'markdown': 'md',
+                'md': 'md',
+                'txt': 'txt',
+                'text': 'txt',
+                'json': 'json',
+                'html': 'html'
+            }
+            normalized_format = format_map.get(format.lower(), format.lower())
+            export_format = ExportFormat(normalized_format)
             
             if export_format == ExportFormat.JSON:
                 return await self._export_json([conversation], file_path, include_metadata)
@@ -61,7 +70,8 @@ class ExportService:
                 return False
                 
         except Exception as e:
-            logger.error(f"❌ Export failed for {conversation_id}: {e}")
+            conv_id = conversation_or_id if isinstance(conversation_or_id, str) else conversation.id
+            logger.error(f"❌ Export failed for {conv_id}: {e}")
             return False
     
     async def export_conversations(
@@ -86,8 +96,17 @@ class ExportService:
                 logger.error("No conversations found to export")
                 return False
             
-            # Export based on format
-            export_format = ExportFormat(format.lower())
+            # Export based on format - normalize format string
+            format_map = {
+                'markdown': 'md',
+                'md': 'md',
+                'txt': 'txt',
+                'text': 'txt',
+                'json': 'json',
+                'html': 'html'
+            }
+            normalized_format = format_map.get(format.lower(), format.lower())
+            export_format = ExportFormat(normalized_format)
             
             if export_format == ExportFormat.JSON:
                 return await self._export_json(conversations, file_path, include_metadata)
@@ -283,33 +302,43 @@ class ExportService:
         """Export conversations to HTML format."""
         try:
             with open(file_path, 'w', encoding='utf-8') as f:
-                # Write HTML header
-                f.write("""<!DOCTYPE html>
+                # Write HTML header (escape braces for CSS)
+                html_template = """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ghostman Conversation Export</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; margin: 40px; background: #f5f5f5; }
-        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        h1 { color: #333; border-bottom: 3px solid #007bff; padding-bottom: 10px; }
-        h2 { color: #444; margin-top: 40px; padding: 15px; background: #f8f9fa; border-radius: 5px; border-left: 4px solid #007bff; }
-        .metadata { background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0; }
-        .metadata table { width: 100%; border-collapse: collapse; }
-        .metadata td { padding: 8px; border-bottom: 1px solid #dee2e6; }
-        .metadata td:first-child { font-weight: bold; width: 150px; }
-        .message { margin: 20px 0; padding: 15px; border-radius: 5px; position: relative; }
-        .system { background: #e9ecef; border-left: 4px solid #6c757d; }
-        .user { background: #e7f3ff; border-left: 4px solid #007bff; }
-        .assistant { background: #e8f5e8; border-left: 4px solid #28a745; }
-        .message-header { font-weight: bold; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
-        .timestamp { font-size: 0.9em; color: #666; }
-        .content { white-space: pre-wrap; }
-        .summary { background: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #ffc107; }
-        .tags { margin: 10px 0; }
-        .tag { background: #007bff; color: white; padding: 3px 8px; border-radius: 12px; font-size: 0.8em; margin-right: 5px; }
-        .conversation-separator { border: none; height: 2px; background: linear-gradient(to right, #007bff, transparent); margin: 40px 0; }
+        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.6; margin: 40px; background: #f5f5f5; }}
+        .container {{ max-width: 1200px; margin: 0 auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+        h1 {{ color: #333; border-bottom: 3px solid #007bff; padding-bottom: 10px; }}
+        h2 {{ color: #444; margin-top: 40px; padding: 15px; background: #f8f9fa; border-radius: 5px; border-left: 4px solid #007bff; }}
+        .metadata {{ background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0; }}
+        .metadata table {{ width: 100%; border-collapse: collapse; }}
+        .metadata td {{ padding: 8px; border-bottom: 1px solid #dee2e6; }}
+        .metadata td:first-child {{ font-weight: bold; width: 150px; }}
+        .message {{ margin: 20px 0; padding: 15px; border-radius: 5px; position: relative; }}
+        .system {{ background: #e9ecef; border-left: 4px solid #6c757d; }}
+        .user {{ background: #e7f3ff; border-left: 4px solid #007bff; }}
+        .assistant {{ background: #e8f5e8; border-left: 4px solid #28a745; }}
+        .message-header {{ font-weight: bold; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }}
+        .timestamp {{ font-size: 0.9em; color: #666; }}
+        .content {{ white-space: pre-wrap; line-height: 1.6; }}
+        .content h1, .content h2, .content h3 {{ margin: 15px 0 10px 0; color: #333; }}
+        .content code {{ background: #f4f4f4; padding: 2px 5px; border-radius: 3px; font-family: monospace; }}
+        .content pre {{ background: #f4f4f4; padding: 10px; border-radius: 5px; overflow-x: auto; }}
+        .content pre code {{ background: none; padding: 0; }}
+        .content blockquote {{ border-left: 4px solid #ddd; margin: 10px 0; padding-left: 15px; color: #666; }}
+        .content ul, .content ol {{ margin: 10px 0; padding-left: 30px; }}
+        .content strong {{ font-weight: 600; color: #000; }}
+        .content em {{ font-style: italic; }}
+        .content a {{ color: #007bff; text-decoration: none; }}
+        .content a:hover {{ text-decoration: underline; }}
+        .summary {{ background: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #ffc107; }}
+        .tags {{ margin: 10px 0; }}
+        .tag {{ background: #007bff; color: white; padding: 3px 8px; border-radius: 12px; font-size: 0.8em; margin-right: 5px; }}
+        .conversation-separator {{ border: none; height: 2px; background: linear-gradient(to right, #007bff, transparent); margin: 40px 0; }}
     </style>
 </head>
 <body>
@@ -325,7 +354,8 @@ class ExportService:
 """.format(
                     export_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     conversation_count=len(conversations)
-                ))
+                )
+                f.write(html_template)
                 
                 for i, conversation in enumerate(conversations, 1):
                     # Conversation section
@@ -353,7 +383,9 @@ class ExportService:
                     if conversation.summary:
                         f.write('        <div class="summary">\n')
                         f.write('            <h3>📝 Summary</h3>\n')
-                        f.write(f'            <p>{self._escape_html(conversation.summary.summary)}</p>\n')
+                        # Convert markdown in summary too
+                        summary_html = self._markdown_to_html(conversation.summary.summary)
+                        f.write(f'            <div>{summary_html}</div>\n')
                         if conversation.summary.key_topics:
                             topics_html = ''.join(f'<span class="tag">{self._escape_html(topic)}</span>' for topic in conversation.summary.key_topics)
                             f.write(f'            <p><strong>Key Topics:</strong> {topics_html}</p>\n')
@@ -370,7 +402,9 @@ class ExportService:
                         f.write(f'                <span>{role_icon} {message.role.value.upper()}</span>\n')
                         f.write(f'                <span class="timestamp">{timestamp}</span>\n')
                         f.write(f'            </div>\n')
-                        f.write(f'            <div class="content">{self._escape_html(message.content)}</div>\n')
+                        # Convert markdown to HTML for better formatting
+                        html_content = self._markdown_to_html(message.content)
+                        f.write(f'            <div class="content">{html_content}</div>\n')
                         f.write(f'        </div>\n')
                     
                     if i < len(conversations):
@@ -395,7 +429,83 @@ class ExportService:
                 .replace('<', '&lt;')
                 .replace('>', '&gt;')
                 .replace('"', '&quot;')
-                .replace("'", '&#x27;'))
+                .replace("'", '&#39;'))
+    
+    def _markdown_to_html(self, text: str) -> str:
+        """Convert markdown text to HTML using markdown-it-py."""
+        try:
+            from markdown_it import MarkdownIt
+            from markdown_it.plugins import plugin
+            
+            # Create markdown-it instance with plugins
+            md = (
+                MarkdownIt("commonmark")
+                .enable(["table", "strikethrough"])  # Enable additional features
+                .enable_many(["replacements", "smartquotes"])  # Typography improvements
+            )
+            
+            # Configure for safety
+            md.options.update({
+                "html": False,  # Don't allow raw HTML for safety
+                "linkify": True,  # Auto-linkify URLs
+                "typographer": True,  # Smart quotes and dashes
+                "breaks": True,  # Convert \n to <br>
+            })
+            
+            # Convert markdown to HTML
+            html = md.render(text)
+            return html
+            
+        except ImportError:
+            # If markdown-it-py not available, try the standard markdown library
+            try:
+                import markdown
+                md = markdown.Markdown(extensions=[
+                    'fenced_code',
+                    'tables', 
+                    'nl2br',
+                    'sane_lists'
+                ])
+                return md.convert(text)
+            except ImportError:
+                # Fall back to basic conversion
+                return self._basic_markdown_to_html(text)
+    
+    def _basic_markdown_to_html(self, text: str) -> str:
+        """Basic markdown to HTML conversion without library."""
+        import re
+        
+        # Escape HTML first
+        html = self._escape_html(text)
+        
+        # Convert code blocks
+        html = re.sub(r'```(\w+)?\n(.*?)\n```', r'<pre><code class="\1">\2</code></pre>', html, flags=re.DOTALL)
+        html = re.sub(r'`([^`]+)`', r'<code>\1</code>', html)
+        
+        # Convert headers
+        html = re.sub(r'^### (.+)$', r'<h3>\1</h3>', html, flags=re.MULTILINE)
+        html = re.sub(r'^## (.+)$', r'<h2>\1</h2>', html, flags=re.MULTILINE)
+        html = re.sub(r'^# (.+)$', r'<h1>\1</h1>', html, flags=re.MULTILINE)
+        
+        # Convert bold and italic
+        html = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', html)
+        html = re.sub(r'\*([^*]+)\*', r'<em>\1</em>', html)
+        
+        # Convert lists
+        html = re.sub(r'^- (.+)$', r'<li>\1</li>', html, flags=re.MULTILINE)
+        html = re.sub(r'(<li>.*</li>\n?)+', r'<ul>\g<0></ul>', html, flags=re.DOTALL)
+        
+        # Convert blockquotes
+        html = re.sub(r'^> (.+)$', r'<blockquote>\1</blockquote>', html, flags=re.MULTILINE)
+        
+        # Convert links
+        html = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', html)
+        
+        # Convert line breaks
+        html = html.replace('\n\n', '</p><p>').replace('\n', '<br>')
+        html = f'<p>{html}</p>'
+        
+        return html
     
     async def get_export_formats(self) -> List[Dict[str, str]]:
         """Get available export formats."""
