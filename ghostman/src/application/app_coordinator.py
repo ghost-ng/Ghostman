@@ -166,8 +166,8 @@ class AppCoordinator(QObject):
         
         self.app_shutdown.emit()
         
-        # Save current conversation before shutdown
-        self._save_current_conversation_state()
+        # Run cleanup operations
+        self._cleanup_on_shutdown()
         
         # Hide UI components
         if self._main_window:
@@ -183,7 +183,7 @@ class AppCoordinator(QObject):
         logger.info("Ghostman application shutdown complete")
     
     def _save_current_conversation_state(self):
-        """Save the currently active conversation with auto-generated title."""
+        """Save the currently active conversation with unsaved messages and auto-generated title."""
         try:
             if (self._main_window and 
                 hasattr(self._main_window, 'floating_repl') and
@@ -198,9 +198,16 @@ class AppCoordinator(QObject):
                     settings.set('conversation.last_active_id', current_conversation_id)
                     logger.info(f"💾 Saved active conversation ID: {current_conversation_id}")
                     
+                    # Check for unsaved messages first
+                    repl_widget = self._main_window.floating_repl.repl_widget
+                    has_unsaved = False
+                    if hasattr(repl_widget, '_has_unsaved_messages'):
+                        has_unsaved = repl_widget._has_unsaved_messages()
+                        if has_unsaved:
+                            logger.info("💾 Detected unsaved messages, will save before shutdown")
+                    
                     # Get the AI service integration to save the conversation and generate title
                     ai_service = None
-                    repl_widget = self._main_window.floating_repl.repl_widget
                     if hasattr(repl_widget, 'conversation_manager') and repl_widget.conversation_manager:
                         ai_service = repl_widget.conversation_manager.get_ai_service()
                     
@@ -214,7 +221,8 @@ class AppCoordinator(QObject):
                                 loop = asyncio.new_event_loop()
                                 asyncio.set_event_loop(loop)
                                 try:
-                                    # Save current conversation context first
+                                    # Save current conversation context and any unsaved messages
+                                    logger.info("💾 Saving current conversation context and any unsaved messages...")
                                     loop.run_until_complete(ai_service._save_current_conversation())
                                     
                                     # Generate and update title if conversation has substantial content
@@ -262,6 +270,59 @@ class AppCoordinator(QObject):
                 
         except Exception as e:
             logger.error(f"❌ Failed to save current conversation state: {e}")
+    
+    def _cleanup_on_shutdown(self):
+        """Comprehensive cleanup operations on application shutdown."""
+        logger.info("🧹 Running comprehensive cleanup operations...")
+        
+        try:
+            # 1. Save current conversation with any unsaved messages
+            self._save_current_conversation_state()
+            
+            # 2. Shutdown conversation manager if available
+            if (self._main_window and 
+                hasattr(self._main_window, 'floating_repl') and
+                self._main_window.floating_repl and
+                hasattr(self._main_window.floating_repl, 'repl_widget')):
+                
+                repl_widget = self._main_window.floating_repl.repl_widget
+                
+                # Shutdown conversation manager
+                if hasattr(repl_widget, 'conversation_manager') and repl_widget.conversation_manager:
+                    try:
+                        repl_widget.conversation_manager.shutdown()
+                        logger.info("✅ Conversation manager shutdown complete")
+                    except Exception as e:
+                        logger.error(f"❌ Failed to shutdown conversation manager: {e}")
+                
+                # Stop any running timers in REPL widget
+                if hasattr(repl_widget, 'autosave_timer') and repl_widget.autosave_timer:
+                    try:
+                        repl_widget.autosave_timer.stop()
+                        logger.debug("✅ Autosave timer stopped")
+                    except Exception as e:
+                        logger.error(f"❌ Failed to stop autosave timer: {e}")
+            
+            # 3. Clear any temporary data
+            try:
+                import tempfile
+                import os
+                temp_dir = tempfile.gettempdir()
+                ghostman_temp_files = [f for f in os.listdir(temp_dir) if f.startswith('ghostman_')]
+                for temp_file in ghostman_temp_files:
+                    try:
+                        os.remove(os.path.join(temp_dir, temp_file))
+                    except:
+                        pass  # Ignore errors cleaning temp files
+                if ghostman_temp_files:
+                    logger.debug(f"✅ Cleaned up {len(ghostman_temp_files)} temporary files")
+            except Exception as e:
+                logger.debug(f"Temp file cleanup failed: {e}")
+            
+            logger.info("✅ Cleanup operations completed successfully")
+            
+        except Exception as e:
+            logger.error(f"❌ Error during cleanup operations: {e}")
     
     def _restore_current_conversation_state(self):
         """Restore the last active conversation from settings."""

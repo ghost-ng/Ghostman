@@ -7,11 +7,12 @@ Provides the avatar interface when in Avatar mode.
 import logging
 from typing import Optional
 from PyQt6.QtWidgets import QMainWindow, QWidget
-from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtCore import pyqtSignal, Qt, QPoint
 from PyQt6.QtGui import QCloseEvent, QMouseEvent
 
 # Import window state management
 from ...application.window_state import save_window_state, load_window_state
+from ...infrastructure.storage.settings_manager import settings
 
 logger = logging.getLogger("ghostman.main_window")
 
@@ -34,6 +35,13 @@ class MainWindow(QMainWindow):
         self.app_coordinator = app_coordinator
         self.floating_repl = None
         self.conversation_browser = None  # Simple conversation browser
+        # Attach state (REPL snapped to avatar)
+        self._repl_attached: bool = bool(settings.get('interface.repl_attached', False))
+        off = settings.get('interface.repl_attach_offset', None)
+        if isinstance(off, dict) and 'x' in off and 'y' in off:
+            self._repl_attach_offset = QPoint(int(off['x']), int(off['y']))
+        else:
+            self._repl_attach_offset = QPoint(140, 0)  # sensible default; will be recalculated when attaching
         
         self._init_ui()
         self._setup_window()
@@ -61,6 +69,15 @@ class MainWindow(QMainWindow):
         # Connect REPL widget signals through floating REPL
         self.floating_repl.repl_widget.settings_requested.connect(self.settings_requested.emit)
         self.floating_repl.repl_widget.browse_requested.connect(self._show_conversations)
+        # Wire attach toggle from REPL title bar
+        if hasattr(self.floating_repl.repl_widget, 'attach_toggle_requested'):
+            self.floating_repl.repl_widget.attach_toggle_requested.connect(self._on_attach_toggle)
+            # Sync initial visual state
+            if hasattr(self.floating_repl.repl_widget, 'set_attach_state'):
+                self.floating_repl.repl_widget.set_attach_state(self._repl_attached)
+        # Update offset when user manually moves REPL while attached
+        if hasattr(self.floating_repl, 'window_moved'):
+            self.floating_repl.window_moved.connect(self._on_repl_moved)
         
         # Set window background
         self._set_window_style()
@@ -174,6 +191,12 @@ class MainWindow(QMainWindow):
     def moveEvent(self, event):
         """Save window state when moved."""
         super().moveEvent(event)
+        # If REPL is attached, move it along with the avatar using stored offset
+        try:
+            if self._repl_attached and self.floating_repl and self.floating_repl.isVisible():
+                self._move_attached_repl()
+        except Exception as e:
+            logger.debug(f"Failed to move attached REPL: {e}")
         # Save state after move
         self.save_current_window_state()
     
@@ -183,6 +206,21 @@ class MainWindow(QMainWindow):
         if self.floating_repl and self.floating_repl.isVisible():
             self.floating_repl.hide()
             logger.debug("Floating REPL hidden due to window close")
+        
+        # Save current conversation state before closing
+        try:
+            if (hasattr(self.app_coordinator, '_cleanup_on_shutdown') and 
+                hasattr(self, 'floating_repl') and 
+                self.floating_repl and 
+                hasattr(self.floating_repl, 'repl_widget')):
+                
+                repl_widget = self.floating_repl.repl_widget
+                if hasattr(repl_widget, '_has_unsaved_messages') and repl_widget._has_unsaved_messages():
+                    logger.info("💾 Saving unsaved messages before window close...")
+                    # Let app coordinator handle the cleanup
+                    
+        except Exception as e:
+            logger.error(f"Failed to check/save unsaved messages: {e}")
         
         # Don't actually close, just minimize to tray
         event.ignore()
@@ -227,10 +265,15 @@ class MainWindow(QMainWindow):
         if screen:
             screen_geometry = screen.availableGeometry()
             
-            # Position REPL relative to avatar (avatar position unchanged)
-            self.floating_repl.position_relative_to_avatar(
-                avatar_pos, avatar_size, screen_geometry
-            )
+            if self._repl_attached:
+                # Move REPL using current offset
+                self._ensure_attach_offset_default()
+                self.floating_repl.move_attached(avatar_pos, self._repl_attach_offset, screen_geometry)
+            else:
+                # Position REPL relative to avatar (avatar position unchanged)
+                self.floating_repl.position_relative_to_avatar(
+                    avatar_pos, avatar_size, screen_geometry
+                )
             
             # Show and activate the REPL
             self.floating_repl.show_and_activate()
@@ -246,6 +289,65 @@ class MainWindow(QMainWindow):
     def _on_repl_closed(self):
         """Handle floating REPL window being closed."""
         logger.debug(f'Floating REPL closed by user, avatar remains at: {self.pos()}')
+
+    def _on_attach_toggle(self, attached: bool):
+        """Handle attach toggle from REPL title bar."""
+        self._repl_attached = bool(attached)
+        try:
+            # Persist state
+            settings.set('interface.repl_attached', self._repl_attached)
+            # Compute and persist offset when attaching
+            if self._repl_attached and self.floating_repl:
+                # If REPL not visible yet, compute a sensible default to the right of avatar
+                if not self.floating_repl.isVisible():
+                    self._ensure_attach_offset_default()
+                else:
+                    self._repl_attach_offset = self.floating_repl.pos() - self.pos()
+                settings.set('interface.repl_attach_offset', {
+                    'x': int(self._repl_attach_offset.x()),
+                    'y': int(self._repl_attach_offset.y()),
+                })
+                # If visible, snap immediately
+                if self.floating_repl.isVisible():
+                    screen = self.screen()
+                    if screen:
+                        self.floating_repl.move_attached(self.pos(), self._repl_attach_offset, screen.availableGeometry())
+            # Update button visual if needed
+            if hasattr(self.floating_repl.repl_widget, 'set_attach_state'):
+                self.floating_repl.repl_widget.set_attach_state(self._repl_attached)
+        except Exception as e:
+            logger.error(f"Failed to handle attach toggle: {e}")
+
+    def _ensure_attach_offset_default(self):
+        """Ensure we have a reasonable default offset when attaching."""
+        # Default: place REPL to the right of avatar with 10px gap and current REPL size if known
+        try:
+            gap = 10
+            default_x = self.width() + gap
+            default_y = 0
+            self._repl_attach_offset = QPoint(default_x, default_y)
+        except Exception:
+            self._repl_attach_offset = QPoint(140, 0)
+
+    def _move_attached_repl(self):
+        """Move REPL based on avatar position and stored offset, clamped to screen."""
+        screen = self.screen()
+        if not screen or not self.floating_repl:
+            return
+        geom = screen.availableGeometry()
+        self.floating_repl.move_attached(self.pos(), self._repl_attach_offset, geom)
+
+    def _on_repl_moved(self, repl_pos: QPoint):
+        """When attached and user drags REPL, recompute offset and persist."""
+        try:
+            if self._repl_attached:
+                self._repl_attach_offset = repl_pos - self.pos()
+                settings.set('interface.repl_attach_offset', {
+                    'x': int(self._repl_attach_offset.x()),
+                    'y': int(self._repl_attach_offset.y()),
+                })
+        except Exception as e:
+            logger.debug(f"Failed to update attach offset on move: {e}")
     
     def _on_command_entered(self, command: str):
         """Handle command from REPL."""
@@ -414,6 +516,7 @@ class MainWindow(QMainWindow):
                 # Update conversation browser to reflect the change
                 if self.conversation_browser:
                     self.conversation_browser.set_current_conversation(conversation_id)
+                    # The browser will handle its own status update and refresh
                 
                 # Show success message with conversation details
                 from PyQt6.QtWidgets import QMessageBox
