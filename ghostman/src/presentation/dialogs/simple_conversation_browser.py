@@ -10,7 +10,7 @@ from datetime import datetime
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget, 
     QTableWidgetItem, QHeaderView, QLabel, QMessageBox, QProgressBar,
-    QFileDialog, QWidget, QAbstractItemView
+    QFileDialog, QWidget, QAbstractItemView, QLineEdit, QCheckBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread, QObject, QTimer
 from PyQt6.QtGui import QFont
@@ -21,12 +21,16 @@ try:
     from ...infrastructure.conversation_management.models.conversation import Conversation
     from ...infrastructure.conversation_management.services.export_service import ExportService
     from ...infrastructure.conversation_management.models.enums import ConversationStatus, ExportFormat
+    from ...infrastructure.conversation_management.models.search import SearchQuery, SearchResults, SearchResult
 except ImportError:
     ConversationManager = None
     Conversation = None
     ExportService = None
     ConversationStatus = None
     ExportFormat = None
+    SearchQuery = None
+    SearchResults = None
+    SearchResult = None
 
 logger = logging.getLogger("ghostman.simple_conversation_browser")
 
@@ -69,6 +73,128 @@ class ConversationLoader(QObject):
             
         except Exception as e:
             self.error_occurred.emit(str(e))
+
+
+class ConversationSearchWorker(QObject):
+    """Background conversation search worker."""
+    
+    search_completed = pyqtSignal(object)  # SearchResults
+    search_error = pyqtSignal(str)
+    
+    def __init__(self, conversation_manager: ConversationManager, search_query: str, use_regex: bool = False, case_sensitive: bool = False):
+        super().__init__()
+        self.conversation_manager = conversation_manager
+        self.search_query = search_query
+        self.use_regex = use_regex
+        self.case_sensitive = case_sensitive
+    
+    def perform_search(self):
+        """Perform search in background thread."""
+        try:
+            if not SearchQuery:
+                self.search_error.emit("Search functionality not available")
+                return
+            
+            # Create new event loop for this thread
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            try:
+                if self.use_regex:
+                    # Perform regex search across all conversations
+                    search_results = loop.run_until_complete(
+                        self._perform_regex_search()
+                    )
+                else:
+                    # Create search query - simple text search with reasonable limit
+                    query = SearchQuery.create_simple_text_search(
+                        text=self.search_query.strip(),
+                        limit=50
+                    )
+                    
+                    # Perform search using conversation service
+                    search_results = loop.run_until_complete(
+                        self.conversation_manager.conversation_service.search_conversations(query)
+                    )
+                
+                logger.debug(f"Search completed: {len(search_results.results)} results for '{self.search_query}' (regex: {self.use_regex})")
+                self.search_completed.emit(search_results)
+                
+            finally:
+                loop.close()
+            
+        except Exception as e:
+            logger.error(f"Search failed: {e}")
+            self.search_error.emit(str(e))
+    
+    async def _perform_regex_search(self):
+        """Perform regex search across all conversations."""
+        try:
+            import re
+            
+            # Validate regex pattern
+            flags = 0 if self.case_sensitive else re.IGNORECASE
+            try:
+                pattern = re.compile(self.search_query.strip(), flags)
+            except re.error as e:
+                raise Exception(f"Invalid regex pattern: {e}")
+            
+            # Get all conversations
+            all_conversations = await self.conversation_manager.list_conversations(limit=1000)
+            
+            # Search through conversations
+            matching_results = []
+            
+            for conversation in all_conversations:
+                match_found = False
+                match_count = 0
+                
+                # Search in title
+                if pattern.search(conversation.title):
+                    match_found = True
+                    match_count += len(pattern.findall(conversation.title))
+                
+                # Load conversation with messages for content search
+                if not match_found:
+                    full_conversation = await self.conversation_manager.get_conversation(
+                        conversation.id, include_messages=True
+                    )
+                    
+                    if full_conversation and full_conversation.messages:
+                        # Search in message content
+                        for message in full_conversation.messages:
+                            if pattern.search(message.content):
+                                match_found = True
+                                match_count += len(pattern.findall(message.content))
+                
+                if match_found:
+                    # Create search result
+                    result = SearchResult(
+                        conversation_id=conversation.id,
+                        title=conversation.title,
+                        match_count=match_count,
+                        relevance_score=match_count / len(conversation.title + " " + (conversation.summary or "")),
+                        matched_fields=["title", "content"] if match_count > 0 else ["title"]
+                    )
+                    matching_results.append(result)
+            
+            # Sort by relevance
+            matching_results.sort(key=lambda x: x.relevance_score or 0, reverse=True)
+            
+            # Create search results object
+            from ...infrastructure.conversation_management.models.search import SearchResults
+            return SearchResults(
+                results=matching_results,
+                total_count=len(matching_results),
+                query_time_ms=0.0,  # We're not tracking time for regex search
+                offset=0,
+                limit=len(matching_results)
+            )
+            
+        except Exception as e:
+            logger.error(f"Regex search failed: {e}")
+            raise
 
 
 class SimpleConversationBrowser(QDialog):
@@ -123,6 +249,55 @@ class SimpleConversationBrowser(QDialog):
         header_layout.addWidget(refresh_btn)
         
         layout.addLayout(header_layout)
+        
+        # Search bar
+        search_layout = QHBoxLayout()
+        
+        search_label = QLabel("Search:")
+        search_label.setMinimumWidth(50)
+        search_layout.addWidget(search_label)
+        
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search conversations by title, content, or tags...")
+        self.search_input.textChanged.connect(self._on_search_text_changed)
+        self.search_input.returnPressed.connect(self._perform_search)
+        search_layout.addWidget(self.search_input)
+        
+        # Search button  
+        search_btn = QPushButton("Search")
+        search_btn.clicked.connect(self._perform_search)
+        search_layout.addWidget(search_btn)
+        
+        # Clear search button
+        clear_btn = QPushButton("Clear")
+        clear_btn.clicked.connect(self._clear_search)
+        search_layout.addWidget(clear_btn)
+        
+        layout.addLayout(search_layout)
+        
+        # Search options
+        options_layout = QHBoxLayout()
+        
+        # Regex checkbox
+        self.regex_checkbox = QCheckBox("Use Regular Expressions")
+        self.regex_checkbox.setToolTip("Enable regex pattern matching for advanced search")
+        options_layout.addWidget(self.regex_checkbox)
+        
+        # Case sensitive checkbox
+        self.case_checkbox = QCheckBox("Case Sensitive")
+        self.case_checkbox.setToolTip("Match case exactly")
+        options_layout.addWidget(self.case_checkbox)
+        
+        options_layout.addStretch()
+        layout.addLayout(options_layout)
+        
+        # Search state management
+        self.search_timer = QTimer()
+        self.search_timer.setSingleShot(True)
+        self.search_timer.timeout.connect(self._perform_search)
+        self.search_debounce_ms = 500  # 500ms debounce
+        self.current_search_query = ""
+        self.is_searching = False
         
         # Conversations table
         self.conversations_table = QTableWidget()
@@ -284,18 +459,27 @@ class SimpleConversationBrowser(QDialog):
         self.loader_thread.wait()
     
     def _populate_table(self):
-        """Populate conversations table."""
+        """Populate conversations table with optional search highlighting."""
         self.conversations_table.setRowCount(len(self.conversations))
         
         for row, conversation in enumerate(self.conversations):
-            # Title (with current indicator)
+            # Title (with current indicator and search highlighting)
             title = conversation.title
             if self._is_current_conversation(conversation):
                 title = f"⭐ {title}"
             
+            # Apply search highlighting if we have an active search
+            if self.current_search_query and len(self.current_search_query) >= 2:
+                title = self._highlight_search_text(title, self.current_search_query)
+            
             title_item = QTableWidgetItem(title)
             if self._is_current_conversation(conversation):
                 title_item.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+            
+            # Add visual indicator for search results
+            if self.current_search_query:
+                title_item.setToolTip(f"Search result for: {self.current_search_query}")
+            
             self.conversations_table.setItem(row, 0, title_item)
             
             # Status
@@ -574,6 +758,125 @@ class SimpleConversationBrowser(QDialog):
             self.status_label.setText(f"Export error: {e}")
             QMessageBox.warning(self, "Export Error", f"Export failed:\n{e}")
     
+    def _on_search_text_changed(self, text: str):
+        """Handle search input text changes with debouncing."""
+        self.current_search_query = text.strip()
+        
+        # If search is empty, reload all conversations
+        if not self.current_search_query:
+            self._clear_search()
+            return
+        
+        # Stop any pending search
+        self.search_timer.stop()
+        
+        # Start debounce timer for search-as-you-type
+        if len(self.current_search_query) >= 2:  # Minimum 2 characters
+            self.search_timer.start(self.search_debounce_ms)
+    
+    def _perform_search(self):
+        """Perform the actual search operation."""
+        if not self.conversation_manager or not self.current_search_query:
+            return
+        
+        if self.is_searching:
+            return  # Prevent concurrent searches
+        
+        self.is_searching = True
+        self.status_label.setText(f"Searching for '{self.current_search_query}'...")
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setMaximum(0)  # Indeterminate
+        
+        # Perform search in background thread
+        self.search_thread = QThread()
+        self.search_worker = ConversationSearchWorker(
+            self.conversation_manager, 
+            self.current_search_query,
+            use_regex=self.regex_checkbox.isChecked(),
+            case_sensitive=self.case_checkbox.isChecked()
+        )
+        self.search_worker.moveToThread(self.search_thread)
+        
+        # Connect signals
+        self.search_worker.search_completed.connect(self._on_search_completed)
+        self.search_worker.search_error.connect(self._on_search_error)
+        self.search_thread.started.connect(self.search_worker.perform_search)
+        self.search_thread.finished.connect(self.search_thread.deleteLater)
+        
+        self.search_thread.start()
+    
+    def _on_search_completed(self, search_results):
+        """Handle search completion."""
+        self.is_searching = False
+        self.progress_bar.setVisible(False)
+        
+        # Convert search results to conversations for display
+        result_conversations = []
+        for result in search_results.results:
+            # Find the conversation in our current list
+            for conv in self.conversations:
+                if conv.id == result.conversation_id:
+                    result_conversations.append(conv)
+                    break
+        
+        # Update conversations list with search results
+        self.conversations = result_conversations
+        self._populate_table()
+        
+        # Update status
+        result_count = len(result_conversations)
+        query_time = search_results.query_time_ms or 0
+        self.status_label.setText(
+            f"Found {result_count} conversations in {query_time:.1f}ms"
+        )
+        
+        logger.info(f"Search completed: {result_count} results")
+        
+        # Clean up thread
+        self.search_thread.quit()
+        self.search_thread.wait()
+    
+    def _on_search_error(self, error: str):
+        """Handle search error."""
+        self.is_searching = False
+        self.progress_bar.setVisible(False)
+        self.status_label.setText(f"Search error: {error}")
+        
+        logger.error(f"Search failed: {error}")
+        QMessageBox.warning(self, "Search Error", f"Search failed:\n{error}")
+        
+        # Clean up thread
+        self.search_thread.quit()
+        self.search_thread.wait()
+    
+    def _clear_search(self):
+        """Clear search and reload all conversations."""
+        self.search_input.clear()
+        self.current_search_query = ""
+        self.search_timer.stop()
+        
+        if self.is_searching:
+            return  # Don't interfere with ongoing search
+        
+        # Reload all conversations
+        self._load_conversations()
+    
+    def _highlight_search_text(self, text: str, search_query: str) -> str:
+        """Highlight search terms in text for visual feedback."""
+        if not search_query or not text:
+            return text
+        
+        # Simple case-insensitive highlighting
+        # Note: QTableWidgetItem doesn't support rich text, so we use a simple marker
+        # In a real implementation, you might want to use a custom delegate for rich text
+        import re
+        pattern = re.compile(re.escape(search_query), re.IGNORECASE)
+        
+        # For table items, we'll use a simple prefix marker
+        if pattern.search(text):
+            return f"🔍 {text}"
+        return text
+    
     def _apply_styles(self):
         """Apply dark theme styles."""
         self.setStyleSheet("""
@@ -621,6 +924,33 @@ class SimpleConversationBrowser(QDialog):
             QTableWidget::item:selected {
                 background-color: #4CAF50;
                 color: #ffffff;
+            }
+            QLineEdit {
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border: 1px solid #555555;
+                padding: 6px 8px;
+                border-radius: 4px;
+                font-size: 11px;
+            }
+            QLineEdit:focus {
+                border-color: #4CAF50;
+                background-color: #252525;
+            }
+            QCheckBox {
+                color: #ffffff;
+                spacing: 5px;
+            }
+            QCheckBox::indicator {
+                width: 16px;
+                height: 16px;
+                border: 1px solid #555555;
+                border-radius: 3px;
+                background-color: #1e1e1e;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #4CAF50;
+                border-color: #4CAF50;
             }
             QProgressBar {
                 border: 1px solid #555555;
