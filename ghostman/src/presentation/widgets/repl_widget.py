@@ -77,9 +77,10 @@ class MarkdownRenderer:
     - Performance-optimized for long conversations
     """
     
-    def __init__(self):
+    def __init__(self, theme_manager=None):
         """Initialize the markdown renderer with optimized configuration."""
         self.markdown_available = MARKDOWN_AVAILABLE
+        self.theme_manager = theme_manager
         
         if self.markdown_available:
             # Configure markdown processor with AI-friendly extensions
@@ -104,7 +105,37 @@ class MarkdownRenderer:
                 tab_length=4
             )
         
-        # Color scheme for different message types
+        # Update color scheme based on theme or use defaults
+        self._update_color_scheme()
+        
+        # Performance cache for repeated renders (small cache to avoid memory issues)
+        self._render_cache = {}
+        self._cache_max_size = 100
+    
+    def _update_color_scheme(self):
+        """Update color scheme based on current theme or use defaults."""
+        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+            try:
+                colors = self.theme_manager.current_theme
+                # Use theme colors for message types
+                self.color_scheme = {
+                    "normal": colors.text_primary,
+                    "input": colors.primary,  # User input in primary color
+                    "response": colors.text_primary,  # AI response in text color  
+                    "system": colors.text_tertiary,  # System messages in muted text
+                    "info": colors.status_info,
+                    "warning": colors.status_warning,
+                    "error": colors.status_error,
+                    "divider": colors.separator
+                }
+            except Exception as e:
+                logger.warning(f"Failed to get theme colors: {e}, using defaults")
+                self._set_default_colors()
+        else:
+            self._set_default_colors()
+    
+    def _set_default_colors(self):
+        """Set default color scheme when theme system is not available."""
         self.color_scheme = {
             "normal": "#f0f0f0",
             "input": "#00ff00", 
@@ -115,10 +146,6 @@ class MarkdownRenderer:
             "error": "#ff0000",
             "divider": "#666666"
         }
-        
-        # Performance cache for repeated renders (small cache to avoid memory issues)
-        self._render_cache = {}
-        self._cache_max_size = 100
     
     def render(self, text: str, style: str = "normal", force_plain: bool = False) -> str:
         """
@@ -383,6 +410,11 @@ class MarkdownRenderer:
         """Clear the render cache to free memory."""
         self._render_cache.clear()
     
+    def update_theme(self):
+        """Update color scheme when theme changes."""
+        self._update_color_scheme()
+        self.clear_cache()  # Clear cache to force re-render with new colors
+    
     def get_cache_stats(self) -> Dict[str, int]:
         """Get cache statistics for debugging/monitoring."""
         return {
@@ -603,6 +635,12 @@ class REPLWidget(QWidget):
             # Update all styling when theme changes
             self._apply_styles()
             self._update_component_themes()
+            
+            # Update markdown renderer to use new theme colors
+            if hasattr(self, '_markdown_renderer'):
+                self._markdown_renderer.update_theme()
+                logger.debug("Markdown renderer updated with new theme colors")
+            
             logger.debug("REPL widget styles updated for new theme")
         except Exception as e:
             logger.error(f"Failed to update REPL widget theme: {e}")
@@ -1548,9 +1586,10 @@ class REPLWidget(QWidget):
             input_font = font_service.create_qfont('user_input')
             self.command_input.setFont(input_font)
             
-            # Clear markdown renderer cache so it uses new fonts
+            # Clear markdown renderer cache so it uses new fonts and update theme
             if hasattr(self, '_markdown_renderer'):
                 self._markdown_renderer.clear_cache()
+                self._markdown_renderer.update_theme()
             
             # Re-render existing content with new fonts
             self._refresh_existing_output()
@@ -2114,7 +2153,7 @@ class REPLWidget(QWidget):
             force_plain: If True, bypasses markdown processing for plain text rendering
         """
         if not hasattr(self, '_markdown_renderer'):
-            self._markdown_renderer = MarkdownRenderer()
+            self._markdown_renderer = MarkdownRenderer(self.theme_manager)
         
         cursor = self.output_display.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)

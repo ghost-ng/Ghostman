@@ -53,7 +53,8 @@
       "Bash(./venv/Scripts/pip.exe install markdown-it-py)",
       "Bash(grep:*)",
       "Bash(cat:*)",
-      "Bash(\"./venv/Scripts/python.exe\" test_settings_theme.py)"
+      "Bash(\"./venv/Scripts/python.exe\" test_settings_theme.py)",
+      "Bash(git commit:*)"
     ],
     "deny": []
   }

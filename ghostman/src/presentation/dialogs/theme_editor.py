@@ -51,7 +51,7 @@ class ColorPickerWidget(QWidget):
             'secondary': 'Secondary Brand',
             'secondary_hover': 'Secondary Hover',
             'background_primary': 'Main Background',
-            'background_secondary': 'Panel Background',
+            'background_secondary': 'REPL Panel Background',
             'background_tertiary': 'Card Background',
             'background_overlay': 'Modal Overlay',
             'text_primary': 'Main Text',
@@ -81,7 +81,7 @@ class ColorPickerWidget(QWidget):
             'secondary': 'Secondary accent color for variety',
             'secondary_hover': 'Darker shade for secondary hover states',
             'background_primary': 'Main window background color',
-            'background_secondary': 'Background for panels and sidebars',
+            'background_secondary': 'Background for the REPL chat panel and sidebars',
             'background_tertiary': 'Background for cards and elevated elements',
             'background_overlay': 'Semi-transparent overlay for modals',
             'text_primary': 'Main text color for headings and content',
@@ -665,13 +665,13 @@ class ThemeEditorDialog(QDialog):
                     ("primary", "Primary Brand", "Your main brand color for buttons and highlights"),
                     ("secondary", "Secondary Brand", "Accent color for variety and contrast"),
                     ("background_primary", "Main Background", "The primary background color of your application"),
+                    ("background_secondary", "REPL Panel Background", "Background for the REPL chat panel and sidebars"),
                     ("text_primary", "Main Text", "Primary text color for headings and content")
                 ]
             },
             "Backgrounds & Surfaces": {
                 "description": "Different background shades that create depth and hierarchy",
                 "colors": [
-                    ("background_secondary", "Panel Background", "Background for sidebars and panels"),
                     ("background_tertiary", "Card Background", "Background for cards and elevated elements"),
                     ("background_overlay", "Modal Overlay", "Semi-transparent overlay for dialogs")
                 ]
