@@ -686,6 +686,13 @@ class REPLWidget(QWidget):
             # Update all QToolButton widgets with new theme
             self._update_all_tool_buttons()
             
+            # Update prompt label with new theme
+            if hasattr(self, 'prompt_label'):
+                # Check if we're currently in processing mode
+                current_text = self.prompt_label.text()
+                is_processing = current_text != ">>>"
+                self._style_prompt_label(normal=not is_processing, processing=is_processing)
+            
         except Exception as e:
             logger.error(f"Failed to update component themes: {e}")
     
@@ -711,6 +718,57 @@ class REPLWidget(QWidget):
             
         except Exception as e:
             logger.error(f"Failed to update tool buttons: {e}")
+    
+    def _style_prompt_label(self, normal=True, processing=False):
+        """Style the prompt label with theme-aware colors."""
+        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+            colors = self.theme_manager.current_theme
+            
+            if processing:
+                # Use warning/accent color for processing state
+                text_color = colors.status_warning
+                bg_color = f"rgba({self._hex_to_rgb(colors.status_warning)}, 0.15)"
+            else:
+                # Use primary color for normal state 
+                text_color = colors.primary
+                bg_color = f"rgba({self._hex_to_rgb(colors.primary)}, 0.15)"
+                
+            self.prompt_label.setStyleSheet(f"""
+                color: {text_color}; 
+                font-family: Segoe UI Emoji, Consolas, monospace; 
+                font-size: 11px;
+                background-color: {bg_color};
+                border-radius: 3px;
+                padding: 5px 8px;
+                margin-right: 5px;
+            """)
+        else:
+            # Fallback to original colors
+            if processing:
+                color = "#ff8c00"
+                bg_color = "rgba(255, 140, 0, 0.1)"
+            else:
+                color = "#00ff00"
+                bg_color = "rgba(0, 255, 0, 0.1)"
+                
+            self.prompt_label.setStyleSheet(f"""
+                color: {color}; 
+                font-family: Segoe UI Emoji, Consolas, monospace; 
+                font-size: 11px;
+                background-color: {bg_color};
+                border-radius: 3px;
+                padding: 5px 8px;
+                margin-right: 5px;
+            """)
+    
+    def _hex_to_rgb(self, hex_color):
+        """Convert hex color to RGB values for rgba()."""
+        if hex_color.startswith('#'):
+            hex_color = hex_color[1:]
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16) 
+        b = int(hex_color[4:6], 16)
+        return f"{r}, {g}, {b}"
     
     def _get_themed_button_style(self, variant="secondary"):
         """Get themed button style string."""
@@ -1496,15 +1554,7 @@ class REPLWidget(QWidget):
         
         # Prompt label with background styling for better visual separation
         self.prompt_label = QLabel(">>>")
-        self.prompt_label.setStyleSheet("""
-            color: #00ff00; 
-            font-family: Segoe UI Emoji, Consolas, monospace; 
-            font-size: 11px;
-            background-color: rgba(0, 255, 0, 0.1);
-            border-radius: 3px;
-            padding: 5px 8px;
-            margin-right: 5px;
-        """)
+        self._style_prompt_label(normal=True)
         input_layout.addWidget(self.prompt_label)
         
         # Command input
@@ -1744,15 +1794,7 @@ class REPLWidget(QWidget):
             if processing:
                 # Show spinner in prompt label
                 self.prompt_label.setText("⠋")  # Spinner character
-                self.prompt_label.setStyleSheet("""
-                    color: #ff8c00; 
-                    font-family: Segoe UI Emoji, Consolas, monospace; 
-                    font-size: 11px;
-                    background-color: rgba(255, 140, 0, 0.1);
-                    border-radius: 3px;
-                    padding: 5px 8px;
-                    margin-right: 5px;
-                """)
+                self._style_prompt_label(normal=False, processing=True)
                 
                 # Optionally add animation (requires QTimer)
                 if not hasattr(self, '_spinner_timer'):
@@ -1769,15 +1811,7 @@ class REPLWidget(QWidget):
                     self._spinner_timer.stop()
                 
                 self.prompt_label.setText(">>>")
-                self.prompt_label.setStyleSheet("""
-                    color: #00ff00; 
-                    font-family: Segoe UI Emoji, Consolas, monospace; 
-                    font-size: 11px;
-                    background-color: rgba(0, 255, 0, 0.1);
-                    border-radius: 3px;
-                    padding: 5px 8px;
-                    margin-right: 5px;
-                """)
+                self._style_prompt_label(normal=True, processing=False)
         except Exception as e:
             logger.error(f"Failed to set processing mode: {e}")
     
