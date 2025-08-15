@@ -693,6 +693,9 @@ class REPLWidget(QWidget):
                 is_processing = current_text != ">>>"
                 self._style_prompt_label(normal=not is_processing, processing=is_processing)
             
+            # Refresh toolbar button icons to prevent ellipses
+            self._refresh_toolbar_icons()
+            
         except Exception as e:
             logger.error(f"Failed to update component themes: {e}")
     
@@ -1029,15 +1032,15 @@ class REPLWidget(QWidget):
         title_layout.addWidget(settings_btn)
         
         # Chat/Browse button
-        chat_btn = QToolButton()
-        chat_btn.setText("💬")  # Use text for reliable display
-        chat_btn.setToolTip("Browse conversations (💬)")  # Put emoji in tooltip instead
-        chat_btn.clicked.connect(self._on_chat_clicked)
-        chat_btn.setStyleSheet(self._get_themed_button_style())
+        self.chat_btn = QToolButton()
+        self.chat_btn.setText("💬")  # Use text for reliable display
+        self.chat_btn.setToolTip("Browse conversations (💬)")  # Put emoji in tooltip instead
+        self.chat_btn.clicked.connect(self._on_chat_clicked)
+        self.chat_btn.setStyleSheet(self._get_themed_button_style())
         # Special styling for chat button with more width
-        #chat_btn.setFixedSize(40, 40)  # Wider than normal buttons
-        #self._style_title_button(chat_btn)
-        title_layout.addWidget(chat_btn)
+        #self.chat_btn.setFixedSize(40, 40)  # Wider than normal buttons
+        #self._style_title_button(self.chat_btn)
+        title_layout.addWidget(self.chat_btn)
         
         # Attach (snap to avatar) toggle button
         self.attach_btn = QToolButton()
@@ -1079,11 +1082,11 @@ class REPLWidget(QWidget):
         title_layout.addWidget(self.attach_btn)
         
         # Search button
-        search_btn = QToolButton()
-        search_btn.setText("🔍")
-        search_btn.setToolTip("Search conversations (Ctrl+F)")
-        search_btn.clicked.connect(self._toggle_search)
-        search_btn.setStyleSheet("""
+        self.search_btn = QToolButton()
+        self.search_btn.setText("🔍")
+        self.search_btn.setToolTip("Search conversations (Ctrl+F)")
+        self.search_btn.clicked.connect(self._toggle_search)
+        self.search_btn.setStyleSheet("""
             QToolButton {
                 background-color: rgba(255, 255, 255, 0.15);
                 color: white;
@@ -1100,7 +1103,7 @@ class REPLWidget(QWidget):
                 background-color: rgba(255, 255, 255, 0.35);
             }
         """)
-        title_layout.addWidget(search_btn)
+        title_layout.addWidget(self.search_btn)
 
         # Move/Resize arrow toggle button
         self.move_btn = QToolButton()
@@ -1321,28 +1324,28 @@ class REPLWidget(QWidget):
         toolbar_layout.addWidget(new_conv_btn)
         
         # Browse conversations button
-        browse_btn = QToolButton()
-        browse_btn.setText("📋")
-        browse_btn.setToolTip("Browse conversations")
-        browse_btn.clicked.connect(self.browse_requested.emit)
-        self._style_tool_button(browse_btn)
-        toolbar_layout.addWidget(browse_btn)
+        self.browse_btn = QToolButton()
+        self.browse_btn.setText("📋")
+        self.browse_btn.setToolTip("Browse conversations")
+        self.browse_btn.clicked.connect(self.browse_requested.emit)
+        self._style_tool_button(self.browse_btn)
+        toolbar_layout.addWidget(self.browse_btn)
         
         # Export button
-        export_btn = QToolButton()
-        export_btn.setText("📤")
-        export_btn.setToolTip("Export current conversation")
-        export_btn.clicked.connect(self._on_export_requested)
-        self._style_tool_button(export_btn)
-        toolbar_layout.addWidget(export_btn)
+        self.export_btn = QToolButton()
+        self.export_btn.setText("📤")
+        self.export_btn.setToolTip("Export current conversation")
+        self.export_btn.clicked.connect(self._on_export_requested)
+        self._style_tool_button(self.export_btn)
+        toolbar_layout.addWidget(self.export_btn)
         
         # Settings button
-        settings_btn = QToolButton()
-        settings_btn.setText("⚙️")
-        settings_btn.setToolTip("Conversation settings")
-        settings_btn.clicked.connect(self.settings_requested.emit)
-        self._style_tool_button(settings_btn)
-        toolbar_layout.addWidget(settings_btn)
+        self.settings_btn = QToolButton()
+        self.settings_btn.setText("⚙️")
+        self.settings_btn.setToolTip("Conversation settings")
+        self.settings_btn.clicked.connect(self.settings_requested.emit)
+        self._style_tool_button(self.settings_btn)
+        toolbar_layout.addWidget(self.settings_btn)
         
         toolbar_layout.addStretch()
         
@@ -1531,6 +1534,39 @@ class REPLWidget(QWidget):
                 opacity: 0.8;
             }}
         """)
+    
+    def _refresh_toolbar_icons(self):
+        """Refresh toolbar button icons to prevent ellipses display after theme changes."""
+        try:
+            # Define all toolbar buttons with their emoji icons
+            button_icons = [
+                ('chat_btn', "💬"),
+                ('search_btn', "🔍"),
+                ('browse_btn', "📋"),
+                ('export_btn', "📤"),
+                ('settings_btn', "⚙️"),
+            ]
+            
+            # Refresh each button's emoji text
+            for widget_name, icon_text in button_icons:
+                if hasattr(self, widget_name):
+                    button = getattr(self, widget_name)
+                    if button and hasattr(button, 'setText'):
+                        # Force refresh the emoji text regardless of current state
+                        button.setText("")  # Clear first
+                        button.setText(icon_text)  # Then set emoji
+                        logger.debug(f"Force refreshed toolbar button icon: {widget_name} -> {icon_text}")
+            
+            # Special handling for attach button state (changes based on checked state)
+            if hasattr(self, 'attach_btn') and self.attach_btn:
+                attached = self.attach_btn.isChecked()
+                icon = "🔗" if attached else "⛓"
+                self.attach_btn.setText("")  # Clear first
+                self.attach_btn.setText(icon)  # Then set emoji
+                logger.debug(f"Force refreshed attach button icon: {icon}")
+                
+        except Exception as e:
+            logger.debug(f"Failed to refresh toolbar icons: {e}")
     
     def _load_opacity_from_settings(self):
         """Load panel opacity from settings manager."""

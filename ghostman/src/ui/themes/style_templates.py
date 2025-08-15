@@ -628,7 +628,7 @@ class StyleTemplates:
         /* Button styling */
         QPushButton {{
             background-color: {colors.primary};
-            color: {colors.text_primary};
+            color: {colors.background_primary};
             border: none;
             padding: 8px 16px;
             border-radius: 4px;
@@ -646,13 +646,6 @@ class StyleTemplates:
             color: {colors.text_tertiary};
         }}
         
-        /* Special button colors */
-        QPushButton[objectName="cancel_btn"] {{
-            background-color: {colors.secondary};
-        }}
-        QPushButton[objectName="cancel_btn"]:hover {{
-            background-color: {colors.secondary_hover};
-        }}
         
         /* List widget styling */
         QListWidget {{
