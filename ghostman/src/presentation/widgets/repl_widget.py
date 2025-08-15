@@ -663,7 +663,7 @@ class REPLWidget(QWidget):
             
             # Update various buttons if they exist
             if hasattr(self, 'send_button'):
-                self.send_button.setStyleSheet(StyleTemplates.get_button_primary_style(colors))
+                self._style_send_button()
             
             # Update conversation selector if it exists
             if hasattr(self, 'conversation_selector'):
@@ -1501,6 +1501,37 @@ class REPLWidget(QWidget):
                 }}
             """)
     
+    def _style_send_button(self):
+        """Style the Send button with theme colors."""
+        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+            colors = self.theme_manager.current_theme
+            primary_color = colors.primary
+            primary_hover = colors.primary_hover
+            text_color = colors.text_primary
+        else:
+            # Fallback colors
+            primary_color = "#ff9800"
+            primary_hover = "#f57c00"
+            text_color = "#ffffff"
+        
+        self.send_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {primary_color};
+                color: {text_color};
+                border: none;
+                padding: 5px 15px;
+                border-radius: 3px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: {primary_hover};
+            }}
+            QPushButton:pressed {{
+                background-color: {primary_color};
+                opacity: 0.8;
+            }}
+        """)
+    
     def _load_opacity_from_settings(self):
         """Load panel opacity from settings manager."""
         if not _global_settings:
@@ -1567,22 +1598,10 @@ class REPLWidget(QWidget):
         input_layout.addWidget(self.command_input)
         
         # Send button
-        send_btn = QPushButton("Send")
-        send_btn.clicked.connect(self._on_command_entered)
-        send_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #4CAF50;
-                color: white;
-                border: none;
-                padding: 5px 15px;
-                border-radius: 3px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #45a049;
-            }
-        """)
-        input_layout.addWidget(send_btn)
+        self.send_button = QPushButton("Send")
+        self.send_button.clicked.connect(self._on_command_entered)
+        self._style_send_button()
+        input_layout.addWidget(self.send_button)
         
         layout.addLayout(input_layout)
         
