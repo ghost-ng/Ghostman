@@ -414,7 +414,18 @@ class MainWindow(QMainWindow):
             
             # Create or show conversation browser with shared conversation manager
             if not self.conversation_browser:
-                self.conversation_browser = SimpleConversationBrowser(parent=self, conversation_manager=conversation_manager)
+                # Get theme manager if available
+                try:
+                    from ...ui.themes.theme_manager import get_theme_manager
+                    theme_manager = get_theme_manager()
+                except ImportError:
+                    theme_manager = None
+                    
+                self.conversation_browser = SimpleConversationBrowser(
+                    parent=self, 
+                    conversation_manager=conversation_manager,
+                    theme_manager=theme_manager
+                )
                 self.conversation_browser.conversation_restore_requested.connect(
                     self._restore_conversation_to_repl
                 )
