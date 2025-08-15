@@ -641,6 +641,10 @@ class REPLWidget(QWidget):
                 self._markdown_renderer.update_theme()
                 logger.debug("Markdown renderer updated with new theme colors")
             
+            # Re-render existing conversation with new colors
+            self._refresh_existing_output()
+            logger.debug("Existing conversation re-rendered with new theme colors")
+            
             logger.debug("REPL widget styles updated for new theme")
         except Exception as e:
             logger.error(f"Failed to update REPL widget theme: {e}")
@@ -1477,11 +1481,21 @@ class REPLWidget(QWidget):
             # Add input field styles
             input_style = StyleTemplates.get_input_field_style(colors)
             
+            # Convert background_tertiary to rgba for child elements
+            if colors.background_tertiary.startswith('#'):
+                r = int(colors.background_tertiary[1:3], 16)
+                g = int(colors.background_tertiary[3:5], 16)
+                b = int(colors.background_tertiary[5:7], 16)
+                # Use slightly less opacity for child elements to maintain contrast
+                child_bg = f"rgba({r}, {g}, {b}, {alpha * 0.9})"
+            else:
+                child_bg = colors.background_tertiary
+            
             # Combine styles
             combined_style = f"""
             {style}
             #repl-root QTextEdit {{
-                background-color: {colors.background_tertiary};
+                background-color: {child_bg};
                 color: {colors.text_primary};
                 border: 1px solid {colors.border_secondary};
                 border-radius: 5px;
@@ -1490,7 +1504,7 @@ class REPLWidget(QWidget):
                 selection-color: {colors.text_primary};
             }}
             #repl-root QLineEdit {{
-                background-color: {colors.background_tertiary};
+                background-color: {child_bg};
                 color: {colors.text_primary};
                 border: 1px solid {colors.border_primary};
                 border-radius: 3px;

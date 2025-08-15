@@ -54,7 +54,8 @@
       "Bash(grep:*)",
       "Bash(cat:*)",
       "Bash(\"./venv/Scripts/python.exe\" test_settings_theme.py)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(\"./venv/Scripts/python.exe\" test_chat_colors.py)"
     ],
     "deny": []
   }
