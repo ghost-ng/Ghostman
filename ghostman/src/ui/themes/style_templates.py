@@ -487,3 +487,223 @@ class StyleTemplates:
             background-color: {colors.secondary};
         }}
         """
+    
+    @staticmethod
+    def get_settings_dialog_style(colors: ColorSystem) -> str:
+        """Comprehensive style for settings dialog."""
+        return f"""
+        /* Main dialog styling */
+        QDialog {{
+            background-color: {colors.background_primary};
+            color: {colors.text_primary};
+        }}
+        
+        /* Tab widget styling */
+        QTabWidget::pane {{
+            border: 1px solid {colors.border_primary};
+            background-color: {colors.background_primary};
+        }}
+        QTabWidget::tab-bar {{
+            alignment: left;
+        }}
+        QTabBar::tab {{
+            background-color: {colors.background_secondary};
+            color: {colors.text_primary};
+            padding: 8px 12px;
+            margin-right: 2px;
+            border: 1px solid {colors.border_primary};
+            border-bottom: none;
+        }}
+        QTabBar::tab:selected {{
+            background-color: {colors.primary};
+            color: {colors.text_primary};
+            font-weight: bold;
+        }}
+        QTabBar::tab:hover {{
+            background-color: {colors.background_tertiary};
+        }}
+        
+        /* Group box styling */
+        QGroupBox {{
+            color: {colors.text_primary};
+            font-weight: bold;
+            border: 1px solid {colors.border_primary};
+            border-radius: 5px;
+            margin-top: 10px;
+            padding-top: 10px;
+        }}
+        QGroupBox::title {{
+            subcontrol-origin: margin;
+            left: 10px;
+            padding: 0 5px 0 5px;
+        }}
+        
+        /* Label styling */
+        QLabel {{
+            color: {colors.text_primary};
+        }}
+        
+        /* Input field styling */
+        QLineEdit, QTextEdit, QSpinBox, QDoubleSpinBox {{
+            background-color: {colors.background_tertiary};
+            color: {colors.text_primary};
+            border: 1px solid {colors.border_primary};
+            border-radius: 4px;
+            padding: 5px;
+        }}
+        QLineEdit:focus, QTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
+            border-color: {colors.border_focus};
+            background-color: {colors.background_secondary};
+        }}
+        QLineEdit:disabled, QTextEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled {{
+            background-color: {colors.interactive_disabled};
+            color: {colors.text_tertiary};
+        }}
+        
+        /* ComboBox styling */
+        QComboBox {{
+            background-color: {colors.background_tertiary};
+            color: {colors.text_primary};
+            border: 1px solid {colors.border_primary};
+            border-radius: 4px;
+            padding: 5px;
+            min-width: 6em;
+        }}
+        QComboBox::drop-down {{
+            subcontrol-origin: padding;
+            subcontrol-position: top right;
+            width: 15px;
+            border-left-width: 1px;
+            border-left-color: {colors.border_primary};
+            border-left-style: solid;
+        }}
+        QComboBox::down-arrow {{
+            color: {colors.text_primary};
+        }}
+        QComboBox QAbstractItemView {{
+            background-color: {colors.background_tertiary};
+            color: {colors.text_primary};
+            selection-background-color: {colors.primary};
+            border: 1px solid {colors.border_primary};
+        }}
+        QComboBox:hover {{
+            border-color: {colors.border_focus};
+        }}
+        QComboBox:disabled {{
+            background-color: {colors.interactive_disabled};
+            color: {colors.text_tertiary};
+        }}
+        
+        /* CheckBox styling */
+        QCheckBox {{
+            color: {colors.text_primary};
+            spacing: 5px;
+        }}
+        QCheckBox::indicator {{
+            width: 18px;
+            height: 18px;
+        }}
+        QCheckBox::indicator:unchecked {{
+            background-color: {colors.background_tertiary};
+            border: 1px solid {colors.border_primary};
+            border-radius: 3px;
+        }}
+        QCheckBox::indicator:checked {{
+            background-color: {colors.primary};
+            border: 1px solid {colors.primary};
+            border-radius: 3px;
+        }}
+        QCheckBox::indicator:hover {{
+            border-color: {colors.border_focus};
+        }}
+        QCheckBox::indicator:disabled {{
+            background-color: {colors.interactive_disabled};
+            border-color: {colors.border_secondary};
+        }}
+        
+        /* Button styling */
+        QPushButton {{
+            background-color: {colors.primary};
+            color: {colors.text_primary};
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-weight: bold;
+            min-width: 80px;
+        }}
+        QPushButton:hover {{
+            background-color: {colors.primary_hover};
+        }}
+        QPushButton:pressed {{
+            background-color: {colors.primary_hover};
+        }}
+        QPushButton:disabled {{
+            background-color: {colors.interactive_disabled};
+            color: {colors.text_tertiary};
+        }}
+        
+        /* Special button colors */
+        QPushButton[objectName="cancel_btn"] {{
+            background-color: {colors.secondary};
+        }}
+        QPushButton[objectName="cancel_btn"]:hover {{
+            background-color: {colors.secondary_hover};
+        }}
+        
+        /* List widget styling */
+        QListWidget {{
+            background-color: {colors.background_tertiary};
+            color: {colors.text_primary};
+            border: 1px solid {colors.border_primary};
+            border-radius: 4px;
+        }}
+        QListWidget::item {{
+            padding: 5px;
+            border-bottom: 1px solid {colors.separator};
+        }}
+        QListWidget::item:selected {{
+            background-color: {colors.primary};
+        }}
+        QListWidget::item:hover {{
+            background-color: {colors.background_secondary};
+        }}
+        
+        /* Splitter styling */
+        QSplitter::handle {{
+            background-color: {colors.separator};
+        }}
+        QSplitter::handle:horizontal {{
+            width: 2px;
+        }}
+        QSplitter::handle:vertical {{
+            height: 2px;
+        }}
+        
+        /* Scroll bar styling */
+        QScrollBar:vertical {{
+            background-color: {colors.background_secondary};
+            width: 12px;
+            border-radius: 6px;
+        }}
+        QScrollBar::handle:vertical {{
+            background-color: {colors.border_secondary};
+            border-radius: 6px;
+            min-height: 20px;
+        }}
+        QScrollBar::handle:vertical:hover {{
+            background-color: {colors.border_primary};
+        }}
+        QScrollBar:horizontal {{
+            background-color: {colors.background_secondary};
+            height: 12px;
+            border-radius: 6px;
+        }}
+        QScrollBar::handle:horizontal {{
+            background-color: {colors.border_secondary};
+            border-radius: 6px;
+            min-width: 20px;
+        }}
+        QScrollBar::handle:horizontal:hover {{
+            background-color: {colors.border_primary};
+        }}
+        """

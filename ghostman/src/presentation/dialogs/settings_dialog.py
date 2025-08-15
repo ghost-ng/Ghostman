@@ -55,8 +55,8 @@ class SettingsDialog(QDialog):
         self.resize(600, 500)
         self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.WindowCloseButtonHint)
         
-        # Apply dark theme styling
-        self._apply_dark_theme()
+        # Apply theme styling
+        self._apply_theme()
         
         # Main layout
         layout = QVBoxLayout(self)
@@ -284,11 +284,11 @@ class SettingsDialog(QDialog):
         preview_layout = QVBoxLayout(preview_group)
 
         self.ai_preview_label = QLabel("AI Response: This is how AI responses will look.")
-        self.ai_preview_label.setStyleSheet("padding: 10px; border: 1px solid #555; background-color: #2a2a2a;")
+        self._apply_preview_label_style(self.ai_preview_label)
         preview_layout.addWidget(self.ai_preview_label)
 
         self.user_preview_label = QLabel("User Input: This is how your input will look.")
-        self.user_preview_label.setStyleSheet("padding: 10px; border: 1px solid #555; background-color: #2a2a2a;")
+        self._apply_preview_label_style(self.user_preview_label)
         preview_layout.addWidget(self.user_preview_label)
 
         layout.addWidget(preview_group)
@@ -306,6 +306,17 @@ class SettingsDialog(QDialog):
 
         layout.addStretch()
         self.tab_widget.addTab(tab, "Fonts")
+    
+    def _apply_preview_label_style(self, label):
+        """Apply theme-aware style to preview labels."""
+        try:
+            from ...ui.themes.theme_manager import get_theme_manager
+            theme_manager = get_theme_manager()
+            colors = theme_manager.current_theme
+            label.setStyleSheet(f"padding: 10px; border: 1px solid {colors.border_primary}; background-color: {colors.background_secondary};")
+        except ImportError:
+            # Fallback to dark theme style
+            label.setStyleSheet("padding: 10px; border: 1px solid #555; background-color: #2a2a2a;")
     
     def _update_font_previews(self):
         """Update font preview labels when font settings change."""
@@ -423,6 +434,8 @@ class SettingsDialog(QDialog):
             theme_manager = get_theme_manager()
             if theme_manager.set_theme(theme_name):
                 logger.info(f"Theme changed to: {theme_name}")
+                # Apply the new theme to this dialog as well
+                self._apply_theme()
             else:
                 logger.error(f"Failed to set theme: {theme_name}")
         except ImportError:
@@ -449,6 +462,8 @@ class SettingsDialog(QDialog):
             theme_manager = get_theme_manager()
             theme_manager.set_custom_theme(color_system)
             logger.info("Custom theme applied from editor")
+            # Apply the new theme to this dialog
+            self._apply_theme()
         except ImportError:
             logger.warning("Theme system not available")
     
@@ -1060,34 +1075,81 @@ class SettingsDialog(QDialog):
         # Emit signal for live preview (parent window can connect to this)
         self.opacity_preview_changed.emit(opacity_float)
     
-    def _apply_messagebox_theme(self, msg_box: QMessageBox, button_color: str = "#4CAF50"):
-        """Apply dark theme styling to a message box."""
-        hover_color = "#45a049" if button_color == "#4CAF50" else "#da190b"
-        
-        msg_box.setStyleSheet(f"""
-            QMessageBox {{
-                background-color: #2b2b2b;
-                color: #ffffff;
-                border: 1px solid #555555;
-            }}
-            QMessageBox QLabel {{
-                color: #ffffff;
-            }}
-            QMessageBox QPushButton {{
-                background-color: {button_color};
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                min-width: 80px;
-            }}
-            QMessageBox QPushButton:hover {{
-                background-color: {hover_color};
-            }}
-        """)
+    def _apply_messagebox_theme(self, msg_box: QMessageBox, button_color: str = None):
+        """Apply current theme styling to a message box."""
+        try:
+            from ...ui.themes.theme_manager import get_theme_manager
+            theme_manager = get_theme_manager()
+            colors = theme_manager.current_theme
+            
+            # Use theme colors or fallback to provided color
+            btn_color = button_color or colors.primary
+            btn_hover = colors.primary_hover if button_color is None else ("#45a049" if button_color == "#4CAF50" else "#da190b")
+            
+            msg_box.setStyleSheet(f"""
+                QMessageBox {{
+                    background-color: {colors.background_primary};
+                    color: {colors.text_primary};
+                    border: 1px solid {colors.border_primary};
+                }}
+                QMessageBox QLabel {{
+                    color: {colors.text_primary};
+                }}
+                QMessageBox QPushButton {{
+                    background-color: {btn_color};
+                    color: {colors.text_primary};
+                    border: none;
+                    padding: 8px 16px;
+                    border-radius: 4px;
+                    min-width: 80px;
+                }}
+                QMessageBox QPushButton:hover {{
+                    background-color: {btn_hover};
+                }}
+            """)
+        except ImportError:
+            # Fallback to dark theme if theme system not available
+            hover_color = "#45a049" if button_color == "#4CAF50" else "#da190b"
+            button_color = button_color or "#4CAF50"
+            
+            msg_box.setStyleSheet(f"""
+                QMessageBox {{
+                    background-color: #2b2b2b;
+                    color: #ffffff;
+                    border: 1px solid #555555;
+                }}
+                QMessageBox QLabel {{
+                    color: #ffffff;
+                }}
+                QMessageBox QPushButton {{
+                    background-color: {button_color};
+                    color: white;
+                    border: none;
+                    padding: 8px 16px;
+                    border-radius: 4px;
+                    min-width: 80px;
+                }}
+                QMessageBox QPushButton:hover {{
+                    background-color: {hover_color};
+                }}
+            """)
     
-    def _apply_dark_theme(self):
-        """Apply dark theme styling to the settings dialog."""
+    def _apply_theme(self):
+        """Apply current theme styling to the settings dialog."""
+        try:
+            from ...ui.themes.theme_manager import get_theme_manager
+            from ...ui.themes.style_templates import StyleTemplates
+            
+            theme_manager = get_theme_manager()
+            style = StyleTemplates.get_settings_dialog_style(theme_manager.current_theme)
+            self.setStyleSheet(style)
+            logger.debug(f"Applied theme: {theme_manager.current_theme_name}")
+        except ImportError:
+            logger.warning("Theme system not available, using fallback dark theme")
+            self._apply_fallback_theme()
+    
+    def _apply_fallback_theme(self):
+        """Apply fallback dark theme styling when theme system is not available."""
         self.setStyleSheet("""
             /* Main dialog styling */
             QDialog {

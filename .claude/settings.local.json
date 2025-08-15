@@ -52,7 +52,8 @@
       "Bash(./venv/Scripts/python.exe test_resize_implementation.py)",
       "Bash(./venv/Scripts/pip.exe install markdown-it-py)",
       "Bash(grep:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(\"./venv/Scripts/python.exe\" test_settings_theme.py)"
     ],
     "deny": []
   }
