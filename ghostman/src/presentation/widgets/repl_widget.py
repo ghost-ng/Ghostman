@@ -1481,12 +1481,15 @@ class REPLWidget(QWidget):
             # Add input field styles
             input_style = StyleTemplates.get_input_field_style(colors)
             
-            # Convert background_tertiary to rgba for child elements
-            if colors.background_tertiary.startswith('#'):
+            # Handle child element backgrounds based on opacity
+            if alpha >= 1.0:
+                # Fully opaque - use original hex color
+                child_bg = colors.background_tertiary
+            elif colors.background_tertiary.startswith('#'):
+                # Transparent - convert to rgba with slightly less opacity for contrast
                 r = int(colors.background_tertiary[1:3], 16)
                 g = int(colors.background_tertiary[3:5], 16)
                 b = int(colors.background_tertiary[5:7], 16)
-                # Use slightly less opacity for child elements to maintain contrast
                 child_bg = f"rgba({r}, {g}, {b}, {alpha * 0.9})"
             else:
                 child_bg = colors.background_tertiary

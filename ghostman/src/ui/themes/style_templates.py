@@ -50,9 +50,13 @@ class StyleTemplates:
     @staticmethod
     def get_repl_panel_style(colors: ColorSystem, opacity: float = 0.9) -> str:
         """Style for REPL panel with transparency support."""
-        # Convert hex to rgba for transparency
+        # Use original hex color when fully opaque, rgba when transparent
         bg_color = colors.background_secondary
-        if bg_color.startswith('#'):
+        if opacity >= 1.0:
+            # Fully opaque - use original hex color
+            panel_bg = bg_color
+        elif bg_color.startswith('#'):
+            # Transparent - convert to rgba
             r = int(bg_color[1:3], 16)
             g = int(bg_color[3:5], 16)
             b = int(bg_color[5:7], 16)
