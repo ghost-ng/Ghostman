@@ -683,8 +683,34 @@ class REPLWidget(QWidget):
             if hasattr(self, 'summary_notification'):
                 self.summary_notification.setStyleSheet(StyleTemplates.get_label_style(colors, "success"))
             
+            # Update all QToolButton widgets with new theme
+            self._update_all_tool_buttons()
+            
         except Exception as e:
             logger.error(f"Failed to update component themes: {e}")
+    
+    def _update_all_tool_buttons(self):
+        """Update all QToolButton widgets in the widget hierarchy with current theme."""
+        try:
+            # Find all QToolButton widgets recursively
+            tool_buttons = self.findChildren(QToolButton)
+            
+            for button in tool_buttons:
+                # Determine if this is a title button or toolbar button based on size/properties
+                if hasattr(button, 'parent') and button.parent():
+                    # Check if it's in the title area (approximate check)
+                    size = button.size()
+                    if size.height() <= 25 and size.width() <= 32:
+                        # This looks like a title button
+                        self._style_title_button(button, button.width() > 30)
+                    else:
+                        # This looks like a toolbar button
+                        self._style_tool_button(button)
+                        
+            logger.debug(f"Updated {len(tool_buttons)} tool buttons with current theme")
+            
+        except Exception as e:
+            logger.error(f"Failed to update tool buttons: {e}")
     
     def _get_themed_button_style(self, variant="secondary"):
         """Get themed button style string."""
@@ -1315,49 +1341,107 @@ class REPLWidget(QWidget):
     def _style_tool_button(self, button: QToolButton):
         """Apply consistent styling to toolbar buttons."""
         button.setMaximumSize(30, 25)
-        button.setStyleSheet("""
-            QToolButton {
-                background-color: rgba(255, 255, 255, 0.1);
-                color: white;
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 4px;
-                font-size: 12px;
-                padding: 2px;
-            }
-            QToolButton:hover {
-                background-color: rgba(255, 255, 255, 0.2);
-                border: 1px solid rgba(255, 255, 255, 0.4);
-            }
-            QToolButton:pressed {
-                background-color: rgba(255, 255, 255, 0.3);
-            }
-        """)
+        
+        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+            # Use theme system for consistent styling
+            colors = self.theme_manager.current_theme
+            button.setStyleSheet(f"""
+                QToolButton {{
+                    background-color: {colors.interactive_normal};
+                    color: {colors.text_primary};
+                    border: 1px solid {colors.border_secondary};
+                    border-radius: 4px;
+                    font-size: 12px;
+                    padding: 2px;
+                }}
+                QToolButton:hover {{
+                    background-color: {colors.interactive_hover};
+                    border: 1px solid {colors.border_focus};
+                }}
+                QToolButton:pressed {{
+                    background-color: {colors.interactive_active};
+                }}
+                QToolButton:disabled {{
+                    background-color: {colors.interactive_disabled};
+                    color: {colors.text_disabled};
+                }}
+            """)
+        else:
+            # Fallback to original styling
+            button.setStyleSheet("""
+                QToolButton {
+                    background-color: rgba(255, 255, 255, 0.1);
+                    color: white;
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                    border-radius: 4px;
+                    font-size: 12px;
+                    padding: 2px;
+                }
+                QToolButton:hover {
+                    background-color: rgba(255, 255, 255, 0.2);
+                    border: 1px solid rgba(255, 255, 255, 0.4);
+                }
+                QToolButton:pressed {
+                    background-color: rgba(255, 255, 255, 0.3);
+                }
+            """)
     
     def _style_title_button(self, button: QToolButton, add_right_padding: bool = False):
         """Apply styling to title bar buttons."""
         button.setFixedSize(32 if add_right_padding else 28, 24)
         padding = "2px 8px 2px 4px" if add_right_padding else "2px 6px"
-        button.setStyleSheet(f"""
-            QToolButton {{
-                background-color: rgba(255, 255, 255, 0.15);
-                color: white;
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                border-radius: 4px;
-                font-size: 14px;
-                padding: {padding};
-            }}
-            QToolButton:hover {{
-                background-color: rgba(255, 255, 255, 0.25);
-                border: 1px solid rgba(255, 255, 255, 0.5);
-            }}
-            QToolButton:pressed {{
-                background-color: rgba(255, 255, 255, 0.35);
-            }}
-            QToolButton::menu-indicator {{
-                image: none;
-                width: 0px;
-            }}
-        """)
+        
+        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+            # Use theme system for consistent styling
+            colors = self.theme_manager.current_theme
+            button.setStyleSheet(f"""
+                QToolButton {{
+                    background-color: {colors.interactive_normal};
+                    color: {colors.text_primary};
+                    border: 1px solid {colors.border_secondary};
+                    border-radius: 4px;
+                    font-size: 14px;
+                    padding: {padding};
+                }}
+                QToolButton:hover {{
+                    background-color: {colors.interactive_hover};
+                    border: 1px solid {colors.border_focus};
+                }}
+                QToolButton:pressed {{
+                    background-color: {colors.interactive_active};
+                }}
+                QToolButton:disabled {{
+                    background-color: {colors.interactive_disabled};
+                    color: {colors.text_disabled};
+                }}
+                QToolButton::menu-indicator {{
+                    image: none;
+                    width: 0px;
+                }}
+            """)
+        else:
+            # Fallback to original styling
+            button.setStyleSheet(f"""
+                QToolButton {{
+                    background-color: rgba(255, 255, 255, 0.15);
+                    color: white;
+                    border: 1px solid rgba(255, 255, 255, 0.3);
+                    border-radius: 4px;
+                    font-size: 14px;
+                    padding: {padding};
+                }}
+                QToolButton:hover {{
+                    background-color: rgba(255, 255, 255, 0.25);
+                    border: 1px solid rgba(255, 255, 255, 0.5);
+                }}
+                QToolButton:pressed {{
+                    background-color: rgba(255, 255, 255, 0.35);
+                }}
+                QToolButton::menu-indicator {{
+                    image: none;
+                    width: 0px;
+                }}
+            """)
     
     def _load_opacity_from_settings(self):
         """Load panel opacity from settings manager."""
