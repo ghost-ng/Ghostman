@@ -362,8 +362,95 @@ class SettingsDialog(QDialog):
         layout.addStretch()
         self.tab_widget.addTab(tab, "Advanced")
         
+        # Create theme tab
+        self._create_theme_tab()
+        
         # Update config path
         self._update_config_path_display()
+    
+    def _create_theme_tab(self):
+        """Create theme customization tab."""
+        tab = QWidget()
+        layout = QVBoxLayout()
+        
+        # Theme selection group
+        theme_group = QGroupBox("Theme Selection")
+        theme_layout = QFormLayout()
+        
+        # Preset theme selector
+        self.theme_selector = QComboBox()
+        try:
+            # Try to import theme manager
+            from ...ui.themes.theme_manager import get_theme_manager
+            theme_manager = get_theme_manager()
+            themes = theme_manager.get_available_themes()
+            self.theme_selector.addItems(themes)
+            self.theme_selector.setCurrentText(theme_manager.current_theme_name)
+            self.theme_selector.currentTextChanged.connect(self._on_theme_selected)
+        except ImportError:
+            self.theme_selector.addItem("Theme system not available")
+            self.theme_selector.setEnabled(False)
+        
+        theme_layout.addRow("Current Theme:", self.theme_selector)
+        theme_group.setLayout(theme_layout)
+        layout.addWidget(theme_group)
+        
+        # Theme editor button
+        editor_group = QGroupBox("Theme Customization")
+        editor_layout = QVBoxLayout()
+        
+        self.open_theme_editor_btn = QPushButton("Open Theme Editor")
+        self.open_theme_editor_btn.clicked.connect(self._open_theme_editor)
+        editor_layout.addWidget(self.open_theme_editor_btn)
+        
+        # Theme info label
+        self.theme_info_label = QLabel("Use the theme editor to customize colors, create new themes, and import/export theme configurations.")
+        self.theme_info_label.setWordWrap(True)
+        self.theme_info_label.setStyleSheet("color: #888; font-style: italic;")
+        editor_layout.addWidget(self.theme_info_label)
+        
+        editor_group.setLayout(editor_layout)
+        layout.addWidget(editor_group)
+        
+        layout.addStretch()
+        tab.setLayout(layout)
+        self.tab_widget.addTab(tab, "Themes")
+    
+    def _on_theme_selected(self, theme_name: str):
+        """Handle theme selection change."""
+        try:
+            from ...ui.themes.theme_manager import get_theme_manager
+            theme_manager = get_theme_manager()
+            if theme_manager.set_theme(theme_name):
+                logger.info(f"Theme changed to: {theme_name}")
+            else:
+                logger.error(f"Failed to set theme: {theme_name}")
+        except ImportError:
+            logger.warning("Theme system not available")
+    
+    def _open_theme_editor(self):
+        """Open the theme editor dialog."""
+        try:
+            from .theme_editor import ThemeEditorDialog
+            dialog = ThemeEditorDialog(self)
+            dialog.theme_applied.connect(self._on_theme_applied)
+            dialog.exec()
+        except ImportError as e:
+            QMessageBox.warning(
+                self,
+                "Theme Editor Unavailable", 
+                f"Theme editor is not available: {e}"
+            )
+    
+    def _on_theme_applied(self, color_system):
+        """Handle theme application from editor."""
+        try:
+            from ...ui.themes.theme_manager import get_theme_manager
+            theme_manager = get_theme_manager()
+            theme_manager.set_custom_theme(color_system)
+            logger.info("Custom theme applied from editor")
+        except ImportError:
+            logger.warning("Theme system not available")
     
     def _populate_model_presets(self):
         """Populate the model preset combo box."""

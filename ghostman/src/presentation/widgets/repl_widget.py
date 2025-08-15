@@ -34,6 +34,16 @@ from ...application.startup_service import startup_service
 # Import font service for font configuration
 from ...application.font_service import font_service
 
+# Theme system imports
+try:
+    from ...ui.themes.theme_manager import get_theme_manager
+    from ...ui.themes.style_templates import StyleTemplates
+    THEME_SYSTEM_AVAILABLE = True
+except ImportError:
+    THEME_SYSTEM_AVAILABLE = False
+    logger = logging.getLogger("ghostman.repl_widget")
+    logger.warning("Theme system not available - using legacy styling")
+
 # Settings import (percent-based opacity)
 try:
     from ...infrastructure.storage.settings_manager import settings as _global_settings
@@ -553,11 +563,15 @@ class REPLWidget(QWidget):
         # Load from settings if available
         self._load_opacity_from_settings()
         
+        # Initialize theme system
+        self._init_theme_system()
+        
         # Assign object name so selective stylesheet rules don't leak globally
         self.setObjectName("repl-root")
 
         self._init_ui()
         self._apply_styles()
+        self._update_component_themes()  # Apply theme to all components after UI init
         self._init_conversation_manager()
         
         # Load conversations after UI is fully initialized
@@ -567,6 +581,91 @@ class REPLWidget(QWidget):
         QTimer.singleShot(200, self._load_window_dimensions)
         
         logger.info("Enhanced REPLWidget initialized with conversation management")
+    
+    def _init_theme_system(self):
+        """Initialize theme system connection."""
+        if THEME_SYSTEM_AVAILABLE:
+            try:
+                self.theme_manager = get_theme_manager()
+                # Connect to theme change signal for live updates
+                self.theme_manager.theme_changed.connect(self._on_theme_changed)
+                logger.debug("Theme system initialized for REPL widget")
+            except Exception as e:
+                logger.warning(f"Failed to initialize theme system: {e}")
+                self.theme_manager = None
+        else:
+            self.theme_manager = None
+            logger.debug("Theme system not available - using legacy styling")
+    
+    def _on_theme_changed(self, color_system):
+        """Handle theme changes by updating widget styles."""
+        try:
+            # Update all styling when theme changes
+            self._apply_styles()
+            self._update_component_themes()
+            logger.debug("REPL widget styles updated for new theme")
+        except Exception as e:
+            logger.error(f"Failed to update REPL widget theme: {e}")
+    
+    def _update_component_themes(self):
+        """Update individual component styles based on current theme."""
+        if not (self.theme_manager and THEME_SYSTEM_AVAILABLE):
+            return
+        
+        try:
+            colors = self.theme_manager.current_theme
+            
+            # Update title frame if it exists
+            if hasattr(self, 'title_frame'):
+                self.title_frame.setStyleSheet(StyleTemplates.get_title_frame_style(colors))
+            
+            # Update various buttons if they exist
+            if hasattr(self, 'send_button'):
+                self.send_button.setStyleSheet(StyleTemplates.get_button_primary_style(colors))
+            
+            # Update conversation selector if it exists
+            if hasattr(self, 'conversation_selector'):
+                self.conversation_selector.setStyleSheet(StyleTemplates.get_combo_box_style(colors))
+            
+            # Update search frame if it exists
+            if hasattr(self, 'search_frame'):
+                self.search_frame.setStyleSheet(StyleTemplates.get_search_frame_style(colors))
+            
+            # Update status labels to use theme colors
+            if hasattr(self, 'status_label'):
+                self.status_label.setStyleSheet(StyleTemplates.get_label_style(colors, "secondary"))
+            
+            if hasattr(self, 'search_status_label'):
+                self.search_status_label.setStyleSheet(StyleTemplates.get_label_style(colors, "tertiary"))
+            
+            if hasattr(self, 'summary_notification'):
+                self.summary_notification.setStyleSheet(StyleTemplates.get_label_style(colors, "success"))
+            
+        except Exception as e:
+            logger.error(f"Failed to update component themes: {e}")
+    
+    def _get_themed_button_style(self, variant="secondary"):
+        """Get themed button style string."""
+        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+            colors = self.theme_manager.current_theme
+            if variant == "primary":
+                return StyleTemplates.get_button_primary_style(colors)
+            else:
+                return StyleTemplates.get_tool_button_style(colors)
+        else:
+            # Fallback to legacy button styles
+            return """
+                QToolButton {
+                    background-color: rgba(255, 255, 255, 0.15);
+                    color: white;
+                    border: 1px solid rgba(255, 255, 255, 0.3);
+                    border-radius: 4px;
+                    padding: 4px 8px;
+                }
+                QToolButton:hover {
+                    background-color: rgba(255, 255, 255, 0.25);
+                }
+            """
     
     def _init_conversation_manager(self):
         """Initialize conversation management system."""
@@ -735,14 +834,18 @@ class REPLWidget(QWidget):
         """Initialize title bar with new conversation and help buttons."""
         # Create a frame for the title bar to make it more visible and draggable
         self.title_frame = QFrame()
-        self.title_frame.setStyleSheet("""
-            QFrame {
-                background-color: rgba(40, 40, 40, 0.8);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 5px;
-                margin: 2px;
-            }
-        """)
+        # Apply theme-aware styling
+        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+            self.title_frame.setStyleSheet(StyleTemplates.get_title_frame_style(self.theme_manager.current_theme))
+        else:
+            self.title_frame.setStyleSheet("""
+                QFrame {
+                    background-color: rgba(40, 40, 40, 0.8);
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                    border-radius: 5px;
+                    margin: 2px;
+                }
+            """)
         
         # Enable drag functionality for the title frame
         self.title_frame.mousePressEvent = self._title_mouse_press
@@ -804,27 +907,7 @@ class REPLWidget(QWidget):
         chat_btn.setText("💬")  # Use text for reliable display
         chat_btn.setToolTip("Browse conversations (💬)")  # Put emoji in tooltip instead
         chat_btn.clicked.connect(self._on_chat_clicked)
-        chat_btn.setStyleSheet(f"""
-            QToolButton {{
-                background-color: rgba(255, 255, 255, 0.15);
-                color: white;
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                border-radius: 4px;
-                font-size: 14px;
-                padding: 1px;
-            }}
-            QToolButton:hover {{
-                background-color: rgba(255, 255, 255, 0.25);
-                border: 1px solid rgba(255, 255, 255, 0.5);
-            }}
-            QToolButton:pressed {{
-                background-color: rgba(255, 255, 255, 0.35);
-            }}
-            QToolButton::menu-indicator {{
-                image: none;
-                width: 0px;
-            }}
-        """)
+        chat_btn.setStyleSheet(self._get_themed_button_style())
         # Special styling for chat button with more width
         #chat_btn.setFixedSize(40, 40)  # Wider than normal buttons
         #self._style_title_button(chat_btn)
@@ -1334,9 +1417,64 @@ class REPLWidget(QWidget):
         self.command_input.setFocus()
     
     def _apply_styles(self):
-        """(Re)apply stylesheet using current panel opacity for background only."""
+        """(Re)apply stylesheet using current panel opacity and theme system."""
         logger.debug(f"🎨 Applying REPL styles with opacity: {self._panel_opacity:.3f}")
         
+        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+            # Use theme system for consistent styling
+            self._apply_themed_styles()
+        else:
+            # Fallback to legacy styling
+            self._apply_legacy_styles()
+    
+    def _apply_themed_styles(self):
+        """Apply styles using the theme system."""
+        try:
+            colors = self.theme_manager.current_theme
+            alpha = max(0.0, min(1.0, self._panel_opacity))
+            
+            # Generate themed style with opacity
+            style = StyleTemplates.get_repl_panel_style(colors, alpha)
+            
+            # Add input field styles
+            input_style = StyleTemplates.get_input_field_style(colors)
+            
+            # Combine styles
+            combined_style = f"""
+            {style}
+            #repl-root QTextEdit {{
+                background-color: {colors.background_tertiary};
+                color: {colors.text_primary};
+                border: 1px solid {colors.border_secondary};
+                border-radius: 5px;
+                padding: 5px;
+                selection-background-color: {colors.secondary};
+                selection-color: {colors.text_primary};
+            }}
+            #repl-root QLineEdit {{
+                background-color: {colors.background_tertiary};
+                color: {colors.text_primary};
+                border: 1px solid {colors.border_primary};
+                border-radius: 3px;
+                padding: 5px;
+                selection-background-color: {colors.secondary};
+                selection-color: {colors.text_primary};
+            }}
+            #repl-root QLineEdit:focus {{
+                border: 2px solid {colors.border_focus};
+            }}
+            """
+            
+            self.setStyleSheet(combined_style)
+            logger.debug("🎨 Applied themed REPL styles")
+            
+        except Exception as e:
+            logger.error(f"Failed to apply themed styles: {e}")
+            # Fallback to legacy styles
+            self._apply_legacy_styles()
+    
+    def _apply_legacy_styles(self):
+        """Apply legacy hardcoded styles as fallback."""
         # Clamp opacity
         alpha = max(0.0, min(1.0, self._panel_opacity))
         panel_bg = f"rgba(30, 30, 30, {alpha:.3f})"
