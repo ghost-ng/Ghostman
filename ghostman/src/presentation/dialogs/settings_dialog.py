@@ -154,10 +154,52 @@ class SettingsDialog(QDialog):
         self.max_tokens_spin.setValue(2000)
         params_layout.addRow("Max Tokens:", self.max_tokens_spin)
         
-        self.system_prompt_edit = QTextEdit()
-        self.system_prompt_edit.setMaximumHeight(100)
-        self.system_prompt_edit.setPlaceholderText("System prompt for the AI assistant...")
-        params_layout.addRow("System Prompt:", self.system_prompt_edit)
+        # System Prompt - Split into user customizable and hardcoded base
+        system_prompt_group = QGroupBox("AI Assistant Instructions")
+        system_prompt_layout = QVBoxLayout()
+        
+        # User customizable prompt
+        user_prompt_label = QLabel("Custom Personality & Behavior:")
+        user_prompt_label.setStyleSheet("font-weight: bold; color: #2196F3;")
+        system_prompt_layout.addWidget(user_prompt_label)
+        
+        help_label = QLabel("Define the AI's identity, role, expertise, and specific behavioral traits")
+        help_label.setStyleSheet("color: #666; font-size: 10px; font-style: italic; margin-bottom: 5px;")
+        system_prompt_layout.addWidget(help_label)
+        
+        self.user_prompt_edit = QTextEdit()
+        self.user_prompt_edit.setMaximumHeight(100)
+        self.user_prompt_edit.setPlaceholderText("Example: You are a Python expert specialized in data science. Focus on performance optimization and explain complex concepts simply.")
+        system_prompt_layout.addWidget(self.user_prompt_edit)
+        
+        # Hardcoded base prompt (read-only display)
+        base_prompt_label = QLabel("Built-in Response Formatting (Always Applied):")
+        base_prompt_label.setStyleSheet("font-weight: bold; color: #666; margin-top: 10px;")
+        system_prompt_layout.addWidget(base_prompt_label)
+        
+        format_help_label = QLabel("These formatting rules are automatically applied to ensure readable responses")
+        format_help_label.setStyleSheet("color: #666; font-size: 10px; font-style: italic; margin-bottom: 5px;")
+        system_prompt_layout.addWidget(format_help_label)
+        
+        self.base_prompt_display = QTextEdit()
+        self.base_prompt_display.setMaximumHeight(80)
+        self.base_prompt_display.setReadOnly(True)
+        self.base_prompt_display.setStyleSheet("background-color: #f8f9fa; color: #666; border: 1px solid #e9ecef; border-radius: 4px;")
+        
+        # Set the hardcoded base prompt - purely formatting rules
+        base_prompt = ("Format all responses using markdown syntax:\n"
+                      "• **bold** for key terms\n"
+                      "• *italics* for emphasis\n" 
+                      "• `code` for technical terms and variables\n"
+                      "• ```language\ncode blocks\n``` for multi-line code\n"
+                      "• # Headers to organize sections\n"
+                      "• - Bullet points for lists\n"
+                      "• > Blockquotes for important notes")
+        self.base_prompt_display.setPlainText(base_prompt)
+        system_prompt_layout.addWidget(self.base_prompt_display)
+        
+        system_prompt_group.setLayout(system_prompt_layout)
+        params_layout.addRow("", system_prompt_group)
         
         layout.addWidget(params_group)
         
@@ -233,11 +275,26 @@ class SettingsDialog(QDialog):
         self.ai_font_family_combo.addItems(available_fonts)
         ai_font_layout.addRow("Font Family:", self.ai_font_family_combo)
 
-        # AI Response Font Size
+        # AI Response Font Size with quick adjustment buttons
+        ai_font_size_layout = QHBoxLayout()
         self.ai_font_size_spin = QSpinBox()
         self.ai_font_size_spin.setRange(6, 72)
         self.ai_font_size_spin.setValue(11)
-        ai_font_layout.addRow("Font Size:", self.ai_font_size_spin)
+        
+        # Quick size adjustment buttons
+        self.ai_font_size_decrease_btn = QPushButton("-")
+        self.ai_font_size_decrease_btn.setMaximumWidth(30)
+        self.ai_font_size_decrease_btn.clicked.connect(lambda: self._adjust_ai_font_size(-1))
+        
+        self.ai_font_size_increase_btn = QPushButton("+")
+        self.ai_font_size_increase_btn.setMaximumWidth(30)
+        self.ai_font_size_increase_btn.clicked.connect(lambda: self._adjust_ai_font_size(1))
+        
+        ai_font_size_layout.addWidget(self.ai_font_size_decrease_btn)
+        ai_font_size_layout.addWidget(self.ai_font_size_spin)
+        ai_font_size_layout.addWidget(self.ai_font_size_increase_btn)
+        
+        ai_font_layout.addRow("Font Size:", ai_font_size_layout)
 
         # AI Response Font Weight
         self.ai_font_weight_combo = QComboBox()
@@ -261,11 +318,26 @@ class SettingsDialog(QDialog):
         self.user_font_family_combo.addItems(available_fonts)
         user_font_layout.addRow("Font Family:", self.user_font_family_combo)
 
-        # User Input Font Size
+        # User Input Font Size with quick adjustment buttons
+        user_font_size_layout = QHBoxLayout()
         self.user_font_size_spin = QSpinBox()
         self.user_font_size_spin.setRange(6, 72)
         self.user_font_size_spin.setValue(10)
-        user_font_layout.addRow("Font Size:", self.user_font_size_spin)
+        
+        # Quick size adjustment buttons
+        self.user_font_size_decrease_btn = QPushButton("-")
+        self.user_font_size_decrease_btn.setMaximumWidth(30)
+        self.user_font_size_decrease_btn.clicked.connect(lambda: self._adjust_user_font_size(-1))
+        
+        self.user_font_size_increase_btn = QPushButton("+")
+        self.user_font_size_increase_btn.setMaximumWidth(30)
+        self.user_font_size_increase_btn.clicked.connect(lambda: self._adjust_user_font_size(1))
+        
+        user_font_size_layout.addWidget(self.user_font_size_decrease_btn)
+        user_font_size_layout.addWidget(self.user_font_size_spin)
+        user_font_size_layout.addWidget(self.user_font_size_increase_btn)
+        
+        user_font_layout.addRow("Font Size:", user_font_size_layout)
 
         # User Input Font Weight
         self.user_font_weight_combo = QComboBox()
@@ -339,6 +411,47 @@ class SettingsDialog(QDialog):
             
         except Exception as e:
             logger.error(f"Failed to update font previews: {e}")
+    
+    def _adjust_ai_font_size(self, delta):
+        """Adjust AI response font size by the given delta."""
+        current_size = self.ai_font_size_spin.value()
+        new_size = max(6, min(72, current_size + delta))
+        self.ai_font_size_spin.setValue(new_size)
+    
+    def _adjust_user_font_size(self, delta):
+        """Adjust user input font size by the given delta."""
+        current_size = self.user_font_size_spin.value()
+        new_size = max(6, min(72, current_size + delta))
+        self.user_font_size_spin.setValue(new_size)
+    
+    def _get_combined_system_prompt(self):
+        """Combine user custom prompt with hardcoded base formatting instructions."""
+        user_prompt = self.user_prompt_edit.toPlainText().strip()
+        base_prompt = self.base_prompt_display.toPlainText().strip()
+        
+        if user_prompt:
+            return f"{user_prompt}\n\n{base_prompt}"
+        else:
+            return base_prompt
+    
+    def _set_user_prompt_from_combined(self, combined_prompt):
+        """Extract user prompt from combined system prompt."""
+        if not combined_prompt:
+            self.user_prompt_edit.clear()
+            return
+        
+        base_prompt = self.base_prompt_display.toPlainText().strip()
+        
+        # If the combined prompt ends with the base prompt, extract the user part
+        if combined_prompt.endswith(base_prompt):
+            user_part = combined_prompt[:-len(base_prompt)].strip()
+            # Remove the separator if present
+            if user_part.endswith('\n\n'):
+                user_part = user_part[:-2].strip()
+            self.user_prompt_edit.setPlainText(user_part)
+        else:
+            # Fallback: set the entire prompt as user prompt
+            self.user_prompt_edit.setPlainText(combined_prompt)
     
     def _create_advanced_tab(self):
         """Create Advanced settings tab."""
@@ -1083,7 +1196,8 @@ class SettingsDialog(QDialog):
                 "api_key": self.api_key_edit.text(),
                 "temperature": self.temperature_spin.value(),
                 "max_tokens": self.max_tokens_spin.value(),
-                "system_prompt": self.system_prompt_edit.toPlainText()
+                "system_prompt": self._get_combined_system_prompt(),
+                "user_prompt": self.user_prompt_edit.toPlainText()
             },
             "interface": {
                 # Store as integer percent
@@ -1138,8 +1252,12 @@ class SettingsDialog(QDialog):
                 self.max_tokens_spin.setValue(int(ai_config["max_tokens"]))
             except (ValueError, TypeError):
                 self.max_tokens_spin.setValue(2000)  # default
-        if "system_prompt" in ai_config:
-            self.system_prompt_edit.setPlainText(str(ai_config["system_prompt"]))
+        if "user_prompt" in ai_config:
+            # New format: use separate user_prompt field
+            self.user_prompt_edit.setPlainText(str(ai_config["user_prompt"]))
+        elif "system_prompt" in ai_config:
+            # Legacy format: extract user prompt from combined system prompt
+            self._set_user_prompt_from_combined(str(ai_config["system_prompt"]))
         
         # Interface settings
         interface_config = config.get("interface", {})
@@ -1279,10 +1397,10 @@ class SettingsDialog(QDialog):
     def _set_default_values(self):
         """Set default values when no settings are available."""
         logger.info("🔧 Setting default values...")
-        # Set default system prompt
-        default_prompt = "You are Spector, a helpful AI assistant integrated into a desktop overlay application. Be concise, friendly, and helpful."
-        self.system_prompt_edit.setPlainText(default_prompt)
-        logger.info(f"📝 Set default system prompt (length: {len(default_prompt)})")
+        # Set default user prompt (purely identity/role, no behavioral or formatting instructions)
+        default_user_prompt = "You are Ghostman, a desktop AI assistant."
+        self.user_prompt_edit.setPlainText(default_user_prompt)
+        logger.info(f"📝 Set default user prompt (length: {len(default_user_prompt)})")
         logger.info(f"🎨 Using default opacity: {self.opacity_percent_spin.value()}%")
         logger.info("✅ Default values set")
     
