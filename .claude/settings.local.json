@@ -56,7 +56,9 @@
       "Bash(\"./venv/Scripts/python.exe\" test_settings_theme.py)",
       "Bash(git commit:*)",
       "Bash(\"./venv/Scripts/python.exe\" test_chat_colors.py)",
-      "Bash(\"./venv/Scripts/python.exe\" test_emoji_theme_fix.py)"
+      "Bash(\"./venv/Scripts/python.exe\" test_emoji_theme_fix.py)",
+      "Bash(./venv/Scripts/python.exe -c \"from ghostman.src.utils.config_paths import cleanup_old_files; print(f''Cleaned up {cleanup_old_files()} files'')\")",
+      "Bash(\"./venv/Scripts/python.exe\" -c \"from ghostman.src.infrastructure.storage.settings_manager import settings; print(f''Settings dir: {settings.settings_dir}'')\")"
     ],
     "deny": []
   }

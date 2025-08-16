@@ -388,25 +388,116 @@ class SettingsDialog(QDialog):
         theme_group = QGroupBox("Theme Selection")
         theme_layout = QFormLayout()
         
-        # Preset theme selector
-        self.theme_selector = QComboBox()
+        # Current theme label
+        self.current_theme_label = QLabel()
+        self.current_theme_label.setStyleSheet("font-weight: bold; color: #4CAF50;")
+        
+        # Built-in theme selector
+        self.builtin_theme_selector = QComboBox()
+        self.builtin_theme_selector.setMinimumWidth(200)
+        
+        # Custom theme selector
+        self.custom_theme_selector = QComboBox()
+        self.custom_theme_selector.setMinimumWidth(200)
+        
         try:
             # Try to import theme manager
             from ...ui.themes.theme_manager import get_theme_manager
             theme_manager = get_theme_manager()
             themes = theme_manager.get_available_themes()
-            self.theme_selector.addItems(themes)
-            self.theme_selector.setCurrentText(theme_manager.current_theme_name)
-            self.theme_selector.currentTextChanged.connect(self._on_theme_selected)
+            
+            # Get built-in and custom themes directly from theme manager
+            preset_themes = theme_manager.get_preset_themes()
+            custom_themes = theme_manager.get_custom_themes()
+            
+            # Populate built-in themes dropdown
+            if preset_themes:
+                self.builtin_theme_selector.addItems(sorted(preset_themes))
+            else:
+                self.builtin_theme_selector.addItem("No built-in themes")
+                self.builtin_theme_selector.setEnabled(False)
+            
+            # Populate custom themes dropdown
+            if custom_themes:
+                self.custom_theme_selector.addItems(sorted(custom_themes))
+            else:
+                self.custom_theme_selector.addItem("No custom themes found")
+                self.custom_theme_selector.setEnabled(False)
+            
+            # Set current theme label and selection
+            current_theme = theme_manager.current_theme_name
+            self.current_theme_label.setText(f"Active: {current_theme}")
+            
+            # Select current theme in appropriate dropdown
+            if current_theme in preset_themes:
+                index = self.builtin_theme_selector.findText(current_theme)
+                if index >= 0:
+                    self.builtin_theme_selector.setCurrentIndex(index)
+            elif current_theme in custom_themes:
+                index = self.custom_theme_selector.findText(current_theme)
+                if index >= 0:
+                    self.custom_theme_selector.setCurrentIndex(index)
+            
+            # Connect signals
+            self.builtin_theme_selector.currentTextChanged.connect(
+                lambda theme: self._on_theme_selected(theme, "builtin"))
+            self.custom_theme_selector.currentTextChanged.connect(
+                lambda theme: self._on_theme_selected(theme, "custom"))
+                
         except ImportError:
-            self.theme_selector.addItem("Theme system not available")
-            self.theme_selector.setEnabled(False)
+            self.builtin_theme_selector.addItem("Theme system not available")
+            self.builtin_theme_selector.setEnabled(False)
+            self.custom_theme_selector.setEnabled(False)
+            self.current_theme_label.setText("Theme system not available")
         
-        theme_layout.addRow("Current Theme:", self.theme_selector)
+        # Add to layout
+        theme_layout.addRow("Current Theme:", self.current_theme_label)
+        theme_layout.addRow("Built-in Themes:", self.builtin_theme_selector)
+        theme_layout.addRow("Custom Themes:", self.custom_theme_selector)
+        
+        # Refresh themes button
+        refresh_btn = QPushButton("Refresh Themes")
+        refresh_btn.clicked.connect(self._refresh_themes)
+        theme_layout.addRow("", refresh_btn)
+        
         theme_group.setLayout(theme_layout)
         layout.addWidget(theme_group)
         
-        # Theme editor button
+        # Theme Management group
+        management_group = QGroupBox("Theme Management")
+        management_layout = QVBoxLayout()
+        
+        # Load theme button
+        load_theme_layout = QHBoxLayout()
+        self.load_theme_btn = QPushButton("Load Theme from File")
+        self.load_theme_btn.clicked.connect(self._load_theme_from_file)
+        load_theme_layout.addWidget(self.load_theme_btn)
+        
+        # Open themes folder button
+        self.open_themes_folder_btn = QPushButton("Open Themes Folder")
+        self.open_themes_folder_btn.clicked.connect(self._open_themes_folder)
+        load_theme_layout.addWidget(self.open_themes_folder_btn)
+        
+        management_layout.addLayout(load_theme_layout)
+        
+        # Export theme button
+        export_theme_layout = QHBoxLayout()
+        self.export_theme_btn = QPushButton("Export Current Theme")
+        self.export_theme_btn.clicked.connect(self._export_current_theme)
+        export_theme_layout.addWidget(self.export_theme_btn)
+        
+        management_layout.addLayout(export_theme_layout)
+        
+        # Theme info
+        info_label = QLabel("Place .json theme files in the themes folder and click 'Refresh Themes' to load them.")
+        info_label.setWordWrap(True)
+        info_label.setStyleSheet("color: #888; font-style: italic;")
+        management_layout.addWidget(info_label)
+        
+        management_group.setLayout(management_layout)
+        layout.addWidget(management_group)
+        
+        # Theme editor button (keep existing)
         editor_group = QGroupBox("Theme Customization")
         editor_layout = QVBoxLayout()
         
@@ -427,19 +518,238 @@ class SettingsDialog(QDialog):
         tab.setLayout(layout)
         self.tab_widget.addTab(tab, "Themes")
     
-    def _on_theme_selected(self, theme_name: str):
-        """Handle theme selection change."""
+    def _on_theme_selected(self, theme_name: str, source: str):
+        """Handle theme selection change from either dropdown."""
+        # Skip invalid selections
+        if not theme_name or theme_name.startswith("No "):
+            return
+            
         try:
             from ...ui.themes.theme_manager import get_theme_manager
             theme_manager = get_theme_manager()
+            
+            # Clear selection in the other dropdown to avoid confusion
+            if source == "builtin":
+                self.custom_theme_selector.blockSignals(True)
+                self.custom_theme_selector.setCurrentIndex(-1)
+                self.custom_theme_selector.blockSignals(False)
+            else:  # source == "custom"
+                self.builtin_theme_selector.blockSignals(True)
+                self.builtin_theme_selector.setCurrentIndex(-1)
+                self.builtin_theme_selector.blockSignals(False)
+            
             if theme_manager.set_theme(theme_name):
                 logger.info(f"Theme changed to: {theme_name}")
+                self.current_theme_label.setText(f"Active: {theme_name}")
                 # Apply the new theme to this dialog as well
                 self._apply_theme()
             else:
                 logger.error(f"Failed to set theme: {theme_name}")
         except ImportError:
             logger.warning("Theme system not available")
+    
+    def _refresh_themes(self):
+        """Refresh the theme list by reloading themes from disk."""
+        try:
+            from ...ui.themes.theme_manager import get_theme_manager
+            theme_manager = get_theme_manager()
+            
+            # Reload themes
+            theme_manager._load_custom_themes()
+            
+            # Save current theme
+            current_theme = theme_manager.current_theme_name
+            
+            # Get all themes
+            themes = theme_manager.get_available_themes()
+            
+            # Get built-in and custom themes directly from theme manager
+            preset_themes = theme_manager.get_preset_themes()
+            custom_themes = theme_manager.get_custom_themes()
+            
+            # Block signals during update
+            self.builtin_theme_selector.blockSignals(True)
+            self.custom_theme_selector.blockSignals(True)
+            
+            # Update built-in themes dropdown
+            self.builtin_theme_selector.clear()
+            if preset_themes:
+                self.builtin_theme_selector.addItems(sorted(preset_themes))
+                self.builtin_theme_selector.setEnabled(True)
+            else:
+                self.builtin_theme_selector.addItem("No built-in themes")
+                self.builtin_theme_selector.setEnabled(False)
+            
+            # Update custom themes dropdown
+            self.custom_theme_selector.clear()
+            if custom_themes:
+                self.custom_theme_selector.addItems(sorted(custom_themes))
+                self.custom_theme_selector.setEnabled(True)
+            else:
+                self.custom_theme_selector.addItem("No custom themes found")
+                self.custom_theme_selector.setEnabled(False)
+            
+            # Restore current theme selection
+            if current_theme in preset_themes:
+                index = self.builtin_theme_selector.findText(current_theme)
+                if index >= 0:
+                    self.builtin_theme_selector.setCurrentIndex(index)
+                self.custom_theme_selector.setCurrentIndex(-1)
+            elif current_theme in custom_themes:
+                index = self.custom_theme_selector.findText(current_theme)
+                if index >= 0:
+                    self.custom_theme_selector.setCurrentIndex(index)
+                self.builtin_theme_selector.setCurrentIndex(-1)
+            
+            # Re-enable signals
+            self.builtin_theme_selector.blockSignals(False)
+            self.custom_theme_selector.blockSignals(False)
+                
+            QMessageBox.information(self, "Themes Refreshed", 
+                                  f"Found {len(custom_themes)} custom theme(s) and {len(preset_themes)} built-in theme(s).")
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to refresh themes: {e}")
+    
+    def _load_theme_from_file(self):
+        """Load a theme from a JSON file."""
+        try:
+            from ...ui.themes.theme_manager import get_theme_manager
+            from ...utils.config_paths import get_themes_dir
+            
+            # Open file dialog
+            file_path, _ = QFileDialog.getOpenFileName(
+                self,
+                "Load Theme File",
+                str(get_themes_dir()),
+                "Theme Files (*.json);;All Files (*.*)"
+            )
+            
+            if file_path:
+                import shutil
+                from pathlib import Path
+                
+                # Copy file to themes directory
+                themes_dir = get_themes_dir()
+                dest_path = themes_dir / Path(file_path).name
+                
+                if dest_path.exists():
+                    reply = QMessageBox.question(
+                        self, 
+                        "Overwrite Theme?",
+                        f"Theme file '{dest_path.name}' already exists. Overwrite?",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                    )
+                    if reply != QMessageBox.StandardButton.Yes:
+                        return
+                
+                shutil.copy2(file_path, dest_path)
+                
+                # Refresh themes
+                self._refresh_themes()
+                
+                QMessageBox.information(self, "Theme Loaded", 
+                                      f"Theme file copied to themes folder: {dest_path.name}")
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to load theme file: {e}")
+    
+    def _open_themes_folder(self):
+        """Open the themes folder in the file explorer."""
+        try:
+            from ...utils.config_paths import get_themes_dir
+            import os
+            import platform
+            
+            themes_dir = get_themes_dir()
+            
+            if platform.system() == 'Windows':
+                os.startfile(themes_dir)
+            elif platform.system() == 'Darwin':  # macOS
+                os.system(f'open "{themes_dir}"')
+            else:  # Linux and others
+                os.system(f'xdg-open "{themes_dir}"')
+                
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to open themes folder: {e}")
+    
+    def _export_current_theme(self):
+        """Export the current theme to a JSON file."""
+        try:
+            from ...ui.themes.theme_manager import get_theme_manager
+            from ...utils.config_paths import get_themes_dir
+            import json
+            from pathlib import Path
+            
+            # Get the current theme
+            theme_manager = get_theme_manager()
+            current_theme_name = theme_manager.current_theme_name
+            current_theme = theme_manager.current_theme
+            
+            if not current_theme:
+                QMessageBox.warning(self, "Error", "No theme currently loaded")
+                return
+            
+            # Create theme data for export
+            theme_data = {
+                "name": current_theme_name,
+                "display_name": current_theme_name.replace("_", " ").title(),
+                "description": f"Exported {current_theme_name} theme",
+                "author": "User Export",
+                "version": "1.0.0",
+                "colors": {
+                    "primary": current_theme.primary,
+                    "primary_hover": current_theme.primary_hover,
+                    "secondary": current_theme.secondary,
+                    "secondary_hover": current_theme.secondary_hover,
+                    
+                    "background_primary": current_theme.background_primary,
+                    "background_secondary": current_theme.background_secondary,
+                    "background_tertiary": current_theme.background_tertiary,
+                    "background_overlay": current_theme.background_overlay,
+                    
+                    "text_primary": current_theme.text_primary,
+                    "text_secondary": current_theme.text_secondary,
+                    "text_tertiary": current_theme.text_tertiary,
+                    "text_disabled": current_theme.text_disabled,
+                    
+                    "interactive_normal": current_theme.interactive_normal,
+                    "interactive_hover": current_theme.interactive_hover,
+                    "interactive_active": current_theme.interactive_active,
+                    "interactive_disabled": current_theme.interactive_disabled,
+                    
+                    "status_success": current_theme.status_success,
+                    "status_warning": current_theme.status_warning,
+                    "status_error": current_theme.status_error,
+                    "status_info": current_theme.status_info,
+                    
+                    "border_primary": current_theme.border_primary,
+                    "border_secondary": current_theme.border_secondary,
+                    "border_focus": current_theme.border_focus,
+                    "separator": current_theme.separator
+                }
+            }
+            
+            # Open save dialog
+            default_filename = f"{current_theme_name}_exported.json"
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Export Theme",
+                str(get_themes_dir() / default_filename),
+                "Theme Files (*.json);;All Files (*.*)"
+            )
+            
+            if file_path:
+                # Save the theme file
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(theme_data, f, indent=2, ensure_ascii=False)
+                
+                QMessageBox.information(
+                    self, 
+                    "Theme Exported", 
+                    f"Theme '{current_theme_name}' exported successfully to:\n{Path(file_path).name}"
+                )
+                
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to export theme: {e}")
     
     def _open_theme_editor(self):
         """Open the theme editor dialog."""

@@ -120,8 +120,8 @@ class SettingsManager:
         self._encryption_key = None
 
         self._ensure_settings_dir()
-        # Attempt migration from legacy path BEFORE key init so key moves too
-        self._migrate_legacy()
+        # Clean up any nested path issues
+        self._cleanup_nested_paths()
         self._initialize_encryption()
         self.load()
         self._log_paths()
@@ -130,13 +130,10 @@ class SettingsManager:
     def _determine_settings_dir(self) -> Path:
         """Determine settings directory.
 
-        Order of preference:
-        1. Platform-specific AppData location (Qt standard) /Ghostman/configs
-        2. Legacy ~/.ghostman (if it already exists and new path absent)
-        3. Fallback to legacy if Qt path not available
+        Always uses platform-specific AppData location (AppData/Roaming/Ghostman on Windows).
+        No longer supports legacy ~/.ghostman directory.
         """
-        legacy_dir = Path.home() / ".ghostman"
-        new_dir: Optional[Path] = None
+        # Try to get platform-specific AppData location
         try:
             if QStandardPaths:
                 base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
@@ -147,39 +144,33 @@ class SettingsManager:
                         settings_root = base_path
                     else:
                         settings_root = base_path / self.APP_DIR_NAME
-                    new_dir = settings_root / self.CONFIG_SUBDIR
-        except Exception:  # pragma: no cover
-            new_dir = None
-
-        if new_dir is None:
-            return legacy_dir
-
-        # If legacy exists and new doesn't, we'll create new and migrate
-        if legacy_dir.exists() and not new_dir.exists():
-            try:
-                new_dir.mkdir(parents=True, exist_ok=True)
-            except Exception as e:  # pragma: no cover
-                logger.warning(f"Failed to create new settings dir, using legacy: {e}")
-                return legacy_dir
-
-        new_dir.mkdir(parents=True, exist_ok=True)
-        return new_dir
+                    settings_dir = settings_root / self.CONFIG_SUBDIR
+                    settings_dir.mkdir(parents=True, exist_ok=True)
+                    return settings_dir
+        except Exception as e:  # pragma: no cover
+            logger.warning(f"Failed to get Qt AppData location: {e}")
+        
+        # Fallback to manual AppData path on Windows
+        if os.name == 'nt':  # Windows
+            appdata = os.environ.get('APPDATA')
+            if appdata:
+                settings_dir = Path(appdata) / self.APP_DIR_NAME / self.CONFIG_SUBDIR
+                settings_dir.mkdir(parents=True, exist_ok=True)
+                return settings_dir
+        
+        # Last resort fallback (should rarely happen)
+        fallback_dir = Path.home() / f".{self.APP_DIR_NAME.lower()}_data" / self.CONFIG_SUBDIR
+        fallback_dir.mkdir(parents=True, exist_ok=True)
+        logger.warning(f"Using fallback settings directory: {fallback_dir}")
+        return fallback_dir
 
     def _migrate_legacy(self):
-        """Migrate settings.json from legacy ~/.ghostman to new path if applicable."""
-        legacy_dir = Path.home() / ".ghostman"
-        if legacy_dir == self.settings_dir:
-            return  # Using legacy path already
-        legacy_file = legacy_dir / "settings.json"
-        if legacy_file.exists() and not self.settings_file.exists():
-            try:
-                data = json.loads(legacy_file.read_text(encoding='utf-8'))
-                with open(self.settings_file, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, indent=2, ensure_ascii=False)
-                logger.info(f"Migrated legacy settings from {legacy_file} -> {self.settings_file}")
-            except Exception as e:  # pragma: no cover
-                logger.error(f"Failed migrating legacy settings: {e}")
-        # Also cleanup accidental nested Ghostman/Ghostman/configs (older path logic)
+        """No longer migrates from legacy ~/.ghostman - this method is kept for compatibility."""
+        # Legacy migration removed - all data should be in APPDATA
+        pass
+    
+    def _cleanup_nested_paths(self):
+        """Cleanup accidental nested Ghostman/Ghostman/configs (from older path logic)."""
         try:
             # Example of bad nesting: .../AppData/Roaming/Ghostman/Ghostman/configs
             parts = [p.lower() for p in self.settings_dir.parts]

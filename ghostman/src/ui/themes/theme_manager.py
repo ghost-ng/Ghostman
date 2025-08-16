@@ -91,30 +91,46 @@ class ThemeManager(QObject):
             self._preset_themes = {"default": ColorSystem()}
     
     def _load_custom_themes(self):
-        """Load custom themes from disk."""
+        """Load custom themes from disk (both root themes folder and custom subfolder)."""
         self._custom_themes = {}
         
-        if not self._custom_themes_dir.exists():
-            return
+        # Load from both the main themes directory and custom subdirectory
+        theme_directories = [self._themes_dir, self._custom_themes_dir]
         
-        for theme_file in self._custom_themes_dir.glob("*.json"):
-            try:
-                with open(theme_file, 'r', encoding='utf-8') as f:
-                    theme_data = json.load(f)
-                
-                theme_name = theme_file.stem
-                color_system = ColorSystem.from_dict(theme_data.get('colors', {}))
-                
-                # Validate theme
-                is_valid, issues = color_system.validate()
-                if is_valid:
-                    self._custom_themes[theme_name] = color_system
-                    logger.debug(f"Loaded custom theme: {theme_name}")
-                else:
-                    logger.warning(f"Invalid custom theme {theme_name}: {issues}")
+        for theme_dir in theme_directories:
+            if not theme_dir.exists():
+                continue
+            
+            for theme_file in theme_dir.glob("*.json"):
+                try:
+                    with open(theme_file, 'r', encoding='utf-8') as f:
+                        theme_data = json.load(f)
                     
-            except Exception as e:
-                logger.error(f"Failed to load custom theme {theme_file}: {e}")
+                    # Use 'name' field from JSON if available, otherwise use filename
+                    theme_name = theme_data.get('name', theme_file.stem)
+                    
+                    # Create ColorSystem from colors data
+                    color_system = ColorSystem.from_dict(theme_data.get('colors', {}))
+                    
+                    # Store additional metadata if available
+                    if hasattr(color_system, '_metadata'):
+                        color_system._metadata = {
+                            'display_name': theme_data.get('display_name', theme_name),
+                            'description': theme_data.get('description', ''),
+                            'author': theme_data.get('author', 'Unknown'),
+                            'version': theme_data.get('version', '1.0.0')
+                        }
+                    
+                    # Validate theme
+                    is_valid, issues = color_system.validate()
+                    if is_valid:
+                        self._custom_themes[theme_name] = color_system
+                        logger.debug(f"Loaded custom theme: {theme_name} from {theme_file}")
+                    else:
+                        logger.warning(f"Invalid custom theme {theme_name}: {issues}")
+                        
+                except Exception as e:
+                    logger.error(f"Failed to load custom theme {theme_file}: {e}")
         
         logger.info(f"Loaded {len(self._custom_themes)} custom themes")
     

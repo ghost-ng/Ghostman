@@ -139,13 +139,13 @@ class MarkdownRenderer:
         """Set default color scheme when theme system is not available."""
         self.color_scheme = {
             "normal": "#f0f0f0",
-            "input": "#00ff00", 
-            "response": "#00bfff",
-            "system": "#808080",
-            "info": "#ffff00",
-            "warning": "#ffa500",
-            "error": "#ff0000",
-            "divider": "#666666"
+            "input": "#4CAF50", 
+            "response": "#2196F3",
+            "system": "#9E9E9E",
+            "info": "#FF9800",
+            "warning": "#FF5722",
+            "error": "#F44336",
+            "divider": "#616161"
         }
     
     def render(self, text: str, style: str = "normal", force_plain: bool = False) -> str:
@@ -162,14 +162,15 @@ class MarkdownRenderer:
         """
         # Handle empty or None text
         if not text or not text.strip():
-            return '<span style="color: #808080;">[Empty message]</span><br>'
+            empty_color = self.color_scheme.get("system", "#808080")
+            return f'<span style="color: {empty_color};">[Empty message]</span><br>'
         
         # Cache key for performance optimization
         cache_key = f"{hash(text)}{style}{force_plain}"
         if cache_key in self._render_cache:
             return self._render_cache[cache_key]
         
-        base_color = self.color_scheme.get(style, "#f0f0f0")
+        base_color = self.color_scheme.get(style, self.color_scheme.get("normal", "#f0f0f0"))
         
         # Determine if we should process as markdown
         should_process_markdown = (
@@ -273,7 +274,7 @@ class MarkdownRenderer:
             'h2': self._adjust_color_brightness(base_color, 1.25),
             'h3': self._adjust_color_brightness(base_color, 1.2),
             'blockquote': self._adjust_color_brightness(base_color, 0.7),
-            'a': "#4A9EFF"  # Link color that works across all themes
+            'a': self.color_scheme.get('info', '#4A9EFF')  # Link color from theme
         }
         
         # Get appropriate font based on message style
@@ -281,21 +282,21 @@ class MarkdownRenderer:
         font_css = font_service.get_css_font_style(font_type)
         
         # Wrap entire content with base color and font configuration
-        styled_html = f'<div style="color: {base_color}; line-height: 1.4; {font_css};">{html_content}</div>'
+        styled_html = f'<div style="color: {base_color}; line-height: {{\'1.4\'}}; {font_css};">{html_content}</div>'
         
         # Apply specific styling to elements
         replacements = {
-            '<code>': f'<code style="background-color: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 3px; color: {style_colors["code"]}; font-family: Consolas, Monaco, monospace;">',
-            '<pre>': f'<pre style="background-color: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; border-left: 3px solid {base_color}; margin: 4px 0; overflow-x: auto;">',
+            '<code>': f'<code style="background-color: rgba(255,255,255,0.1); padding: {{\'2px\'}} {{\'4px\'}}; border-radius: {{\'3px\'}}; color: {style_colors["code"]}; font-family: Consolas, Monaco, monospace;">',
+            '<pre>': f'<pre style="background-color: rgba(255,255,255,0.05); padding: {{\'8px\'}}; border-radius: {{\'4px\'}}; border-left: {{\'3px\'}} solid {base_color}; margin: {{\'4px\'}} {{\'0\'}}; overflow-x: auto;">',
             '<em>': f'<em style="color: {style_colors["em"]}; font-style: italic;">',
             '<strong>': f'<strong style="color: {style_colors["strong"]}; font-weight: bold;">',
-            '<h1>': f'<h1 style="color: {style_colors["h1"]}; font-size: 1.4em; margin: 8px 0 4px 0; border-bottom: 2px solid {base_color};">',
-            '<h2>': f'<h2 style="color: {style_colors["h2"]}; font-size: 1.3em; margin: 6px 0 3px 0; border-bottom: 1px solid {base_color};">',
-            '<h3>': f'<h3 style="color: {style_colors["h3"]}; font-size: 1.2em; margin: 4px 0 2px 0;">',
-            '<blockquote>': f'<blockquote style="color: {style_colors["blockquote"]}; border-left: 3px solid {base_color}; padding-left: 12px; margin: 4px 0; font-style: italic;">',
+            '<h1>': f'<h1 style="color: {style_colors["h1"]}; font-size: {{\'1.4em\'}}; margin: {{\'8px\'}} {{\'0\'}} {{\'4px\'}} {{\'0\'}}; border-bottom: {{\'2px\'}} solid {base_color};">',
+            '<h2>': f'<h2 style="color: {style_colors["h2"]}; font-size: {{\'1.3em\'}}; margin: {{\'6px\'}} {{\'0\'}} {{\'3px\'}} {{\'0\'}}; border-bottom: {{\'1px\'}} solid {base_color};">',
+            '<h3>': f'<h3 style="color: {style_colors["h3"]}; font-size: {{\'1.2em\'}}; margin: {{\'4px\'}} {{\'0\'}} {{\'2px\'}} {{\'0\'}};">',
+            '<blockquote>': f'<blockquote style="color: {style_colors["blockquote"]}; border-left: {{\'3px\'}} solid {base_color}; padding-left: {{\'12px\'}}; margin: {{\'4px\'}} {{\'0\'}}; font-style: italic;">',
             '<ul>': '<ul style="margin: 4px 0; padding-left: 20px;">',
             '<ol>': '<ol style="margin: 4px 0; padding-left: 20px;">',
-            '<li>': f'<li style="margin: 2px 0;">',
+            '<li>': f'<li style="margin: {{\'2px\'}} {{\'0\'}};">',
             '<table>': f'<table style="border-collapse: collapse; margin: 8px 0; border: 1px solid {base_color};">',
             '<th>': f'<th style="padding: 4px 8px; border: 1px solid {base_color}; background-color: rgba(255,255,255,0.1); font-weight: bold;">',
             '<td>': f'<td style="padding: 4px 8px; border: 1px solid {base_color};">',
@@ -467,7 +468,11 @@ class ConversationCard(QWidget):
         
         # Message count
         msg_count = QLabel(f"📝 {len(self.conversation.messages)} msgs")
-        msg_count.setStyleSheet("color: #888; font-size: 9px;")
+        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+            text_color = self.theme_manager.current_theme.text_tertiary
+        else:
+            text_color = "#888"
+        msg_count.setStyleSheet(f"color: {text_color}; font-size: 9px;")
         meta_row.addWidget(msg_count)
         
         # Last updated
@@ -480,7 +485,11 @@ class ConversationCard(QWidget):
             time_text = f"{time_diff.seconds // 60}m ago"
         
         time_label = QLabel(f"🕒 {time_text}")
-        time_label.setStyleSheet("color: #888; font-size: 9px;")
+        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+            text_color = self.theme_manager.current_theme.text_tertiary
+        else:
+            text_color = "#888"
+        time_label.setStyleSheet(f"color: {text_color}; font-size: 9px;")
         meta_row.addWidget(time_label)
         
         meta_row.addStretch()
@@ -492,7 +501,11 @@ class ConversationCard(QWidget):
             if len(self.conversation.metadata.tags) > 3:
                 tags_text += "💬"
             tags_label = QLabel(tags_text)
-            tags_label.setStyleSheet("color: #666; font-size: 8px; font-style: italic;")
+            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+                text_color = self.theme_manager.current_theme.text_tertiary
+            else:
+                text_color = "#666"
+            tags_label.setStyleSheet(f"color: {text_color}; font-size: 8px; font-style: italic;")
             layout.addWidget(tags_label)
     
     def _get_status_icon(self) -> str:
@@ -637,6 +650,24 @@ class REPLWidget(QWidget):
             self._apply_styles()
             self._update_component_themes()
             
+            # Update conversation selector styling
+            if hasattr(self, 'conversation_selector'):
+                self._style_conversation_selector()
+            
+            # Update send button styling
+            if hasattr(self, 'send_button'):
+                self._style_send_button()
+            
+            # Update search elements if they exist
+            if hasattr(self, 'search_status_label'):
+                status_color = self.theme_manager.current_theme.text_tertiary
+                self.search_status_label.setStyleSheet(f"color: {status_color}; font-size: 10px;")
+            
+            # Update summary notification styling
+            if hasattr(self, 'summary_notification'):
+                summary_color = self.theme_manager.current_theme.status_success
+                self.summary_notification.setStyleSheet(f"color: {summary_color}; font-size: 9px; font-style: italic;")
+            
             # Update markdown renderer to use new theme colors
             if hasattr(self, '_markdown_renderer'):
                 self._markdown_renderer.update_theme()
@@ -751,43 +782,56 @@ class REPLWidget(QWidget):
         """Style the prompt label with theme-aware colors."""
         if self.theme_manager and THEME_SYSTEM_AVAILABLE:
             colors = self.theme_manager.current_theme
-            
+
+            # Base background tiers with graceful fallback
+            bg_secondary = getattr(colors, 'background_secondary', getattr(colors, 'background_primary', '#222'))
+            bg_tertiary = getattr(colors, 'background_tertiary', bg_secondary)
+
             if processing:
-                # Use warning/accent color for processing state
-                text_color = colors.status_warning
-                bg_color = f"rgba({self._hex_to_rgb(colors.status_warning)}, 0.15)"
+                # Emphasize processing with warning/accent text and tertiary background
+                text_color = getattr(colors, 'status_warning', getattr(colors, 'primary', '#FFA500'))
+                bg_color = bg_tertiary
+                border_color = getattr(colors, 'border_focus', getattr(colors, 'border_secondary', '#777'))
             else:
-                # Use primary color for normal state 
-                text_color = colors.primary
-                bg_color = f"rgba({self._hex_to_rgb(colors.primary)}, 0.15)"
-                
-            self.prompt_label.setStyleSheet(f"""
-                color: {text_color}; 
-                font-family: Segoe UI Emoji, Consolas, monospace; 
-                font-size: 11px;
-                background-color: {bg_color};
-                border-radius: 3px;
-                padding: 5px 8px;
-                margin-right: 5px;
-            """)
+                # Normal prompt: primary color text on secondary background
+                text_color = getattr(colors, 'primary', getattr(colors, 'text_primary', '#4CAF50'))
+                bg_color = bg_secondary
+                border_color = getattr(colors, 'border_secondary', '#555')
+
+            # Avoid identical bg/text
+            if text_color.lower() == bg_color.lower():
+                text_color = getattr(colors, 'text_primary', '#FFFFFF')
+
+            # Compose stylesheet (force solid background independent of panel opacity)
+            self.prompt_label.setStyleSheet(
+                "QLabel { "
+                f"color: {text_color}; "
+                f"background-color: {bg_color}; "
+                f"border: 1px solid {border_color}; "
+                "border-radius: 4px; "
+                "font-family: Segoe UI Emoji, Consolas, monospace; "
+                "font-size: 11px; "
+                "padding: 3px 8px; "
+                "margin-right: 6px; "
+                "}"
+            )
         else:
-            # Fallback to original colors
+            # Fallback to improved colors without background - force opacity to 1.0
             if processing:
-                color = "#ff8c00"
-                bg_color = "rgba(255, 140, 0, 0.1)"
+                color = "#FF9800"  # Material orange
             else:
-                color = "#00ff00"
-                bg_color = "rgba(0, 255, 0, 0.1)"
+                color = "#4CAF50"  # Material green
                 
-            self.prompt_label.setStyleSheet(f"""
-                color: {color}; 
-                font-family: Segoe UI Emoji, Consolas, monospace; 
-                font-size: 11px;
-                background-color: {bg_color};
-                border-radius: 3px;
-                padding: 5px 8px;
-                margin-right: 5px;
-            """)
+            # Use string formatting to avoid CSS syntax issues
+            self.prompt_label.setStyleSheet(
+                f"color: {color}; "
+                f"font-family: Segoe UI Emoji, Consolas, monospace; "
+                f"font-size: 11px; "
+                f"padding: 5px 8px; "
+                f"margin-right: 5px; "
+                f"background-color: transparent; "
+                f"opacity: 1.0;"
+            )
     
     def _hex_to_rgb(self, hex_color):
         """Convert hex color to RGB values for rgba()."""
@@ -818,6 +862,138 @@ class REPLWidget(QWidget):
                 }
                 QToolButton:hover {
                     background-color: rgba(255, 255, 255, 0.25);
+                }
+            """
+    
+    def _get_search_button_style(self):
+        """Get theme-aware styling for search buttons."""
+        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+            colors = self.theme_manager.current_theme
+            return f"""
+                QPushButton {{
+                    background-color: {colors.interactive_normal};
+                    color: {colors.text_primary};
+                    border: {{'1px'}} solid {colors.border_secondary};
+                    border-radius: {{'3px'}};
+                    font-size: {{'11px'}};
+                }}
+                QPushButton:hover {{
+                    background-color: {colors.interactive_hover};
+                    border-color: {colors.border_focus};
+                }}
+                QPushButton:pressed {{
+                    background-color: {colors.interactive_active};
+                }}
+                QPushButton:disabled {{
+                    background-color: {colors.interactive_disabled};
+                    color: {colors.text_disabled};
+                    border-color: {colors.border_secondary};
+                }}
+            """
+        else:
+            return """
+                QPushButton {
+                    background-color: rgba(255, 255, 255, 0.1);
+                    color: white;
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                    border-radius: 3px;
+                    font-size: 11px;
+                }
+                QPushButton:hover {
+                    background-color: rgba(255, 255, 255, 0.2);
+                    border-color: rgba(255, 255, 255, 0.4);
+                }
+                QPushButton:pressed {
+                    background-color: rgba(255, 255, 255, 0.3);
+                }
+                QPushButton:disabled {
+                    background-color: rgba(255, 255, 255, 0.05);
+                    color: #666;
+                    border-color: rgba(255, 255, 255, 0.1);
+                }
+            """
+    
+    def _get_search_checkbox_style(self):
+        """Get theme-aware styling for search checkbox."""
+        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+            colors = self.theme_manager.current_theme
+            return f"""
+                QCheckBox {{
+                    color: {colors.text_primary};
+                    spacing: {{'2px'}};
+                    font-size: {{'10px'}};
+                    font-weight: bold;
+                }}
+                QCheckBox::indicator {{
+                    width: {{'14px'}};
+                    height: {{'14px'}};
+                    border: {{'1px'}} solid {colors.border_secondary};
+                    background-color: {colors.interactive_normal};
+                    border-radius: {{'2px'}};
+                }}
+                QCheckBox::indicator:checked {{
+                    background-color: {colors.primary};
+                    border-color: {colors.primary};
+                }}
+                QCheckBox::indicator:hover {{
+                    border-color: {colors.border_focus};
+                }}
+            """
+        else:
+            return """
+                QCheckBox {
+                    color: white;
+                    spacing: 2px;
+                    font-size: 10px;
+                    font-weight: bold;
+                }
+                QCheckBox::indicator {
+                    width: 14px;
+                    height: 14px;
+                    border: 1px solid rgba(255, 255, 255, 0.3);
+                    background-color: rgba(255, 255, 255, 0.1);
+                    border-radius: 2px;
+                }
+                QCheckBox::indicator:checked {
+                    background-color: #FFA500;
+                    border-color: #FFA500;
+                }
+                QCheckBox::indicator:hover {
+                    border-color: rgba(255, 255, 255, 0.5);
+                }
+            """
+    
+    def _get_search_input_style(self):
+        """Get theme-aware styling for search input."""
+        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+            colors = self.theme_manager.current_theme
+            return f"""
+                QLineEdit {{
+                    background-color: {colors.background_secondary};
+                    color: {colors.text_primary};
+                    border: {{'1px'}} solid {colors.border_secondary};
+                    padding: {{'4px'}} {{'6px'}};
+                    border-radius: {{'3px'}};
+                    font-size: {{'11px'}};
+                }}
+                QLineEdit:focus {{
+                    border-color: {colors.border_focus};
+                    background-color: {colors.background_tertiary};
+                }}
+            """
+        else:
+            return """
+                QLineEdit {
+                    background-color: rgba(30, 30, 30, 0.8);
+                    color: #ffffff;
+                    border: 1px solid rgba(255, 255, 255, 0.3);
+                    padding: 4px 6px;
+                    border-radius: 3px;
+                    font-size: 11px;
+                }
+                QLineEdit:focus {
+                    border-color: #FFA500;
+                    background-color: rgba(40, 40, 40, 0.9);
                 }
             """
     
@@ -959,21 +1135,30 @@ class REPLWidget(QWidget):
             
         if not conversation:
             self.status_label.setText("🆕 New")
-            self.status_label.setStyleSheet("color: #FFA500; font-weight: bold; font-size: 10px;")
+            new_color = self.theme_manager.current_theme.status_info if (self.theme_manager and THEME_SYSTEM_AVAILABLE) else "#FFA500"
+            self.status_label.setStyleSheet(f"color: {new_color}; font-weight: bold; font-size: 10px;")
             return
         
         status_text = conversation.status.value.title()
         icon = self._get_status_icon(conversation)
         self.status_label.setText(f"{icon} {status_text}")
         
-        # Color coding based on status
-        colors = {
-            "Active": "#4CAF50",
-            "Pinned": "#FFD700", 
-            "Archived": "#888888",
-            "Deleted": "#FF5555"
-        }
-        color = colors.get(status_text, "#4CAF50")
+        # Color coding based on status with theme support
+        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+            colors = {
+                "Active": self.theme_manager.current_theme.status_success,
+                "Pinned": self.theme_manager.current_theme.status_warning, 
+                "Archived": self.theme_manager.current_theme.text_disabled,
+                "Deleted": self.theme_manager.current_theme.status_error
+            }
+        else:
+            colors = {
+                "Active": "#4CAF50",
+                "Pinned": "#FFD700", 
+                "Archived": "#888888",
+                "Deleted": "#FF5555"
+            }
+        color = colors.get(status_text, colors.get("Active", "#4CAF50"))
         self.status_label.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 10px;")
         
         # Show summary indicator if available
@@ -1186,7 +1371,8 @@ class REPLWidget(QWidget):
         # Search results label
         self.search_status_label = QLabel("0/0")
         self.search_status_label.setMinimumWidth(40)
-        self.search_status_label.setStyleSheet("color: #888; font-size: 10px;")
+        status_color = self.theme_manager.current_theme.text_tertiary if (self.theme_manager and THEME_SYSTEM_AVAILABLE) else "#888"
+        self.search_status_label.setStyleSheet(f"color: {status_color}; font-size: 10px;")
         search_layout.addWidget(self.search_status_label)
         
         # Close search button
@@ -1196,28 +1382,8 @@ class REPLWidget(QWidget):
         close_search_btn.clicked.connect(self._close_search)
         search_layout.addWidget(close_search_btn)
         
-        # Style search buttons
-        button_style = """
-            QPushButton {
-                background-color: rgba(255, 255, 255, 0.1);
-                color: white;
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 3px;
-                font-size: 11px;
-            }
-            QPushButton:hover {
-                background-color: rgba(255, 255, 255, 0.2);
-                border-color: rgba(255, 255, 255, 0.4);
-            }
-            QPushButton:pressed {
-                background-color: rgba(255, 255, 255, 0.3);
-            }
-            QPushButton:disabled {
-                background-color: rgba(255, 255, 255, 0.05);
-                color: #666;
-                border-color: rgba(255, 255, 255, 0.1);
-            }
-        """
+        # Style search buttons with theme colors
+        button_style = self._get_search_button_style()
         self.search_prev_btn.setStyleSheet(button_style)
         self.search_next_btn.setStyleSheet(button_style)
         close_search_btn.setStyleSheet(button_style)
@@ -1237,30 +1403,13 @@ class REPLWidget(QWidget):
                 border-radius: 2px;
                 background-color: rgba(30, 30, 30, 0.8);
             }
-            QCheckBox::indicator:checked {
-                background-color: #FFA500;
-                border-color: #FFA500;
-            }
-            QCheckBox::indicator:hover {
-                border-color: rgba(255, 255, 255, 0.5);
-            }
         """)
+        checkbox_style = self._get_search_checkbox_style()
+        self.regex_checkbox.setStyleSheet(checkbox_style)
         
-        # Search input styling
-        self.search_input.setStyleSheet("""
-            QLineEdit {
-                background-color: rgba(30, 30, 30, 0.8);
-                color: #ffffff;
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                padding: 4px 6px;
-                border-radius: 3px;
-                font-size: 11px;
-            }
-            QLineEdit:focus {
-                border-color: #FFA500;
-                background-color: rgba(40, 40, 40, 0.9);
-            }
-        """)
+        # Search input styling with theme colors
+        input_style = self._get_search_input_style()
+        self.search_input.setStyleSheet(input_style)
         
         # Initialize search state
         self.current_search_matches = []
@@ -1316,25 +1465,27 @@ class REPLWidget(QWidget):
         # add padding to right
         self.toolbar_new_conv_btn.setStyleSheet("padding-right: 4px;")
         self.toolbar_new_conv_btn.setToolTip("Start new conversation")
-        new_conv_btn.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
-        new_conv_btn.clicked.connect(self._on_new_conversation_clicked)
-        self._style_tool_button(new_conv_btn)
+        self.toolbar_new_conv_btn.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        self.toolbar_new_conv_btn.clicked.connect(self._on_new_conversation_clicked)
+        self._style_tool_button(self.toolbar_new_conv_btn)
+        # add padding
+        
         
         # Create menu for new conversation options
-        new_conv_menu = QMenu(new_conv_btn)
+        new_conv_menu = QMenu(self.toolbar_new_conv_btn)
         
         # Start new conversation action
-        new_action = QAction("Start New Conversation", new_conv_btn)
+        new_action = QAction("Start New Conversation", self.toolbar_new_conv_btn)
         new_action.triggered.connect(lambda: self._start_new_conversation(save_current=False))
         new_conv_menu.addAction(new_action)
         
         # Start new conversation and save current action
-        save_and_new_action = QAction("Save Current & Start New", new_conv_btn)
+        save_and_new_action = QAction("Save Current & Start New", self.toolbar_new_conv_btn)
         save_and_new_action.triggered.connect(lambda: self._start_new_conversation(save_current=True))
         new_conv_menu.addAction(save_and_new_action)
         
-        new_conv_btn.setMenu(new_conv_menu)
-        toolbar_layout.addWidget(new_conv_btn)
+        self.toolbar_new_conv_btn.setMenu(new_conv_menu)
+        toolbar_layout.addWidget(self.toolbar_new_conv_btn)
         
         # Browse conversations button
         self.browse_btn = QToolButton()
@@ -1375,44 +1526,28 @@ class REPLWidget(QWidget):
         # Summary notification label
         self.summary_notification = QLabel()
         self.summary_notification.setVisible(False)
-        self.summary_notification.setStyleSheet("color: #4CAF50; font-size: 9px; font-style: italic;")
+        summary_color = self.theme_manager.current_theme.status_success if (self.theme_manager and THEME_SYSTEM_AVAILABLE) else "#4CAF50"
+        self.summary_notification.setStyleSheet(f"color: {summary_color}; font-size: 9px; font-style: italic;")
         toolbar_layout.addWidget(self.summary_notification)
         
         parent_layout.addLayout(toolbar_layout)
     
     def _style_conversation_selector(self):
         """Apply custom styling to conversation selector."""
-        self.conversation_selector.setStyleSheet("""
-            QComboBox {
-                background-color: rgba(40, 40, 40, 0.8);
-                color: white;
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                border-radius: 5px;
-                padding: 5px 10px;
-                font-size: 11px;
-            }
-            QComboBox:hover {
-                border: 1px solid #4CAF50;
-            }
-            QComboBox::drop-down {
-                border: none;
-                width: 20px;
-            }
-            QComboBox::down-arrow {
-                image: none;
-                border-left: 3px solid transparent;
-                border-right: 3px solid transparent;
-                border-top: 5px solid white;
-                margin-top: 2px;
-            }
-            QComboBox QAbstractItemView {
-                background-color: rgba(30, 30, 30, 0.95);
-                color: white;
-                selection-background-color: #4CAF50;
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                outline: none;
-            }
-        """)
+        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+            colors = self.theme_manager.current_theme
+            # Use theme colors for conversation selector
+            bg_color = colors.background_secondary
+            text_color = colors.text_primary
+            border_color = colors.border_secondary
+            focus_color = colors.border_focus
+            
+            style = f"QComboBox {{background-color: {bg_color}; color: {text_color}; border: 1px solid {border_color}; border-radius: 5px; padding: 5px 10px; font-size: 11px;}} QComboBox:hover {{border: 1px solid {focus_color};}} QComboBox::drop-down {{border: none; width: 20px;}} QComboBox::down-arrow {{image: none; border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 5px solid {text_color}; margin-top: 2px;}} QComboBox QAbstractItemView {{background-color: {colors.background_primary}; color: {text_color}; selection-background-color: {colors.primary}; border: 1px solid {border_color}; outline: none;}}"
+        else:
+            # Fallback styles
+            style = "QComboBox {background-color: rgba(40, 40, 40, 0.8); color: white; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 5px; padding: 5px 10px; font-size: 11px;} QComboBox:hover {border: 1px solid #4CAF50;} QComboBox::drop-down {border: none; width: 20px;} QComboBox::down-arrow {image: none; border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 5px solid white; margin-top: 2px;} QComboBox QAbstractItemView {background-color: rgba(30, 30, 30, 0.95); color: white; selection-background-color: #4CAF50; border: 1px solid rgba(255, 255, 255, 0.3); outline: none;}"
+        
+        self.conversation_selector.setStyleSheet(style)
     
     def _style_tool_button(self, button: QToolButton):
         """Apply consistent styling to toolbar buttons with emoji-safe font handling."""
@@ -1429,15 +1564,15 @@ class REPLWidget(QWidget):
                 QToolButton {{
                     background-color: {colors.interactive_normal};
                     color: {colors.text_primary};
-                    border: 1px solid {colors.border_secondary};
-                    border-radius: 4px;
+                    border: {{'1px'}} solid {colors.border_secondary};
+                    border-radius: {{'4px'}};
                     font-family: {emoji_font_stack};
-                    font-size: 12px;
-                    padding: 2px;
+                    font-size: {{'12px'}};
+                    padding: {{'2px'}};
                 }}
                 QToolButton:hover {{
                     background-color: {colors.interactive_hover};
-                    border: 1px solid {colors.border_focus};
+                    border: {{'1px'}} solid {colors.border_focus};
                 }}
                 QToolButton:pressed {{
                     background-color: {colors.interactive_active};
@@ -1454,15 +1589,15 @@ class REPLWidget(QWidget):
                 QToolButton {{
                     background-color: rgba(255, 255, 255, 0.1);
                     color: white;
-                    border: 1px solid rgba(255, 255, 255, 0.2);
-                    border-radius: 4px;
+                    border: {{'1px'}} solid rgba(255, 255, 255, 0.2);
+                    border-radius: {{'4px'}};
                     font-family: {emoji_font_stack};
-                    font-size: 12px;
-                    padding: 2px;
+                    font-size: {{'12px'}};
+                    padding: {{'2px'}};
                 }}
                 QToolButton:hover {{
                     background-color: rgba(255, 255, 255, 0.2);
-                    border: 1px solid rgba(255, 255, 255, 0.4);
+                    border: {{'1px'}} solid rgba(255, 255, 255, 0.4);
                 }}
                 QToolButton:pressed {{
                     background-color: rgba(255, 255, 255, 0.3);
@@ -1482,15 +1617,15 @@ class REPLWidget(QWidget):
                 QToolButton {{
                     background-color: {colors.interactive_normal};
                     color: {colors.text_primary};
-                    border: 1px solid {colors.border_secondary};
-                    border-radius: 4px;
+                    border: {{'1px'}} solid {colors.border_secondary};
+                    border-radius: {{'4px'}};
                     font-family: {emoji_font_stack};
-                    font-size: 14px;
+                    font-size: {{'14px'}};
                     padding: {padding};
                 }}
                 QToolButton:hover {{
                     background-color: {colors.interactive_hover};
-                    border: 1px solid {colors.border_focus};
+                    border: {{'1px'}} solid {colors.border_focus};
                 }}
                 QToolButton:pressed {{
                     background-color: {colors.interactive_active};
@@ -1501,7 +1636,7 @@ class REPLWidget(QWidget):
                 }}
                 QToolButton::menu-indicator {{
                     image: none;
-                    width: 0px;
+                    width: {{'0px'}};
                 }}
             """)
         else:
@@ -1511,22 +1646,22 @@ class REPLWidget(QWidget):
                 QToolButton {{
                     background-color: rgba(255, 255, 255, 0.15);
                     color: white;
-                    border: 1px solid rgba(255, 255, 255, 0.3);
-                    border-radius: 4px;
+                    border: {{'1px'}} solid rgba(255, 255, 255, 0.3);
+                    border-radius: {{'4px'}};
                     font-family: {emoji_font_stack};
-                    font-size: 14px;
+                    font-size: {{'14px'}};
                     padding: {padding};
                 }}
                 QToolButton:hover {{
                     background-color: rgba(255, 255, 255, 0.25);
-                    border: 1px solid rgba(255, 255, 255, 0.5);
+                    border: {{'1px'}} solid rgba(255, 255, 255, 0.5);
                 }}
                 QToolButton:pressed {{
                     background-color: rgba(255, 255, 255, 0.35);
                 }}
                 QToolButton::menu-indicator {{
                     image: none;
-                    width: 0px;
+                    width: {{'0px'}};
                 }}
             """)
     
@@ -1543,23 +1678,24 @@ class REPLWidget(QWidget):
             primary_hover = "#f57c00"
             text_color = "#ffffff"
         
-        self.send_button.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {primary_color};
-                color: {text_color};
-                border: none;
-                padding: 5px 15px;
-                border-radius: 3px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background-color: {primary_hover};
-            }}
-            QPushButton:pressed {{
-                background-color: {primary_color};
-                opacity: 0.8;
-            }}
-        """)
+        # Use string formatting to avoid CSS syntax issues
+        self.send_button.setStyleSheet(
+            f"QPushButton {{ "
+            f"background-color: {primary_color}; "
+            f"color: {text_color}; "
+            f"border: none; "
+            f"padding: 5px 15px; "
+            f"border-radius: 3px; "
+            f"font-weight: bold; "
+            f"}} "
+            f"QPushButton:hover {{ "
+            f"background-color: {primary_hover}; "
+            f"}} "
+            f"QPushButton:pressed {{ "
+            f"background-color: {primary_color}; "
+            f"opacity: 0.8; "
+            f"}}"
+        )
     
     def _update_search_button_state(self):
         """Update search button visual state based on search mode."""
@@ -1598,17 +1734,17 @@ class REPLWidget(QWidget):
                 QToolButton {{
                     background-color: {bg_color};
                     color: {text_color};
-                    border: 1px solid {border_color};
-                    border-radius: 4px;
-                    font-size: 14px;
-                    padding: 2px 6px;
+                    border: {{'1px'}} solid {border_color};
+                    border-radius: {{'4px'}};
+                    font-size: {{'14px'}};
+                    padding: {{'2px'}} {{'6px'}};
                 }}
                 QToolButton:hover {{
                     background-color: {border_color};
                 }}
                 QToolButton:pressed {{
                     background-color: {bg_color};
-                    opacity: 0.8;
+                    opacity: {{'0.8'}};
                 }}
             """)
             
@@ -1658,18 +1794,18 @@ class REPLWidget(QWidget):
                 QToolButton {{
                     background-color: {bg_color};
                     color: {text_color};
-                    border: 1px solid {border_color};
-                    border-radius: 4px;
-                    font-size: 14px;
-                    padding: 2px 6px;
+                    border: {{'1px'}} solid {border_color};
+                    border-radius: {{'4px'}};
+                    font-size: {{'14px'}};
+                    padding: {{'2px'}} {{'6px'}};
                 }}
                 QToolButton:hover {{
                     background-color: {hover_color};
-                    border: 1px solid {border_color};
+                    border: {{'1px'}} solid {border_color};
                 }}
                 QToolButton:pressed {{
                     background-color: {bg_color};
-                    opacity: 0.8;
+                    opacity: {{'0.8'}};
                 }}
             """)
             
@@ -2021,31 +2157,13 @@ class REPLWidget(QWidget):
             else:
                 child_bg = colors.background_tertiary
             
-            # Combine styles
-            combined_style = f"""
-            {style}
-            #repl-root QTextEdit {{
-                background-color: {child_bg};
-                color: {colors.text_primary};
-                border: 1px solid {colors.border_secondary};
-                border-radius: 5px;
-                padding: 5px;
-                selection-background-color: {colors.secondary};
-                selection-color: {colors.text_primary};
-            }}
-            #repl-root QLineEdit {{
-                background-color: {child_bg};
-                color: {colors.text_primary};
-                border: 1px solid {colors.border_primary};
-                border-radius: 3px;
-                padding: 5px;
-                selection-background-color: {colors.secondary};
-                selection-color: {colors.text_primary};
-            }}
-            #repl-root QLineEdit:focus {{
-                border: 2px solid {colors.border_focus};
-            }}
-            """
+            # Combine styles using string formatting to avoid CSS syntax issues
+            textedit_style = f"#repl-root QTextEdit {{ background-color: {child_bg}; color: {colors.text_primary}; border: 1px solid {colors.border_secondary}; border-radius: 5px; padding: 5px; selection-background-color: {colors.secondary}; selection-color: {colors.text_primary}; }}"
+            lineedit_style = f"#repl-root QLineEdit {{ background-color: {child_bg}; color: {colors.text_primary}; border: 1px solid {colors.border_primary}; border-radius: 3px; padding: 5px; selection-background-color: {colors.secondary}; selection-color: {colors.text_primary}; }}"
+            lineedit_focus_style = f"#repl-root QLineEdit:focus {{ border: 2px solid {colors.border_focus}; }}"
+            
+            combined_style = f"{style} {textedit_style} {lineedit_style} {lineedit_focus_style}"
+            
             
             self.setStyleSheet(combined_style)
             logger.debug("🎨 Applied themed REPL styles")
@@ -2068,29 +2186,13 @@ class REPLWidget(QWidget):
         logger.debug(f"  📦 Panel background: {panel_bg}")
         logger.debug(f"  📝 Text area background: {textedit_bg}")
         logger.debug(f"  ⌨️  Input background: {lineedit_bg}")
-        self.setStyleSheet(f"""
-            #repl-root {{
-                background-color: {panel_bg};
-                border-radius: 6px;
-            }}
-            #repl-root QTextEdit {{
-                background-color: {textedit_bg};
-                color: #f0f0f0;
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 5px;
-                padding: 5px;
-            }}
-            #repl-root QLineEdit {{
-                background-color: {lineedit_bg};
-                color: #ffffff;
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 3px;
-                padding: 5px;
-            }}
-            #repl-root QLineEdit:focus {{
-                border: 1px solid #4CAF50;
-            }}
-        """)
+        # Use simple string formatting to avoid CSS syntax issues
+        root_style = f"#repl-root {{ background-color: {panel_bg}; border-radius: 6px; }}"
+        textedit_fallback = f"#repl-root QTextEdit {{ background-color: {textedit_bg}; color: #f0f0f0; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 5px; padding: 5px; }}"
+        lineedit_fallback = f"#repl-root QLineEdit {{ background-color: {lineedit_bg}; color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 3px; padding: 5px; }}"
+        lineedit_focus_fallback = "#repl-root QLineEdit:focus { border: 1px solid #4CAF50; }"
+        
+        self.setStyleSheet(f"{root_style} {textedit_fallback} {lineedit_fallback} {lineedit_focus_fallback}")
 
     def set_panel_opacity(self, opacity: float):
         """Set the frame (panel) background opacity only.
@@ -2699,7 +2801,7 @@ class REPLWidget(QWidget):
         except Exception as e:
             logger.error(f"Error rendering output: {e}")
             # Fallback to simple text rendering
-            color = self._markdown_renderer.color_scheme.get(style, "#f0f0f0")
+            color = self._markdown_renderer.color_scheme.get(style, self._markdown_renderer.color_scheme.get("normal", "#f0f0f0"))
             escaped_text = html.escape(str(text))
             cursor.insertHtml(f'<span style="color: {color};">{escaped_text}</span><br>')
         
@@ -2726,7 +2828,8 @@ class REPLWidget(QWidget):
             
             # Remove selected content and add notice
             cursor.removeSelectedText()
-            cursor.insertHtml('<span style="color: #808080; font-style: italic;">[Previous messages truncated for performance]</span><br><br>')
+            truncate_color = self._markdown_renderer.color_scheme.get("system", "#808080") if hasattr(self, '_markdown_renderer') else "#808080"
+            cursor.insertHtml(f'<span style="color: {truncate_color}; font-style: italic;">[Previous messages truncated for performance]</span><br><br>')
             
             logger.debug(f"Document size managed: removed 200 blocks, {document.blockCount()} remaining")
     
@@ -3296,7 +3399,8 @@ class REPLWidget(QWidget):
         
         # Warning label
         warning_label = QLabel("⚠️ This action cannot be undone. Deleted conversations will be permanently removed.")
-        warning_label.setStyleSheet("color: #ff6b6b; font-weight: bold;")
+        warning_color = self.theme_manager.current_theme.status_error if (self.theme_manager and THEME_SYSTEM_AVAILABLE) else "#ff6b6b"
+        warning_label.setStyleSheet(f"color: {warning_color}; font-weight: bold;")
         warning_label.setWordWrap(True)
         layout.addWidget(warning_label)
         
@@ -3307,7 +3411,8 @@ class REPLWidget(QWidget):
         cancel_btn.clicked.connect(dialog.reject)
         
         delete_btn = QPushButton("Delete Selected")
-        delete_btn.setStyleSheet("background-color: #ff6b6b; color: white; font-weight: bold;")
+        delete_bg = self.theme_manager.current_theme.status_error if (self.theme_manager and THEME_SYSTEM_AVAILABLE) else "#ff6b6b"
+        delete_btn.setStyleSheet(f"background-color: {delete_bg}; color: white; font-weight: bold;")
         delete_btn.clicked.connect(lambda: self._handle_bulk_delete(dialog, conversation_list))
         
         button_layout.addWidget(cancel_btn)
@@ -3653,8 +3758,7 @@ class REPLWidget(QWidget):
                 # Show grips - resize mode ON
                 parent_window.show_resize_arrows(auto_hide=False)  # Compatibility method
                 # Style button as active/pressed
-                self.move_btn.setStyleSheet("""
-                    QToolButton {
+                self.move_btn.setStyleSheet("""QToolButton {
                         background-color: rgba(255, 215, 0, 0.8);
                         color: black;
                         border: 2px solid rgba(255, 255, 255, 0.8);
@@ -3664,8 +3768,7 @@ class REPLWidget(QWidget):
                     }
                     QToolButton:hover {
                         background-color: rgba(255, 215, 0, 0.9);
-                    }
-                """)
+                    }""")
                 print("🔘 Move mode ON - edge grips visible, REPL fully clickable")
             else:
                 # Hide grips - normal mode restored
@@ -4073,10 +4176,16 @@ class REPLWidget(QWidget):
             # Clear previous highlights
             self._clear_search_highlights()
             
-            # Create highlight format
+            # Create highlight format with theme colors
             highlight_format = QTextCharFormat()
-            highlight_format.setBackground(QColor("#ffff00"))  # Yellow background
-            highlight_format.setForeground(QColor("#000000"))  # Black text
+            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+                highlight_bg = self.theme_manager.current_theme.status_warning
+                highlight_fg = self.theme_manager.current_theme.background_primary
+            else:
+                highlight_bg = "#ffff00"  # Yellow background
+                highlight_fg = "#000000"  # Black text
+            highlight_format.setBackground(QColor(highlight_bg))
+            highlight_format.setForeground(QColor(highlight_fg))
             
             # Apply highlight to current match
             cursor = self.output_display.textCursor()

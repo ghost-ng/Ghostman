@@ -407,12 +407,16 @@ class ThemeEditorDialog(QDialog):
     
     def _init_ui(self):
         """Initialize the user interface."""
-        self.setWindowTitle("Theme Editor")
+        self.setWindowTitle("Theme Editor (Not Yet Implemented)")
         self.setModal(True)
         self.resize(900, 700)
         
-        # Main layout
+        # Main layout with stacked widget for overlay
         main_layout = QVBoxLayout()
+        
+        # Create a container widget for the actual content
+        content_widget = QWidget()
+        content_layout = QVBoxLayout()
         
         # Create splitter for main content
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -429,12 +433,46 @@ class ThemeEditorDialog(QDialog):
         splitter.setStretchFactor(0, 2)  # Controls take 2/3
         splitter.setStretchFactor(1, 1)  # Preview takes 1/3
         
-        main_layout.addWidget(splitter)
+        content_layout.addWidget(splitter)
         
         # Button bar
         button_layout = self._create_button_bar()
-        main_layout.addLayout(button_layout)
+        content_layout.addLayout(button_layout)
         
+        content_widget.setLayout(content_layout)
+        
+        # Create overlay widget with "Not Yet Implemented" message
+        overlay_widget = QWidget()
+        overlay_widget.setStyleSheet("""
+            QWidget {
+                background-color: rgba(0, 0, 0, 180);
+            }
+            QLabel {
+                color: white;
+                font-size: 24px;
+                font-weight: bold;
+                padding: 20px;
+                background-color: rgba(255, 140, 0, 200);
+                border-radius: 10px;
+            }
+        """)
+        overlay_layout = QVBoxLayout()
+        overlay_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        overlay_label = QLabel("🚧 Theme Editor Not Yet Implemented 🚧\n\nThis feature is coming soon!")
+        overlay_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        overlay_layout.addWidget(overlay_label)
+        
+        overlay_widget.setLayout(overlay_layout)
+        
+        # Stack the widgets
+        from PyQt6.QtWidgets import QStackedLayout
+        stacked_layout = QStackedLayout()
+        stacked_layout.addWidget(content_widget)
+        stacked_layout.addWidget(overlay_widget)
+        stacked_layout.setCurrentIndex(1)  # Show overlay on top
+        
+        main_layout.addLayout(stacked_layout)
         self.setLayout(main_layout)
     
     def _create_controls_panel(self) -> QWidget:
