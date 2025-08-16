@@ -649,8 +649,10 @@ class AppCoordinator(QObject):
                 settings_processed += 1
         
         # Refresh fonts in REPL widget if available
-        if self._floating_repl and hasattr(self._floating_repl, 'repl_widget'):
-            repl_widget = self._floating_repl.repl_widget
+        if (hasattr(self._main_window, 'floating_repl') and 
+            self._main_window.floating_repl and 
+            hasattr(self._main_window.floating_repl, 'repl_widget')):
+            repl_widget = self._main_window.floating_repl.repl_widget
             if hasattr(repl_widget, 'refresh_fonts'):
                 try:
                     repl_widget.refresh_fonts()

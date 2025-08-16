@@ -32,6 +32,16 @@ except ImportError:
     SearchResults = None
     SearchResult = None
 
+# Import theme system
+try:
+    from ...ui.themes.theme_manager import get_theme_manager
+    from ...ui.themes.style_templates import StyleTemplates
+    THEME_SYSTEM_AVAILABLE = True
+except ImportError:
+    get_theme_manager = None
+    StyleTemplates = None
+    THEME_SYSTEM_AVAILABLE = False
+
 logger = logging.getLogger("ghostman.simple_conversation_browser")
 
 
@@ -211,12 +221,18 @@ class SimpleConversationBrowser(QDialog):
     
     conversation_restore_requested = pyqtSignal(str)  # conversation_id
     
-    def __init__(self, parent=None, conversation_manager=None):
+    def __init__(self, parent=None, conversation_manager=None, theme_manager=None):
         super().__init__(parent)
         self.conversation_manager: Optional[ConversationManager] = conversation_manager
         self.export_service: Optional[ExportService] = None
         self.conversations: List[Conversation] = []
         self.current_conversation_id: Optional[str] = None
+        
+        # Initialize theme manager
+        if theme_manager is None and THEME_SYSTEM_AVAILABLE:
+            self.theme_manager = get_theme_manager()
+        else:
+            self.theme_manager = theme_manager
         
         self._init_ui()
         self._init_conversation_manager()
@@ -878,91 +894,181 @@ class SimpleConversationBrowser(QDialog):
         return text
     
     def _apply_styles(self):
-        """Apply dark theme styles."""
-        self.setStyleSheet("""
-            QDialog {
-                background-color: #2b2b2b;
-                color: #ffffff;
-            }
-            QLabel {
-                color: #ffffff;
-            }
-            QPushButton {
-                background-color: #404040;
-                color: #ffffff;
-                border: 1px solid #555555;
-                padding: 6px 12px;
-                border-radius: 4px;
-                font-size: 11px;
-            }
-            QPushButton:hover {
-                background-color: #4a4a4a;
-                border-color: #666666;
-            }
-            QPushButton:pressed {
-                background-color: #333333;
-            }
-            QPushButton:disabled {
-                background-color: #2a2a2a;
-                color: #666666;
-                border-color: #444444;
-            }
-            QTableWidget {
-                background-color: #1e1e1e;
-                alternate-background-color: #252525;
-                color: #ffffff;
-                gridline-color: #444444;
-                border: 1px solid #555555;
-            }
-            QHeaderView::section {
-                background-color: #333333;
-                color: #ffffff;
-                padding: 6px;
-                border: 1px solid #555555;
-                font-weight: bold;
-            }
-            QTableWidget::item:selected {
-                background-color: #4CAF50;
-                color: #ffffff;
-            }
-            QLineEdit {
-                background-color: #1e1e1e;
-                color: #ffffff;
-                border: 1px solid #555555;
-                padding: 6px 8px;
-                border-radius: 4px;
-                font-size: 11px;
-            }
-            QLineEdit:focus {
-                border-color: #4CAF50;
-                background-color: #252525;
-            }
-            QCheckBox {
-                color: #ffffff;
-                spacing: 5px;
-            }
-            QCheckBox::indicator {
-                width: 16px;
-                height: 16px;
-                border: 1px solid #555555;
-                border-radius: 3px;
-                background-color: #1e1e1e;
-            }
-            QCheckBox::indicator:checked {
-                background-color: #4CAF50;
-                border-color: #4CAF50;
-            }
-            QProgressBar {
-                border: 1px solid #555555;
-                border-radius: 3px;
-                background-color: #2a2a2a;
-                text-align: center;
-            }
-            QProgressBar::chunk {
-                background-color: #4CAF50;
-                border-radius: 2px;
-            }
-        """)
+        """Apply theme-aware styles to the conversation browser."""
+        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+            # Use theme system for consistent styling
+            colors = self.theme_manager.current_theme
+            self.setStyleSheet(f"""
+                QDialog {{
+                    background-color: {colors.background_primary};
+                    color: {colors.text_primary};
+                }}
+                QLabel {{
+                    color: {colors.text_primary};
+                }}
+                QPushButton {{
+                    background-color: {colors.interactive_normal};
+                    color: {colors.text_primary};
+                    border: 1px solid {colors.border_secondary};
+                    padding: 6px 12px;
+                    border-radius: 4px;
+                    font-size: 11px;
+                }}
+                QPushButton:hover {{
+                    background-color: {colors.interactive_hover};
+                    border-color: {colors.border_focus};
+                }}
+                QPushButton:pressed {{
+                    background-color: {colors.interactive_active};
+                }}
+                QPushButton:disabled {{
+                    background-color: {colors.interactive_disabled};
+                    color: {colors.text_disabled};
+                    border-color: {colors.border_secondary};
+                }}
+                QTableWidget {{
+                    background-color: {colors.background_tertiary};
+                    alternate-background-color: {colors.background_secondary};
+                    color: {colors.text_primary};
+                    gridline-color: {colors.separator};
+                    border: 1px solid {colors.border_primary};
+                }}
+                QHeaderView::section {{
+                    background-color: {colors.background_secondary};
+                    color: {colors.text_primary};
+                    padding: 6px;
+                    border: 1px solid {colors.border_primary};
+                    font-weight: bold;
+                }}
+                QTableWidget::item:selected {{
+                    background-color: {colors.primary};
+                    color: {colors.text_primary};
+                }}
+                QLineEdit {{
+                    background-color: {colors.background_tertiary};
+                    color: {colors.text_primary};
+                    border: 1px solid {colors.border_primary};
+                    padding: 6px 8px;
+                    border-radius: 4px;
+                    font-size: 11px;
+                }}
+                QLineEdit:focus {{
+                    border-color: {colors.border_focus};
+                    background-color: {colors.background_secondary};
+                }}
+                QCheckBox {{
+                    color: {colors.text_primary};
+                    spacing: 5px;
+                }}
+                QCheckBox::indicator {{
+                    width: 16px;
+                    height: 16px;
+                    border: 1px solid {colors.border_primary};
+                    border-radius: 3px;
+                    background-color: {colors.background_tertiary};
+                }}
+                QCheckBox::indicator:checked {{
+                    background-color: {colors.primary};
+                    border-color: {colors.primary};
+                }}
+                QProgressBar {{
+                    border: 1px solid {colors.border_primary};
+                    border-radius: 3px;
+                    background-color: {colors.background_secondary};
+                    text-align: center;
+                    color: {colors.text_primary};
+                }}
+                QProgressBar::chunk {{
+                    background-color: {colors.primary};
+                    border-radius: 2px;
+                }}
+            """)
+        else:
+            # Fallback to original dark theme styling
+            self.setStyleSheet("""
+                QDialog {
+                    background-color: #2b2b2b;
+                    color: #ffffff;
+                }
+                QLabel {
+                    color: #ffffff;
+                }
+                QPushButton {
+                    background-color: #404040;
+                    color: #ffffff;
+                    border: 1px solid #555555;
+                    padding: 6px 12px;
+                    border-radius: 4px;
+                    font-size: 11px;
+                }
+                QPushButton:hover {
+                    background-color: #4a4a4a;
+                    border-color: #666666;
+                }
+                QPushButton:pressed {
+                    background-color: #333333;
+                }
+                QPushButton:disabled {
+                    background-color: #2a2a2a;
+                    color: #666666;
+                    border-color: #444444;
+                }
+                QTableWidget {
+                    background-color: #1e1e1e;
+                    alternate-background-color: #252525;
+                    color: #ffffff;
+                    gridline-color: #444444;
+                    border: 1px solid #555555;
+                }
+                QHeaderView::section {
+                    background-color: #333333;
+                    color: #ffffff;
+                    padding: 6px;
+                    border: 1px solid #555555;
+                    font-weight: bold;
+                }
+                QTableWidget::item:selected {
+                    background-color: #4CAF50;
+                    color: #ffffff;
+                }
+                QLineEdit {
+                    background-color: #1e1e1e;
+                    color: #ffffff;
+                    border: 1px solid #555555;
+                    padding: 6px 8px;
+                    border-radius: 4px;
+                    font-size: 11px;
+                }
+                QLineEdit:focus {
+                    border-color: #4CAF50;
+                    background-color: #252525;
+                }
+                QCheckBox {
+                    color: #ffffff;
+                    spacing: 5px;
+                }
+                QCheckBox::indicator {
+                    width: 16px;
+                    height: 16px;
+                    border: 1px solid #555555;
+                    border-radius: 3px;
+                    background-color: #1e1e1e;
+                }
+                QCheckBox::indicator:checked {
+                    background-color: #4CAF50;
+                    border-color: #4CAF50;
+                }
+                QProgressBar {
+                    border: 1px solid #555555;
+                    border-radius: 3px;
+                    background-color: #2a2a2a;
+                    text-align: center;
+                }
+                QProgressBar::chunk {
+                    background-color: #4CAF50;
+                    border-radius: 2px;
+                }
+            """)
     
     def set_current_conversation(self, conversation_id: Optional[str]):
         """Set the current conversation ID for highlighting."""
