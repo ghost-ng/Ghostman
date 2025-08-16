@@ -7,6 +7,7 @@ Provides a Read-Eval-Print-Loop interface for interacting with the AI.
 import logging
 import asyncio
 import html
+import os
 import re
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
@@ -686,6 +687,23 @@ class REPLWidget(QWidget):
             # Update all QToolButton widgets with new theme
             self._update_all_tool_buttons()
             
+            # Update button visual states
+            self._update_search_button_state()
+            self._update_attach_button_state()
+            
+            # Reload theme-specific icons
+            self._load_search_icon()
+            self._load_chain_icon()
+            self._load_chat_icon()
+            if hasattr(self, 'title_settings_btn'):
+                self._load_gear_icon(self.title_settings_btn)
+            if hasattr(self, 'settings_btn'):
+                self._load_gear_icon(self.settings_btn)
+            if hasattr(self, 'title_new_conv_btn'):
+                self._load_plus_icon(self.title_new_conv_btn)
+            if hasattr(self, 'toolbar_new_conv_btn'):
+                self._load_plus_icon(self.toolbar_new_conv_btn)
+            
             # Update prompt label with new theme
             if hasattr(self, 'prompt_label'):
                 # Check if we're currently in processing mode
@@ -716,6 +734,13 @@ class REPLWidget(QWidget):
                     else:
                         # This looks like a toolbar button
                         self._style_tool_button(button)
+                        
+                    # Ensure emoji text is preserved during theme updates
+                    current_text = button.text()
+                    if current_text and len(current_text) <= 2:  # Likely an emoji
+                        # Refresh emoji with proper font context
+                        button_name = getattr(button, 'objectName', lambda: 'unknown')()
+                        self._restore_button_emoji(button, current_text, button_name)
                         
             logger.debug(f"Updated {len(tool_buttons)} tool buttons with current theme")
             
@@ -988,29 +1013,31 @@ class REPLWidget(QWidget):
         title_layout.setSpacing(8)
         
         # New conversation button with menu (with extra padding)
-        new_conv_btn = QToolButton()
-        new_conv_btn.setText("➕")
-        new_conv_btn.setToolTip("Start new conversation")
-        new_conv_btn.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
-        new_conv_btn.clicked.connect(self._on_new_conversation_clicked)
-        #new_conv_btn.setFixedSize(40, 40)  
-        self._style_title_button(new_conv_btn, add_right_padding=True)
+        self.title_new_conv_btn = QToolButton()
+        # Load plus icon (theme-specific)
+        self._load_plus_icon(self.title_new_conv_btn)
+        self.title_new_conv_btn.setIconSize(QSize(16, 16))
+        self.title_new_conv_btn.setToolTip("Start new conversation")
+        self.title_new_conv_btn.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        self.title_new_conv_btn.clicked.connect(self._on_new_conversation_clicked)
+        #self.title_new_conv_btn.setFixedSize(40, 40)  
+        self._style_title_button(self.title_new_conv_btn, add_right_padding=True)
         
         # Create menu for new conversation options
-        new_conv_menu = QMenu(new_conv_btn)
+        new_conv_menu = QMenu(self.title_new_conv_btn)
         
         # Start new conversation action
-        new_action = QAction("Start New Conversation", new_conv_btn)
+        new_action = QAction("Start New Conversation", self.title_new_conv_btn)
         new_action.triggered.connect(lambda: self._start_new_conversation(save_current=False))
         new_conv_menu.addAction(new_action)
         
         # Start new conversation and save current action
-        save_and_new_action = QAction("Save Current & Start New", new_conv_btn)
+        save_and_new_action = QAction("Save Current & Start New", self.title_new_conv_btn)
         save_and_new_action.triggered.connect(lambda: self._start_new_conversation(save_current=True))
         new_conv_menu.addAction(save_and_new_action)
         
-        new_conv_btn.setMenu(new_conv_menu)
-        title_layout.addWidget(new_conv_btn)
+        self.title_new_conv_btn.setMenu(new_conv_menu)
+        title_layout.addWidget(self.title_new_conv_btn)
         
         # Help button
         help_btn = QToolButton()
@@ -1022,19 +1049,22 @@ class REPLWidget(QWidget):
         title_layout.addWidget(help_btn)
         
         # Settings button
-        settings_btn = QToolButton()
-        settings_btn.setText("⚙")
-        
-        settings_btn.setToolTip("Open settings")
-        settings_btn.clicked.connect(self._on_settings_clicked)
-        #settings_btn.setFixedSize(40, 40)
-        self._style_title_button(settings_btn)
-        title_layout.addWidget(settings_btn)
+        self.title_settings_btn = QToolButton()
+        # Load gear icon (theme-specific)
+        self._load_gear_icon(self.title_settings_btn)
+        self.title_settings_btn.setIconSize(QSize(16, 16))
+        self.title_settings_btn.setToolTip("Open settings")
+        self.title_settings_btn.clicked.connect(self._on_settings_clicked)
+        #self.title_settings_btn.setFixedSize(40, 40)
+        self._style_title_button(self.title_settings_btn)
+        title_layout.addWidget(self.title_settings_btn)
         
         # Chat/Browse button
         self.chat_btn = QToolButton()
-        self.chat_btn.setText("💬")  # Use text for reliable display
-        self.chat_btn.setToolTip("Browse conversations (💬)")  # Put emoji in tooltip instead
+        # Load chat icon (theme-specific)
+        self._load_chat_icon()
+        self.chat_btn.setIconSize(QSize(16, 16))
+        self.chat_btn.setToolTip("Browse conversations")
         self.chat_btn.clicked.connect(self._on_chat_clicked)
         self.chat_btn.setStyleSheet(self._get_themed_button_style())
         # Special styling for chat button with more width
@@ -1044,7 +1074,9 @@ class REPLWidget(QWidget):
         
         # Attach (snap to avatar) toggle button
         self.attach_btn = QToolButton()
-        self.attach_btn.setText("🔗")  # Link icon when attached
+        # Load chain icon (theme-specific)
+        self._load_chain_icon()
+        self.attach_btn.setIconSize(QSize(16, 16))
         self.attach_btn.setToolTip("Attach REPL to avatar (toggle)")
         self.attach_btn.setCheckable(True)
         # Initialize from settings if available
@@ -1054,55 +1086,20 @@ class REPLWidget(QWidget):
             self.attach_btn.setChecked(initial_attached)
         except Exception:
             initial_attached = False
-        # Style: highlight when checked
-        self.attach_btn.setStyleSheet(
-            """
-            QToolButton {
-                background-color: rgba(255, 255, 255, 0.15);
-                color: white;
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                border-radius: 4px;
-                font-size: 14px;
-                padding: 2px 6px;
-            }
-            QToolButton:hover {
-                background-color: rgba(255, 255, 255, 0.25);
-                border: 1px solid rgba(255, 255, 255, 0.5);
-            }
-            QToolButton:pressed {
-                background-color: rgba(255, 255, 255, 0.35);
-            }
-            QToolButton:checked {
-                background-color: rgba(76, 175, 80, 0.5); /* green tint when attached */
-                border: 1px solid rgba(76, 175, 80, 0.8);
-            }
-            """
-        )
+        # Style: theme-aware styling
+        self._update_attach_button_state()
         self.attach_btn.clicked.connect(self._on_attach_toggle_clicked)
         title_layout.addWidget(self.attach_btn)
         
         # Search button
         self.search_btn = QToolButton()
-        self.search_btn.setText("🔍")
+        # Load search icon (theme-specific)
+        self._load_search_icon()
+        self.search_btn.setIconSize(QSize(16, 16))
         self.search_btn.setToolTip("Search conversations (Ctrl+F)")
         self.search_btn.clicked.connect(self._toggle_search)
-        self.search_btn.setStyleSheet("""
-            QToolButton {
-                background-color: rgba(255, 255, 255, 0.15);
-                color: white;
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                border-radius: 4px;
-                font-size: 14px;
-                padding: 2px 6px;
-            }
-            QToolButton:hover {
-                background-color: rgba(255, 255, 255, 0.25);
-                border: 1px solid rgba(255, 255, 255, 0.5);
-            }
-            QToolButton:pressed {
-                background-color: rgba(255, 255, 255, 0.35);
-            }
-        """)
+        # Style: theme-aware styling
+        self._update_search_button_state()
         title_layout.addWidget(self.search_btn)
 
         # Move/Resize arrow toggle button
@@ -1280,8 +1277,17 @@ class REPLWidget(QWidget):
         """Emit attach toggle request with current state and update tooltip/icon."""
         attached = self.attach_btn.isChecked()
         # Update visual feedback
-        self.attach_btn.setText("🔗" if attached else "⛓")
+        if not self.attach_btn.icon().isNull():
+            # Using icon - visual feedback is handled by styling
+            pass
+        else:
+            # Using text fallback
+            self.attach_btn.setText("⚲" if attached else "⚮")
         self.attach_btn.setToolTip("Attached to avatar" if attached else "Detached from avatar")
+        
+        # Update visual state
+        self._update_attach_button_state()
+        
         # Emit to parent window to handle positioning/persistence
         self.attach_toggle_requested.emit(attached)
 
@@ -1289,8 +1295,13 @@ class REPLWidget(QWidget):
         """Externally update the attach button state and visuals."""
         if hasattr(self, 'attach_btn'):
             self.attach_btn.setChecked(bool(attached))
-            self.attach_btn.setText("🔗" if attached else "⛓")
+            if self.attach_btn.icon().isNull():
+                # Using text fallback
+                self.attach_btn.setText("⚲" if attached else "⚮")
             self.attach_btn.setToolTip("Attached to avatar" if attached else "Detached from avatar")
+            
+            # Update visual state
+            self._update_attach_button_state()
     
     def _init_conversation_toolbar(self, parent_layout):
         """Initialize conversation management toolbar."""
@@ -1298,11 +1309,13 @@ class REPLWidget(QWidget):
         toolbar_layout.setSpacing(5)
         
         # New conversation button with menu
-        new_conv_btn = QToolButton()
-        new_conv_btn.setText("➕")
+        self.toolbar_new_conv_btn = QToolButton()
+        # Load plus icon (theme-specific)
+        self._load_plus_icon(self.toolbar_new_conv_btn)
+        self.toolbar_new_conv_btn.setIconSize(QSize(16, 16))
         # add padding to right
-        new_conv_btn.setStyleSheet("padding-right: 4px;")
-        new_conv_btn.setToolTip("Start new conversation")
+        self.toolbar_new_conv_btn.setStyleSheet("padding-right: 4px;")
+        self.toolbar_new_conv_btn.setToolTip("Start new conversation")
         new_conv_btn.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
         new_conv_btn.clicked.connect(self._on_new_conversation_clicked)
         self._style_tool_button(new_conv_btn)
@@ -1325,7 +1338,7 @@ class REPLWidget(QWidget):
         
         # Browse conversations button
         self.browse_btn = QToolButton()
-        self.browse_btn.setText("📋")
+        self.browse_btn.setText("≡")
         self.browse_btn.setToolTip("Browse conversations")
         self.browse_btn.clicked.connect(self.browse_requested.emit)
         self._style_tool_button(self.browse_btn)
@@ -1333,7 +1346,7 @@ class REPLWidget(QWidget):
         
         # Export button
         self.export_btn = QToolButton()
-        self.export_btn.setText("📤")
+        self.export_btn.setText("↗")
         self.export_btn.setToolTip("Export current conversation")
         self.export_btn.clicked.connect(self._on_export_requested)
         self._style_tool_button(self.export_btn)
@@ -1341,7 +1354,9 @@ class REPLWidget(QWidget):
         
         # Settings button
         self.settings_btn = QToolButton()
-        self.settings_btn.setText("⚙️")
+        # Load gear icon (theme-specific)
+        self._load_gear_icon(self.settings_btn)
+        self.settings_btn.setIconSize(QSize(16, 16))
         self.settings_btn.setToolTip("Conversation settings")
         self.settings_btn.clicked.connect(self.settings_requested.emit)
         self._style_tool_button(self.settings_btn)
@@ -1400,18 +1415,23 @@ class REPLWidget(QWidget):
         """)
     
     def _style_tool_button(self, button: QToolButton):
-        """Apply consistent styling to toolbar buttons."""
+        """Apply consistent styling to toolbar buttons with emoji-safe font handling."""
         button.setMaximumSize(30, 25)
         
         if self.theme_manager and THEME_SYSTEM_AVAILABLE:
             # Use theme system for consistent styling
             colors = self.theme_manager.current_theme
+            
+            # Get emoji-compatible font stack
+            emoji_font_stack = self._get_emoji_font_stack()
+            
             button.setStyleSheet(f"""
                 QToolButton {{
                     background-color: {colors.interactive_normal};
                     color: {colors.text_primary};
                     border: 1px solid {colors.border_secondary};
                     border-radius: 4px;
+                    font-family: {emoji_font_stack};
                     font-size: 12px;
                     padding: 2px;
                 }}
@@ -1428,23 +1448,25 @@ class REPLWidget(QWidget):
                 }}
             """)
         else:
-            # Fallback to original styling
-            button.setStyleSheet("""
-                QToolButton {
+            # Fallback to original styling with emoji font support
+            emoji_font_stack = self._get_emoji_font_stack()
+            button.setStyleSheet(f"""
+                QToolButton {{
                     background-color: rgba(255, 255, 255, 0.1);
                     color: white;
                     border: 1px solid rgba(255, 255, 255, 0.2);
                     border-radius: 4px;
+                    font-family: {emoji_font_stack};
                     font-size: 12px;
                     padding: 2px;
-                }
-                QToolButton:hover {
+                }}
+                QToolButton:hover {{
                     background-color: rgba(255, 255, 255, 0.2);
                     border: 1px solid rgba(255, 255, 255, 0.4);
-                }
-                QToolButton:pressed {
+                }}
+                QToolButton:pressed {{
                     background-color: rgba(255, 255, 255, 0.3);
-                }
+                }}
             """)
     
     def _style_title_button(self, button: QToolButton, add_right_padding: bool = False):
@@ -1455,12 +1477,14 @@ class REPLWidget(QWidget):
         if self.theme_manager and THEME_SYSTEM_AVAILABLE:
             # Use theme system for consistent styling
             colors = self.theme_manager.current_theme
+            emoji_font_stack = self._get_emoji_font_stack()
             button.setStyleSheet(f"""
                 QToolButton {{
                     background-color: {colors.interactive_normal};
                     color: {colors.text_primary};
                     border: 1px solid {colors.border_secondary};
                     border-radius: 4px;
+                    font-family: {emoji_font_stack};
                     font-size: 14px;
                     padding: {padding};
                 }}
@@ -1481,13 +1505,15 @@ class REPLWidget(QWidget):
                 }}
             """)
         else:
-            # Fallback to original styling
+            # Fallback to original styling with emoji font support
+            emoji_font_stack = self._get_emoji_font_stack()
             button.setStyleSheet(f"""
                 QToolButton {{
                     background-color: rgba(255, 255, 255, 0.15);
                     color: white;
                     border: 1px solid rgba(255, 255, 255, 0.3);
                     border-radius: 4px;
+                    font-family: {emoji_font_stack};
                     font-size: 14px;
                     padding: {padding};
                 }}
@@ -1535,38 +1561,350 @@ class REPLWidget(QWidget):
             }}
         """)
     
+    def _update_search_button_state(self):
+        """Update search button visual state based on search mode."""
+        try:
+            if not hasattr(self, 'search_btn'):
+                return
+                
+            # Check if search is active
+            search_active = hasattr(self, 'search_frame') and self.search_frame and self.search_frame.isVisible()
+            
+            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+                colors = self.theme_manager.current_theme
+                if search_active:
+                    # Highlighted state - use primary color background
+                    bg_color = colors.primary
+                    text_color = colors.background_primary
+                    border_color = colors.primary_hover
+                else:
+                    # Normal state
+                    bg_color = colors.interactive_normal
+                    text_color = colors.text_primary
+                    border_color = colors.border_secondary
+            else:
+                # Fallback colors
+                if search_active:
+                    bg_color = "#ff9800"
+                    text_color = "#000000"
+                    border_color = "#f57c00"
+                else:
+                    bg_color = "rgba(255, 255, 255, 0.15)"
+                    text_color = "white"
+                    border_color = "rgba(255, 255, 255, 0.3)"
+            
+            # Apply styling
+            self.search_btn.setStyleSheet(f"""
+                QToolButton {{
+                    background-color: {bg_color};
+                    color: {text_color};
+                    border: 1px solid {border_color};
+                    border-radius: 4px;
+                    font-size: 14px;
+                    padding: 2px 6px;
+                }}
+                QToolButton:hover {{
+                    background-color: {border_color};
+                }}
+                QToolButton:pressed {{
+                    background-color: {bg_color};
+                    opacity: 0.8;
+                }}
+            """)
+            
+            logger.debug(f"Updated search button state: active={search_active}")
+            
+        except Exception as e:
+            logger.error(f"Failed to update search button state: {e}")
+    
+    def _update_attach_button_state(self):
+        """Update attach button visual state based on attachment state."""
+        try:
+            if not hasattr(self, 'attach_btn'):
+                return
+                
+            # Check if attached
+            is_attached = self.attach_btn.isChecked()
+            
+            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+                colors = self.theme_manager.current_theme
+                if is_attached:
+                    # Attached state - use success/primary color
+                    bg_color = colors.status_success
+                    text_color = colors.background_primary
+                    border_color = colors.status_success
+                    hover_color = colors.primary_hover
+                else:
+                    # Detached state - normal styling
+                    bg_color = colors.interactive_normal
+                    text_color = colors.text_primary
+                    border_color = colors.border_secondary
+                    hover_color = colors.interactive_hover
+            else:
+                # Fallback colors
+                if is_attached:
+                    bg_color = "#4CAF50"
+                    text_color = "#ffffff"
+                    border_color = "#45a049"
+                    hover_color = "#66bb6a"
+                else:
+                    bg_color = "rgba(255, 255, 255, 0.15)"
+                    text_color = "white"
+                    border_color = "rgba(255, 255, 255, 0.3)"
+                    hover_color = "rgba(255, 255, 255, 0.25)"
+            
+            # Apply styling
+            self.attach_btn.setStyleSheet(f"""
+                QToolButton {{
+                    background-color: {bg_color};
+                    color: {text_color};
+                    border: 1px solid {border_color};
+                    border-radius: 4px;
+                    font-size: 14px;
+                    padding: 2px 6px;
+                }}
+                QToolButton:hover {{
+                    background-color: {hover_color};
+                    border: 1px solid {border_color};
+                }}
+                QToolButton:pressed {{
+                    background-color: {bg_color};
+                    opacity: 0.8;
+                }}
+            """)
+            
+            logger.debug(f"Updated attach button state: attached={is_attached}")
+            
+        except Exception as e:
+            logger.error(f"Failed to update attach button state: {e}")
+    
+    def _load_search_icon(self):
+        """Load theme-appropriate search icon."""
+        try:
+            # Determine if theme is dark or light
+            icon_variant = self._get_icon_variant()
+            
+            search_icon_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", 
+                "assets", "icons", f"search_{icon_variant}.png"
+            )
+            
+            if os.path.exists(search_icon_path):
+                search_icon = QIcon(search_icon_path)
+                self.search_btn.setIcon(search_icon)
+                logger.debug(f"Loaded search icon: search_{icon_variant}.png")
+            else:
+                # Fallback to Unicode symbol
+                self.search_btn.setText("⌕")
+                logger.warning(f"Search icon not found: {search_icon_path}")
+                
+        except Exception as e:
+            logger.error(f"Failed to load search icon: {e}")
+            self.search_btn.setText("⌕")  # Fallback
+    
+    def _load_chain_icon(self):
+        """Load theme-appropriate chain icon."""
+        try:
+            # Determine if theme is dark or light  
+            icon_variant = self._get_icon_variant()
+            
+            chain_icon_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", 
+                "assets", "icons", f"chain_{icon_variant}.png"
+            )
+            
+            if os.path.exists(chain_icon_path):
+                chain_icon = QIcon(chain_icon_path)
+                self.attach_btn.setIcon(chain_icon)
+                logger.debug(f"Loaded chain icon: chain_{icon_variant}.png")
+            else:
+                # Fallback to Unicode symbol
+                self.attach_btn.setText("⚲")
+                logger.warning(f"Chain icon not found: {chain_icon_path}")
+                
+        except Exception as e:
+            logger.error(f"Failed to load chain icon: {e}")
+            self.attach_btn.setText("⚲")  # Fallback
+    
+    def _load_chat_icon(self):
+        """Load theme-appropriate chat icon."""
+        try:
+            # Determine if theme is dark or light  
+            icon_variant = self._get_icon_variant()
+            
+            chat_icon_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", 
+                "assets", "icons", f"chat_{icon_variant}.png"
+            )
+            
+            if os.path.exists(chat_icon_path):
+                chat_icon = QIcon(chat_icon_path)
+                self.chat_btn.setIcon(chat_icon)
+                logger.debug(f"Loaded chat icon: chat_{icon_variant}.png")
+            else:
+                # Fallback to Unicode symbol
+                self.chat_btn.setText("☰")
+                logger.warning(f"Chat icon not found: {chat_icon_path}")
+                
+        except Exception as e:
+            logger.error(f"Failed to load chat icon: {e}")
+            self.chat_btn.setText("☰")  # Fallback
+    
+    def _load_gear_icon(self, button):
+        """Load theme-appropriate gear icon for a given button."""
+        try:
+            # Determine if theme is dark or light  
+            icon_variant = self._get_icon_variant()
+            
+            gear_icon_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", 
+                "assets", "icons", f"gear_{icon_variant}.png"
+            )
+            
+            if os.path.exists(gear_icon_path):
+                gear_icon = QIcon(gear_icon_path)
+                button.setIcon(gear_icon)
+                logger.debug(f"Loaded gear icon: gear_{icon_variant}.png")
+            else:
+                # Fallback to Unicode symbol
+                button.setText("⚙")
+                logger.warning(f"Gear icon not found: {gear_icon_path}")
+                
+        except Exception as e:
+            logger.error(f"Failed to load gear icon: {e}")
+            button.setText("⚙")  # Fallback
+    
+    def _load_plus_icon(self, button):
+        """Load theme-appropriate plus icon for a given button."""
+        try:
+            # Determine if theme is dark or light  
+            icon_variant = self._get_icon_variant()
+            
+            plus_icon_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", 
+                "assets", "icons", f"plus_{icon_variant}.png"
+            )
+            
+            if os.path.exists(plus_icon_path):
+                plus_icon = QIcon(plus_icon_path)
+                button.setIcon(plus_icon)
+                logger.debug(f"Loaded plus icon: plus_{icon_variant}.png")
+            else:
+                # Fallback to Unicode symbol
+                button.setText("➕")
+                logger.warning(f"Plus icon not found: {plus_icon_path}")
+                
+        except Exception as e:
+            logger.error(f"Failed to load plus icon: {e}")
+            button.setText("➕")  # Fallback
+    
+    def _get_icon_variant(self) -> str:
+        """Determine which icon variant to use based on theme."""
+        try:
+            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+                colors = self.theme_manager.current_theme
+                # Check if background is dark or light
+                bg_color = colors.background_primary
+                # Simple heuristic: if background starts with #0-#7, it's dark
+                if bg_color.startswith('#') and len(bg_color) >= 2:
+                    first_hex_digit = int(bg_color[1], 16)
+                    return "lite" if first_hex_digit <= 7 else "dark"
+            
+            # Default fallback
+            return "lite"
+            
+        except Exception as e:
+            logger.error(f"Failed to determine icon variant: {e}")
+            return "lite"
+    
+    def _get_emoji_font_stack(self) -> str:
+        """Get a font stack that supports emoji rendering on Windows."""
+        # Windows emoji-compatible fonts in priority order
+        emoji_fonts = [
+            "Segoe UI Emoji",      # Primary Windows emoji font
+            "Segoe UI Symbol",     # Windows symbol font  
+            "Segoe UI",           # Standard Windows UI font with emoji support
+            "Microsoft YaHei",     # Chinese font with good emoji support
+            "Apple Color Emoji",   # For cross-platform compatibility
+            "Noto Color Emoji",    # Google emoji font
+            "Noto Emoji",         # Google monochrome emoji
+            "Arial Unicode MS",    # Fallback Unicode font
+            "sans-serif"          # Final fallback
+        ]
+        
+        # Format as CSS font-family list
+        font_stack = ", ".join(f'"{font}"' for font in emoji_fonts)
+        logger.debug(f"Generated emoji font stack: {font_stack}")
+        return font_stack
+    
+    def _restore_button_emoji(self, button: QToolButton, emoji_text: str, button_name: str):
+        """Restore emoji text to a button using multiple strategies."""
+        try:
+            # Strategy 1: Force font and text refresh
+            original_font = button.font()
+            
+            # Create emoji-compatible font
+            emoji_font = QFont()
+            emoji_font.setFamily("Segoe UI Emoji")
+            emoji_font.setPointSize(12)
+            
+            # Clear and restore text with font context
+            button.setText("")  # Clear first
+            button.setFont(emoji_font)  # Set emoji font
+            button.setText(emoji_text)  # Set emoji text
+            
+            # Strategy 2: Force widget update
+            button.update()
+            button.repaint()
+            
+            logger.debug(f"Restored emoji for {button_name}: {emoji_text}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to restore emoji for {button_name}: {e}")
+            # Fallback: just set the text without font manipulation
+            try:
+                button.setText(emoji_text)
+            except Exception as fallback_error:
+                logger.error(f"Fallback emoji restoration failed for {button_name}: {fallback_error}")
+    
     def _refresh_toolbar_icons(self):
         """Refresh toolbar button icons to prevent ellipses display after theme changes."""
         try:
-            # Define all toolbar buttons with their emoji icons
+            # Define all toolbar buttons with their Unicode symbols
             button_icons = [
-                ('chat_btn', "💬"),
-                ('search_btn', "🔍"),
-                ('browse_btn', "📋"),
-                ('export_btn', "📤"),
-                ('settings_btn', "⚙️"),
+                ('chat_btn', "☰"),
+                ('search_btn', "⌕"),
+                ('browse_btn', "≡"),
+                ('export_btn', "↗"),
+                ('settings_btn', "⚙"),
             ]
             
-            # Refresh each button's emoji text
+            # Refresh each button's emoji text with enhanced restoration
             for widget_name, icon_text in button_icons:
                 if hasattr(self, widget_name):
                     button = getattr(self, widget_name)
                     if button and hasattr(button, 'setText'):
-                        # Force refresh the emoji text regardless of current state
-                        button.setText("")  # Clear first
-                        button.setText(icon_text)  # Then set emoji
-                        logger.debug(f"Force refreshed toolbar button icon: {widget_name} -> {icon_text}")
+                        # Skip buttons that are using icons instead of text
+                        if hasattr(button, 'icon') and not button.icon().isNull():
+                            logger.debug(f"Skipping icon refresh for {widget_name} - using icon file")
+                            continue
+                        # Multi-step restoration process for text-based buttons
+                        self._restore_button_emoji(button, icon_text, widget_name)
             
             # Special handling for attach button state (changes based on checked state)
             if hasattr(self, 'attach_btn') and self.attach_btn:
-                attached = self.attach_btn.isChecked()
-                icon = "🔗" if attached else "⛓"
-                self.attach_btn.setText("")  # Clear first
-                self.attach_btn.setText(icon)  # Then set emoji
-                logger.debug(f"Force refreshed attach button icon: {icon}")
+                # Skip if using icon file
+                if hasattr(self.attach_btn, 'icon') and not self.attach_btn.icon().isNull():
+                    logger.debug("Skipping attach button refresh - using icon file")
+                else:
+                    # Using text fallback
+                    attached = self.attach_btn.isChecked()
+                    icon = "⚲" if attached else "⚮"
+                    self._restore_button_emoji(self.attach_btn, icon, "attach_btn")
                 
+            logger.debug("Completed toolbar icon refresh to prevent ellipses")
         except Exception as e:
-            logger.debug(f"Failed to refresh toolbar icons: {e}")
+            logger.error(f"Failed to refresh toolbar icons: {e}")
     
     def _load_opacity_from_settings(self):
         """Load panel opacity from settings manager."""
@@ -3556,6 +3894,9 @@ class REPLWidget(QWidget):
                     self.search_input.selectAll()
                 logger.debug("Search bar opened")
                 
+            # Update search button visual state
+            self._update_search_button_state()
+                
         except Exception as e:
             logger.error(f"Failed to toggle search: {e}")
     
@@ -3580,6 +3921,9 @@ class REPLWidget(QWidget):
             self.current_search_query = ""
             
             logger.debug("Search closed and highlights cleared")
+            
+            # Update search button visual state
+            self._update_search_button_state()
             
         except Exception as e:
             logger.error(f"Failed to close search: {e}")
