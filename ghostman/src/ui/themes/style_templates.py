@@ -4,9 +4,332 @@ Style Templates for Ghostman Theme System.
 Provides reusable style templates that use theme variables for consistent
 styling across all components.
 """
-
+import logging
 from typing import Dict, Any
 from .color_system import ColorSystem
+logger = logging.getLogger("ghostman.style_templates")
+
+class ButtonStyleManager:
+    """
+    Unified button styling manager that ensures consistency across all button types.
+    
+    Provides a single source of truth for button styling with:
+    - Consistent 8px padding for all buttons
+    - Consistent 4px border-radius for all buttons
+    - Theme-aware color management
+    - Support for all button states (normal, hover, pressed, disabled, toggle)
+    """
+    
+    # Global button constants - ALL buttons must use these
+    PADDING = "8px"
+    BORDER_RADIUS = "4px"
+    FONT_SIZE = "12px"
+    DEFAULT_ICON_SIZE = 10  # Default icon size in pixels (compact)
+    
+    @staticmethod
+    def get_icon_size():
+        """Get unified icon size from settings, with fallback to default."""
+        try:
+            from ghostman.src.infrastructure.storage.settings_manager import settings
+            # Try new simplified setting first, then old nested setting, then default
+            return settings.get("icon_size", 
+                   settings.get("icon_sizing.title_bar_icon_size", 
+                   ButtonStyleManager.DEFAULT_ICON_SIZE))
+        except:
+            return ButtonStyleManager.DEFAULT_ICON_SIZE
+    
+    @staticmethod
+    def get_computed_sizes():
+        """Get computed icon and button sizes for debugging/documentation."""
+        icon_size = ButtonStyleManager.get_icon_size()
+        # Use same smart padding calculation as apply_unified_button_style
+        if icon_size <= 10:
+            padding_total = 2  # Minimal padding for tiny icons (8-10px)
+        elif icon_size <= 16:
+            padding_total = 4  # Small padding for small icons (11-16px)
+        else:
+            padding_total = 6  # Standard padding for larger icons (17px+)
+        
+        button_size = icon_size + padding_total
+        padding_each_side = padding_total // 2
+        
+        return {
+            "icon_size": icon_size,
+            "button_size": button_size,
+            "padding_total": padding_total,
+            "padding_each_side": padding_each_side
+        }
+    
+    @staticmethod
+    def get_dynamic_css_padding():
+        """Get CSS padding value based on icon size."""
+        sizes = ButtonStyleManager.get_computed_sizes()
+        return f"{sizes['padding_each_side']}px"
+    
+    @staticmethod
+    def get_unified_button_style(colors, 
+                               button_type: str = "push",
+                               size: str = "medium",
+                               state: str = "normal",
+                               special_colors: dict = None) -> str:
+        """
+        Generate unified button styling that ensures ALL buttons look identical.
+        
+        Args:
+            colors: ColorSystem instance
+            button_type: "push", "tool", or "icon"
+            size: "small", "medium", "large", or "icon"
+            state: "normal", "toggle", "danger", "success", "warning"
+            special_colors: Optional dict to override default colors for special states
+            
+        Returns:
+            Complete CSS string for the button
+        """
+        # Size configurations with CONSISTENT padding and border-radius
+        # ALL buttons use the same 8px padding and 4px border-radius
+        size_configs = {
+            "icon_button": {"min_width": "10px", "min_height": "10px"},
+            "extra_small": {"min_width": "48px", "min_height": "28px"},
+            "small": {"min_width": "60px", "min_height": "32px"},
+            "medium": {"min_width": "80px", "min_height": "32px"},
+            "large": {"min_width": "100px", "min_height": "36px"},
+            "icon": {"min_width": "32px", "min_height": "32px"}
+        }
+        logger.debug(f"ButtonStyleManager: Generating style for {button_type} button of size {size} in state {state}")
+        config = size_configs.get(size, size_configs["medium"])
+        
+        # Handle fallback colors when theme system is not available
+        if colors is None:
+            # Fallback colors for systems without theme support
+            if state == "toggle":
+                bg_color = "#FFA500"
+                text_color = "#000000"
+                hover_color = "#FFB733"
+                active_color = "#E6940B"
+            elif state == "danger":
+                bg_color = "#F44336"
+                text_color = "#FFFFFF"
+                hover_color = "#F66356"
+                active_color = "#D32F2F"
+            elif state == "success":
+                bg_color = "#4CAF50"
+                text_color = "#FFFFFF"
+                hover_color = "#66BB6A"
+                active_color = "#388E3C"
+            elif state == "warning":
+                bg_color = "#FF9800"
+                text_color = "#000000"
+                hover_color = "#FFB74D"
+                active_color = "#F57C00"
+            else:  # normal
+                bg_color = "rgba(255, 255, 255, 0.15)"
+                text_color = "white"
+                hover_color = "rgba(255, 255, 255, 0.25)"
+                active_color = "rgba(255, 255, 255, 0.35)"
+            
+            border_color = "none" if button_type == "tool" else "rgba(255, 255, 255, 0.2)"
+            disabled_bg = "rgba(255, 255, 255, 0.05)"
+            disabled_text = "#666"
+        else:
+            # Determine base colors based on state
+            if special_colors:
+                bg_color = special_colors.get("background", colors.interactive_normal)
+                text_color = special_colors.get("text", colors.text_primary)
+                hover_color = special_colors.get("hover", colors.interactive_hover)
+                active_color = special_colors.get("active", colors.interactive_active)
+                border_color = special_colors.get("border", "none" if button_type == "tool" else colors.border_primary)
+            else:
+                # Default state colors
+                if state == "toggle":
+                    bg_color = colors.primary
+                    text_color = colors.background_primary
+                    hover_color = colors.primary_hover
+                    active_color = colors.primary_hover
+                elif state == "danger":
+                    bg_color = colors.status_error
+                    text_color = colors.text_primary
+                    hover_color = colors.status_error  # Should be lighter in real implementation
+                    active_color = colors.status_error
+                elif state == "success":
+                    bg_color = colors.status_success
+                    text_color = colors.background_primary
+                    hover_color = colors.status_success  # Should be lighter
+                    active_color = colors.status_success
+                elif state == "warning":
+                    bg_color = colors.status_warning
+                    text_color = colors.background_primary
+                    hover_color = colors.status_warning  # Should be lighter
+                    active_color = colors.status_warning
+                else:  # normal
+                    bg_color = colors.interactive_normal
+                    text_color = colors.text_primary
+                    hover_color = colors.interactive_hover
+                    active_color = colors.interactive_active
+                
+                border_color = "none" if button_type == "tool" else colors.border_primary
+            
+            disabled_bg = colors.interactive_disabled
+            disabled_text = colors.text_disabled
+        
+        # Widget selector based on button type
+        widget_selector = "QToolButton" if button_type in ["tool", "icon"] else "QPushButton"
+        border_style = "border: none;" if button_type == "tool" else f"border: 1px solid {border_color};"
+        
+        # Get dynamic CSS padding based on icon size
+        css_padding = ButtonStyleManager.get_dynamic_css_padding()
+        
+        return f"""
+        {widget_selector} {{
+            background-color: {bg_color};
+            color: {text_color};
+            {border_style}
+            border-radius: {ButtonStyleManager.BORDER_RADIUS};
+            padding: {css_padding};
+            margin: 0px;
+            min-width: {config["min_width"]};
+            min-height: {config["min_height"]};
+            font-size: {ButtonStyleManager.FONT_SIZE};
+            font-weight: normal;
+        }}
+        {widget_selector}:hover {{
+            background-color: {hover_color};
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }}
+        {widget_selector}:pressed {{
+            background-color: {active_color};
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }}
+        {widget_selector}:disabled {{
+            background-color: {disabled_bg};
+            color: {disabled_text};
+        }}
+        """
+    
+    @staticmethod
+    def apply_unified_button_style(button, colors,
+                                 button_type: str = "push",
+                                 size: str = "medium", 
+                                 state: str = "normal",
+                                 special_colors: dict = None,
+                                 emoji_font: str = None):
+        """
+        Apply unified styling to any button widget.
+        
+        This is the ONLY method that should be used to style buttons.
+        
+        Args:
+            button: Qt button widget (QPushButton or QToolButton)
+            colors: ColorSystem instance
+            button_type: "push", "tool", or "icon" 
+            size: "icon","extra_small","small", "medium", "large"
+            state: "normal", "toggle", "danger", "success", "warning"
+            special_colors: Optional dict for custom colors
+            emoji_font: Optional font family for emoji buttons
+        """
+        # Get base style
+        style = ButtonStyleManager.get_unified_button_style(
+            colors, button_type, size, state, special_colors
+        )
+        
+        # Add emoji font if specified
+        if emoji_font:
+            # Insert font-family into the base selector
+            widget_selector = "QToolButton" if button_type in ["tool", "icon"] else "QPushButton"
+            style = style.replace(
+                f"{widget_selector} {{",
+                f"{widget_selector} {{\n            font-family: {emoji_font};"
+            )
+        
+        # Apply both CSS and Qt size constraints for reliable sizing
+        # Get configurable icon size and calculate proportional button size
+        icon_size = ButtonStyleManager.get_icon_size()
+        # Use smarter padding calculation for better proportions with small icons
+        if icon_size <= 10:
+            padding = 2  # Minimal padding for tiny icons (8-10px)
+        elif icon_size <= 16:
+            padding = 4  # Small padding for small icons (11-16px)
+        else:
+            padding = 6  # Standard padding for larger icons (17px+)
+        
+        icon_button_size = icon_size + padding
+        
+        size_configs = {
+            "icon": {"min_width": icon_button_size, "min_height": icon_button_size, "max_width": icon_button_size, "max_height": icon_button_size},
+            "extra_small": {"min_width": 48, "min_height": 28},
+            "small": {"min_width": 60, "min_height": 32},
+            "medium": {"min_width": 80, "min_height": 32},
+            "large": {"min_width": 100, "min_height": 36},
+        }
+        
+        config = size_configs.get(size, size_configs["medium"])
+        
+        # Apply Qt size constraints for reliable sizing
+        button.setMinimumSize(config["min_width"], config["min_height"])
+        button.setMaximumSize(config.get("max_width", 16777215), config.get("max_height", 16777215))
+        
+        # Set icon size for buttons that have icons
+        from PyQt6.QtCore import QSize
+        icon_size = ButtonStyleManager.get_icon_size()
+        button.setIconSize(QSize(icon_size, icon_size))
+        
+        # Apply the unified style
+        button.setStyleSheet(style)
+    
+    @staticmethod
+    def apply_plus_button_style(button, colors, emoji_font: str = None):
+        """
+        Apply special styling for plus button with asymmetric padding.
+        
+        Args:
+            button: Qt button widget (QToolButton)
+            colors: ColorSystem instance
+            emoji_font: Optional font family for emoji buttons
+        """
+        # Get base style for icon button
+        style = ButtonStyleManager.get_unified_button_style(
+            colors, "tool", "icon", "normal", None
+        )
+        
+        # Override padding for plus button (more padding on left for better visual balance)
+        sizes = ButtonStyleManager.get_computed_sizes()
+        base_padding = sizes['padding_each_side']
+        right_padding = base_padding * 5  # Extra padding on right to create space before dropdown arrow
+        left_padding = base_padding * 5  # More padding on left for visual balance
+        
+        old_padding = f"padding: {base_padding}px;"
+        new_padding = f"padding: {base_padding}px {right_padding}px {base_padding}px {left_padding}px;"
+        style = style.replace(old_padding, new_padding)
+        
+        # Adjust width for asymmetric padding
+        base_width = sizes['button_size']
+        new_width = base_width + (left_padding - base_padding) + (right_padding - base_padding)
+        style = style.replace(f"min-width: {base_width}px;", f"min-width: {new_width}px;")
+        
+        # Add emoji font if specified
+        if emoji_font:
+            style = style.replace("QToolButton {", f"QToolButton {{\n            font-family: {emoji_font};")
+        
+        # Apply the style with menu indicator removal
+        button.setStyleSheet(style + """
+            QToolButton::menu-indicator {
+                image: none;
+                width: 5px;
+                margin-left: 4px;
+            }
+        """)
+        
+        # Set icon size for consistency with other buttons
+        from PyQt6.QtCore import QSize
+        icon_size = ButtonStyleManager.get_icon_size()
+        button.setIconSize(QSize(icon_size, icon_size))
+        
+        # Set same size constraints as other icon buttons for consistency
+        sizes = ButtonStyleManager.get_computed_sizes()
+        icon_size = sizes['icon_size']
+        button_size = sizes['button_size'] + (left_padding - base_padding) + (right_padding - base_padding)  # Account for asymmetric padding
+        
+        button.setMinimumSize(button_size, sizes['button_size'])
+        button.setMaximumSize(button_size, sizes['button_size'])
 
 
 class StyleTemplates:
@@ -80,7 +403,7 @@ class StyleTemplates:
             background-color: {colors.background_tertiary};
             border: 1px solid {colors.border_secondary};
             border-radius: 4px;
-            padding: 4px;
+            padding: 0px;
         }}
         QLabel {{
             color: {colors.text_primary};
@@ -146,13 +469,13 @@ class StyleTemplates:
         QToolButton {{
             background-color: {colors.interactive_normal};
             color: {colors.text_primary};
-            border: 1px solid {colors.border_secondary};
+            border: none;
             border-radius: 4px;
-            padding: 4px 8px;
+            padding: 0px;
+            margin-bottom: 2px;
         }}
         QToolButton:hover {{
             background-color: {colors.interactive_hover};
-            border-color: {colors.border_focus};
         }}
         QToolButton:pressed {{
             background-color: {colors.interactive_active};
@@ -160,13 +483,60 @@ class StyleTemplates:
         QToolButton:disabled {{
             background-color: {colors.interactive_disabled};
             color: {colors.text_disabled};
-            border-color: {colors.border_secondary};
         }}
         QToolButton::menu-button {{
             border: none;
             width: 16px;
         }}
         """
+    
+    @staticmethod
+    def get_uniform_button_style(colors: ColorSystem, size="medium") -> str:
+        """
+        DEPRECATED: Use ButtonStyleManager.get_unified_button_style() instead.
+        Legacy wrapper for backward compatibility.
+        """
+        return ButtonStyleManager.get_unified_button_style(colors, "push", size)
+    
+    @staticmethod
+    def get_uniform_tool_button_style(colors: ColorSystem, size="medium") -> str:
+        """
+        DEPRECATED: Use ButtonStyleManager.get_unified_button_style() instead.
+        Legacy wrapper for backward compatibility.
+        """
+        return ButtonStyleManager.get_unified_button_style(colors, "tool", size)
+    
+    @staticmethod
+    def get_icon_button_style(colors: ColorSystem, variant="normal") -> str:
+        """
+        Style for icon-only buttons with square dimensions.
+        Uses the unified ButtonStyleManager for consistency.
+        
+        Args:
+            colors: Color system to use
+            variant: "normal", "primary", "danger", or "minimal"
+        """
+        # Map variants to states
+        state_map = {
+            "primary": "toggle",
+            "danger": "danger", 
+            "minimal": "normal",
+            "normal": "normal"
+        }
+        
+        state = state_map.get(variant, "normal")
+        
+        # Special handling for minimal variant
+        if variant == "minimal":
+            special_colors = {
+                "background": "transparent",
+                "text": colors.text_secondary,
+                "hover": colors.interactive_hover,
+                "active": colors.interactive_active
+            }
+            return ButtonStyleManager.get_unified_button_style(colors, "push", "icon", state, special_colors)
+        
+        return ButtonStyleManager.get_unified_button_style(colors, "push", "icon", state)
     
     @staticmethod
     def get_input_field_style(colors: ColorSystem) -> str:

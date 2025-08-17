@@ -8,7 +8,7 @@ import logging
 from typing import Optional
 from PyQt6.QtWidgets import QWidget, QMainWindow
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint
-from PyQt6.QtGui import QCloseEvent, QMouseEvent
+from PyQt6.QtGui import QCloseEvent, QMouseEvent, QShortcut, QKeySequence
 
 from .repl_widget import REPLWidget
 # Import window state management
@@ -92,6 +92,9 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
         
         # Direct arrow resize implementation (bypassing mixin complexity)
         self._setup_direct_arrows()
+        
+        # Setup keyboard shortcuts
+        self._setup_keyboard_shortcuts()
         
         logger.info("FloatingREPLWindow initialized")
     
@@ -225,6 +228,19 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
         
         
         logger.debug("FloatingREPL window properties configured")
+    
+    def _setup_keyboard_shortcuts(self):
+        """Setup keyboard shortcuts for the REPL window."""
+        # Ctrl+H to hide/close the REPL window
+        hide_shortcut = QShortcut(QKeySequence("Ctrl+H"), self)
+        hide_shortcut.activated.connect(self._hide_repl)
+        
+        logger.debug("REPL keyboard shortcuts configured: Ctrl+H to hide")
+    
+    def _hide_repl(self):
+        """Hide/close the REPL window."""
+        logger.info("REPL hide shortcut activated (Ctrl+H)")
+        self.close()
     
     def save_current_window_state(self):
         """Save current REPL window position and size."""

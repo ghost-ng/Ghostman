@@ -12,6 +12,7 @@ import re
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 
+logger = logging.getLogger("ghostman.repl_widget")
 # Markdown rendering imports
 try:
     import markdown
@@ -19,7 +20,7 @@ try:
     MARKDOWN_AVAILABLE = True
 except ImportError:
     MARKDOWN_AVAILABLE = False
-    logger = logging.getLogger("ghostman.repl_widget")
+    
     logger.warning("Markdown library not available - falling back to plain text rendering")
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
@@ -38,11 +39,10 @@ from ...application.font_service import font_service
 # Theme system imports
 try:
     from ...ui.themes.theme_manager import get_theme_manager
-    from ...ui.themes.style_templates import StyleTemplates
+    from ...ui.themes.style_templates import StyleTemplates, ButtonStyleManager
     THEME_SYSTEM_AVAILABLE = True
 except ImportError:
     THEME_SYSTEM_AVAILABLE = False
-    logger = logging.getLogger("ghostman.repl_widget")
     logger.warning("Theme system not available - using legacy styling")
 
 # Settings import (percent-based opacity)
@@ -732,8 +732,10 @@ class REPLWidget(QWidget):
                 self._load_gear_icon(self.settings_btn)
             if hasattr(self, 'title_new_conv_btn'):
                 self._load_plus_icon(self.title_new_conv_btn)
-            if hasattr(self, 'toolbar_new_conv_btn'):
-                self._load_plus_icon(self.toolbar_new_conv_btn)
+            if hasattr(self, 'move_btn'):
+                self._load_move_icon(self.move_btn)
+            
+            # Note: help_btn is a local variable, so it's handled during initialization
             
             # Update prompt label with new theme
             if hasattr(self, 'prompt_label'):
@@ -788,8 +790,8 @@ class REPLWidget(QWidget):
             bg_tertiary = getattr(colors, 'background_tertiary', bg_secondary)
 
             if processing:
-                # Emphasize processing with warning/accent text and tertiary background
-                text_color = getattr(colors, 'status_warning', getattr(colors, 'primary', '#FFA500'))
+                # Emphasize processing with theme-aware accent color (primary or info status)
+                text_color = getattr(colors, 'primary', getattr(colors, 'status_info', getattr(colors, 'text_primary', '#4CAF50')))
                 bg_color = bg_tertiary
                 border_color = getattr(colors, 'border_focus', getattr(colors, 'border_secondary', '#777'))
             else:
@@ -811,7 +813,7 @@ class REPLWidget(QWidget):
                 "border-radius: 4px; "
                 "font-family: Segoe UI Emoji, Consolas, monospace; "
                 "font-size: 11px; "
-                "padding: 3px 8px; "
+                "padding: 5px 8px; "  # Consistent padding to prevent size changes
                 "margin-right: 6px; "
                 "}"
             )
@@ -842,76 +844,21 @@ class REPLWidget(QWidget):
         b = int(hex_color[4:6], 16)
         return f"{r}, {g}, {b}"
     
-    def _get_themed_button_style(self, variant="secondary"):
-        """Get themed button style string."""
+    def _get_uniform_button_style(self, size="medium", button_type="push"):
+        """
+        DEPRECATED: Use ButtonStyleManager.get_unified_button_style() instead.
+        Legacy wrapper for backward compatibility.
+        """
         if self.theme_manager and THEME_SYSTEM_AVAILABLE:
             colors = self.theme_manager.current_theme
-            if variant == "primary":
-                return StyleTemplates.get_button_primary_style(colors)
-            else:
-                return StyleTemplates.get_tool_button_style(colors)
+            return ButtonStyleManager.get_unified_button_style(colors, button_type, size)
         else:
-            # Fallback to legacy button styles
-            return """
-                QToolButton {
-                    background-color: rgba(255, 255, 255, 0.15);
-                    color: white;
-                    border: 1px solid rgba(255, 255, 255, 0.3);
-                    border-radius: 4px;
-                    padding: 4px 8px;
-                }
-                QToolButton:hover {
-                    background-color: rgba(255, 255, 255, 0.25);
-                }
-            """
+            # Fallback for systems without theme support
+            return ButtonStyleManager.get_unified_button_style(None, button_type, size)
     
-    def _get_search_button_style(self):
-        """Get theme-aware styling for search buttons."""
-        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
-            colors = self.theme_manager.current_theme
-            return f"""
-                QPushButton {{
-                    background-color: {colors.interactive_normal};
-                    color: {colors.text_primary};
-                    border: {{'1px'}} solid {colors.border_secondary};
-                    border-radius: {{'3px'}};
-                    font-size: {{'11px'}};
-                }}
-                QPushButton:hover {{
-                    background-color: {colors.interactive_hover};
-                    border-color: {colors.border_focus};
-                }}
-                QPushButton:pressed {{
-                    background-color: {colors.interactive_active};
-                }}
-                QPushButton:disabled {{
-                    background-color: {colors.interactive_disabled};
-                    color: {colors.text_disabled};
-                    border-color: {colors.border_secondary};
-                }}
-            """
-        else:
-            return """
-                QPushButton {
-                    background-color: rgba(255, 255, 255, 0.1);
-                    color: white;
-                    border: 1px solid rgba(255, 255, 255, 0.2);
-                    border-radius: 3px;
-                    font-size: 11px;
-                }
-                QPushButton:hover {
-                    background-color: rgba(255, 255, 255, 0.2);
-                    border-color: rgba(255, 255, 255, 0.4);
-                }
-                QPushButton:pressed {
-                    background-color: rgba(255, 255, 255, 0.3);
-                }
-                QPushButton:disabled {
-                    background-color: rgba(255, 255, 255, 0.05);
-                    color: #666;
-                    border-color: rgba(255, 255, 255, 0.1);
-                }
-            """
+    def _get_themed_button_style(self, variant="secondary"):
+        """Get themed button style string (legacy method for backward compatibility)."""
+        return self._get_uniform_button_style("medium", "tool")
     
     def _get_search_checkbox_style(self):
         """Get theme-aware styling for search checkbox."""
@@ -1182,7 +1129,7 @@ class REPLWidget(QWidget):
                     background-color: rgba(40, 40, 40, 0.8);
                     border: 1px solid rgba(255, 255, 255, 0.2);
                     border-radius: 5px;
-                    margin: 2px;
+                    margin: 0px;
                 }
             """)
         
@@ -1194,14 +1141,16 @@ class REPLWidget(QWidget):
         self._drag_pos = None
         
         title_layout = QHBoxLayout(self.title_frame)
-        title_layout.setContentsMargins(8, 4, 8, 4)
-        title_layout.setSpacing(8)
+        # Compensate for main layout's 10px top margin by reducing title layout top margin
+        # This makes top (10px main + 0px title = 10px) equal to bottom (10px title)
+        title_layout.setContentsMargins(8, 0, 8, 20) # left, top, right, bottom
+        title_layout.setSpacing(8)  # space in between icon buttons
         
         # New conversation button with menu (with extra padding)
         self.title_new_conv_btn = QToolButton()
         # Load plus icon (theme-specific)
         self._load_plus_icon(self.title_new_conv_btn)
-        self.title_new_conv_btn.setIconSize(QSize(16, 16))
+        # Icon size is now handled by ButtonStyleManager
         self.title_new_conv_btn.setToolTip("Start new conversation")
         self.title_new_conv_btn.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
         self.title_new_conv_btn.clicked.connect(self._on_new_conversation_clicked)
@@ -1226,7 +1175,7 @@ class REPLWidget(QWidget):
         
         # Help button
         help_btn = QToolButton()
-        help_btn.setText("❓")
+        self._load_help_icon(help_btn)
         help_btn.setToolTip("Show help")
         #help_btn.setFixedSize(40, 40)  # Consistent size with other buttons
         help_btn.clicked.connect(self._on_help_clicked)
@@ -1237,7 +1186,7 @@ class REPLWidget(QWidget):
         self.title_settings_btn = QToolButton()
         # Load gear icon (theme-specific)
         self._load_gear_icon(self.title_settings_btn)
-        self.title_settings_btn.setIconSize(QSize(16, 16))
+        # Icon size is now handled by ButtonStyleManager
         self.title_settings_btn.setToolTip("Open settings")
         self.title_settings_btn.clicked.connect(self._on_settings_clicked)
         #self.title_settings_btn.setFixedSize(40, 40)
@@ -1248,22 +1197,22 @@ class REPLWidget(QWidget):
         self.chat_btn = QToolButton()
         # Load chat icon (theme-specific)
         self._load_chat_icon()
-        self.chat_btn.setIconSize(QSize(16, 16))
+        # Icon size is now handled by ButtonStyleManager
         self.chat_btn.setToolTip("Browse conversations")
         self.chat_btn.clicked.connect(self._on_chat_clicked)
-        self.chat_btn.setStyleSheet(self._get_themed_button_style())
-        # Special styling for chat button with more width
-        #self.chat_btn.setFixedSize(40, 40)  # Wider than normal buttons
-        #self._style_title_button(self.chat_btn)
+        # Apply uniform button styling with proper padding
+        logger.info("Applying uniform styling to chat button")
+        self._style_title_button(self.chat_btn)
         title_layout.addWidget(self.chat_btn)
         
         # Attach (snap to avatar) toggle button
         self.attach_btn = QToolButton()
         # Load chain icon (theme-specific)
         self._load_chain_icon()
-        self.attach_btn.setIconSize(QSize(16, 16))
+        # Icon size is now handled by ButtonStyleManager
         self.attach_btn.setToolTip("Attach REPL to avatar (toggle)")
         self.attach_btn.setCheckable(True)
+        self._style_title_button(self.attach_btn)
         # Initialize from settings if available
         try:
             from ...infrastructure.storage.settings_manager import settings as _settings
@@ -1280,41 +1229,31 @@ class REPLWidget(QWidget):
         self.search_btn = QToolButton()
         # Load search icon (theme-specific)
         self._load_search_icon()
-        self.search_btn.setIconSize(QSize(16, 16))
+        # Icon size is now handled by ButtonStyleManager
         self.search_btn.setToolTip("Search conversations (Ctrl+F)")
         self.search_btn.clicked.connect(self._toggle_search)
+        # Apply uniform styling first
+        self._style_title_button(self.search_btn)
         # Style: theme-aware styling
         self._update_search_button_state()
         title_layout.addWidget(self.search_btn)
 
         # Move/Resize arrow toggle button
         self.move_btn = QToolButton()
-        self.move_btn.setText("✥")  # Four arrows symbol
+        self._load_move_icon(self.move_btn)
         self.move_btn.setToolTip("Toggle resize arrows")
         self.move_btn.setCheckable(True)  # Make it a toggle button
         self.move_btn.clicked.connect(self._on_move_toggle_clicked)
         self._style_title_button(self.move_btn)
+        # Size constraints are now handled by _style_title_button CSS
         title_layout.addWidget(self.move_btn)
         
         title_layout.addStretch()
         
-        # Minimize button (expanded)
+        # Minimize button (uniform styling)
         minimize_btn = QPushButton("__")
-        minimize_btn.setFixedSize(28, 24)  # Expanded from 20x20
         minimize_btn.clicked.connect(self.minimize_requested.emit)
-        minimize_btn.setStyleSheet("""
-            QPushButton {
-                background-color: rgba(255, 255, 255, 0.3);
-                color: white;
-                border: 1px solid rgba(255, 255, 255, 0.4);
-                border-radius: 4px;
-                font-weight: bold;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: rgba(255, 255, 255, 0.4);
-            }
-        """)
+        self._style_title_button(minimize_btn)
         title_layout.addWidget(minimize_btn)
         
         parent_layout.addWidget(self.title_frame)
@@ -1351,20 +1290,18 @@ class REPLWidget(QWidget):
         # Regex checkbox
         self.regex_checkbox = QCheckBox(".*")
         self.regex_checkbox.setToolTip("Use regular expressions")
-        self.regex_checkbox.setFixedSize(35, 25)
+        self.regex_checkbox.setMinimumSize(35, 25)
         self.regex_checkbox.stateChanged.connect(self._on_regex_toggled)
         search_layout.addWidget(self.regex_checkbox)
         
-        # Search navigation buttons
+        # Search navigation buttons (uniform styling)
         self.search_prev_btn = QPushButton("↑")
         self.search_prev_btn.setToolTip("Previous match")
-        self.search_prev_btn.setFixedSize(30, 25)
         self.search_prev_btn.clicked.connect(self._search_previous)
         search_layout.addWidget(self.search_prev_btn)
         
         self.search_next_btn = QPushButton("↓")
         self.search_next_btn.setToolTip("Next match")
-        self.search_next_btn.setFixedSize(30, 25)
         self.search_next_btn.clicked.connect(self._search_next)
         search_layout.addWidget(self.search_next_btn)
         
@@ -1375,18 +1312,17 @@ class REPLWidget(QWidget):
         self.search_status_label.setStyleSheet(f"color: {status_color}; font-size: 10px;")
         search_layout.addWidget(self.search_status_label)
         
-        # Close search button
+        # Close search button (uniform styling)
         close_search_btn = QPushButton("✕")
         close_search_btn.setToolTip("Close search")
-        close_search_btn.setFixedSize(25, 25)
         close_search_btn.clicked.connect(self._close_search)
         search_layout.addWidget(close_search_btn)
         
-        # Style search buttons with theme colors
-        button_style = self._get_search_button_style()
-        self.search_prev_btn.setStyleSheet(button_style)
-        self.search_next_btn.setStyleSheet(button_style)
-        close_search_btn.setStyleSheet(button_style)
+        # Style search buttons with unified ButtonStyleManager
+        colors = self.theme_manager.current_theme if self.theme_manager and THEME_SYSTEM_AVAILABLE else None
+        ButtonStyleManager.apply_unified_button_style(self.search_prev_btn, colors, "push", "small")
+        ButtonStyleManager.apply_unified_button_style(self.search_next_btn, colors, "push", "small")
+        ButtonStyleManager.apply_unified_button_style(close_search_btn, colors, "push", "small")
         
         # Style regex checkbox
         self.regex_checkbox.setStyleSheet("""
@@ -1461,7 +1397,7 @@ class REPLWidget(QWidget):
         self.toolbar_new_conv_btn = QToolButton()
         # Load plus icon (theme-specific)
         self._load_plus_icon(self.toolbar_new_conv_btn)
-        self.toolbar_new_conv_btn.setIconSize(QSize(16, 16))
+        # Icon size is now handled by ButtonStyleManager
         # add padding to right
         self.toolbar_new_conv_btn.setStyleSheet("padding-right: 4px;")
         self.toolbar_new_conv_btn.setToolTip("Start new conversation")
@@ -1507,7 +1443,7 @@ class REPLWidget(QWidget):
         self.settings_btn = QToolButton()
         # Load gear icon (theme-specific)
         self._load_gear_icon(self.settings_btn)
-        self.settings_btn.setIconSize(QSize(16, 16))
+        # Icon size is now handled by ButtonStyleManager
         self.settings_btn.setToolTip("Conversation settings")
         self.settings_btn.clicked.connect(self.settings_requested.emit)
         self._style_tool_button(self.settings_btn)
@@ -1550,203 +1486,103 @@ class REPLWidget(QWidget):
         self.conversation_selector.setStyleSheet(style)
     
     def _style_tool_button(self, button: QToolButton):
-        """Apply consistent styling to toolbar buttons with emoji-safe font handling."""
-        button.setMaximumSize(30, 25)
+        """Apply consistent styling to toolbar buttons using unified ButtonStyleManager."""
+        # Remove old size constraints to let CSS take control
+        button.setMaximumSize(16777215, 16777215)
         
-        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
-            # Use theme system for consistent styling
-            colors = self.theme_manager.current_theme
-            
-            # Get emoji-compatible font stack
-            emoji_font_stack = self._get_emoji_font_stack()
-            
-            button.setStyleSheet(f"""
-                QToolButton {{
-                    background-color: {colors.interactive_normal};
-                    color: {colors.text_primary};
-                    border: {{'1px'}} solid {colors.border_secondary};
-                    border-radius: {{'4px'}};
-                    font-family: {emoji_font_stack};
-                    font-size: {{'12px'}};
-                    padding: {{'2px'}};
-                }}
-                QToolButton:hover {{
-                    background-color: {colors.interactive_hover};
-                    border: {{'1px'}} solid {colors.border_focus};
-                }}
-                QToolButton:pressed {{
-                    background-color: {colors.interactive_active};
-                }}
-                QToolButton:disabled {{
-                    background-color: {colors.interactive_disabled};
-                    color: {colors.text_disabled};
-                }}
-            """)
-        else:
-            # Fallback to original styling with emoji font support
-            emoji_font_stack = self._get_emoji_font_stack()
-            button.setStyleSheet(f"""
-                QToolButton {{
-                    background-color: rgba(255, 255, 255, 0.1);
-                    color: white;
-                    border: {{'1px'}} solid rgba(255, 255, 255, 0.2);
-                    border-radius: {{'4px'}};
-                    font-family: {emoji_font_stack};
-                    font-size: {{'12px'}};
-                    padding: {{'2px'}};
-                }}
-                QToolButton:hover {{
-                    background-color: rgba(255, 255, 255, 0.2);
-                    border: {{'1px'}} solid rgba(255, 255, 255, 0.4);
-                }}
-                QToolButton:pressed {{
-                    background-color: rgba(255, 255, 255, 0.3);
-                }}
-            """)
+        # Get theme colors and emoji font
+        colors = self.theme_manager.current_theme if self.theme_manager and THEME_SYSTEM_AVAILABLE else None
+        emoji_font_stack = self._get_emoji_font_stack()
+        
+        # Use unified button styling system with consistent 8px padding
+        ButtonStyleManager.apply_unified_button_style(
+            button, colors, "tool", "icon", "normal", None, emoji_font_stack
+        )
     
-    def _style_title_button(self, button: QToolButton, add_right_padding: bool = False):
-        """Apply styling to title bar buttons."""
-        button.setFixedSize(32 if add_right_padding else 28, 24)
-        padding = "2px 8px 2px 4px" if add_right_padding else "2px 6px"
+    def _apply_move_button_toggle_style(self, button: QToolButton):
+        """
+        Apply unified toggle styling to move button.
+        Uses the new ButtonStyleManager with special warning colors.
+        """
+        colors = self.theme_manager.current_theme if self.theme_manager and THEME_SYSTEM_AVAILABLE else None
+        emoji_font_stack = self._get_emoji_font_stack()
         
-        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
-            # Use theme system for consistent styling
-            colors = self.theme_manager.current_theme
-            emoji_font_stack = self._get_emoji_font_stack()
-            button.setStyleSheet(f"""
-                QToolButton {{
-                    background-color: {colors.interactive_normal};
-                    color: {colors.text_primary};
-                    border: {{'1px'}} solid {colors.border_secondary};
-                    border-radius: {{'4px'}};
-                    font-family: {emoji_font_stack};
-                    font-size: {{'14px'}};
-                    padding: {padding};
-                }}
-                QToolButton:hover {{
-                    background-color: {colors.interactive_hover};
-                    border: {{'1px'}} solid {colors.border_focus};
-                }}
-                QToolButton:pressed {{
-                    background-color: {colors.interactive_active};
-                }}
-                QToolButton:disabled {{
-                    background-color: {colors.interactive_disabled};
-                    color: {colors.text_disabled};
-                }}
-                QToolButton::menu-indicator {{
-                    image: none;
-                    width: {{'0px'}};
-                }}
-            """)
+        # Special colors for move button toggle state (warning/amber)
+        special_colors = {
+            "background": "rgba(255, 215, 0, 0.8)",
+            "text": "black",
+            "hover": "rgba(255, 215, 0, 0.9)",
+            "active": "rgba(255, 215, 0, 1.0)"
+        }
+        
+        ButtonStyleManager.apply_unified_button_style(
+            button, colors, "tool", "icon", "normal", special_colors, emoji_font_stack
+        )
+
+    def _style_title_button(self, button, add_right_padding: bool = False):
+        """
+        Apply unified styling to title bar buttons.
+        Uses the new ButtonStyleManager for consistency.
+        Handles both QToolButton (with icons) and QPushButton (minimize) properly.
+        """
+        colors = self.theme_manager.current_theme if self.theme_manager and THEME_SYSTEM_AVAILABLE else None
+        emoji_font_stack = self._get_emoji_font_stack()
+        
+        # Detect button type automatically
+        from PyQt6.QtWidgets import QPushButton, QToolButton
+        if isinstance(button, QPushButton):
+            button_type = "push"
         else:
-            # Fallback to original styling with emoji font support
-            emoji_font_stack = self._get_emoji_font_stack()
-            button.setStyleSheet(f"""
-                QToolButton {{
-                    background-color: rgba(255, 255, 255, 0.15);
-                    color: white;
-                    border: {{'1px'}} solid rgba(255, 255, 255, 0.3);
-                    border-radius: {{'4px'}};
-                    font-family: {emoji_font_stack};
-                    font-size: {{'14px'}};
-                    padding: {padding};
-                }}
-                QToolButton:hover {{
-                    background-color: rgba(255, 255, 255, 0.25);
-                    border: {{'1px'}} solid rgba(255, 255, 255, 0.5);
-                }}
-                QToolButton:pressed {{
-                    background-color: rgba(255, 255, 255, 0.35);
-                }}
-                QToolButton::menu-indicator {{
-                    image: none;
-                    width: {{'0px'}};
-                }}
-            """)
+            button_type = "tool"
+        
+        # Handle special padding for plus button
+        if add_right_padding:
+            # Use the dedicated plus button styling method
+            ButtonStyleManager.apply_plus_button_style(button, colors, emoji_font_stack)
+        else:
+            # Use standard unified styling
+            logger.info(f"Applying unified icon styling to {button_type} button")
+            ButtonStyleManager.apply_unified_button_style(
+                button, colors, button_type, "icon", "normal", {}, emoji_font_stack
+            )
     
     def _style_send_button(self):
-        """Style the Send button with theme colors."""
-        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
-            colors = self.theme_manager.current_theme
-            primary_color = colors.primary
-            primary_hover = colors.primary_hover
-            text_color = colors.text_primary
-        else:
-            # Fallback colors
-            primary_color = "#ff9800"
-            primary_hover = "#f57c00"
-            text_color = "#ffffff"
+        """Style the Send button with unified primary styling."""
+        colors = self.theme_manager.current_theme if self.theme_manager and THEME_SYSTEM_AVAILABLE else None
         
-        # Use string formatting to avoid CSS syntax issues
-        self.send_button.setStyleSheet(
-            f"QPushButton {{ "
-            f"background-color: {primary_color}; "
-            f"color: {text_color}; "
-            f"border: none; "
-            f"padding: 5px 15px; "
-            f"border-radius: 3px; "
-            f"font-weight: bold; "
-            f"}} "
-            f"QPushButton:hover {{ "
-            f"background-color: {primary_hover}; "
-            f"}} "
-            f"QPushButton:pressed {{ "
-            f"background-color: {primary_color}; "
-            f"opacity: 0.8; "
-            f"}}"
+        # Use primary state for send button
+        ButtonStyleManager.apply_unified_button_style(
+            self.send_button, colors, "push", "small", "toggle"
         )
     
     def _update_search_button_state(self):
-        """Update search button visual state based on search mode."""
+        """Update search button visual state using unified styling system."""
         try:
             if not hasattr(self, 'search_btn'):
                 return
                 
             # Check if search is active
             search_active = hasattr(self, 'search_frame') and self.search_frame and self.search_frame.isVisible()
+            colors = self.theme_manager.current_theme if self.theme_manager and THEME_SYSTEM_AVAILABLE else None
             
-            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
-                colors = self.theme_manager.current_theme
-                if search_active:
-                    # Highlighted state - use primary color background
-                    bg_color = colors.primary
-                    text_color = colors.background_primary
-                    border_color = colors.primary_hover
-                else:
-                    # Normal state
-                    bg_color = colors.interactive_normal
-                    text_color = colors.text_primary
-                    border_color = colors.border_secondary
+            if search_active:
+                # Use warning state for active search (matching theme)
+                state = "warning"
+                special_colors = {
+                    "background": colors.primary if colors else "#ff9800",
+                    "text": colors.background_primary if colors else "#000000",
+                    "hover": colors.primary_hover if colors else "#f57c00",
+                    "active": colors.primary if colors else "#e6940b"
+                }
             else:
-                # Fallback colors
-                if search_active:
-                    bg_color = "#ff9800"
-                    text_color = "#000000"
-                    border_color = "#f57c00"
-                else:
-                    bg_color = "rgba(255, 255, 255, 0.15)"
-                    text_color = "white"
-                    border_color = "rgba(255, 255, 255, 0.3)"
+                # Use normal state
+                state = "normal"
+                special_colors = None
             
-            # Apply styling
-            self.search_btn.setStyleSheet(f"""
-                QToolButton {{
-                    background-color: {bg_color};
-                    color: {text_color};
-                    border: {{'1px'}} solid {border_color};
-                    border-radius: {{'4px'}};
-                    font-size: {{'14px'}};
-                    padding: {{'2px'}} {{'6px'}};
-                }}
-                QToolButton:hover {{
-                    background-color: {border_color};
-                }}
-                QToolButton:pressed {{
-                    background-color: {bg_color};
-                    opacity: {{'0.8'}};
-                }}
-            """)
+            # Apply unified styling
+            ButtonStyleManager.apply_unified_button_style(
+                self.search_btn, colors, "tool", "icon", state, special_colors
+            )
             
             logger.debug(f"Updated search button state: active={search_active}")
             
@@ -1754,60 +1590,33 @@ class REPLWidget(QWidget):
             logger.error(f"Failed to update search button state: {e}")
     
     def _update_attach_button_state(self):
-        """Update attach button visual state based on attachment state."""
+        """Update attach button visual state using unified styling system."""
         try:
             if not hasattr(self, 'attach_btn'):
                 return
                 
             # Check if attached
             is_attached = self.attach_btn.isChecked()
+            colors = self.theme_manager.current_theme if self.theme_manager and THEME_SYSTEM_AVAILABLE else None
             
-            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
-                colors = self.theme_manager.current_theme
-                if is_attached:
-                    # Attached state - use success/primary color
-                    bg_color = colors.status_success
-                    text_color = colors.background_primary
-                    border_color = colors.status_success
-                    hover_color = colors.primary_hover
-                else:
-                    # Detached state - normal styling
-                    bg_color = colors.interactive_normal
-                    text_color = colors.text_primary
-                    border_color = colors.border_secondary
-                    hover_color = colors.interactive_hover
+            if is_attached:
+                # Use success state for attached state
+                state = "success"
+                special_colors = {
+                    "background": colors.status_success if colors else "#4CAF50",
+                    "text": colors.background_primary if colors else "#ffffff",
+                    "hover": colors.primary_hover if colors else "#66bb6a",
+                    "active": colors.status_success if colors else "#45a049"
+                }
             else:
-                # Fallback colors
-                if is_attached:
-                    bg_color = "#4CAF50"
-                    text_color = "#ffffff"
-                    border_color = "#45a049"
-                    hover_color = "#66bb6a"
-                else:
-                    bg_color = "rgba(255, 255, 255, 0.15)"
-                    text_color = "white"
-                    border_color = "rgba(255, 255, 255, 0.3)"
-                    hover_color = "rgba(255, 255, 255, 0.25)"
+                # Use normal state for detached
+                state = "normal"
+                special_colors = None
             
-            # Apply styling
-            self.attach_btn.setStyleSheet(f"""
-                QToolButton {{
-                    background-color: {bg_color};
-                    color: {text_color};
-                    border: {{'1px'}} solid {border_color};
-                    border-radius: {{'4px'}};
-                    font-size: {{'14px'}};
-                    padding: {{'2px'}} {{'6px'}};
-                }}
-                QToolButton:hover {{
-                    background-color: {hover_color};
-                    border: {{'1px'}} solid {border_color};
-                }}
-                QToolButton:pressed {{
-                    background-color: {bg_color};
-                    opacity: {{'0.8'}};
-                }}
-            """)
+            # Apply unified styling
+            ButtonStyleManager.apply_unified_button_style(
+                self.attach_btn, colors, "tool", "icon", state, special_colors
+            )
             
             logger.debug(f"Updated attach button state: attached={is_attached}")
             
@@ -1933,6 +1742,54 @@ class REPLWidget(QWidget):
         except Exception as e:
             logger.error(f"Failed to load plus icon: {e}")
             button.setText("➕")  # Fallback
+    
+    def _load_help_icon(self, button):
+        """Load theme-appropriate help icon for a given button."""
+        try:
+            # Determine if theme is dark or light  
+            icon_variant = self._get_icon_variant()
+            
+            help_icon_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", 
+                "assets", "icons", f"help_{icon_variant}.png"
+            )
+            
+            if os.path.exists(help_icon_path):
+                help_icon = QIcon(help_icon_path)
+                button.setIcon(help_icon)
+                logger.debug(f"Loaded help icon: help_{icon_variant}.png")
+            else:
+                # Fallback to Unicode symbol
+                button.setText("❓")
+                logger.warning(f"Help icon not found: {help_icon_path}")
+                
+        except Exception as e:
+            logger.error(f"Failed to load help icon: {e}")
+            button.setText("❓")  # Fallback
+    
+    def _load_move_icon(self, button):
+        """Load theme-appropriate move icon for a given button."""
+        try:
+            # Determine if theme is dark or light  
+            icon_variant = self._get_icon_variant()
+            
+            move_icon_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", 
+                "assets", "icons", f"move_{icon_variant}.png"
+            )
+            
+            if os.path.exists(move_icon_path):
+                move_icon = QIcon(move_icon_path)
+                button.setIcon(move_icon)
+                logger.debug(f"Loaded move icon: move_{icon_variant}.png")
+            else:
+                # Fallback to Unicode symbol
+                button.setText("✥")
+                logger.warning(f"Move icon not found: {move_icon_path}")
+                
+        except Exception as e:
+            logger.error(f"Failed to load move icon: {e}")
+            button.setText("✥")  # Fallback
     
     def _get_icon_variant(self) -> str:
         """Determine which icon variant to use based on theme."""
@@ -2149,11 +2006,11 @@ class REPLWidget(QWidget):
                 # Fully opaque - use original hex color
                 child_bg = colors.background_tertiary
             elif colors.background_tertiary.startswith('#'):
-                # Transparent - convert to rgba with slightly less opacity for contrast
+                # Transparent - convert to rgba with correct opacity (alpha is 0.0-1.0)
                 r = int(colors.background_tertiary[1:3], 16)
                 g = int(colors.background_tertiary[3:5], 16)
                 b = int(colors.background_tertiary[5:7], 16)
-                child_bg = f"rgba({r}, {g}, {b}, {alpha * 0.9})"
+                child_bg = f"rgba({r}, {g}, {b}, {alpha:.3f})"
             else:
                 child_bg = colors.background_tertiary
             
@@ -2287,6 +2144,10 @@ class REPLWidget(QWidget):
         """Set the UI to processing mode with spinner or normal mode."""
         try:
             if processing:
+                # get current width
+                current_width = self.prompt_label.width()
+                # set min width
+                self.prompt_label.setMinimumWidth(current_width)
                 # Show spinner in prompt label
                 self.prompt_label.setText("⠋")  # Spinner character
                 self._style_prompt_label(normal=False, processing=True)
@@ -2316,6 +2177,8 @@ class REPLWidget(QWidget):
             if hasattr(self, '_spinner_chars') and hasattr(self, '_spinner_index'):
                 self._spinner_index = (self._spinner_index + 1) % len(self._spinner_chars)
                 self.prompt_label.setText(self._spinner_chars[self._spinner_index])
+                # ensure middle of spinner is aligned
+                self.prompt_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         except Exception as e:
             logger.error(f"Failed to update spinner: {e}")
     
@@ -3335,6 +3198,10 @@ class REPLWidget(QWidget):
     def _refresh_conversation_selector(self):
         """Refresh the conversation selector dropdown with updated status icons."""
         try:
+            # Check if conversation_selector exists (it may not be implemented yet)
+            if not hasattr(self, 'conversation_selector'):
+                return
+                
             if not self.conversations_list:
                 return
             
@@ -3757,18 +3624,8 @@ class REPLWidget(QWidget):
             if self.move_btn.isChecked():
                 # Show grips - resize mode ON
                 parent_window.show_resize_arrows(auto_hide=False)  # Compatibility method
-                # Style button as active/pressed
-                self.move_btn.setStyleSheet("""QToolButton {
-                        background-color: rgba(255, 215, 0, 0.8);
-                        color: black;
-                        border: 2px solid rgba(255, 255, 255, 0.8);
-                        border-radius: 4px;
-                        padding: 4px;
-                        font-weight: bold;
-                    }
-                    QToolButton:hover {
-                        background-color: rgba(255, 215, 0, 0.9);
-                    }""")
+                # Apply toggle styling that preserves all size constraints
+                self._apply_move_button_toggle_style(self.move_btn)
                 print("🔘 Move mode ON - edge grips visible, REPL fully clickable")
             else:
                 # Hide grips - normal mode restored

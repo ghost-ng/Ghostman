@@ -62,7 +62,9 @@
       "Bash(\"./venv/Scripts/python.exe\" -c \"from ghostman.src.ui.themes.theme_manager import get_theme_manager; tm = get_theme_manager(); print(f''Available themes: {tm.get_available_themes()}'')\")",
       "Bash(\"./venv/Scripts/python.exe\":*)",
       "Bash(sed:*)",
-      "WebFetch(domain:www.ryanfiller.com)"
+      "WebFetch(domain:www.ryanfiller.com)",
+      "Bash(call venvScriptsactivate.bat)",
+      "Bash(.venvScriptspython.exe test_button_sizing.py)"
     ],
     "deny": []
   }

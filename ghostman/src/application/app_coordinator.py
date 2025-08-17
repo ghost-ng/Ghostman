@@ -42,6 +42,7 @@ class AppCoordinator(QObject):
         self._state_machine: Optional[TwoStateMachine] = None
         self._main_window = None  # Will be MainWindow instance
         self._system_tray = None  # Will be EnhancedSystemTray instance
+        self._settings_dialog = None  # Keep reference to prevent garbage collection
         self._initialized = False
         
         logger.info("AppCoordinator created")
@@ -447,15 +448,20 @@ class AppCoordinator(QObject):
             # Reuse global settings singleton (avoid divergent instances / lost writes)
             self._settings_manager = settings
             
-            logger.debug("Creating settings dialog...")
-            # Create and show settings dialog
-            settings_dialog = SettingsDialog(self._settings_manager, parent=self._main_window)
-            settings_dialog.settings_applied.connect(self._on_settings_applied)
-            settings_dialog.opacity_preview_changed.connect(self._on_opacity_preview)
+            # Create or reuse existing settings dialog (prevent multiple instances)
+            if self._settings_dialog is None or not self._settings_dialog.isVisible():
+                logger.debug("Creating new settings dialog...")
+                self._settings_dialog = SettingsDialog(self._settings_manager, parent=self._main_window)
+                self._settings_dialog.settings_applied.connect(self._on_settings_applied)
+                self._settings_dialog.opacity_preview_changed.connect(self._on_opacity_preview)
+            else:
+                logger.debug("Bringing existing settings dialog to front...")
             
             logger.debug("Showing settings dialog...")
-            result = settings_dialog.exec()
-            logger.info(f"Settings dialog closed with result: {result}")
+            self._settings_dialog.show()
+            self._settings_dialog.raise_()
+            self._settings_dialog.activateWindow()
+            logger.info("Settings dialog opened (non-modal)")
             
         except Exception as e:
             logger.error(f"Failed to show settings dialog: {e}")

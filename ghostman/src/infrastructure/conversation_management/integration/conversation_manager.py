@@ -486,7 +486,7 @@ class ConversationManager:
             
             # Close database connections
             if self.db_manager:
-                self.db_manager.close()
+                self.db_manager.close_all_connections()
             
             # Clear callbacks
             self._status_callbacks.clear()

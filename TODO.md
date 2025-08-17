@@ -40,17 +40,10 @@
 
 ### User Experience
 - [ ] Add keyboard shortcuts for common actions
-- [ ] Implement conversation search functionality
+    - Ctrl-H to hide the REPL window
+    - Ctrl-M to minimize all the taskbar
 - [ ] Add conversation tagging/categorization
 - [ ] Create onboarding/first-run experience
-
-### Settings & Configuration
-- [ ] Create settings UI dialog
-- [ ] Add color theming options for user customization
-- [ ] Add font size increase/decrease setting option
-- [ ] Split system prompt: user-modifiable + hard-coded base prompt
-- [ ] Implement hotkey configuration
-- [ ] Add backup/restore settings functionality
 
 ## 📋 Medium Priority
 ### Performance
@@ -61,34 +54,23 @@
 
 ### Integration
 - [ ] Add support for multiple AI providers
-- [ ] Implement plugin system for extensions
 - [ ] Add system clipboard integration
-- [ ] Create API for third-party integrations
 
 ### Documentation
 - [ ] Write user guide for new features
 - [ ] Update README with current functionality
-- [ ] Create video tutorials
 - [ ] Document API configuration options
 
 ## 💡 Nice to Have
 ### Advanced Features
-- [ ] Voice input/output support
 - [ ] Image generation integration
-- [ ] Code execution sandbox
-- [ ] Multi-language support
+
 
 ### Analytics
 - [ ] Usage statistics dashboard
 - [ ] Token usage tracking
 - [ ] Performance metrics
-- [ ] Error reporting system
 
-### Community
-- [ ] Create Discord/community server
-- [ ] Set up feature request system
-- [ ] Implement telemetry (opt-in)
-- [ ] Create contributor guidelines
 
 ## 🐛 Known Issues
 - [ ] Window positioning on multi-monitor setups needs refinement
