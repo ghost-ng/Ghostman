@@ -131,7 +131,7 @@ class StartupService:
             preamble_lines.append("   • Test connection and save")
         else:
             # API test successful - show normal welcome
-            preamble_lines.append("✅ API Connected")
+            preamble_lines.append("✅ Connected!")
             preamble_lines.append("")
             
             # Get custom preamble from settings if available

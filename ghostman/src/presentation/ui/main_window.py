@@ -8,7 +8,7 @@ import logging
 from typing import Optional
 from PyQt6.QtWidgets import QMainWindow, QWidget
 from PyQt6.QtCore import pyqtSignal, Qt, QPoint
-from PyQt6.QtGui import QCloseEvent, QMouseEvent
+from PyQt6.QtGui import QCloseEvent, QMouseEvent, QShortcut, QKeySequence
 
 # Import window state management
 from ...application.window_state import save_window_state, load_window_state
@@ -45,6 +45,7 @@ class MainWindow(QMainWindow):
         
         self._init_ui()
         self._setup_window()
+        self._setup_keyboard_shortcuts()
         
         logger.info("MainWindow initialized")
     
@@ -98,6 +99,20 @@ class MainWindow(QMainWindow):
         self._center_window()
         
         logger.debug("Window properties configured")
+    
+    def _setup_keyboard_shortcuts(self):
+        """Setup global keyboard shortcuts for the main window."""
+        # Ctrl+M to minimize to taskbar/tray
+        minimize_shortcut = QShortcut(QKeySequence("Ctrl+M"), self)
+        minimize_shortcut.activated.connect(self._minimize_to_taskbar)
+        
+        logger.debug("MainWindow keyboard shortcuts configured: Ctrl+M to minimize")
+    
+    def _minimize_to_taskbar(self):
+        """Minimize the entire application to taskbar/tray."""
+        logger.info("Minimize shortcut activated (Ctrl+M)")
+        # Emit minimize signal which will be handled by the app coordinator
+        self.minimize_requested.emit()
     
     def _set_window_style(self):
         """Set the window style and background."""

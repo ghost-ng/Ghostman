@@ -308,10 +308,10 @@ def get_arctic_white_theme() -> ColorSystem:
         text_tertiary="#555555",
         text_disabled="#999999",
         
-        # Interactive
-        interactive_normal="#dee2e6",
-        interactive_hover="#ced4da",
-        interactive_active="#adb5bd",
+        # Interactive - using blue tints for better visibility on white
+        interactive_normal="rgba(21, 101, 192, 0.08)",  # Primary blue with very low opacity
+        interactive_hover="rgba(21, 101, 192, 0.15)",   # Primary blue with slightly more opacity
+        interactive_active="rgba(21, 101, 192, 0.25)",  # Primary blue with more opacity
         interactive_disabled="#f8f9fa",
         
         # Status
@@ -718,10 +718,10 @@ def get_pulse_theme() -> ColorSystem:
         text_tertiary="#C8B9FF",
         text_disabled="#5A5570",
         
-        # Interactive
-        interactive_normal="#3A3558",
-        interactive_hover="#4A4468",
-        interactive_active="#5A5378",
+        # Interactive - enhanced visibility with transparency
+        interactive_normal="rgba(139, 92, 246, 0.15)",  # Primary with low transparency
+        interactive_hover="rgba(139, 92, 246, 0.25)",   # Primary with more transparency
+        interactive_active="rgba(236, 72, 153, 0.3)",   # Secondary with transparency
         interactive_disabled="#1E1B3A",
         
         # Status
@@ -800,10 +800,10 @@ def get_solarized_dark_theme() -> ColorSystem:
         text_tertiary="#839496",
         text_disabled="#073642",
         
-        # Interactive
-        interactive_normal="#0e4853",
-        interactive_hover="#165a65",
-        interactive_active="#1e6c78",
+        # Interactive - using Solarized base01/base1 for better button visibility
+        interactive_normal="rgba(88, 110, 117, 0.3)",  # Solarized base01 with transparency
+        interactive_hover="rgba(147, 161, 161, 0.4)",  # Solarized base1 with transparency
+        interactive_active="rgba(42, 161, 152, 0.5)",  # Solarized cyan with transparency
         interactive_disabled="#073642",
         
         # Status

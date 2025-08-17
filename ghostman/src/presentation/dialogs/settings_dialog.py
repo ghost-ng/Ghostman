@@ -45,15 +45,22 @@ class SettingsDialog(QDialog):
         
         self._init_ui()
         self._load_current_settings()
+        self._apply_uniform_button_styles()
         
         logger.info("SettingsDialog initialized")
     
     def _init_ui(self):
         """Initialize the user interface."""
-        self.setWindowTitle("Spector Settings")
-        self.setModal(True)
+        self.setWindowTitle("Ghostman Settings")
+        self.setModal(False)
         self.resize(600, 500)
-        self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.WindowCloseButtonHint)
+        # Non-modal tool window that doesn't block main app interaction
+        self.setWindowFlags(
+            Qt.WindowType.Window | 
+            Qt.WindowType.WindowCloseButtonHint | 
+            Qt.WindowType.WindowMinimizeButtonHint |
+            Qt.WindowType.WindowStaysOnTopHint
+        )
         
         # Apply theme styling
         self._apply_theme()
@@ -281,13 +288,11 @@ class SettingsDialog(QDialog):
         self.ai_font_size_spin.setRange(6, 72)
         self.ai_font_size_spin.setValue(11)
         
-        # Quick size adjustment buttons
+        # Quick size adjustment buttons (uniform styling)
         self.ai_font_size_decrease_btn = QPushButton("-")
-        self.ai_font_size_decrease_btn.setMaximumWidth(30)
         self.ai_font_size_decrease_btn.clicked.connect(lambda: self._adjust_ai_font_size(-1))
         
         self.ai_font_size_increase_btn = QPushButton("+")
-        self.ai_font_size_increase_btn.setMaximumWidth(30)
         self.ai_font_size_increase_btn.clicked.connect(lambda: self._adjust_ai_font_size(1))
         
         ai_font_size_layout.addWidget(self.ai_font_size_decrease_btn)
@@ -326,11 +331,9 @@ class SettingsDialog(QDialog):
         
         # Quick size adjustment buttons
         self.user_font_size_decrease_btn = QPushButton("-")
-        self.user_font_size_decrease_btn.setMaximumWidth(30)
         self.user_font_size_decrease_btn.clicked.connect(lambda: self._adjust_user_font_size(-1))
         
         self.user_font_size_increase_btn = QPushButton("+")
-        self.user_font_size_increase_btn.setMaximumWidth(30)
         self.user_font_size_increase_btn.clicked.connect(lambda: self._adjust_user_font_size(1))
         
         user_font_size_layout.addWidget(self.user_font_size_decrease_btn)
@@ -365,16 +368,24 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(preview_group)
 
-        # Connect font change events to preview updates
+        # Connect font change events to preview updates AND immediate application
         self.ai_font_family_combo.currentTextChanged.connect(self._update_font_previews)
+        self.ai_font_family_combo.currentTextChanged.connect(self._apply_font_changes_immediately)
         self.ai_font_size_spin.valueChanged.connect(self._update_font_previews)
+        self.ai_font_size_spin.valueChanged.connect(self._apply_font_changes_immediately)
         self.ai_font_weight_combo.currentTextChanged.connect(self._update_font_previews)
+        self.ai_font_weight_combo.currentTextChanged.connect(self._apply_font_changes_immediately)
         self.ai_font_style_combo.currentTextChanged.connect(self._update_font_previews)
+        self.ai_font_style_combo.currentTextChanged.connect(self._apply_font_changes_immediately)
         
         self.user_font_family_combo.currentTextChanged.connect(self._update_font_previews)
+        self.user_font_family_combo.currentTextChanged.connect(self._apply_font_changes_immediately)
         self.user_font_size_spin.valueChanged.connect(self._update_font_previews)
+        self.user_font_size_spin.valueChanged.connect(self._apply_font_changes_immediately)
         self.user_font_weight_combo.currentTextChanged.connect(self._update_font_previews)
+        self.user_font_weight_combo.currentTextChanged.connect(self._apply_font_changes_immediately)
         self.user_font_style_combo.currentTextChanged.connect(self._update_font_previews)
+        self.user_font_style_combo.currentTextChanged.connect(self._apply_font_changes_immediately)
 
         layout.addStretch()
         self.tab_widget.addTab(tab, "Fonts")
@@ -417,12 +428,86 @@ class SettingsDialog(QDialog):
         current_size = self.ai_font_size_spin.value()
         new_size = max(6, min(72, current_size + delta))
         self.ai_font_size_spin.setValue(new_size)
+        # Immediately apply the font change
+        self._apply_font_changes_immediately()
     
     def _adjust_user_font_size(self, delta):
         """Adjust user input font size by the given delta."""
         current_size = self.user_font_size_spin.value()
         new_size = max(6, min(72, current_size + delta))
         self.user_font_size_spin.setValue(new_size)
+        # Immediately apply the font change
+        self._apply_font_changes_immediately()
+    
+    def _apply_font_changes_immediately(self):
+        """Apply font changes immediately without waiting for the Apply button."""
+        try:
+            # Get current font configuration
+            fonts_config = {
+                "ai_response": {
+                    "family": self.ai_font_family_combo.currentText(),
+                    "size": self.ai_font_size_spin.value(),
+                    "weight": self.ai_font_weight_combo.currentText().lower(),
+                    "style": self.ai_font_style_combo.currentText().lower()
+                },
+                "user_input": {
+                    "family": self.user_font_family_combo.currentText(),
+                    "size": self.user_font_size_spin.value(),
+                    "weight": self.user_font_weight_combo.currentText().lower(),
+                    "style": self.user_font_style_combo.currentText().lower()
+                }
+            }
+            
+            # Save to settings manager immediately
+            self.settings_manager.set('fonts', fonts_config)
+            
+            # Emit signal to apply fonts immediately (just the fonts category)
+            font_only_config = {"fonts": fonts_config}
+            self.settings_applied.emit(font_only_config)
+            
+            logger.debug("Font changes applied immediately")
+            
+        except Exception as e:
+            logger.error(f"Failed to apply font changes immediately: {e}")
+    
+    def _apply_uniform_button_styles(self):
+        """Apply uniform styling to all buttons in the settings dialog."""
+        try:
+            from ...ui.themes.style_templates import StyleTemplates
+            from ...ui.themes.theme_manager import get_theme_manager
+            
+            # Get theme manager for consistent styling
+            theme_manager = get_theme_manager()
+            if theme_manager and hasattr(theme_manager, 'current_theme'):
+                colors = theme_manager.current_theme
+                
+                # Apply icon button style to font adjustment buttons
+                icon_style = StyleTemplates.get_icon_button_style(colors)
+                self.ai_font_size_decrease_btn.setStyleSheet(icon_style)
+                self.ai_font_size_increase_btn.setStyleSheet(icon_style)
+                self.user_font_size_decrease_btn.setStyleSheet(icon_style)
+                self.user_font_size_increase_btn.setStyleSheet(icon_style)
+                
+                # Apply uniform button style to regular buttons
+                button_style = StyleTemplates.get_uniform_button_style(colors, "medium")
+                self.apply_btn.setStyleSheet(button_style)
+                self.cancel_btn.setStyleSheet(button_style)
+                self.ok_btn.setStyleSheet(button_style)
+                self.save_config_btn.setStyleSheet(button_style)
+                self.load_config_btn.setStyleSheet(button_style)
+                self.test_btn.setStyleSheet(button_style)
+                
+                # Apply primary button style to show key button
+                primary_style = StyleTemplates.get_button_primary_style(colors)
+                if hasattr(self, 'show_key_btn'):
+                    self.show_key_btn.setStyleSheet(primary_style)
+                
+                logger.debug("Applied uniform button styles to settings dialog")
+            else:
+                logger.warning("Theme manager not available for button styling")
+                
+        except Exception as e:
+            logger.error(f"Failed to apply uniform button styles: {e}")
     
     def _get_combined_system_prompt(self):
         """Combine user custom prompt with hardcoded base formatting instructions."""
@@ -1443,19 +1528,17 @@ class SettingsDialog(QDialog):
         
         if self.settings_manager:
             logger.info("💾 SAVING SETTINGS TO STORAGE")
-            # Save to settings manager
+            # Save to settings manager using nested structure for proper persistence
             saved_count = 0
             for category, settings in config.items():
-                for key, value in settings.items():
-                    full_key = f"{category}.{key}"
-                    try:
-                        self.settings_manager.set(full_key, value)
-                        display_value = "***MASKED***" if key == "api_key" and value else value
-                        logger.info(f"  ✅ Saved: {full_key} = {display_value}")
-                        saved_count += 1
-                    except Exception as e:
-                        logger.error(f"  ❌ Failed to save {full_key}: {e}")
-            logger.info(f"💾 Settings storage complete: {saved_count} items saved")
+                try:
+                    # Save the entire category as a nested structure
+                    self.settings_manager.set(category, settings)
+                    logger.info(f"  ✅ Saved category: {category} ({len(settings)} items)")
+                    saved_count += 1
+                except Exception as e:
+                    logger.error(f"  ❌ Failed to save category {category}: {e}")
+            logger.info(f"💾 Settings storage complete: {saved_count} categories saved")
         else:
             logger.warning("⚠️  No settings manager available - settings not persisted")
         
