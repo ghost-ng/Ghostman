@@ -64,7 +64,17 @@
       "Bash(sed:*)",
       "WebFetch(domain:www.ryanfiller.com)",
       "Bash(call venvScriptsactivate.bat)",
-      "Bash(.venvScriptspython.exe test_button_sizing.py)"
+      "Bash(.venvScriptspython.exe test_button_sizing.py)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "WebFetch(domain:pyqt-fluent-widgets.readthedocs.io)",
+      "Bash(./venv/Scripts/python.exe:*)",
+      "Bash(.venvScriptspython.exe test_modern_settings.py)",
+      "Bash(\"./venv/Scripts/pip.exe\" install PyQt6-Fluent-Widgets)"
     ],
     "deny": []
   }
