@@ -1,0 +1,181 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags like v0.1.0, v1.0.0
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        architecture: 'x64'
+        
+    - name: Cache pip packages
+      uses: actions/cache@v3
+      with:
+        path: ~\AppData\Local\pip\Cache
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+          
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+        
+    - name: Extract version from __version__.py
+      id: extract_version
+      run: |
+        $version = python -c "from ghostman.__version__ import __version__; print(__version__)"
+        echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+        echo "Extracted version: $version"
+        
+    - name: Clean build directories
+      run: |
+        if (Test-Path "build") { Remove-Item -Recurse -Force "build" }
+        if (Test-Path "dist") { Remove-Item -Recurse -Force "dist" }
+        
+    - name: Build Windows executable
+      run: |
+        pyinstaller ghostman.spec
+        
+    - name: Verify build output
+      run: |
+        if (Test-Path "dist/ghostman.exe") {
+          echo "✅ Executable built successfully"
+          $size = (Get-Item "dist/ghostman.exe").Length
+          echo "📦 Executable size: $([math]::Round($size/1MB, 2)) MB"
+        } else {
+          echo "❌ Build failed - executable not found"
+          exit 1
+        }
+        
+    - name: Create portable archive
+      run: |
+        cd dist
+        Compress-Archive -Path "ghostman.exe" -DestinationPath "ghostman-v${{ steps.extract_version.outputs.VERSION }}-windows-x64.zip"
+        echo "📦 Created portable archive"
+        
+    - name: Create source archive
+      run: |
+        $excludePatterns = @(
+          '.git*',
+          '__pycache__',
+          '*.pyc',
+          'build',
+          'dist',
+          '.vscode',
+          '*.log',
+          'test_*.py',
+          '.claude'
+        )
+        $tempDir = "ghostman-v${{ steps.extract_version.outputs.VERSION }}-source"
+        New-Item -ItemType Directory -Path $tempDir -Force
+        
+        # Copy source files excluding patterns
+        Get-ChildItem -Path "." -Recurse | Where-Object {
+          $file = $_
+          $shouldExclude = $false
+          foreach ($pattern in $excludePatterns) {
+            if ($file.FullName -like "*$pattern*") {
+              $shouldExclude = $true
+              break
+            }
+          }
+          return -not $shouldExclude -and -not $file.PSIsContainer
+        } | ForEach-Object {
+          $relativePath = $_.FullName.Substring((Get-Location).Path.Length + 1)
+          $targetPath = Join-Path $tempDir $relativePath
+          $targetDir = Split-Path $targetPath -Parent
+          if (-not (Test-Path $targetDir)) {
+            New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+          }
+          Copy-Item $_.FullName $targetPath
+        }
+        
+        Compress-Archive -Path $tempDir -DestinationPath "ghostman-v${{ steps.extract_version.outputs.VERSION }}-source.zip"
+        Remove-Item -Recurse -Force $tempDir
+        echo "📦 Created source archive"
+        
+    - name: Generate SHA256 checksums
+      run: |
+        cd dist
+        $files = @(
+          "ghostman-v${{ steps.extract_version.outputs.VERSION }}-windows-x64.zip"
+        )
+        
+        $checksums = @()
+        foreach ($file in $files) {
+          if (Test-Path $file) {
+            $hash = (Get-FileHash -Path $file -Algorithm SHA256).Hash.ToLower()
+            $checksums += "$hash  $file"
+            echo "🔐 $file : $hash"
+          }
+        }
+        
+        # Add source archive checksum
+        $sourceFile = "../ghostman-v${{ steps.extract_version.outputs.VERSION }}-source.zip"
+        if (Test-Path $sourceFile) {
+          $hash = (Get-FileHash -Path $sourceFile -Algorithm SHA256).Hash.ToLower()
+          $checksums += "$hash  ghostman-v${{ steps.extract_version.outputs.VERSION }}-source.zip"
+          echo "🔐 Source archive : $hash"
+        }
+        
+        $checksums | Out-File -FilePath "SHA256SUMS.txt" -Encoding UTF8
+        echo "✅ Generated SHA256 checksums"
+        
+    - name: Create GitHub Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.ref_name }}
+        name: Ghostman (Spector) ${{ steps.extract_version.outputs.VERSION }}
+        body: |
+          ## Ghostman (Spector) AI Assistant v${{ steps.extract_version.outputs.VERSION }}
+          
+          ### 🚀 Quick Start
+          1. Download `ghostman-v${{ steps.extract_version.outputs.VERSION }}-windows-x64.zip`
+          2. Extract the ZIP file
+          3. Run `ghostman.exe`
+          
+          ### 📦 Downloads
+          - **Windows Executable**: `ghostman-v${{ steps.extract_version.outputs.VERSION }}-windows-x64.zip`
+          - **Source Code**: `ghostman-v${{ steps.extract_version.outputs.VERSION }}-source.zip`
+          - **Checksums**: `SHA256SUMS.txt`
+          
+          ### ✨ Features
+          - 🎨 Pin button for always-on-top functionality
+          - 🖱️ Advanced window positioning and attachment system
+          - ⚙️ Comprehensive settings with theme support
+          - 💬 AI-powered conversation management
+          - 📝 Local help documentation system
+          
+          ### 🔒 Security
+          Verify downloads using SHA256 checksums in `SHA256SUMS.txt`
+          
+          ### 📋 Requirements
+          - Windows 10/11 64-bit
+          - No additional Python installation required
+          
+          ---
+          🤖 Built with PyInstaller • 🛡️ Open Source • 💙 Made with Python & PyQt6
+        draft: true
+        prerelease: false
+        generate_release_notes: false
+        files: |
+          dist/ghostman-v${{ steps.extract_version.outputs.VERSION }}-windows-x64.zip
+          ghostman-v${{ steps.extract_version.outputs.VERSION }}-source.zip
+          dist/SHA256SUMS.txt
