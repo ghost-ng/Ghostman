@@ -56,9 +56,9 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
     
-    - name: Build executable
+    - name: Build Windows executable
       run: |
-        python build.py
+        pyinstaller ghostman.spec
     
     - name: Create archive
       run: |
@@ -102,9 +102,9 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
     
-    - name: Build executable
+    - name: Build Linux executable
       run: |
-        python build.py
+        pyinstaller ghostman.spec
     
     - name: Create archive
       run: |
@@ -134,14 +134,14 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
     
-    - name: Build executable
+    - name: Build macOS executable
       run: |
-        python build.py
+        pyinstaller ghostman.spec
     
     - name: Create archive
       run: |
         cd dist
-        tar -czf ghostman-macos-x64.tar.gz ghostman.app
+        tar -czf ghostman-macos-x64.tar.gz ghostman
     
     - name: Upload macOS executable
       uses: softprops/action-gh-release@v1
