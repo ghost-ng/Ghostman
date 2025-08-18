@@ -72,6 +72,7 @@ class MainWindow(QMainWindow):
         self.floating_repl.repl_widget.settings_requested.connect(self.settings_requested.emit)
         self.floating_repl.repl_widget.help_requested.connect(self.help_requested.emit)
         self.floating_repl.repl_widget.browse_requested.connect(self._show_conversations)
+        self.floating_repl.repl_widget.pin_toggle_requested.connect(self._on_pin_toggle)
         # Wire attach toggle from REPL title bar
         if hasattr(self.floating_repl.repl_widget, 'attach_toggle_requested'):
             self.floating_repl.repl_widget.attach_toggle_requested.connect(self._on_attach_toggle)
@@ -93,8 +94,20 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(90, 90)
         self.resize(120, 120)  # 40% smaller (200 * 0.6 = 120)
         
-        # Make window frameless for a cleaner look
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+        # Get always on top setting from settings
+        always_on_top = True  # Default value
+        try:
+            from ..infrastructure.storage.settings_manager import settings as _settings
+            always_on_top = _settings.get('interface.always_on_top', True)
+        except Exception:
+            pass
+        
+        # Make window frameless and conditionally always on top
+        base_flags = Qt.WindowType.FramelessWindowHint
+        if always_on_top:
+            base_flags |= Qt.WindowType.WindowStaysOnTopHint
+            
+        self.setWindowFlags(base_flags)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         
         # Center the window
@@ -306,9 +319,45 @@ class MainWindow(QMainWindow):
             screen_geometry = screen.availableGeometry()
             
             if self._repl_attached:
-                # Move REPL using current offset
-                self._ensure_attach_offset_default()
-                self.floating_repl.move_attached(avatar_pos, self._repl_attach_offset, screen_geometry)
+                # When attached, try to use saved positions first if they exist
+                repl_positioned_by_saved = False
+                try:
+                    from ..application.window_state import load_window_state
+                    repl_state = load_window_state('repl')
+                    
+                    if (repl_state['position'] and 
+                        'x' in repl_state['position'] and 
+                        'y' in repl_state['position']):
+                        
+                        repl_x, repl_y = repl_state['position']['x'], repl_state['position']['y']
+                        repl_size = repl_state['size']
+                        
+                        # Enhanced validation for attached windows - more lenient for left-side positioning
+                        validation_result = self._validate_attached_repl_position(
+                            repl_x, repl_y, repl_size, screen_geometry, avatar_pos
+                        )
+                        
+                        if validation_result['valid']:
+                            # Use saved position and update offset based on current avatar position
+                            self.floating_repl.resize(repl_size['width'], repl_size['height'])
+                            self.floating_repl.move(repl_x, repl_y)
+                            self._repl_attach_offset = QPoint(repl_x, repl_y) - avatar_pos
+                            repl_positioned_by_saved = True
+                            logger.debug(f'✅ Used saved REPL position: ({repl_x}, {repl_y}), offset: {self._repl_attach_offset}')
+                        else:
+                            logger.debug(f'❌ Saved REPL position validation failed: {validation_result["reason"]}')
+                            # Auto-debug when validation fails
+                            if logger.isEnabledFor(logging.DEBUG):
+                                self.debug_attachment_state()
+                            
+                except Exception as e:
+                    logger.debug(f"Could not use saved REPL position: {e}")
+                
+                if not repl_positioned_by_saved:
+                    # Fall back to current attachment logic
+                    self._ensure_attach_offset_default()
+                    self.floating_repl.move_attached(avatar_pos, self._repl_attach_offset, screen_geometry)
+                    logger.debug("Used attachment offset for REPL positioning")
             else:
                 # Position REPL relative to avatar (avatar position unchanged)
                 self.floating_repl.position_relative_to_avatar(
@@ -350,10 +399,8 @@ class MainWindow(QMainWindow):
                     self._repl_attach_offset = self.floating_repl.pos() - self.pos()
                     logger.info(f"🔗 Computed offset: {self._repl_attach_offset}")
                     
-                settings.set('interface.repl_attach_offset', {
-                    'x': int(self._repl_attach_offset.x()),
-                    'y': int(self._repl_attach_offset.y()),
-                })
+                # Save the computed offset
+                self._save_attach_offset()
                 
                 # If visible, snap immediately
                 if self.floating_repl.isVisible():
@@ -370,16 +417,185 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.error(f"Failed to handle attach toggle: {e}")
 
-    def _ensure_attach_offset_default(self):
-        """Ensure we have a reasonable default offset when attaching."""
-        # Default: place REPL to the right of avatar with 10px gap and current REPL size if known
+    def _validate_attached_repl_position(self, repl_x, repl_y, repl_size, screen_geometry, avatar_pos):
+        """
+        Enhanced validation for attached REPL positions with detailed debugging.
+        
+        Args:
+            repl_x, repl_y: Proposed REPL position
+            repl_size: Dictionary with 'width' and 'height' keys
+            screen_geometry: QRect of available screen area
+            avatar_pos: QPoint of current avatar position
+            
+        Returns:
+            Dictionary with 'valid' boolean and 'reason' string for debugging
+        """
         try:
+            # Calculate the offset this position would create
+            proposed_offset = QPoint(repl_x, repl_y) - avatar_pos
+            
+            # More lenient visibility requirements for attached windows
+            # Only require 80px width and 40px height to be visible (title bar + some content)
+            min_visible_width = min(80, repl_size['width'] // 3)
+            min_visible_height = min(40, repl_size['height'] // 6)
+            
+            # Check visibility constraints
+            left_visible = repl_x + min_visible_width >= screen_geometry.left()
+            right_visible = repl_x + repl_size['width'] - min_visible_width <= screen_geometry.right()
+            top_visible = repl_y + min_visible_height >= screen_geometry.top()
+            bottom_visible = repl_y + repl_size['height'] - min_visible_height <= screen_geometry.bottom()
+            
+            # Special handling for left-side positioning (negative offset.x)
+            if proposed_offset.x() < 0:
+                logger.debug(f"🔍 Left-side REPL detected: offset.x = {proposed_offset.x()}")
+                # For left-side, be more lenient about the right edge
+                # Just ensure the REPL isn't completely off-screen
+                right_visible = repl_x + min_visible_width <= screen_geometry.right()
+            
+            # Detailed debugging information
+            debug_info = {
+                'repl_pos': f'({repl_x}, {repl_y})',
+                'repl_size': f"{repl_size['width']}x{repl_size['height']}",
+                'avatar_pos': f'({avatar_pos.x()}, {avatar_pos.y()})',
+                'offset': f'({proposed_offset.x()}, {proposed_offset.y()})',
+                'screen': f'{screen_geometry.left()},{screen_geometry.top()} to {screen_geometry.right()},{screen_geometry.bottom()}',
+                'min_visible': f'{min_visible_width}x{min_visible_height}',
+                'checks': f'L={left_visible}, R={right_visible}, T={top_visible}, B={bottom_visible}'
+            }
+            
+            is_valid = left_visible and right_visible and top_visible and bottom_visible
+            
+            if is_valid:
+                logger.debug(f"🔍 REPL position validation SUCCESS: {debug_info}")
+                return {'valid': True, 'reason': 'Position is sufficiently visible'}
+            else:
+                failed_checks = []
+                if not left_visible: failed_checks.append('left_edge')
+                if not right_visible: failed_checks.append('right_edge')
+                if not top_visible: failed_checks.append('top_edge')
+                if not bottom_visible: failed_checks.append('bottom_edge')
+                
+                reason = f"Failed visibility checks: {', '.join(failed_checks)}. Debug: {debug_info}"
+                logger.debug(f"🔍 REPL position validation FAILED: {reason}")
+                return {'valid': False, 'reason': reason}
+                
+        except Exception as e:
+            error_reason = f"Validation error: {e}"
+            logger.error(f"🔍 REPL position validation ERROR: {error_reason}")
+            return {'valid': False, 'reason': error_reason}
+
+    def _ensure_attach_offset_default(self):
+        """
+        Ensure we have a reasonable default offset when attaching.
+        
+        Tries to preserve existing offset orientation (left vs right) if available,
+        otherwise defaults to right-side positioning.
+        """
+        try:
+            # Check if we have a saved offset that we should respect
+            saved_offset = settings.get('interface.repl_attach_offset', None)
+            if isinstance(saved_offset, dict) and 'x' in saved_offset and 'y' in saved_offset:
+                saved_x, saved_y = int(saved_offset['x']), int(saved_offset['y'])
+                
+                # If the saved offset indicates left-side positioning (negative x), preserve that
+                if saved_x < 0:
+                    logger.debug(f"🔗 Preserving left-side positioning from saved offset: ({saved_x}, {saved_y})")
+                    # Calculate appropriate left-side offset based on current avatar width
+                    gap = 10
+                    default_x = -(self.floating_repl.width() if self.floating_repl else 520) - gap
+                    default_y = saved_y  # Preserve Y offset
+                    self._repl_attach_offset = QPoint(default_x, default_y)
+                    logger.debug(f"🔗 Adjusted left-side offset: {self._repl_attach_offset}")
+                    return
+                else:
+                    logger.debug(f"🔗 Using saved right-side offset: ({saved_x}, {saved_y})")
+                    self._repl_attach_offset = QPoint(saved_x, saved_y)
+                    return
+            
+            # Default: place REPL to the right of avatar with 10px gap
             gap = 10
             default_x = self.width() + gap
             default_y = 0
             self._repl_attach_offset = QPoint(default_x, default_y)
-        except Exception:
+            logger.debug(f"🔗 Set default right-side offset: {self._repl_attach_offset} (avatar size: {self.width()}x{self.height()})")
+            
+        except Exception as e:
+            logger.warning(f"Error calculating attach offset: {e}")
             self._repl_attach_offset = QPoint(140, 0)
+            logger.debug(f"🔗 Fallback attach offset: {self._repl_attach_offset}")
+
+    def _save_attach_offset(self):
+        """Save the current attachment offset to settings."""
+        try:
+            settings.set('interface.repl_attach_offset', {
+                'x': int(self._repl_attach_offset.x()),
+                'y': int(self._repl_attach_offset.y()),
+            })
+            logger.debug(f"🔗 Saved attach offset: {self._repl_attach_offset}")
+        except Exception as e:
+            logger.error(f"Failed to save attach offset: {e}")
+
+    def debug_attachment_state(self):
+        """
+        Comprehensive debugging method for attachment positioning issues.
+        
+        Call this method when debugging positioning problems to get detailed
+        information about the current state.
+        """
+        try:
+            logger.info("🔍 ===== ATTACHMENT DEBUG REPORT =====")
+            
+            # Basic state
+            logger.info(f"🔍 Attached: {self._repl_attached}")
+            logger.info(f"🔍 Current attach offset: {self._repl_attach_offset}")
+            
+            # Avatar state
+            avatar_pos = self.pos()
+            avatar_size = self.size()
+            logger.info(f"🔍 Avatar position: {avatar_pos}")
+            logger.info(f"🔍 Avatar size: {avatar_size}")
+            
+            # REPL state
+            if self.floating_repl:
+                repl_pos = self.floating_repl.pos()
+                repl_size = self.floating_repl.size()
+                repl_visible = self.floating_repl.isVisible()
+                logger.info(f"🔍 REPL position: {repl_pos}")
+                logger.info(f"🔍 REPL size: {repl_size}")
+                logger.info(f"🔍 REPL visible: {repl_visible}")
+                
+                if repl_visible:
+                    # Calculate current offset
+                    current_offset = repl_pos - avatar_pos
+                    logger.info(f"🔍 Current calculated offset: {current_offset}")
+                    logger.info(f"🔍 Offset mismatch: {current_offset != self._repl_attach_offset}")
+            
+            # Screen info
+            screen = self.screen()
+            if screen:
+                screen_geometry = screen.availableGeometry()
+                logger.info(f"🔍 Screen geometry: {screen_geometry}")
+            
+            # Settings state
+            saved_attach_state = settings.get('interface.repl_attached', None)
+            saved_offset = settings.get('interface.repl_attach_offset', None)
+            logger.info(f"🔍 Saved attach state: {saved_attach_state}")
+            logger.info(f"🔍 Saved offset: {saved_offset}")
+            
+            # Window states
+            try:
+                from ..application.window_state import load_window_state
+                avatar_state = load_window_state('avatar')
+                repl_state = load_window_state('repl')
+                logger.info(f"🔍 Avatar window state: {avatar_state}")
+                logger.info(f"🔍 REPL window state: {repl_state}")
+            except Exception as e:
+                logger.warning(f"🔍 Could not load window states: {e}")
+            
+            logger.info("🔍 ===== END DEBUG REPORT =====")
+            
+        except Exception as e:
+            logger.error(f"🔍 Error in debug_attachment_state: {e}")
 
     def _move_attached_repl(self):
         """Move REPL based on avatar position and stored offset, clamped to screen."""
@@ -405,6 +621,106 @@ class MainWindow(QMainWindow):
                 })
         except Exception as e:
             logger.debug(f"Failed to move avatar on REPL move: {e}")
+    
+    def _validate_attached_repl_position(self, repl_x, repl_y, repl_size, screen_geometry, avatar_pos):
+        """Enhanced validation for attached REPL positioning with left-side support."""
+        try:
+            # More lenient requirements - only need 80px width and 40px height visible
+            min_visible_width = min(80, repl_size['width'] // 3)
+            min_visible_height = min(40, repl_size['height'] // 5)
+            
+            # Calculate if enough of the window would be visible
+            right_edge = repl_x + repl_size['width']
+            bottom_edge = repl_y + repl_size['height']
+            
+            # Check visibility from each edge
+            left_visible = right_edge >= screen_geometry.left() + min_visible_width
+            right_visible = repl_x <= screen_geometry.right() - min_visible_width
+            top_visible = bottom_edge >= screen_geometry.top() + min_visible_height
+            bottom_visible = repl_y <= screen_geometry.bottom() - min_visible_height
+            
+            # Calculate the offset to understand positioning relative to avatar
+            offset = QPoint(repl_x, repl_y) - avatar_pos
+            is_left_side = offset.x() < 0
+            
+            # Log detailed validation info
+            logger.debug(f"Validation for REPL at ({repl_x}, {repl_y}):")
+            logger.debug(f"  Screen: {screen_geometry}")
+            logger.debug(f"  Size: {repl_size['width']}x{repl_size['height']}")
+            logger.debug(f"  Avatar: {avatar_pos}, Offset: {offset}, Left side: {is_left_side}")
+            logger.debug(f"  Visibility: left={left_visible}, right={right_visible}, top={top_visible}, bottom={bottom_visible}")
+            
+            if left_visible and right_visible and top_visible and bottom_visible:
+                return {'valid': True, 'reason': 'Position validated successfully'}
+            else:
+                failed_checks = []
+                if not left_visible: failed_checks.append('left')
+                if not right_visible: failed_checks.append('right')
+                if not top_visible: failed_checks.append('top')
+                if not bottom_visible: failed_checks.append('bottom')
+                return {'valid': False, 'reason': f'Failed visibility checks: {", ".join(failed_checks)}'}
+                
+        except Exception as e:
+            return {'valid': False, 'reason': f'Validation error: {e}'}
+    
+    def debug_attachment_state(self):
+        """Comprehensive debugging of attachment state."""
+        try:
+            logger.debug("=== ATTACHMENT STATE DEBUG ===")
+            logger.debug(f"Avatar position: {self.pos()}")
+            logger.debug(f"Avatar size: {self.size()}")
+            logger.debug(f"Attached: {self._repl_attached}")
+            logger.debug(f"Current offset: {self._repl_attach_offset}")
+            
+            if self.floating_repl:
+                logger.debug(f"REPL position: {self.floating_repl.pos()}")
+                logger.debug(f"REPL size: {self.floating_repl.size()}")
+                logger.debug(f"REPL visible: {self.floating_repl.isVisible()}")
+            
+            screen = self.screen()
+            if screen:
+                geom = screen.availableGeometry()
+                logger.debug(f"Screen geometry: {geom}")
+            
+            # Check saved states
+            try:
+                from ..application.window_state import load_window_state
+                avatar_state = load_window_state('avatar')
+                repl_state = load_window_state('repl')
+                logger.debug(f"Saved avatar state: {avatar_state}")
+                logger.debug(f"Saved REPL state: {repl_state}")
+            except Exception as e:
+                logger.debug(f"Could not load saved states: {e}")
+                
+            # Check settings
+            try:
+                attached_setting = settings.get('interface.repl_attached', False)
+                offset_setting = settings.get('interface.repl_attach_offset', None)
+                logger.debug(f"Settings - attached: {attached_setting}, offset: {offset_setting}")
+            except Exception as e:
+                logger.debug(f"Could not load settings: {e}")
+                
+            logger.debug("=== END ATTACHMENT DEBUG ===")
+        except Exception as e:
+            logger.error(f"Debug failed: {e}")
+    
+    def _on_pin_toggle(self, always_on_top: bool):
+        """Handle pin toggle from REPL - apply always on top setting."""
+        try:
+            logger.info(f"📌 Pin toggle received: always_on_top = {always_on_top}")
+            
+            # Save to settings (already done by REPL widget, but ensure consistency)
+            settings.set('interface.always_on_top', always_on_top)
+            
+            # Apply the window flags immediately via app coordinator
+            if hasattr(self.app_coordinator, '_update_window_flags'):
+                self.app_coordinator._update_window_flags(always_on_top)
+                logger.info(f"✅ Applied always on top setting: {always_on_top}")
+            else:
+                logger.warning("App coordinator doesn't have _update_window_flags method")
+                
+        except Exception as e:
+            logger.error(f"Failed to handle pin toggle: {e}")
     
     def _on_command_entered(self, command: str):
         """Handle command from REPL."""

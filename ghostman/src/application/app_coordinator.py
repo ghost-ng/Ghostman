@@ -94,7 +94,7 @@ class AppCoordinator(QObject):
             if self._system_tray:
                 # Use the same icon as the tray icon (which includes the avatar)
                 self._system_tray.show_message(
-                    "Ghostman Started",
+                    "Spector",
                     "AI Assistant is ready in system tray",
                     QSystemTrayIcon.MessageIcon.Information,
                     2000
@@ -133,6 +133,7 @@ class AppCoordinator(QObject):
             self._system_tray = EnhancedSystemTray(self)
             self._system_tray.show_avatar_requested.connect(self._show_avatar_mode)
             self._system_tray.settings_requested.connect(self._show_settings)
+            self._system_tray.help_requested.connect(self._show_help)
             self._system_tray.quit_requested.connect(self._quit_application)
             # Show the system tray icon
             self._system_tray.show()
@@ -142,6 +143,7 @@ class AppCoordinator(QObject):
             self._main_window.minimize_requested.connect(self._show_tray_mode)
             self._main_window.close_requested.connect(self._show_tray_mode)
             self._main_window.settings_requested.connect(self._show_settings)
+            self._main_window.help_requested.connect(self._show_help)
             # Note: conversations signal is handled directly in MainWindow
             
             logger.debug("UI components initialized successfully")
@@ -476,6 +478,39 @@ class AppCoordinator(QObject):
                     f"Failed to open settings dialog:\n{str(e)}"
                 )
     
+    def _show_help(self):
+        """Show the help dialog."""
+        logger.info("=== HELP REQUESTED - OPENING HELP DIALOG ===")
+        try:
+            logger.debug("Importing help dialog components...")
+            from ..presentation.dialogs.help_dialog import HelpDialog
+            
+            # Create or reuse existing help dialog (prevent multiple instances)
+            if not hasattr(self, '_help_dialog') or self._help_dialog is None or not self._help_dialog.isVisible():
+                logger.debug("Creating new help dialog...")
+                self._help_dialog = HelpDialog(parent=self._main_window)
+            else:
+                logger.debug("Bringing existing help dialog to front...")
+            
+            logger.debug("Showing help dialog...")
+            self._help_dialog.show()
+            self._help_dialog.raise_()
+            self._help_dialog.activateWindow()
+            logger.info("Help dialog opened")
+            
+        except Exception as e:
+            logger.error(f"Failed to show help dialog: {e}")
+            import traceback
+            traceback.print_exc()
+            # Show error message if possible
+            if self._main_window:
+                from PyQt6.QtWidgets import QMessageBox
+                QMessageBox.critical(
+                    self._main_window, 
+                    "Error", 
+                    f"Failed to open help dialog:\n{str(e)}"
+                )
+    
     def _on_settings_applied(self, config: dict):
         """Handle settings being applied."""
         logger.info("=== 🎛️  COORDINATOR: APPLYING SETTINGS TO RUNNING APPLICATION ===")
@@ -584,7 +619,7 @@ class AppCoordinator(QObject):
         # Apply always on top
         if "always_on_top" in interface_config:
             always_on_top = interface_config["always_on_top"]
-            logger.info(f"📌 Processing always on top setting: {always_on_top}")
+            logger.debug(f"📌 Processing always on top setting: {always_on_top}")
             try:
                 self._update_window_flags(always_on_top)
                 logger.info(f"✅ Always on top applied: {always_on_top}")
@@ -669,30 +704,29 @@ class AppCoordinator(QObject):
         logger.info(f"🔤 Font settings processing complete: {settings_processed}/{len(fonts_config)} applied")
     
     def _update_window_flags(self, always_on_top: bool):
-        """Update window flags for always on top behavior."""
+        """Update window flags for always on top behavior with minimal flicker."""
         if not self._main_window:
             return
         
         try:
             from PyQt6.QtCore import Qt
-            current_flags = self._main_window.windowFlags()
+            from PyQt6.QtWidgets import QApplication
             
+            # Batch updates to minimize flicker
+            windows_to_update = []
+            
+            # Check main window (avatar)
+            current_flags = self._main_window.windowFlags()
             if always_on_top:
                 new_flags = current_flags | Qt.WindowType.WindowStaysOnTopHint
-                logger.debug("Adding WindowStaysOnTopHint flag")
             else:
                 new_flags = current_flags & ~Qt.WindowType.WindowStaysOnTopHint
-                logger.debug("Removing WindowStaysOnTopHint flag")
+                
+            # Only update if flags actually changed
+            if new_flags != current_flags:
+                windows_to_update.append((self._main_window, new_flags, self._main_window.isVisible(), "avatar"))
             
-            # Apply new flags
-            was_visible = self._main_window.isVisible()
-            self._main_window.setWindowFlags(new_flags)
-            
-            if was_visible:
-                self._main_window.show()
-                logger.debug("Window flags updated and window reshown")
-            
-            # Also apply to floating REPL
+            # Check floating REPL
             if hasattr(self._main_window, 'floating_repl') and self._main_window.floating_repl:
                 repl_flags = self._main_window.floating_repl.windowFlags()
                 if always_on_top:
@@ -700,11 +734,26 @@ class AppCoordinator(QObject):
                 else:
                     repl_new_flags = repl_flags & ~Qt.WindowType.WindowStaysOnTopHint
                 
-                repl_was_visible = self._main_window.floating_repl.isVisible()
-                self._main_window.floating_repl.setWindowFlags(repl_new_flags)
-                if repl_was_visible:
-                    self._main_window.floating_repl.show()
-                    logger.debug("Floating REPL window flags also updated")
+                # Only update if flags actually changed
+                if repl_new_flags != repl_flags:
+                    windows_to_update.append((self._main_window.floating_repl, repl_new_flags, self._main_window.floating_repl.isVisible(), "REPL"))
+            
+            # Apply all updates quickly in sequence to minimize flicker
+            if windows_to_update:
+                # Disable updates during flag changes
+                QApplication.setQuitOnLastWindowClosed(False)
+                
+                for window, flags, was_visible, window_type in windows_to_update:
+                    window.setWindowFlags(flags)
+                    if was_visible:
+                        window.show()
+                
+                QApplication.setQuitOnLastWindowClosed(True)
+                window_names = [item[3] for item in windows_to_update]
+                logger.debug(f"Updated {len(windows_to_update)} windows ({', '.join(window_names)}) with always_on_top={always_on_top}")
+            else:
+                logger.debug(f"No window flag changes needed for always_on_top={always_on_top}")
+                logger.debug("Floating REPL window flags also updated")
             
         except Exception as e:
             logger.error(f"Failed to update window flags: {e}")

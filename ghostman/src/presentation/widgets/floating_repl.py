@@ -211,12 +211,20 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
         self.resize(520, 450)  # Default size: 500px + padding for REPL content
         self.setMinimumSize(300, 250)  # Set minimum size instead of fixed size
         
-        # Make window frameless and always on top
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint | 
-            Qt.WindowType.WindowStaysOnTopHint |
-            Qt.WindowType.Tool  # Prevents it from showing in taskbar
-        )
+        # Get always on top setting from settings
+        always_on_top = True  # Default value
+        try:
+            from ...infrastructure.storage.settings_manager import settings as _settings
+            always_on_top = _settings.get('interface.always_on_top', True)
+        except Exception:
+            pass
+        
+        # Make window frameless and conditionally always on top
+        base_flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool  # Prevents taskbar
+        if always_on_top:
+            base_flags |= Qt.WindowType.WindowStaysOnTopHint
+            
+        self.setWindowFlags(base_flags)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         
         # Enable mouse tracking for cursor changes without button press

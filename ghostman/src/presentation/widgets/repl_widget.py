@@ -574,7 +574,9 @@ class REPLWidget(QWidget):
     export_requested = pyqtSignal(str)  # conversation_id
     browse_requested = pyqtSignal()
     settings_requested = pyqtSignal()
+    help_requested = pyqtSignal()
     attach_toggle_requested = pyqtSignal(bool)
+    pin_toggle_requested = pyqtSignal(bool)
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -721,6 +723,7 @@ class REPLWidget(QWidget):
             # Update button visual states
             self._update_search_button_state()
             self._update_attach_button_state()
+            self._update_pin_button_state()
             
             # Reload theme-specific icons
             self._load_search_icon()
@@ -734,6 +737,8 @@ class REPLWidget(QWidget):
                 self._load_plus_icon(self.title_new_conv_btn)
             if hasattr(self, 'move_btn'):
                 self._load_move_icon(self.move_btn)
+            if hasattr(self, 'pin_btn'):
+                self._load_pin_icon()
             
             # Note: help_btn is a local variable, so it's handled during initialization
             
@@ -1026,6 +1031,12 @@ class REPLWidget(QWidget):
         
         try:
             logger.debug("Loading conversations from conversation manager...")
+            # Fix any issues with multiple active conversations before loading
+            if hasattr(self.conversation_manager, 'fix_multiple_active_conversations'):
+                fixed = self.conversation_manager.fix_multiple_active_conversations()
+                if fixed:
+                    logger.debug("✅ Verified conversation uniqueness")
+            
             # Get recent conversations (all statuses) for the conversation UI
             conversations = await self.conversation_manager.list_conversations(limit=20)
             logger.debug(f"Loaded {len(conversations)} conversations")
@@ -1036,6 +1047,10 @@ class REPLWidget(QWidget):
             if conversations:
                 # Find the active conversation
                 active_conversations = [c for c in conversations if c.status == ConversationStatus.ACTIVE]
+                if len(active_conversations) > 1:
+                    logger.warning(f"⚠️  Found {len(active_conversations)} active conversations after cleanup - this should not happen")
+                    # Use the first one but log the issue
+                    active_conversations = active_conversations[:1]
                 if active_conversations:
                     self.current_conversation = active_conversations[0]
                     logger.debug(f"Set current conversation to active: {self.current_conversation.title}")
@@ -1152,10 +1167,10 @@ class REPLWidget(QWidget):
         self._load_plus_icon(self.title_new_conv_btn)
         # Icon size is now handled by ButtonStyleManager
         self.title_new_conv_btn.setToolTip("Start new conversation")
-        self.title_new_conv_btn.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
-        self.title_new_conv_btn.clicked.connect(self._on_new_conversation_clicked)
+        # Don't set popup mode - we'll handle the menu manually
+        self.title_new_conv_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.title_new_conv_btn.clicked.connect(self._show_new_conv_menu)
         #self.title_new_conv_btn.setFixedSize(40, 40)  
-        self._style_title_button(self.title_new_conv_btn, add_right_padding=True)
         
         # Create menu for new conversation options
         new_conv_menu = QMenu(self.title_new_conv_btn)
@@ -1170,17 +1185,31 @@ class REPLWidget(QWidget):
         save_and_new_action.triggered.connect(lambda: self._start_new_conversation(save_current=True))
         new_conv_menu.addAction(save_and_new_action)
         
-        self.title_new_conv_btn.setMenu(new_conv_menu)
+        # Store menu reference but don't set it on the button (avoids arrow)
+        self.title_new_conv_menu = new_conv_menu
+        
+        # Apply styling without menu attached
+        self._style_title_button(self.title_new_conv_btn, add_right_padding=True)
+        
         title_layout.addWidget(self.title_new_conv_btn)
         
-        # Help button
-        help_btn = QToolButton()
-        self._load_help_icon(help_btn)
-        help_btn.setToolTip("Show help")
-        #help_btn.setFixedSize(40, 40)  # Consistent size with other buttons
-        help_btn.clicked.connect(self._on_help_clicked)
-        self._style_title_button(help_btn)
-        title_layout.addWidget(help_btn)
+        # Help documentation button (with help-docs icon)
+        self.title_help_btn = QToolButton()
+        # Load help icon (theme-specific)
+        self._load_help_icon(self.title_help_btn)
+        # Icon size is now handled by ButtonStyleManager
+        self.title_help_btn.setToolTip("Open help documentation")
+        self.title_help_btn.clicked.connect(self._on_help_clicked)
+        self._style_title_button(self.title_help_btn)
+        title_layout.addWidget(self.title_help_btn)
+        
+        # Help command button (with ? mark)
+        self.help_command_btn = QToolButton()
+        self.help_command_btn.setText("?")
+        self.help_command_btn.setToolTip("Send 'help' command to chat")
+        self.help_command_btn.clicked.connect(self._on_help_command_clicked)
+        self._style_title_button(self.help_command_btn)
+        title_layout.addWidget(self.help_command_btn)
         
         # Settings button
         self.title_settings_btn = QToolButton()
@@ -1247,6 +1276,55 @@ class REPLWidget(QWidget):
         self._style_title_button(self.move_btn)
         # Size constraints are now handled by _style_title_button CSS
         title_layout.addWidget(self.move_btn)
+        
+        # Always on top (pin) toggle button - FORCE ICON ONLY, NO EMOJI
+        self.pin_btn = QToolButton()
+        self.pin_btn.setToolTip("Toggle always stay on top")
+        self.pin_btn.setCheckable(True)  # Make it a toggle button
+        
+        # IMMEDIATELY load icon BEFORE any other operations
+        self._load_pin_icon_immediate()
+        
+        # Force icon-only mode (no text) AFTER icon is loaded
+        self.pin_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        
+        # ABSOLUTE PROTECTION: Never allow text content
+        self.pin_btn.setText("")
+        
+        # Set initial state from settings
+        try:
+            always_on_top = settings.get('interface.always_on_top', True)
+            self.pin_btn.setChecked(always_on_top)
+        except Exception:
+            self.pin_btn.setChecked(True)
+        
+        self.pin_btn.clicked.connect(self._on_pin_toggle_clicked)
+        
+        # Apply initial styling based on current state
+        if self.pin_btn.isChecked():
+            self._apply_pin_button_toggle_style(self.pin_btn)
+            logger.debug("Applied initial pin button toggle styling")
+        else:
+            self._style_title_button(self.pin_btn)
+            logger.debug("Applied initial normal pin button styling")
+        
+        # Final icon reload to ensure it sticks
+        self._load_pin_icon_immediate()
+        
+        # FINAL PROTECTION: Clear any text that might have been set
+        self.pin_btn.setText("")
+        
+        # OVERRIDE setText method to prevent emoji injection (no recursion)
+        original_setText = self.pin_btn.setText
+        self.pin_btn._original_setText = original_setText  # Store reference
+        def protected_setText(text):
+            if text:  # Only log if someone is trying to set actual text
+                logger.debug(f"Pin button setText blocked: '{text}'")
+            # Always ignore any text setting attempts - no icon reload to prevent recursion
+            original_setText("")
+        self.pin_btn.setText = protected_setText
+        
+        title_layout.addWidget(self.pin_btn)
         
         title_layout.addStretch()
         
@@ -1361,6 +1439,8 @@ class REPLWidget(QWidget):
     def _on_attach_toggle_clicked(self):
         """Emit attach toggle request with current state and update tooltip/icon."""
         attached = self.attach_btn.isChecked()
+        logger.info(f"🔗 Attach button clicked - new state: {'attached' if attached else 'detached'}")
+        
         # Update visual feedback
         if not self.attach_btn.icon().isNull():
             # Using icon - visual feedback is handled by styling
@@ -1374,6 +1454,7 @@ class REPLWidget(QWidget):
         self._update_attach_button_state()
         
         # Emit to parent window to handle positioning/persistence
+        logger.info(f"🔗 Emitting attach_toggle_requested signal: {attached}")
         self.attach_toggle_requested.emit(attached)
 
     def set_attach_state(self, attached: bool):
@@ -1398,16 +1479,12 @@ class REPLWidget(QWidget):
         # Load plus icon (theme-specific)
         self._load_plus_icon(self.toolbar_new_conv_btn)
         # Icon size is now handled by ButtonStyleManager
-        # add padding to right
-        self.toolbar_new_conv_btn.setStyleSheet("padding-right: 4px;")
         self.toolbar_new_conv_btn.setToolTip("Start new conversation")
-        self.toolbar_new_conv_btn.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
-        self.toolbar_new_conv_btn.clicked.connect(self._on_new_conversation_clicked)
-        self._style_tool_button(self.toolbar_new_conv_btn)
-        # add padding
+        # Don't set popup mode - we'll handle the menu manually
+        self.toolbar_new_conv_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.toolbar_new_conv_btn.clicked.connect(self._show_toolbar_new_conv_menu)
         
-        
-        # Create menu for new conversation options
+        # Create menu for new conversation options FIRST
         new_conv_menu = QMenu(self.toolbar_new_conv_btn)
         
         # Start new conversation action
@@ -1420,7 +1497,12 @@ class REPLWidget(QWidget):
         save_and_new_action.triggered.connect(lambda: self._start_new_conversation(save_current=True))
         new_conv_menu.addAction(save_and_new_action)
         
-        self.toolbar_new_conv_btn.setMenu(new_conv_menu)
+        # Store menu reference but don't set it on the button (avoids arrow)
+        self.toolbar_new_conv_menu = new_conv_menu
+        
+        # Apply styling without menu attached
+        self._style_tool_button(self.toolbar_new_conv_btn)
+        
         toolbar_layout.addWidget(self.toolbar_new_conv_btn)
         
         # Browse conversations button
@@ -1508,6 +1590,26 @@ class REPLWidget(QWidget):
         emoji_font_stack = self._get_emoji_font_stack()
         
         # Special colors for move button toggle state (warning/amber)
+        special_colors = {
+            "background": "rgba(255, 215, 0, 0.8)",
+            "text": "black",
+            "hover": "rgba(255, 215, 0, 0.9)",
+            "active": "rgba(255, 215, 0, 1.0)"
+        }
+        
+        ButtonStyleManager.apply_unified_button_style(
+            button, colors, "tool", "icon", "normal", special_colors, emoji_font_stack
+        )
+    
+    def _apply_pin_button_toggle_style(self, button: QToolButton):
+        """
+        Apply unified toggle styling to pin button.
+        Uses the same colors as move button for consistency.
+        """
+        colors = self.theme_manager.current_theme if self.theme_manager and THEME_SYSTEM_AVAILABLE else None
+        emoji_font_stack = self._get_emoji_font_stack()
+        
+        # Special colors for pin button toggle state (same as move button)
         special_colors = {
             "background": "rgba(255, 215, 0, 0.8)",
             "text": "black",
@@ -1622,6 +1724,75 @@ class REPLWidget(QWidget):
             
         except Exception as e:
             logger.error(f"Failed to update attach button state: {e}")
+    
+    def _apply_pin_button_toggle_style(self, button: QToolButton):
+        """
+        Apply unified toggle styling to pin button.
+        Uses the new ButtonStyleManager with special warning colors - SAME AS MOVE BUTTON.
+        """
+        colors = self.theme_manager.current_theme if self.theme_manager and THEME_SYSTEM_AVAILABLE else None
+        emoji_font_stack = self._get_emoji_font_stack()
+        
+        # Special colors for pin button toggle state (warning/amber) - IDENTICAL to move button
+        special_colors = {
+            "background": "rgba(255, 215, 0, 0.8)",
+            "text": "black",
+            "hover": "rgba(255, 215, 0, 0.9)",
+            "active": "rgba(255, 215, 0, 1.0)"
+        }
+        
+        ButtonStyleManager.apply_unified_button_style(
+            button, colors, "tool", "icon", "normal", special_colors, emoji_font_stack
+        )
+
+    def _update_pin_button_state(self):
+        """Update pin button visual state using unified styling system."""
+        try:
+            if not hasattr(self, 'pin_btn'):
+                return
+                
+            # Check if pin is active (always on top enabled)
+            pin_active = self.pin_btn.isChecked()
+            
+            # Note: Icon will be reloaded after styling
+            
+            if pin_active:
+                # Apply toggle styling with amber feedback - SAME AS MOVE BUTTON
+                self._apply_pin_button_toggle_style(self.pin_btn)
+                logger.debug("Applied pin button toggle styling (amber)")
+            else:
+                # Reset to normal styling - SAME AS MOVE BUTTON
+                self._style_title_button(self.pin_btn)
+                logger.debug("Applied normal pin button styling")
+            
+            # CRITICAL: Reload icon after styling to ensure it's preserved
+            self._load_pin_icon_immediate()
+            
+            # Ensure text is always cleared
+            if hasattr(self.pin_btn, '_original_setText'):
+                self.pin_btn._original_setText("")
+            else:
+                self.pin_btn.setText("")
+            
+            # Apply the same styling as other buttons but with special toggle colors if active
+            if pin_active:
+                self._apply_pin_button_toggle_style(self.pin_btn)
+            else:
+                self._style_title_button(self.pin_btn)
+            
+            # Reload icon after styling
+            self._load_pin_icon_immediate()
+            
+            # Ensure text is always cleared using original method to avoid recursion
+            if hasattr(self.pin_btn, '_original_setText'):
+                self.pin_btn._original_setText("")
+            else:
+                self.pin_btn.setText("")
+            
+            logger.debug(f"Updated pin button state: active={pin_active}")
+            
+        except Exception as e:
+            logger.error(f"Failed to update pin button state: {e}")
     
     def _load_search_icon(self):
         """Load theme-appropriate search icon."""
@@ -1744,24 +1915,35 @@ class REPLWidget(QWidget):
             button.setText("➕")  # Fallback
     
     def _load_help_icon(self, button):
-        """Load theme-appropriate help icon for a given button."""
+        """Load theme-appropriate help-docs icon for a given button."""
         try:
             # Determine if theme is dark or light  
             icon_variant = self._get_icon_variant()
             
+            # First try help-docs icon (preferred)
+            help_docs_icon_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", 
+                "assets", "icons", f"help-docs_{icon_variant}.png"
+            )
+            
+            # Fallback to regular help icon if help-docs not found
             help_icon_path = os.path.join(
                 os.path.dirname(__file__), "..", "..", "..", 
                 "assets", "icons", f"help_{icon_variant}.png"
             )
             
-            if os.path.exists(help_icon_path):
+            if os.path.exists(help_docs_icon_path):
+                help_icon = QIcon(help_docs_icon_path)
+                button.setIcon(help_icon)
+                logger.debug(f"Loaded help-docs icon: help-docs_{icon_variant}.png")
+            elif os.path.exists(help_icon_path):
                 help_icon = QIcon(help_icon_path)
                 button.setIcon(help_icon)
                 logger.debug(f"Loaded help icon: help_{icon_variant}.png")
             else:
                 # Fallback to Unicode symbol
                 button.setText("❓")
-                logger.warning(f"Help icon not found: {help_icon_path}")
+                logger.warning(f"Help icons not found: {help_docs_icon_path} or {help_icon_path}")
                 
         except Exception as e:
             logger.error(f"Failed to load help icon: {e}")
@@ -1894,6 +2076,18 @@ class REPLWidget(QWidget):
                     attached = self.attach_btn.isChecked()
                     icon = "⚲" if attached else "⚮"
                     self._restore_button_emoji(self.attach_btn, icon, "attach_btn")
+            
+            # PROTECTION: Ensure pin button never gets emoji restoration
+            if hasattr(self, 'pin_btn') and self.pin_btn:
+                # Pin button should ONLY use PNG icons, never emoji
+                if hasattr(self.pin_btn, 'icon') and not self.pin_btn.icon().isNull():
+                    logger.debug("Pin button using icon file - preserving icon")
+                    # Ensure text is always cleared
+                    self.pin_btn.setText("")
+                else:
+                    # If icon is null for some reason, reload it immediately
+                    logger.warning("Pin button icon is null - force reloading")
+                    self._load_pin_icon_immediate()
                 
             logger.debug("Completed toolbar icon refresh to prevent ellipses")
         except Exception as e:
@@ -2273,11 +2467,17 @@ class REPLWidget(QWidget):
         # Save current conversation state if needed and mark as inactive
         if self.current_conversation:
             self.idle_detector.reset_activity(conversation.id)
-            # Mark previous conversation as inactive
-            asyncio.create_task(self._update_conversation_status(self.current_conversation.id, ConversationStatus.PINNED))
-        
-        # Mark new conversation as active
-        asyncio.create_task(self._update_conversation_status(conversation.id, ConversationStatus.ACTIVE))
+        # Set new conversation as active (this will automatically mark others as pinned)
+        if self.conversation_manager:
+            success = self.conversation_manager.set_conversation_active_simple(conversation.id)
+            if success:
+                logger.info(f"✅ Set conversation {conversation.id[:8]}... as active (enforcing uniqueness)")
+                # Update local conversation status
+                conversation.status = ConversationStatus.ACTIVE
+                # Refresh the conversation selector UI
+                self._refresh_conversation_selector()
+            else:
+                logger.error(f"❌ Failed to set conversation {conversation.id[:8]}... as active")
         
         # Switch to new conversation
         self.current_conversation = conversation
@@ -3460,7 +3660,7 @@ class REPLWidget(QWidget):
                     temp_conversation = Conversation(
                         id=conversation_id,
                         title=title,
-                        status=ConversationStatus.ACTIVE,
+                        status=ConversationStatus.PINNED,  # Start as pinned, will be set active properly
                         created_at=datetime.now(),
                         updated_at=datetime.now(),
                         metadata=metadata
@@ -3469,8 +3669,15 @@ class REPLWidget(QWidget):
                     self.current_conversation = temp_conversation
                     logger.info(f"⚡ Created temporary conversation for immediate use: {conversation_id}")
                     
-                    # Schedule proper database creation in background
+                    # Schedule proper database creation and activation in background
                     asyncio.create_task(self._save_temp_conversation_to_db(temp_conversation, message))
+                    
+                    # Set as active using proper uniqueness enforcement
+                    if self.conversation_manager:
+                        success = self.conversation_manager.set_conversation_active_simple(conversation_id)
+                        if success:
+                            temp_conversation.status = ConversationStatus.ACTIVE
+                            logger.info(f"✅ Set temp conversation as active with uniqueness enforced")
                     
                 except Exception as fallback_error:
                     logger.error(f"❌ Fallback conversation creation also failed: {fallback_error}")
@@ -3600,10 +3807,178 @@ class REPLWidget(QWidget):
         self._start_new_conversation(save_current=False)
     
     def _on_help_clicked(self):
-        """Handle help button click - send help command and display result."""
-        # Send help command to the REPL
+        """Handle help button click - open help docs directly in browser."""
+        logger.info("Help button clicked - opening help docs in browser")
+        import webbrowser
+        import sys
+        from pathlib import Path
+        
+        try:
+            # Try to find local help documentation
+            possible_paths = [
+                # Development mode
+                Path(__file__).parent.parent.parent.parent / "assets" / "help" / "index.html",
+                # Installed package mode
+                Path(sys.prefix) / "share" / "ghostman" / "help" / "index.html",
+                # Bundled executable mode
+                Path(getattr(sys, '_MEIPASS', Path.cwd())) / "ghostman" / "assets" / "help" / "index.html",
+                # Relative to current working directory
+                Path.cwd() / "ghostman" / "assets" / "help" / "index.html",
+            ]
+            
+            help_path = None
+            for path in possible_paths:
+                if path.exists():
+                    help_path = path
+                    break
+            
+            if help_path:
+                # Open local help file
+                help_url = help_path.as_uri()
+                webbrowser.open(help_url)
+                logger.info(f"Opened local help documentation: {help_url}")
+            else:
+                # Fallback: open online docs
+                webbrowser.open("https://github.com/ghost-ng/ghost-ng/tree/main/docs")
+                logger.info("Opened online documentation (local help not found)")
+                
+        except Exception as e:
+            logger.error(f"Failed to open help docs: {e}")
+            # Last resort fallback
+            try:
+                webbrowser.open("https://github.com/ghost-ng/ghost-ng")
+                logger.info("Opened project homepage as fallback")
+            except Exception as e2:
+                logger.error(f"Failed to open any help resource: {e2}")
+    
+    def _on_help_command_clicked(self):
+        """Handle help command button click - send 'help' command to chat."""
+        logger.info("Help command button clicked - sending 'help' command")
+        # Set the command input to 'help' and send it
         self.command_input.setText("help")
         self._on_command_entered()
+    
+    def _handle_debug_command(self):
+        """Handle debug command to show attachment state."""
+        try:
+            # Get the main window from the parent chain
+            main_window = None
+            parent = self.parent()
+            while parent:
+                if hasattr(parent, 'debug_attachment_state'):
+                    main_window = parent
+                    break
+                parent = parent.parent()
+            
+            if main_window:
+                main_window.debug_attachment_state()
+                self._display_response("🔍 Debug info logged to console. Check debug logs for attachment state details.", "system")
+            else:
+                self._display_response("❌ Could not find main window for debugging.", "error")
+        except Exception as e:
+            self._display_response(f"❌ Debug command failed: {e}", "error")
+    
+    
+    def _load_pin_icon_immediate(self):
+        """Immediately load pin icon with maximum force - no fallbacks."""
+        try:
+            # Determine if theme is dark or light  
+            icon_variant = self._get_icon_variant()
+            
+            # Use ABSOLUTE path to eliminate any path resolution issues
+            base_path = r"C:\Users\miguel\OneDrive\Documents\Ghostman\ghostman\assets\icons"
+            pin_icon_path = os.path.join(base_path, f"pin_{icon_variant}.png")
+            
+            logger.error(f"🔥 FORCING PIN ICON: {pin_icon_path}")
+            
+            if os.path.exists(pin_icon_path):
+                # Create icon and verify it loads
+                icon = QIcon(pin_icon_path)
+                if not icon.isNull():
+                    # FORCE clear any existing content
+                    self.pin_btn.setText("")
+                    self.pin_btn.setIcon(QIcon())  # Clear first
+                    
+                    # Set the new icon
+                    self.pin_btn.setIcon(icon)
+                    
+                    # Set icon size explicitly
+                    self.pin_btn.setIconSize(QSize(16, 16))
+                    
+                    # FORCE icon-only mode
+                    self.pin_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+                    
+                    # Clear text again
+                    self.pin_btn.setText("")
+                    
+                    # Force update
+                    self.pin_btn.update()
+                    
+                    logger.error(f"🔥 ICON FORCED: Text='{self.pin_btn.text()}', IconNull={self.pin_btn.icon().isNull()}")
+                else:
+                    logger.error(f"❌ QIcon creation failed for: {pin_icon_path}")
+            else:
+                logger.error(f"❌ Pin icon file not found: {pin_icon_path}")
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to force load pin icon: {e}")
+            # Clear everything on error - NO EMOJI FALLBACK
+            self.pin_btn.setText("")
+            self.pin_btn.setIcon(QIcon())
+    
+    def _load_pin_icon(self):
+        """Compatibility method - redirects to immediate loader."""
+        self._load_pin_icon_immediate()
+    
+    def _on_pin_toggle_clicked(self):
+        """Handle pin button toggle - change always on top setting."""
+        try:
+            always_on_top = self.pin_btn.isChecked()
+            logger.info(f"Pin button toggled: always_on_top = {always_on_top}")
+            
+            # Apply visual feedback IMMEDIATELY like move button
+            if always_on_top:
+                # Apply amber/gold toggle styling
+                self._apply_pin_button_toggle_style(self.pin_btn)
+                logger.debug("🟡 Pin mode ON - applied amber styling")
+            else:
+                # Reset to normal styling - SAME AS MOVE BUTTON
+                self._style_title_button(self.pin_btn)
+                logger.debug("⚪ Pin mode OFF - reset to normal styling")
+            
+            # Reload icon after styling to preserve it
+            self._load_pin_icon_immediate()
+            
+            # Clear any text that might have been set by styling
+            if hasattr(self.pin_btn, '_original_setText'):
+                self.pin_btn._original_setText("")
+            
+            # Save to settings
+            if _global_settings:
+                _global_settings.set('interface.always_on_top', always_on_top)
+            
+            # Apply the setting immediately by triggering the app coordinator
+            self.pin_toggle_requested.emit(always_on_top)
+            
+            # Update tooltip
+            self.pin_btn.setToolTip("Always stay on top" if always_on_top else "Click to stay on top")
+            
+        except Exception as e:
+            logger.error(f"Failed to handle pin toggle: {e}")
+    
+    def _show_new_conv_menu(self):
+        """Show the new conversation menu for title button."""
+        if hasattr(self, 'title_new_conv_menu'):
+            # Position menu below the button
+            button_pos = self.title_new_conv_btn.mapToGlobal(self.title_new_conv_btn.rect().bottomLeft())
+            self.title_new_conv_menu.exec(button_pos)
+    
+    def _show_toolbar_new_conv_menu(self):
+        """Show the new conversation menu for toolbar button."""
+        if hasattr(self, 'toolbar_new_conv_menu'):
+            # Position menu below the button
+            button_pos = self.toolbar_new_conv_btn.mapToGlobal(self.toolbar_new_conv_btn.rect().bottomLeft())
+            self.toolbar_new_conv_menu.exec(button_pos)
     
     def _on_settings_clicked(self):
         """Handle settings button click - open settings dialog."""
