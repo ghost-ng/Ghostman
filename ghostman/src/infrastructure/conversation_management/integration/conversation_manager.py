@@ -450,6 +450,17 @@ class ConversationManager:
         
         return self._simple_status.get_active_conversation_id()
     
+    def fix_multiple_active_conversations(self) -> bool:
+        """Fix any issues with multiple active conversations."""
+        if not self._initialized:
+            return False
+            
+        if not hasattr(self, '_simple_status'):
+            from ..services.simple_status_service import SimpleStatusService
+            self._simple_status = SimpleStatusService(self.db_manager)
+        
+        return self._simple_status.fix_multiple_active_conversations()
+    
     # --- Utilities ---
     
     def get_active_conversation_id(self) -> Optional[str]:

@@ -1,0 +1,29 @@
+# Include the README and requirements
+include README.md
+include requirements.txt
+include LICENSE
+
+# Include version and spec files
+include ghostman/__version__.py
+include ghost-ng.spec
+
+# Include all assets
+recursive-include ghostman/assets *
+recursive-include ghostman/config *
+
+# Include documentation
+recursive-include docs *.md
+
+# Include scripts for development
+include scripts/version_bump.py
+include scripts/release.py
+include build.py
+
+# Exclude development and test files
+exclude tests/*
+exclude .github/*
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude *~
+global-exclude *.swp
+global-exclude .DS_Store

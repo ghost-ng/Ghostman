@@ -28,6 +28,7 @@ class EnhancedSystemTray(QObject):
     # Signals
     show_avatar_requested = pyqtSignal()
     settings_requested = pyqtSignal()
+    help_requested = pyqtSignal()
     about_requested = pyqtSignal()
     quit_requested = pyqtSignal()
     
@@ -78,8 +79,13 @@ class EnhancedSystemTray(QObject):
         settings_action.triggered.connect(self.settings_requested.emit)
         self.context_menu.addAction(settings_action)
         
+        # Help action
+        help_action = QAction("Help...", self.context_menu)
+        help_action.triggered.connect(self.help_requested.emit)
+        self.context_menu.addAction(help_action)
+        
         # About action
-        about_action = QAction("About Ghostman", self.context_menu)
+        about_action = QAction("About ghost-ng", self.context_menu)
         about_action.triggered.connect(self.about_requested.emit)
         self.context_menu.addAction(about_action)
         
@@ -145,6 +151,32 @@ class EnhancedSystemTray(QObject):
         
         return QIcon(pixmap)
     
+    def _get_avatar_icon(self) -> QIcon:
+        """Get the avatar icon for notifications."""
+        # Try to load avatar icon from assets
+        avatar_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "..", "assets", "avatar.png"
+        )
+        
+        if os.path.exists(avatar_path):
+            try:
+                # Load and resize avatar for notification (typically 32x32 or 64x64)
+                pixmap = QPixmap(avatar_path)
+                if not pixmap.isNull():
+                    # Scale to appropriate size for notifications
+                    scaled_pixmap = pixmap.scaled(
+                        32, 32, 
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation
+                    )
+                    logger.debug(f"Loaded avatar icon from: {avatar_path}")
+                    return QIcon(scaled_pixmap)
+            except Exception as e:
+                logger.warning(f"Failed to load avatar icon: {e}")
+        
+        logger.debug("Avatar icon not found, will use system icon")
+        return QIcon()  # Return empty icon to trigger fallback
+    
     def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason):
         """Handle tray icon activation."""
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
@@ -203,8 +235,15 @@ class EnhancedSystemTray(QObject):
             duration: Duration in milliseconds
         """
         if self.tray_icon and self.tray_icon.isVisible():
-            self.tray_icon.showMessage(title, message, icon_type, duration)
-            logger.debug(f"Tray message shown: {title}")
+            # Use custom avatar icon for notifications instead of system icons
+            avatar_icon = self._get_avatar_icon()
+            if avatar_icon and not avatar_icon.isNull():
+                self.tray_icon.showMessage(title, message, avatar_icon, duration)
+                logger.debug(f"Tray message shown with avatar icon: {title}")
+            else:
+                # Fallback to system icon if avatar not available
+                self.tray_icon.showMessage(title, message, icon_type, duration)
+                logger.debug(f"Tray message shown with system icon: {title}")
         else:
             logger.warning("Cannot show tray message - tray icon not visible")
     

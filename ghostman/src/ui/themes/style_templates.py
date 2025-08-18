@@ -309,14 +309,8 @@ class ButtonStyleManager:
         if emoji_font:
             style = style.replace("QToolButton {", f"QToolButton {{\n            font-family: {emoji_font};")
         
-        # Apply the style with menu indicator removal
-        button.setStyleSheet(style + """
-            QToolButton::menu-indicator {
-                image: none;
-                width: 5px;
-                margin-left: 4px;
-            }
-        """)
+        # Apply the style (no menu indicator CSS needed since we don't use menus)
+        button.setStyleSheet(style)
         
         # Set icon size for consistency with other buttons
         from PyQt6.QtCore import QSize
@@ -584,13 +578,7 @@ class StyleTemplates:
             border: none;
             width: 20px;
         }}
-        QComboBox::down-arrow {{
-            image: none;
-            border-left: 4px solid transparent;
-            border-right: 4px solid transparent;
-            border-top: 4px solid {colors.text_secondary};
-            margin-right: 4px;
-        }}
+
         QComboBox QAbstractItemView {{
             background-color: {colors.background_secondary};
             color: {colors.text_primary};
@@ -726,26 +714,27 @@ class StyleTemplates:
             background-color: {colors.background_tertiary};
             color: {colors.text_secondary};
             border: 1px solid {colors.border_secondary};
-            padding: 6px 12px;
-            margin-right: 2px;
+            padding: 8px 16px;
+            margin-right: 3px;
+            border-radius: 8px;
+            min-width: 80px;
         }}
         QTabBar::tab:selected {{
-            background-color: {colors.secondary};
-            color: {colors.text_primary};
-            border-color: {colors.border_focus};
+            background-color: {colors.primary};
+            color: {colors.background_primary};
+            border-color: {colors.primary};
+            font-weight: bold;
         }}
         QTabBar::tab:hover {{
             background-color: {colors.interactive_hover};
             color: {colors.text_primary};
+            border-color: {colors.border_focus};
         }}
         QTabBar::tab:first {{
-            border-top-left-radius: 4px;
-            border-bottom-left-radius: 4px;
+            margin-left: 3px;
         }}
         QTabBar::tab:last {{
-            border-top-right-radius: 4px;
-            border-bottom-right-radius: 4px;
-            margin-right: 0px;
+            margin-right: 3px;
         }}
         """
     
@@ -883,18 +872,21 @@ class StyleTemplates:
         QTabBar::tab {{
             background-color: {colors.background_secondary};
             color: {colors.text_primary};
-            padding: 8px 12px;
-            margin-right: 2px;
+            padding: 8px 16px;
+            margin-right: 3px;
             border: 1px solid {colors.border_primary};
+            border-radius: 8px 8px 0px 0px;
             border-bottom: none;
+            min-width: 80px;
         }}
         QTabBar::tab:selected {{
             background-color: {colors.primary};
-            color: {colors.text_primary};
+            color: {colors.background_primary};
             font-weight: bold;
         }}
         QTabBar::tab:hover {{
             background-color: {colors.background_tertiary};
+            border-color: {colors.border_focus};
         }}
         
         /* Group box styling */
@@ -951,9 +943,7 @@ class StyleTemplates:
             border-left-color: {colors.border_primary};
             border-left-style: solid;
         }}
-        QComboBox::down-arrow {{
-            color: {colors.text_primary};
-        }}
+
         QComboBox QAbstractItemView {{
             background-color: {colors.background_tertiary};
             color: {colors.text_primary};

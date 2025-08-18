@@ -38,6 +38,9 @@ def get_preset_themes() -> Dict[str, ColorSystem]:
         "solarized_light": get_solarized_light_theme(),
         "solarized_dark": get_solarized_dark_theme(),
         "dracula": get_dracula_theme(),
+        "openai_like": get_openai_like_theme(),
+        "openui_like": get_openui_like_theme(),
+        "openwebui_like": get_openwebui_like_theme(),
     }
 
 
@@ -308,10 +311,10 @@ def get_arctic_white_theme() -> ColorSystem:
         text_tertiary="#555555",
         text_disabled="#999999",
         
-        # Interactive - using blue tints for better visibility on white
-        interactive_normal="rgba(21, 101, 192, 0.08)",  # Primary blue with very low opacity
-        interactive_hover="rgba(21, 101, 192, 0.15)",   # Primary blue with slightly more opacity
-        interactive_active="rgba(21, 101, 192, 0.25)",  # Primary blue with more opacity
+        # Interactive - improved for better button visibility
+        interactive_normal="#f0f4f8",  # Light blue-gray for button backgrounds
+        interactive_hover="#e3f2fd",   # Slightly more blue on hover
+        interactive_active="#bbdefb",  # Even more blue when pressed
         interactive_disabled="#f8f9fa",
         
         # Status
@@ -858,4 +861,127 @@ def get_dracula_theme() -> ColorSystem:
         border_secondary="#44475a",
         border_focus="#bd93f9",
         separator="#44475a",
+    )
+
+
+def get_openai_like_theme() -> ColorSystem:
+    """OpenAI-inspired clean minimal theme with subtle grays."""
+    return ColorSystem(
+        # Primary colors - OpenAI uses very subtle, professional colors
+        primary="#10a37f",  # OpenAI's green accent
+        primary_hover="#0d8968",
+        secondary="#6f7780",  # Muted gray
+        secondary_hover="#5c646e",
+        
+        # Backgrounds - Very clean whites and light grays
+        background_primary="#ffffff",
+        background_secondary="#f7f7f8",
+        background_tertiary="#ececf1",
+        background_overlay="#00000020",
+        
+        # Text - Clean, readable grays
+        text_primary="#2d333a",
+        text_secondary="#6f7780",
+        text_tertiary="#9ca3af",
+        text_disabled="#d1d5db",
+        
+        # Interactive - Subtle, clean backgrounds
+        interactive_normal="#f9fafb",
+        interactive_hover="#f3f4f6",
+        interactive_active="#e5e7eb",
+        interactive_disabled="#f9fafb",
+        
+        # Status
+        status_success="#10a37f",
+        status_warning="#f59e0b",
+        status_error="#ef4444",
+        status_info="#3b82f6",
+        
+        # Borders
+        border_primary="#d1d5db",
+        border_secondary="#e5e7eb",
+        border_focus="#10a37f",
+        separator="#e5e7eb",
+    )
+
+
+def get_openui_like_theme() -> ColorSystem:
+    """Open UI inspired theme with green accents and professional grays."""
+    return ColorSystem(
+        # Primary colors - Based on Open UI's green theme
+        primary="#00a453",  # Open UI green
+        primary_hover="#007a3d",
+        secondary="#555555",
+        secondary_hover="#444444",
+        
+        # Backgrounds
+        background_primary="#ffffff",
+        background_secondary="#f2f2f2",
+        background_tertiary="#e8e8e8",
+        background_overlay="#00000040",
+        
+        # Text
+        text_primary="#333333",
+        text_secondary="#555555",
+        text_tertiary="#777777",
+        text_disabled="#cccccc",
+        
+        # Interactive
+        interactive_normal="#f8f9fa",
+        interactive_hover="#e9ecef",
+        interactive_active="#dee2e6",
+        interactive_disabled="#f8f9fa",
+        
+        # Status
+        status_success="#00a453",
+        status_warning="#ff8800",
+        status_error="#dc3545",
+        status_info="#007a3d",
+        
+        # Borders
+        border_primary="#cccccc",
+        border_secondary="#e6e6e6",
+        border_focus="#00a453",
+        separator="#e6e6e6",
+    )
+
+
+def get_openwebui_like_theme() -> ColorSystem:
+    """Open WebUI inspired dark theme with purple accents and chat-like design."""
+    return ColorSystem(
+        # Primary colors - OpenWebUI style with purple/violet accents
+        primary="#8b5cf6",  # Violet primary (typical OpenWebUI accent)
+        primary_hover="#7c3aed",
+        secondary="#64748b",  # Slate gray
+        secondary_hover="#475569",
+        
+        # Backgrounds - Very dark like modern chat apps
+        background_primary="#0f0f0f",  # Almost black main background
+        background_secondary="#1a1a1a",  # Dark sidebar/secondary areas
+        background_tertiary="#262626",  # Slightly lighter for inputs/cards
+        background_overlay="#00000090",
+        
+        # Text - High contrast for readability
+        text_primary="#ffffff",  # Pure white for main text
+        text_secondary="#e5e5e5",  # Light gray for secondary text
+        text_tertiary="#a3a3a3",  # Medium gray for hints
+        text_disabled="#737373",  # Darker gray for disabled
+        
+        # Interactive - Purple-tinted dark backgrounds
+        interactive_normal="#2a2a2a",
+        interactive_hover="#3a3a3a",
+        interactive_active="#4a4a4a",
+        interactive_disabled="#1a1a1a",
+        
+        # Status - Modern, vibrant colors
+        status_success="#22c55e",  # Green
+        status_warning="#f59e0b",  # Orange
+        status_error="#ef4444",   # Red
+        status_info="#8b5cf6",    # Violet (matches primary)
+        
+        # Borders - Subtle but visible
+        border_primary="#404040",
+        border_secondary="#2a2a2a",
+        border_focus="#8b5cf6",
+        separator="#2a2a2a",
     )

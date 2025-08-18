@@ -236,17 +236,33 @@ class SettingsDialog(QDialog):
         appearance_group = QGroupBox("Appearance")
         appearance_layout = QFormLayout(appearance_group)
 
-        # Percent-based opacity (store int percent 10-100)
+        # Percent-based opacity (store int percent 10-100) with +/- buttons
+        opacity_layout = QHBoxLayout()
+        
+        # Decrease button
+        self.opacity_decrease_btn = QPushButton("-")
+        self.opacity_decrease_btn.setMaximumWidth(30)
+        self.opacity_decrease_btn.clicked.connect(lambda: self._adjust_opacity(-5))
+        
+        # Opacity spin box
         self.opacity_percent_spin = QSpinBox()
         self.opacity_percent_spin.setRange(10, 100)
-        self.opacity_percent_spin.setSingleStep(1)
+        self.opacity_percent_spin.setSingleStep(5)
         self.opacity_percent_spin.setValue(90)
         self.opacity_percent_spin.valueChanged.connect(self._on_opacity_preview)
-        appearance_layout.addRow("Panel Opacity (%):", self.opacity_percent_spin)
+        
+        # Increase button
+        self.opacity_increase_btn = QPushButton("+")
+        self.opacity_increase_btn.setMaximumWidth(30)
+        self.opacity_increase_btn.clicked.connect(lambda: self._adjust_opacity(5))
+        
+        opacity_layout.addWidget(self.opacity_decrease_btn)
+        opacity_layout.addWidget(self.opacity_percent_spin)
+        opacity_layout.addWidget(self.opacity_increase_btn)
+        opacity_layout.addStretch()
+        
+        appearance_layout.addRow("Panel Opacity (%):", opacity_layout)
 
-        self.always_on_top_check = QCheckBox("Always stay on top")
-        self.always_on_top_check.setChecked(True)
-        appearance_layout.addRow("", self.always_on_top_check)
 
         layout.addWidget(appearance_group)
 
@@ -282,22 +298,28 @@ class SettingsDialog(QDialog):
         self.ai_font_family_combo.addItems(available_fonts)
         ai_font_layout.addRow("Font Family:", self.ai_font_family_combo)
 
-        # AI Response Font Size with quick adjustment buttons
+        # AI Response Font Size with improved +/- buttons
         ai_font_size_layout = QHBoxLayout()
+        
+        # Decrease button with proper styling
+        self.ai_font_size_decrease_btn = QPushButton("-")
+        self.ai_font_size_decrease_btn.setMaximumWidth(30)
+        self.ai_font_size_decrease_btn.clicked.connect(lambda: self._adjust_ai_font_size(-1))
+        
+        # Font size spin box
         self.ai_font_size_spin = QSpinBox()
         self.ai_font_size_spin.setRange(6, 72)
         self.ai_font_size_spin.setValue(11)
         
-        # Quick size adjustment buttons (uniform styling)
-        self.ai_font_size_decrease_btn = QPushButton("-")
-        self.ai_font_size_decrease_btn.clicked.connect(lambda: self._adjust_ai_font_size(-1))
-        
+        # Increase button with proper styling
         self.ai_font_size_increase_btn = QPushButton("+")
+        self.ai_font_size_increase_btn.setMaximumWidth(30)
         self.ai_font_size_increase_btn.clicked.connect(lambda: self._adjust_ai_font_size(1))
         
         ai_font_size_layout.addWidget(self.ai_font_size_decrease_btn)
         ai_font_size_layout.addWidget(self.ai_font_size_spin)
         ai_font_size_layout.addWidget(self.ai_font_size_increase_btn)
+        ai_font_size_layout.addStretch()
         
         ai_font_layout.addRow("Font Size:", ai_font_size_layout)
 
@@ -323,22 +345,28 @@ class SettingsDialog(QDialog):
         self.user_font_family_combo.addItems(available_fonts)
         user_font_layout.addRow("Font Family:", self.user_font_family_combo)
 
-        # User Input Font Size with quick adjustment buttons
+        # User Input Font Size with improved +/- buttons
         user_font_size_layout = QHBoxLayout()
+        
+        # Decrease button with proper styling
+        self.user_font_size_decrease_btn = QPushButton("-")
+        self.user_font_size_decrease_btn.setMaximumWidth(30)
+        self.user_font_size_decrease_btn.clicked.connect(lambda: self._adjust_user_font_size(-1))
+        
+        # Font size spin box
         self.user_font_size_spin = QSpinBox()
         self.user_font_size_spin.setRange(6, 72)
         self.user_font_size_spin.setValue(10)
         
-        # Quick size adjustment buttons
-        self.user_font_size_decrease_btn = QPushButton("-")
-        self.user_font_size_decrease_btn.clicked.connect(lambda: self._adjust_user_font_size(-1))
-        
+        # Increase button with proper styling
         self.user_font_size_increase_btn = QPushButton("+")
+        self.user_font_size_increase_btn.setMaximumWidth(30)
         self.user_font_size_increase_btn.clicked.connect(lambda: self._adjust_user_font_size(1))
         
         user_font_size_layout.addWidget(self.user_font_size_decrease_btn)
         user_font_size_layout.addWidget(self.user_font_size_spin)
         user_font_size_layout.addWidget(self.user_font_size_increase_btn)
+        user_font_size_layout.addStretch()
         
         user_font_layout.addRow("Font Size:", user_font_size_layout)
 
@@ -439,6 +467,12 @@ class SettingsDialog(QDialog):
         # Immediately apply the font change
         self._apply_font_changes_immediately()
     
+    def _adjust_opacity(self, delta):
+        """Adjust panel opacity by the given delta."""
+        current_opacity = self.opacity_percent_spin.value()
+        new_opacity = max(10, min(100, current_opacity + delta))
+        self.opacity_percent_spin.setValue(new_opacity)
+    
     def _apply_font_changes_immediately(self):
         """Apply font changes immediately without waiting for the Apply button."""
         try:
@@ -473,7 +507,7 @@ class SettingsDialog(QDialog):
     def _apply_uniform_button_styles(self):
         """Apply uniform styling to all buttons in the settings dialog."""
         try:
-            from ...ui.themes.style_templates import StyleTemplates
+            from ...ui.themes.style_templates import ButtonStyleManager
             from ...ui.themes.theme_manager import get_theme_manager
             
             # Get theme manager for consistent styling
@@ -481,28 +515,73 @@ class SettingsDialog(QDialog):
             if theme_manager and hasattr(theme_manager, 'current_theme'):
                 colors = theme_manager.current_theme
                 
-                # Apply icon button style to font adjustment buttons
-                icon_style = StyleTemplates.get_icon_button_style(colors)
-                self.ai_font_size_decrease_btn.setStyleSheet(icon_style)
-                self.ai_font_size_increase_btn.setStyleSheet(icon_style)
-                self.user_font_size_decrease_btn.setStyleSheet(icon_style)
-                self.user_font_size_increase_btn.setStyleSheet(icon_style)
+                # Apply custom styled +/- buttons
+                # Create a modern button style for +/- buttons
+                plus_minus_style = f"""
+                QPushButton {{
+                    background-color: {colors.interactive_normal};
+                    color: {colors.text_primary};
+                    border: 1px solid {colors.border_primary};
+                    border-radius: 4px;
+                    font-size: 16px;
+                    font-weight: bold;
+                    padding: 2px;
+                    min-width: 28px;
+                    max-width: 30px;
+                    min-height: 24px;
+                }}
+                QPushButton:hover {{
+                    background-color: {colors.interactive_hover};
+                    border-color: {colors.primary};
+                }}
+                QPushButton:pressed {{
+                    background-color: {colors.interactive_active};
+                    border-color: {colors.primary_hover};
+                }}
+                """
                 
-                # Apply uniform button style to regular buttons
-                button_style = StyleTemplates.get_uniform_button_style(colors, "medium")
-                self.apply_btn.setStyleSheet(button_style)
-                self.cancel_btn.setStyleSheet(button_style)
-                self.ok_btn.setStyleSheet(button_style)
-                self.save_config_btn.setStyleSheet(button_style)
-                self.load_config_btn.setStyleSheet(button_style)
-                self.test_btn.setStyleSheet(button_style)
+                # Apply to all +/- buttons
+                self.ai_font_size_decrease_btn.setStyleSheet(plus_minus_style)
+                self.ai_font_size_increase_btn.setStyleSheet(plus_minus_style)
+                self.user_font_size_decrease_btn.setStyleSheet(plus_minus_style)
+                self.user_font_size_increase_btn.setStyleSheet(plus_minus_style)
+                self.opacity_decrease_btn.setStyleSheet(plus_minus_style)
+                self.opacity_increase_btn.setStyleSheet(plus_minus_style)
                 
-                # Apply primary button style to show key button
-                primary_style = StyleTemplates.get_button_primary_style(colors)
-                if hasattr(self, 'show_key_btn'):
-                    self.show_key_btn.setStyleSheet(primary_style)
+                # Style the spinboxes to remove arrows and look cleaner
+                spinbox_style = f"""
+                QSpinBox {{
+                    background-color: {colors.background_tertiary};
+                    color: {colors.text_primary};
+                    border: 1px solid {colors.border_primary};
+                    border-radius: 4px;
+                    padding: 4px 8px;
+                    min-width: 60px;
+                }}
+                QSpinBox:focus {{
+                    border-color: {colors.primary};
+                }}
+                QSpinBox::up-button, QSpinBox::down-button {{
+                    width: 0px;
+                    border: none;
+                }}
+                """
                 
-                logger.debug("Applied uniform button styles to settings dialog")
+                # Apply to opacity and font size spinboxes
+                self.opacity_percent_spin.setStyleSheet(spinbox_style)
+                self.ai_font_size_spin.setStyleSheet(spinbox_style)
+                self.user_font_size_spin.setStyleSheet(spinbox_style)
+                
+                # Apply uniform button style to regular buttons using ButtonStyleManager
+                regular_button_style = ButtonStyleManager.get_unified_button_style(colors, "push", "medium")
+                self.apply_btn.setStyleSheet(regular_button_style)
+                self.cancel_btn.setStyleSheet(regular_button_style)
+                self.ok_btn.setStyleSheet(regular_button_style)
+                self.save_config_btn.setStyleSheet(regular_button_style)
+                self.load_config_btn.setStyleSheet(regular_button_style)
+                self.test_btn.setStyleSheet(regular_button_style)
+                
+                logger.debug("Applied modern button styles to settings dialog")
             else:
                 logger.warning("Theme manager not available for button styling")
                 
@@ -1287,7 +1366,6 @@ class SettingsDialog(QDialog):
             "interface": {
                 # Store as integer percent
                 "opacity": int(self.opacity_percent_spin.value()),
-                "always_on_top": self.always_on_top_check.isChecked(),
                 "start_minimized": self.start_minimized_check.isChecked(),
                 "close_to_tray": self.close_to_tray_check.isChecked()
             },
@@ -1370,12 +1448,6 @@ class SettingsDialog(QDialog):
                 self.opacity_percent_spin.setValue(op_int)
             except (ValueError, TypeError):
                 self.opacity_percent_spin.setValue(90)  # default
-        if "always_on_top" in interface_config:
-            # Convert string "True"/"False" to boolean
-            value = interface_config["always_on_top"]
-            if isinstance(value, str):
-                value = value.lower() in ('true', '1', 'yes')
-            self.always_on_top_check.setChecked(bool(value))
         if "start_minimized" in interface_config:
             value = interface_config["start_minimized"]
             if isinstance(value, str):

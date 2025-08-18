@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ghost-ng Help Documentation</title>
+    <link rel="stylesheet" href="css/help.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <h1>👻 ghost-ng</h1>
+                    <span class="version">v1.0.0</span>
+                </div>
+                <nav class="nav">
+                    <a href="#getting-started" class="nav-link">Getting Started</a>
+                    <a href="#features" class="nav-link">Features</a>
+                    <a href="#settings" class="nav-link">Settings</a>
+                    <a href="#troubleshooting" class="nav-link">Troubleshooting</a>
+                </nav>
+            </div>
+        </header>
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-content">
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="Search help...">
+                </div>
+                
+                <nav class="sidebar-nav">
+                    <div class="nav-section">
+                        <h3>Getting Started</h3>
+                        <ul>
+                            <li><a href="#installation">Installation</a></li>
+                            <li><a href="#first-run">First Run</a></li>
+                            <li><a href="#api-setup">API Setup</a></li>
+                        </ul>
+                    </div>
+                    
+                    <div class="nav-section">
+                        <h3>Core Features</h3>
+                        <ul>
+                            <li><a href="#chat-interface">Chat Interface</a></li>
+                            <li><a href="#avatar-widget">Avatar Widget</a></li>
+                            <li><a href="#conversation-management">Conversations</a></li>
+                            <li><a href="#themes">Themes & Styling</a></li>
+                        </ul>
+                    </div>
+                    
+                    <div class="nav-section">
+                        <h3>Advanced</h3>
+                        <ul>
+                            <li><a href="#keyboard-shortcuts">Keyboard Shortcuts</a></li>
+                            <li><a href="#customization">Customization</a></li>
+                            <li><a href="#data-management">Data Management</a></li>
+                        </ul>
+                    </div>
+                    
+                    <div class="nav-section">
+                        <h3>Support</h3>
+                        <ul>
+                            <li><a href="#troubleshooting">Troubleshooting</a></li>
+                            <li><a href="#faq">FAQ</a></li>
+                            <li><a href="#contact">Contact & Support</a></li>
+                        </ul>
+                    </div>
+                </nav>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Welcome Section -->
+            <section id="welcome" class="content-section">
+                <div class="hero">
+                    <h1>Welcome to ghost-ng</h1>
+                    <p class="hero-subtitle">Your AI-powered desktop assistant with floating widgets and conversation management</p>
+                    <div class="hero-features">
+                        <div class="feature-item">
+                            <span class="feature-icon">🤖</span>
+                            <span>AI-Powered Chat</span>
+                        </div>
+                        <div class="feature-item">
+                            <span class="feature-icon">👻</span>
+                            <span>Floating Avatar</span>
+                        </div>
+                        <div class="feature-item">
+                            <span class="feature-icon">💬</span>
+                            <span>Conversation History</span>
+                        </div>
+                        <div class="feature-item">
+                            <span class="feature-icon">🎨</span>
+                            <span>Rich Theming</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Getting Started -->
+            <section id="getting-started" class="content-section">
+                <h2>Getting Started</h2>
+                
+                <div id="installation" class="subsection">
+                    <h3>Installation</h3>
+                    <div class="info-box">
+                        <p><strong>Requirements:</strong> An OpenAI API key or compatible AI service</p>
+                    </div>
+                    
+                    <ol class="step-list">
+                        <li>Download the latest ghost-ng installer from <a href="https://github.com/ghost-ng/ghost-ng/releases" target="_blank">GitHub Releases</a></li>
+                        <li>Run the installer and follow the setup wizard</li>
+                        <li>Launch ghost-ng from your desktop shortcut or Start menu</li>
+                        <li>Configure your API key in Settings (see API Setup below)</li>
+                    </ol>
+                </div>
+
+                <div id="first-run" class="subsection">
+                    <h3>First Run</h3>
+                    <ol class="step-list">
+                        <li>Launch ghost-ng from your desktop or command line</li>
+                        <li>The application will start in system tray mode</li>
+                        <li>Right-click the tray icon and select "Show Avatar" to open the main interface</li>
+                        <li>Click the gear icon to open settings and configure your API key</li>
+                    </ol>
+                </div>
+
+                <div id="api-setup" class="subsection">
+                    <h3>API Setup</h3>
+                    <div class="warning-box">
+                        <p><strong>⚠️ Important:</strong> You need an AI service API key to use ghost-ng's features.</p>
+                    </div>
+                    
+                    <h4>OpenAI Setup (Recommended)</h4>
+                    <ol class="step-list">
+                        <li>Visit <a href="https://platform.openai.com/" target="_blank">OpenAI Platform</a></li>
+                        <li>Create an account or sign in</li>
+                        <li>Go to API Keys section and create a new key</li>
+                        <li>Copy the API key</li>
+                        <li>In ghost-ng, click the gear icon → AI Model</li>
+                        <li>Paste your API key in the API Key field</li>
+                        <li>Click "Test Connection" to verify</li>
+                    </ol>
+                    
+                    <h4>OpenAI-Compatible Services</h4>
+                    <p>ghost-ng also works with OpenAI-compatible API providers:</p>
+                    <ul>
+                        <li><strong>Anthropic Claude:</strong> Use with proxy services</li>
+                        <li><strong>Local AI:</strong> Ollama, LM Studio, or similar</li>
+                        <li><strong>Azure OpenAI:</strong> Enterprise deployments</li>
+                        <li><strong>Custom endpoints:</strong> Any OpenAI-compatible API</li>
+                    </ul>
+                    <p>Configure the Base URL and API key in Settings → AI Model for alternative providers.</p>
+                </div>
+            </section>
+
+            <!-- Features -->
+            <section id="features" class="content-section">
+                <h2>Core Features</h2>
+
+                <div id="chat-interface" class="subsection">
+                    <h3>Chat Interface (REPL)</h3>
+                    <p>The main chat interface where you interact with the AI assistant.</p>
+                    
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>💬 Chat Commands</h4>
+                            <ul>
+                                <li><kbd>Enter</kbd> - Send message</li>
+                                <li>Use the + button for new conversation options</li>
+                                <li><kbd>Up/Down</kbd> - Navigate message history</li>
+                                <li><kbd>Ctrl+F</kbd> - Search conversations</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>🔄 Streaming Responses</h4>
+                            <ul>
+                                <li>Real-time AI response streaming</li>
+                                <li>Markdown formatting support</li>
+                                <li>Code syntax highlighting</li>
+                                <li>Copy individual messages</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="avatar-widget" class="subsection">
+                    <h3>Avatar Widget</h3>
+                    <p>A floating, draggable avatar that provides quick access to ghost-ng features.</p>
+                    
+                    <div class="info-box">
+                        <p><strong>Avatar Modes:</strong></p>
+                        <ul>
+                            <li><strong>Idle:</strong> Gentle floating animation</li>
+                            <li><strong>Thinking:</strong> Processing user input</li>
+                            <li><strong>Speaking:</strong> Displaying AI response</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div id="conversation-management" class="subsection">
+                    <h3>Conversation Management</h3>
+                    <p>Persistent chat history with advanced organization features.</p>
+                    
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>📊 Status Types</h4>
+                            <ul>
+                                <li><span class="status-badge active">🔥 Active</span> - Currently selected conversation</li>
+                                <li><span class="status-badge pinned">⭐ Pinned</span> - Important conversations</li>
+                                <li><span class="status-badge archived">📦 Archived</span> - Old conversations</li>
+                                <li><span class="status-badge deleted">🗑️ Deleted</span> - Removed conversations</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>🔍 Search & Export</h4>
+                            <ul>
+                                <li>Full-text search across all conversations</li>
+                                <li>Export to JSON, TXT, Markdown, HTML</li>
+                                <li>Filter by status or date range</li>
+                                <li>Bulk operations available</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="themes" class="subsection">
+                    <h3>Themes & Styling</h3>
+                    <p>Choose from 23+ built-in themes or create your own custom themes.</p>
+                    
+                    <div class="theme-showcase">
+                        <div class="theme-item">
+                            <div class="theme-preview openai-like"></div>
+                            <span>OpenAI-like</span>
+                        </div>
+                        <div class="theme-item">
+                            <div class="theme-preview arctic-white"></div>
+                            <span>Arctic White</span>
+                        </div>
+                        <div class="theme-item">
+                            <div class="theme-preview cyberpunk"></div>
+                            <span>Cyberpunk</span>
+                        </div>
+                        <div class="theme-item">
+                            <div class="theme-preview dracula"></div>
+                            <span>Dracula</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Settings -->
+            <section id="settings" class="content-section">
+                <h2>Settings & Configuration</h2>
+                
+                <div class="settings-grid">
+                    <div class="settings-card">
+                        <h4>🎨 Appearance</h4>
+                        <ul>
+                            <li>Theme selection</li>
+                            <li>Font family and size</li>
+                            <li>Window opacity</li>
+                            <li>Icon sizing</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="settings-card">
+                        <h4>🤖 AI Model</h4>
+                        <ul>
+                            <li>API key configuration</li>
+                            <li>Model selection</li>
+                            <li>Temperature and parameters</li>
+                            <li>System/user prompts</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="settings-card">
+                        <h4>🖥️ Interface</h4>
+                        <ul>
+                            <li>Always on top toggle</li>
+                            <li>Start minimized option</li>
+                            <li>Close to tray behavior</li>
+                            <li>Window positioning</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="settings-card">
+                        <h4>🔧 Advanced</h4>
+                        <ul>
+                            <li>Logging level</li>
+                            <li>Debug mode</li>
+                            <li>Database management</li>
+                            <li>Import/export settings</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Keyboard Shortcuts -->
+            <section id="keyboard-shortcuts" class="content-section">
+                <h2>Keyboard Shortcuts</h2>
+                
+                <div class="shortcuts-grid">
+                    <div class="shortcuts-category">
+                        <h4>Chat Interface</h4>
+                        <div class="shortcut-item">
+                            <kbd>Enter</kbd>
+                            <span>Send message</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>↑</kbd> / <kbd>↓</kbd>
+                            <span>Navigate message history</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>F</kbd>
+                            <span>Search conversations</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Esc</kbd>
+                            <span>Close search</span>
+                        </div>
+                    </div>
+                    
+                    <div class="shortcuts-category">
+                        <h4>Window Management</h4>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>H</kbd>
+                            <span>Hide chat window</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>M</kbd>
+                            <span>Minimize to tray</span>
+                        </div>
+                        <div class="shortcut-item">
+                            Click avatar
+                            <span>Show/hide chat</span>
+                        </div>
+                        <div class="shortcut-item">
+                            Right-click tray
+                            <span>Access menu</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Troubleshooting -->
+            <section id="troubleshooting" class="content-section">
+                <h2>Troubleshooting</h2>
+                
+                <div id="faq" class="subsection">
+                    <h3>Frequently Asked Questions</h3>
+                    
+                    <div class="faq-item">
+                        <h4>❓ ghost-ng won't start or crashes immediately</h4>
+                        <div class="faq-answer">
+                            <p>Try these solutions:</p>
+                            <ul>
+                                <li>Restart the application</li>
+                                <li>Check if you have the latest version installed</li>
+                                <li>Try running as administrator (Windows only)</li>
+                                <li>Check logs in: <code>%APPDATA%/Ghostman/logs/</code> (Windows)</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div class="faq-item">
+                        <h4>❓ API connection fails</h4>
+                        <div class="faq-answer">
+                            <p>Common API issues:</p>
+                            <ul>
+                                <li>Verify your OpenAI API key is valid and has credits</li>
+                                <li>Check internet connectivity</li>
+                                <li>Ensure firewall isn't blocking the connection</li>
+                                <li>Try a different model (GPT-3.5-turbo vs GPT-4)</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div class="faq-item">
+                        <h4>❓ Conversations not saving</h4>
+                        <div class="faq-answer">
+                            <p>Database troubleshooting:</p>
+                            <ul>
+                                <li>Check if you have write permissions to the app data folder</li>
+                                <li>Restart the application to reinitialize the database</li>
+                                <li>In Settings → Advanced, try "Reset Database"</li>
+                                <li>Check available disk space</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <h3>Log Files</h3>
+                    <p>Log files can help diagnose issues:</p>
+                    <div class="code-block">
+                        <h4>Log Locations</h4>
+                        <pre><code>Windows: %APPDATA%\Ghostman\logs\
+macOS: ~/Library/Application Support/Ghostman/logs/
+Linux: ~/.config/Ghostman/logs/</code></pre>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Contact -->
+            <section id="contact" class="content-section">
+                <h2>Contact & Support</h2>
+                
+                <div class="contact-grid">
+                    <div class="contact-item">
+                        <h4>🐛 Bug Reports</h4>
+                        <p>Found a bug? Report it on our GitHub issues page.</p>
+                        <a href="https://github.com/ghost-ng/ghost-ng/issues" target="_blank" class="btn btn-primary">Report Bug</a>
+                    </div>
+                    
+                    <div class="contact-item">
+                        <h4>💬 Discussions</h4>
+                        <p>Join the community for questions and discussions.</p>
+                        <a href="https://github.com/ghost-ng/ghost-ng/discussions" target="_blank" class="btn btn-secondary">Join Discussion</a>
+                    </div>
+                    
+                    <div class="contact-item">
+                        <h4>📚 Documentation</h4>
+                        <p>Full documentation and guides on GitHub.</p>
+                        <a href="https://github.com/ghost-ng/ghost-ng/tree/main/docs" target="_blank" class="btn btn-secondary">View Docs</a>
+                    </div>
+                    
+                    <div class="contact-item">
+                        <h4>🏷️ Releases</h4>
+                        <p>Download the latest version and view changelog.</p>
+                        <a href="https://github.com/ghost-ng/ghost-ng/releases" target="_blank" class="btn btn-secondary">Latest Release</a>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="js/help.js"></script>
+</body>
+</html>

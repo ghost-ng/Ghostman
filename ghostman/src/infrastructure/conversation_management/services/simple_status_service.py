@@ -103,3 +103,51 @@ class SimpleStatusService:
         except Exception as e:
             logger.error(f"❌ Failed to count conversations: {e}")
             return {}
+    
+    def fix_multiple_active_conversations(self) -> bool:
+        """
+        Fix database state where multiple conversations are marked as active.
+        Keep the most recently updated one as active, set others to pinned.
+        """
+        try:
+            with self.db.get_session() as session:
+                # Get all active conversations
+                result = session.execute(text("""
+                    SELECT id, updated_at FROM conversations 
+                    WHERE status = 'active'
+                    ORDER BY updated_at DESC
+                """))
+                
+                active_conversations = result.fetchall()
+                
+                if len(active_conversations) <= 1:
+                    logger.info(f"✅ Conversation uniqueness OK: {len(active_conversations)} active conversations")
+                    return True
+                
+                logger.warning(f"⚠️  Found {len(active_conversations)} active conversations, fixing...")
+                
+                # Keep the most recent one, set others to pinned
+                most_recent_id = active_conversations[0][0]
+                
+                # Set all to pinned first
+                session.execute(text("""
+                    UPDATE conversations 
+                    SET status = 'pinned', updated_at = CURRENT_TIMESTAMP
+                    WHERE status = 'active'
+                """))
+                
+                # Set the most recent one back to active
+                session.execute(text("""
+                    UPDATE conversations 
+                    SET status = 'active', updated_at = CURRENT_TIMESTAMP
+                    WHERE id = :conv_id
+                """), {"conv_id": most_recent_id})
+                
+                session.commit()
+                
+                logger.info(f"✅ Fixed multiple active conversations, kept {most_recent_id[:8]}... as active")
+                return True
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to fix multiple active conversations: {e}")
+            return False
