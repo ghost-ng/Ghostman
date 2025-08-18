@@ -7,7 +7,7 @@ retry logic, and proper resource cleanup for the requests library.
 
 import threading
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 from urllib.parse import urlparse
 from contextlib import contextmanager
 
@@ -52,6 +52,7 @@ class SessionManager:
         self._session_lock = threading.RLock()  # Reentrant lock for nested calls
         self._adapters: Dict[str, HTTPAdapter] = {}
         self._default_timeout = 30
+        self._pki_config: Optional[Tuple[str, str, Optional[str]]] = None  # (cert_path, key_path, ca_path)
         self._initialized = True
         
         logger.info("SessionManager initialized")
@@ -126,7 +127,94 @@ class SessionManager:
                 "Content-Type": "application/json"
             })
             
+            # Apply PKI configuration if available
+            if self._pki_config:
+                self._apply_pki_config()
+            
             logger.info(f"Session configured: timeout={timeout}s, retries={max_retries}, pool_size={pool_maxsize}")
+    
+    def configure_pki(
+        self,
+        cert_path: str,
+        key_path: str,
+        ca_path: Optional[str] = None
+    ) -> None:
+        """
+        Configure PKI client authentication for the session.
+        
+        Args:
+            cert_path: Path to client certificate file (.crt or .pem)
+            key_path: Path to client private key file (.pem)
+            ca_path: Optional path to CA certificate chain file
+        """
+        with self._session_lock:
+            self._pki_config = (cert_path, key_path, ca_path)
+            
+            # If session exists, apply PKI configuration immediately
+            if self._session:
+                self._apply_pki_config()
+            
+            logger.info(f"PKI configured: cert={cert_path}, key={key_path}, ca={'Yes' if ca_path else 'No'}")
+    
+    def disable_pki(self) -> None:
+        """Disable PKI client authentication for the session."""
+        with self._session_lock:
+            self._pki_config = None
+            
+            # If session exists, remove PKI configuration
+            if self._session:
+                self._session.cert = None
+                self._session.verify = True  # Reset to default
+            
+            logger.info("PKI authentication disabled")
+    
+    def _apply_pki_config(self) -> None:
+        """Apply PKI configuration to the current session."""
+        if not self._session or not self._pki_config:
+            return
+        
+        cert_path, key_path, ca_path = self._pki_config
+        
+        try:
+            # Set client certificate and key
+            self._session.cert = (cert_path, key_path)
+            
+            # Set CA certificate for server verification if provided
+            if ca_path:
+                self._session.verify = ca_path
+            else:
+                # Use default CA verification
+                self._session.verify = True
+            
+            logger.debug("PKI configuration applied to session")
+            
+        except Exception as e:
+            logger.error(f"Failed to apply PKI configuration: {e}")
+            raise
+    
+    def get_pki_info(self) -> Dict[str, Any]:
+        """
+        Get PKI configuration information.
+        
+        Returns:
+            Dict with PKI configuration details
+        """
+        info = {
+            "pki_enabled": self._pki_config is not None,
+            "cert_path": None,
+            "key_path": None,
+            "ca_path": None
+        }
+        
+        if self._pki_config:
+            cert_path, key_path, ca_path = self._pki_config
+            info.update({
+                "cert_path": cert_path,
+                "key_path": key_path,
+                "ca_path": ca_path
+            })
+        
+        return info
     
     @contextmanager
     def get_session(self):
@@ -232,7 +320,8 @@ class SessionManager:
         info = {
             "session_configured": self._session is not None,
             "adapters": list(self._adapters.keys()),
-            "default_timeout": self._default_timeout
+            "default_timeout": self._default_timeout,
+            "pki_info": self.get_pki_info()
         }
         
         if self._session:

@@ -77,6 +77,7 @@ class SettingsDialog(QDialog):
         self._create_interface_tab()
         self._create_font_tab()
         self._create_advanced_tab()
+        self._create_pki_tab()
         
         # Buttons layout
         button_layout = QHBoxLayout()
@@ -652,6 +653,56 @@ class SettingsDialog(QDialog):
         
         # Create theme tab
         self._create_theme_tab()
+    
+    def _create_pki_tab(self):
+        """Create PKI Authentication settings tab."""
+        try:
+            from ..widgets.pki_settings_widget import PKISettingsWidget
+            
+            # Create PKI settings widget
+            self.pki_widget = PKISettingsWidget()
+            
+            # Connect PKI status changes
+            self.pki_widget.pki_status_changed.connect(self._on_pki_status_changed)
+            
+            # Add as tab
+            self.tab_widget.addTab(self.pki_widget, "PKI Auth")
+            
+        except ImportError as e:
+            logger.warning(f"PKI settings not available: {e}")
+            # Create a placeholder tab
+            placeholder = QWidget()
+            layout = QVBoxLayout(placeholder)
+            
+            info_label = QLabel("""
+            <h3>PKI Authentication Not Available</h3>
+            <p>PKI (Public Key Infrastructure) authentication features are not available 
+            in this installation.</p>
+            
+            <p>To enable PKI authentication:</p>
+            <ul>
+            <li>Ensure the cryptography library is installed</li>
+            <li>Contact your administrator for PKI setup assistance</li>
+            </ul>
+            """)
+            info_label.setWordWrap(True)
+            layout.addWidget(info_label)
+            layout.addStretch()
+            
+            self.tab_widget.addTab(placeholder, "PKI Auth")
+    
+    def _on_pki_status_changed(self, enabled: bool):
+        """Handle PKI authentication status changes."""
+        try:
+            logger.info(f"PKI authentication {'enabled' if enabled else 'disabled'}")
+            
+            # You could add additional handling here, such as:
+            # - Updating other parts of the application
+            # - Refreshing connection settings
+            # - Notifying the main application window
+            
+        except Exception as e:
+            logger.error(f"Error handling PKI status change: {e}")
         
         # Update config path
         self._update_config_path_display()
