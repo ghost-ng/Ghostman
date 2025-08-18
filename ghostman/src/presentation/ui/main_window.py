@@ -28,6 +28,7 @@ class MainWindow(QMainWindow):
     minimize_requested = pyqtSignal()
     close_requested = pyqtSignal()
     settings_requested = pyqtSignal()
+    help_requested = pyqtSignal()
     conversations_requested = pyqtSignal()
     
     def __init__(self, app_coordinator):
@@ -69,6 +70,7 @@ class MainWindow(QMainWindow):
         self.floating_repl.command_entered.connect(self._on_command_entered)
         # Connect REPL widget signals through floating REPL
         self.floating_repl.repl_widget.settings_requested.connect(self.settings_requested.emit)
+        self.floating_repl.repl_widget.help_requested.connect(self.help_requested.emit)
         self.floating_repl.repl_widget.browse_requested.connect(self._show_conversations)
         # Wire attach toggle from REPL title bar
         if hasattr(self.floating_repl.repl_widget, 'attach_toggle_requested'):
@@ -209,7 +211,10 @@ class MainWindow(QMainWindow):
         # If REPL is attached, move it along with the avatar using stored offset
         try:
             if self._repl_attached and self.floating_repl and self.floating_repl.isVisible():
+                logger.debug(f"🔗 Avatar moved - moving attached REPL. Avatar at: {self.pos()}")
                 self._move_attached_repl()
+            elif self._repl_attached:
+                logger.debug(f"🔗 Avatar moved but REPL not visible (attached={self._repl_attached})")
         except Exception as e:
             logger.debug(f"Failed to move attached REPL: {e}")
         # Save state after move
@@ -217,8 +222,13 @@ class MainWindow(QMainWindow):
     
     def closeEvent(self, event: QCloseEvent):
         """Handle window close event."""
+        # Save REPL visibility state before hiding
+        repl_was_visible = self.floating_repl and self.floating_repl.isVisible()
+        settings.set('interface.repl_was_visible', repl_was_visible)
+        logger.debug(f"Saved REPL visibility state on close: {repl_was_visible}")
+        
         # Hide floating REPL if it's visible
-        if self.floating_repl and self.floating_repl.isVisible():
+        if repl_was_visible:
             self.floating_repl.hide()
             logger.debug("Floating REPL hidden due to window close")
         
@@ -248,12 +258,27 @@ class MainWindow(QMainWindow):
         self.show()
         self.raise_()
         self.activateWindow()
+        
+        # Restore REPL visibility if it was previously visible
+        try:
+            repl_was_visible = settings.get('interface.repl_was_visible', False)
+            if repl_was_visible and self.floating_repl:
+                logger.debug(f"Restoring REPL visibility: {repl_was_visible}")
+                self._show_repl()
+        except Exception as e:
+            logger.error(f"Failed to restore REPL visibility: {e}")
+        
         logger.debug("Window shown and activated")
     
     def minimize_to_tray(self):
         """Minimize the window to system tray."""
+        # Save REPL visibility state before hiding
+        repl_was_visible = self.floating_repl and self.floating_repl.isVisible()
+        settings.set('interface.repl_was_visible', repl_was_visible)
+        logger.debug(f"Saved REPL visibility state: {repl_was_visible}")
+        
         # Hide floating REPL if it's visible
-        if self.floating_repl and self.floating_repl.isVisible():
+        if repl_was_visible:
             self.floating_repl.hide()
             logger.debug("Floating REPL hidden due to minimize to tray")
         
@@ -307,26 +332,38 @@ class MainWindow(QMainWindow):
 
     def _on_attach_toggle(self, attached: bool):
         """Handle attach toggle from REPL title bar."""
+        logger.info(f"🔗 MainWindow received attach toggle signal: {attached}")
         self._repl_attached = bool(attached)
         try:
             # Persist state
             settings.set('interface.repl_attached', self._repl_attached)
+            logger.info(f"🔗 Saved attach state to settings: {self._repl_attached}")
+            
             # Compute and persist offset when attaching
             if self._repl_attached and self.floating_repl:
                 # If REPL not visible yet, compute a sensible default to the right of avatar
                 if not self.floating_repl.isVisible():
+                    logger.info("🔗 REPL not visible, using default offset")
                     self._ensure_attach_offset_default()
                 else:
+                    logger.info("🔗 REPL visible, computing offset from current positions")
                     self._repl_attach_offset = self.floating_repl.pos() - self.pos()
+                    logger.info(f"🔗 Computed offset: {self._repl_attach_offset}")
+                    
                 settings.set('interface.repl_attach_offset', {
                     'x': int(self._repl_attach_offset.x()),
                     'y': int(self._repl_attach_offset.y()),
                 })
+                
                 # If visible, snap immediately
                 if self.floating_repl.isVisible():
                     screen = self.screen()
                     if screen:
+                        logger.info(f"🔗 Snapping REPL to attached position immediately")
                         self.floating_repl.move_attached(self.pos(), self._repl_attach_offset, screen.availableGeometry())
+            else:
+                logger.info(f"🔗 Detached or REPL not available")
+                
             # Update button visual if needed
             if hasattr(self.floating_repl.repl_widget, 'set_attach_state'):
                 self.floating_repl.repl_widget.set_attach_state(self._repl_attached)
@@ -353,16 +390,21 @@ class MainWindow(QMainWindow):
         self.floating_repl.move_attached(self.pos(), self._repl_attach_offset, geom)
 
     def _on_repl_moved(self, repl_pos: QPoint):
-        """When attached and user drags REPL, recompute offset and persist."""
+        """When attached and user drags REPL, move avatar to maintain offset."""
         try:
             if self._repl_attached:
-                self._repl_attach_offset = repl_pos - self.pos()
+                # Calculate where avatar should be based on REPL position and offset
+                new_avatar_pos = repl_pos - self._repl_attach_offset
+                logger.debug(f"🔗 REPL moved to {repl_pos}, moving avatar to {new_avatar_pos}")
+                self.move(new_avatar_pos)
+                # Update the offset for consistency
+                self._repl_attach_offset = repl_pos - new_avatar_pos
                 settings.set('interface.repl_attach_offset', {
                     'x': int(self._repl_attach_offset.x()),
                     'y': int(self._repl_attach_offset.y()),
                 })
         except Exception as e:
-            logger.debug(f"Failed to update attach offset on move: {e}")
+            logger.debug(f"Failed to move avatar on REPL move: {e}")
     
     def _on_command_entered(self, command: str):
         """Handle command from REPL."""

@@ -68,6 +68,7 @@ class AvatarWidget(SimpleAvatarArrowMixin, AvatarResizableMixin, QWidget):
         self.is_dragging = False
         self.drag_start_pos = QPoint()
         self.mouse_press_pos = QPoint()
+        self.window_moved_during_drag = False
         
         # Initialize resize functionality - use simple arrow system
         self._use_simple_arrows = True
@@ -329,12 +330,14 @@ class AvatarWidget(SimpleAvatarArrowMixin, AvatarResizableMixin, QWidget):
             if not is_in_resize_zone:
                 # Normal drag behavior
                 self.is_dragging = True
+                self.window_moved_during_drag = False
                 self.drag_start_pos = event.globalPosition().toPoint() - self.window().pos()
                 self.mouse_press_pos = event.position()
                 logger.debug(f"Mouse pressed for drag at {event.position()}, window pos: {self.window().pos()}")
             else:
                 # Let resize handle this
                 self.is_dragging = False
+                self.window_moved_during_drag = False
                 logger.debug(f"Mouse pressed in resize zone at {event.position()}")
         elif event.button() == Qt.MouseButton.RightButton:
             self._show_context_menu(event.globalPosition().toPoint())
@@ -346,18 +349,23 @@ class AvatarWidget(SimpleAvatarArrowMixin, AvatarResizableMixin, QWidget):
             if self.window():
                 new_pos = event.globalPosition().toPoint() - self.drag_start_pos
                 self.window().move(new_pos)
+                self.window_moved_during_drag = True
                 logger.debug(f"Dragging window to position: {new_pos}")
     
     def mouseReleaseEvent(self, event: QMouseEvent):
         """Handle mouse release events."""
         if event.button() == Qt.MouseButton.LeftButton:
+            was_dragging = self.is_dragging
+            window_moved = self.window_moved_during_drag
             self.is_dragging = False
+            self.window_moved_during_drag = False
             
-            # Check if this was a click (minimal movement) rather than a drag
+            # Only emit avatar_clicked if no actual window movement occurred
+            # Check both mouse movement distance AND whether window actually moved
             distance = (event.position() - self.mouse_press_pos).manhattanLength()
-            logger.debug(f"Mouse released, distance moved: {distance}px")
+            logger.debug(f"Mouse released, distance moved: {distance}px, window moved during drag: {window_moved}")
             
-            if distance < 5:  # Less than 5 pixels = click
+            if not window_moved and distance < 10:  # No window movement AND minimal mouse movement = click
                 logger.debug('Detected click (not drag) - emitting avatar_clicked')
                 self.avatar_clicked.emit()
             else:
