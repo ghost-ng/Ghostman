@@ -240,9 +240,20 @@ class AIService:
         Returns:
             Dict with response information
         """
-        # For now, call the sync version
-        # TODO: Implement proper async support
-        return self.send_message(message, stream=stream)
+        # Run the synchronous send_message in an executor to avoid blocking the event loop
+        import asyncio
+        import concurrent.futures
+        
+        # Create executor if not exists
+        if not hasattr(self, '_executor'):
+            self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+        
+        # Run sync method in executor
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            self._executor,
+            lambda: self.send_message(message, stream=stream)
+        )
     
     def send_message(
         self, 
@@ -460,6 +471,11 @@ class AIService:
         if self.client:
             self.client.close()
             self.client = None
+        
+        # Shutdown executor if it exists
+        if hasattr(self, '_executor'):
+            self._executor.shutdown(wait=True)
+            delattr(self, '_executor')
         
         self._initialized = False
         self._response_callbacks.clear()

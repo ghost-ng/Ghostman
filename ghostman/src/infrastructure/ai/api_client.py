@@ -10,8 +10,10 @@ import logging
 import time
 from typing import Dict, Any, Optional, List, AsyncIterator, Iterator
 from urllib.parse import urljoin
-import httpx
+import requests
 from dataclasses import dataclass
+
+from .session_manager import session_manager
 
 logger = logging.getLogger("ghostman.api_client")
 
@@ -45,6 +47,16 @@ class RateLimitError(APIClientError):
 
 class APIServerError(APIClientError):
     """Server-side error (5xx responses)."""
+    pass
+
+
+class NetworkError(APIClientError):
+    """Network-related error."""
+    pass
+
+
+class TimeoutError(APIClientError):
+    """Request timeout error."""
     pass
 
 
@@ -84,8 +96,12 @@ class OpenAICompatibleClient:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         
-        # Create HTTP client
-        self.client = httpx.Client(timeout=timeout)
+        # Configure the global session manager
+        session_manager.configure_session(
+            timeout=timeout,
+            max_retries=max_retries,
+            backoff_factor=retry_delay
+        )
         
         # Set default headers
         self._setup_headers()
@@ -109,15 +125,15 @@ class OpenAICompatibleClient:
                 # OpenAI and most others use Authorization Bearer
                 headers["Authorization"] = f"Bearer {self.api_key}"
         
-        self.client.headers.update(headers)
+        session_manager.update_headers(headers)
         logger.debug("API client headers configured")
     
-    def _handle_error_response(self, response: httpx.Response) -> APIClientError:
+    def _handle_error_response(self, response: requests.Response) -> APIClientError:
         """Convert HTTP error responses to appropriate exceptions."""
         try:
             error_data = response.json()
             error_message = error_data.get("error", {}).get("message", "Unknown error")
-        except (json.JSONDecodeError, KeyError):
+        except (json.JSONDecodeError, KeyError, ValueError):
             error_message = f"HTTP {response.status_code}: {response.text[:200]}"
         
         if response.status_code == 401:
@@ -156,16 +172,19 @@ class OpenAICompatibleClient:
         """
         url = urljoin(f"{self.base_url}/", endpoint.lstrip('/'))
         
+        # Retry logic is now handled by the session manager's HTTPAdapter
+        # But we'll keep manual retry for specific error handling
         for attempt in range(self.max_retries + 1):
             try:
                 logger.debug(f"API request attempt {attempt + 1}: {method} {url}")
                 
-                # Make the request
-                response = self.client.request(
+                # Make the request using session manager
+                response = session_manager.make_request(
                     method=method,
                     url=url,
                     json=data if data else None,
-                    params=params
+                    params=params,
+                    timeout=self.timeout
                 )
                 
                 # Check for success
@@ -178,7 +197,7 @@ class OpenAICompatibleClient:
                             status_code=response.status_code,
                             headers=dict(response.headers)
                         )
-                    except json.JSONDecodeError:
+                    except (json.JSONDecodeError, ValueError):
                         return APIResponse(
                             success=True,
                             data={"text": response.text},
@@ -211,7 +230,7 @@ class OpenAICompatibleClient:
                     headers=dict(response.headers)
                 )
                 
-            except httpx.TimeoutException as e:
+            except requests.Timeout as e:
                 if attempt < self.max_retries:
                     delay = self.retry_delay * (2 ** attempt)
                     logger.warning(f"Request timeout, retrying in {delay}s: {e}")
@@ -224,7 +243,20 @@ class OpenAICompatibleClient:
                     status_code=None
                 )
             
-            except httpx.RequestError as e:
+            except requests.ConnectionError as e:
+                if attempt < self.max_retries:
+                    delay = self.retry_delay * (2 ** attempt)
+                    logger.warning(f"Connection error, retrying in {delay}s: {e}")
+                    time.sleep(delay)
+                    continue
+                
+                return APIResponse(
+                    success=False,
+                    error=f"Connection error: {str(e)}",
+                    status_code=None
+                )
+            
+            except requests.RequestException as e:
                 if attempt < self.max_retries:
                     delay = self.retry_delay * (2 ** attempt)
                     logger.warning(f"Request error, retrying in {delay}s: {e}")
@@ -351,9 +383,9 @@ class OpenAICompatibleClient:
     
     def close(self):
         """Close the HTTP client."""
-        if hasattr(self, 'client') and self.client:
-            self.client.close()
-            logger.debug("API client closed")
+        # Session is managed globally, so we don't close it here
+        # Individual clients just remove their specific headers
+        logger.debug("API client closed")
     
     def __enter__(self):
         """Context manager entry."""
