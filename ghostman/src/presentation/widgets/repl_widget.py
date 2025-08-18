@@ -2604,6 +2604,32 @@ class REPLWidget(QWidget):
         if not self.conversation_manager or not conversation_id:
             return
         
+        # Check if conversation needs summarization
+        try:
+            # Check current conversation
+            if self.current_conversation and self.current_conversation.id == conversation_id:
+                # Skip if no messages
+                if self.current_conversation.message_count == 0:
+                    logger.debug(f"⏭️ Skipping summarization for {conversation_id}: No messages")
+                    return
+                
+                # Skip if already has a summary (title is set and not default)
+                if (hasattr(self.current_conversation, 'title') and 
+                    self.current_conversation.title and 
+                    not self.current_conversation.title.startswith('New Conversation')):
+                    logger.debug(f"⏭️ Skipping summarization for {conversation_id}: Already has title/summary")
+                    return
+                
+                # Track messages since last summary
+                MIN_MESSAGES_FOR_SUMMARY = 2  # Minimum messages needed for a summary
+                if self.current_conversation.message_count < MIN_MESSAGES_FOR_SUMMARY:
+                    logger.debug(f"⏭️ Skipping summarization for {conversation_id}: Only {self.current_conversation.message_count} messages (min: {MIN_MESSAGES_FOR_SUMMARY})")
+                    return
+                    
+        except Exception as e:
+            logger.error(f"Failed to check conversation before summarization: {e}")
+            return
+        
         # Add to summarization queue if not already present
         if conversation_id not in self.summarization_queue:
             self.summarization_queue.append(conversation_id)
@@ -2629,55 +2655,51 @@ class REPLWidget(QWidget):
         
         logger.info("🔄 Starting background summarization...")
         
-        # Create background worker
-        class SummarizationWorker(QObject):
-            finished = pyqtSignal(str, bool)  # conversation_id, success
-            
-            def __init__(self, conversation_manager, conversation_id):
-                super().__init__()
-                self.conversation_manager = conversation_manager
-                self.conversation_id = conversation_id
-            
-            def run(self):
-                try:
-                    # Get summary service
-                    if hasattr(self.conversation_manager, 'conversation_service'):
-                        summary_service = self.conversation_manager.conversation_service.summary_service
-                        
-                        # Generate summary asynchronously
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        try:
-                            success = loop.run_until_complete(
-                                summary_service.generate_summary(self.conversation_id)
-                            )
-                            self.finished.emit(self.conversation_id, success)
-                        finally:
-                            loop.close()
-                    else:
-                        self.finished.emit(self.conversation_id, False)
-                        
-                except Exception as e:
-                    logger.error(f"Summarization worker error: {e}")
-                    self.finished.emit(self.conversation_id, False)
-        
-        # Process first conversation in queue
+        # Process first conversation in queue asynchronously
         conversation_id = self.summarization_queue[0]
         
-        # Create and start worker thread
-        self.summary_thread = QThread()
-        self.summary_worker = SummarizationWorker(self.conversation_manager, conversation_id)
-        self.summary_worker.moveToThread(self.summary_thread)
+        # Start async summarization without blocking the UI
+        QTimer.singleShot(0, lambda: self._run_summarization_async(conversation_id))
+    
+    def _run_summarization_async(self, conversation_id: str):
+        """Run summarization asynchronously without blocking the UI."""
+        async def async_summarization():
+            try:
+                if hasattr(self.conversation_manager, 'conversation_service'):
+                    summary_service = self.conversation_manager.conversation_service.summary_service
+                    
+                    # Generate summary - this is already async
+                    success = await summary_service.generate_summary(conversation_id)
+                    
+                    # Call completion handler on main thread
+                    QTimer.singleShot(0, lambda: self._on_summarization_finished(conversation_id, success))
+                else:
+                    QTimer.singleShot(0, lambda: self._on_summarization_finished(conversation_id, False))
+                    
+            except Exception as e:
+                logger.error(f"Async summarization error: {e}")
+                QTimer.singleShot(0, lambda: self._on_summarization_finished(conversation_id, False))
         
-        # Connect signals
-        self.summary_thread.started.connect(self.summary_worker.run)
-        self.summary_worker.finished.connect(self._on_summarization_finished)
-        self.summary_worker.finished.connect(self.summary_thread.quit)
-        self.summary_worker.finished.connect(self.summary_worker.deleteLater)
-        self.summary_thread.finished.connect(self.summary_thread.deleteLater)
-        
-        # Start processing
-        self.summary_thread.start()
+        # Run the async function using asyncio
+        try:
+            import asyncio
+            
+            # Try to get existing event loop
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # Create task if loop is already running
+                    asyncio.create_task(async_summarization())
+                else:
+                    # Run until complete if loop is not running
+                    loop.run_until_complete(async_summarization())
+            except RuntimeError:
+                # No event loop exists, create a new one
+                asyncio.run(async_summarization())
+                
+        except Exception as e:
+            logger.error(f"Failed to run async summarization: {e}")
+            self._on_summarization_finished(conversation_id, False)
     
     @pyqtSlot(str, bool)
     def _on_summarization_finished(self, conversation_id: str, success: bool):
@@ -4516,10 +4538,9 @@ class REPLWidget(QWidget):
                 self.ai_thread.quit()
                 self.ai_thread.wait(3000)  # Wait up to 3 seconds
             
-            # Stop summarization threads
-            if hasattr(self, 'summary_thread') and self.summary_thread.isRunning():
-                self.summary_thread.quit()
-                self.summary_thread.wait(3000)
+            # Clear summarization queue
+            self.summarization_queue.clear()
+            self.is_summarizing = False
             
             # Clear conversation references
             self.current_conversation = None

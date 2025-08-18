@@ -100,9 +100,9 @@ Respond with ONLY the title, no other text.
             # Generate summary prompt
             prompt = self._build_summary_prompt(conversation, summary_content)
             
-            # Call AI service
+            # Call AI service asynchronously
             logger.info(f"Generating summary for conversation: {conversation_id}")
-            result = ai_service.send_message(prompt)
+            result = await ai_service.send_message_async(prompt)
             
             if not result.get('success', False):
                 logger.error(f"AI summary generation failed: {result.get('error', 'Unknown error')}")
@@ -164,9 +164,9 @@ Respond with ONLY the title, no other text.
             # Generate title prompt
             prompt = self.TITLE_PROMPT_TEMPLATE.format(content=title_content)
             
-            # Call AI service
+            # Call AI service asynchronously
             logger.info(f"Generating title for conversation: {conversation_id}")
-            result = ai_service.send_message(prompt)
+            result = await ai_service.send_message_async(prompt)
             
             if not result.get('success', False):
                 logger.error(f"AI title generation failed: {result.get('error', 'Unknown error')}")
