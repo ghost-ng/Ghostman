@@ -47,13 +47,26 @@ def build_source():
 
 def build_executable():
     """Build standalone executable with PyInstaller."""
-    # Use the existing spec file
-    spec_file = Path('ghost-ng.spec')
-    if not spec_file.exists():
-        print("❌ ghost-ng.spec file not found!")
-        return False
+    # Create a PyInstaller command for Ghostman
+    pyinstaller_cmd = [
+        "pyinstaller",
+        "--name=ghostman",
+        "--onefile",
+        "--windowed",
+        "--icon=ghostman/assets/avatar.ico" if Path('ghostman/assets/avatar.ico').exists() else "",
+        "--add-data=ghostman/assets:ghostman/assets",
+        "--add-data=ghostman/__version__.py:ghostman",
+        "--hidden-import=PyQt6",
+        "--hidden-import=markdown",
+        "--hidden-import=aiohttp",
+        "--hidden-import=sqlalchemy",
+        "ghostman/__main__.py"
+    ]
     
-    return run_command("pyinstaller ghost-ng.spec", "Building standalone executable")
+    # Filter out empty strings
+    pyinstaller_cmd = [arg for arg in pyinstaller_cmd if arg]
+    
+    return run_command(' '.join(pyinstaller_cmd), "Building standalone executable")
 
 def main():
     """Main build process."""
@@ -86,8 +99,8 @@ def main():
         print("\nArtifacts created:")
         print("📦 Source: dist/*.tar.gz")
         print("🎯 Wheel: dist/*.whl")
-        if Path('dist/ghost-ng').exists() or Path('dist/ghost-ng.exe').exists():
-            print("💾 Executable: dist/ghost-ng or dist/ghost-ng.exe")
+        if Path('dist/ghostman').exists() or Path('dist/ghostman.exe').exists():
+            print("💾 Executable: dist/ghostman or dist/ghostman.exe")
     else:
         print("\n❌ Build failed!")
         sys.exit(1)
