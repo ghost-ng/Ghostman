@@ -79,7 +79,11 @@
       "WebFetch(domain:open-ui.org)",
       "WebFetch(domain:openwebui.com)",
       "WebFetch(domain:www.server-world.info)",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "Bash(gh workflow run:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(git tag:*)"
     ],
     "deny": []
   }
