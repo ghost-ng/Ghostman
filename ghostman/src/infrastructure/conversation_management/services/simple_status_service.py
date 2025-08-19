@@ -42,14 +42,14 @@ class SimpleStatusService:
                 session.commit()
                 
                 if result.rowcount > 0:
-                    logger.info(f"✅ Set conversation {conversation_id[:8]}... as ACTIVE")
+                    logger.info(f"✓ Set conversation {conversation_id[:8]}... as ACTIVE")
                     return True
                 else:
-                    logger.warning(f"⚠️  Conversation {conversation_id} not found")
+                    logger.warning(f"⚠  Conversation {conversation_id} not found")
                     return False
                     
         except Exception as e:
-            logger.error(f"❌ Failed to set conversation active: {e}")
+            logger.error(f"✗ Failed to set conversation active: {e}")
             return False
     
     def get_active_conversation_id(self) -> Optional[str]:
@@ -67,7 +67,7 @@ class SimpleStatusService:
                 return row[0] if row else None
                 
         except Exception as e:
-            logger.error(f"❌ Failed to get active conversation: {e}")
+            logger.error(f"✗ Failed to get active conversation: {e}")
             return None
     
     def get_conversation_status(self, conversation_id: str) -> Optional[ConversationStatus]:
@@ -85,7 +85,7 @@ class SimpleStatusService:
                 return None
                 
         except Exception as e:
-            logger.error(f"❌ Failed to get conversation status: {e}")
+            logger.error(f"✗ Failed to get conversation status: {e}")
             return None
     
     def count_conversations_by_status(self) -> dict:
@@ -101,7 +101,7 @@ class SimpleStatusService:
                 return {row[0]: row[1] for row in result.fetchall()}
                 
         except Exception as e:
-            logger.error(f"❌ Failed to count conversations: {e}")
+            logger.error(f"✗ Failed to count conversations: {e}")
             return {}
     
     def fix_multiple_active_conversations(self) -> bool:
@@ -121,10 +121,10 @@ class SimpleStatusService:
                 active_conversations = result.fetchall()
                 
                 if len(active_conversations) <= 1:
-                    logger.info(f"✅ Conversation uniqueness OK: {len(active_conversations)} active conversations")
+                    logger.info(f"✓ Conversation uniqueness OK: {len(active_conversations)} active conversations")
                     return True
                 
-                logger.warning(f"⚠️  Found {len(active_conversations)} active conversations, fixing...")
+                logger.warning(f"⚠  Found {len(active_conversations)} active conversations, fixing...")
                 
                 # Keep the most recent one, set others to pinned
                 most_recent_id = active_conversations[0][0]
@@ -145,9 +145,9 @@ class SimpleStatusService:
                 
                 session.commit()
                 
-                logger.info(f"✅ Fixed multiple active conversations, kept {most_recent_id[:8]}... as active")
+                logger.info(f"✓ Fixed multiple active conversations, kept {most_recent_id[:8]}... as active")
                 return True
                 
         except Exception as e:
-            logger.error(f"❌ Failed to fix multiple active conversations: {e}")
+            logger.error(f"✗ Failed to fix multiple active conversations: {e}")
             return False

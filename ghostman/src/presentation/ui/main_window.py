@@ -343,9 +343,9 @@ class MainWindow(QMainWindow):
                             self.floating_repl.move(repl_x, repl_y)
                             self._repl_attach_offset = QPoint(repl_x, repl_y) - avatar_pos
                             repl_positioned_by_saved = True
-                            logger.debug(f'✅ Used saved REPL position: ({repl_x}, {repl_y}), offset: {self._repl_attach_offset}')
+                            logger.debug(f'✓ Used saved REPL position: ({repl_x}, {repl_y}), offset: {self._repl_attach_offset}')
                         else:
-                            logger.debug(f'❌ Saved REPL position validation failed: {validation_result["reason"]}')
+                            logger.debug(f'✗ Saved REPL position validation failed: {validation_result["reason"]}')
                             # Auto-debug when validation fails
                             if logger.isEnabledFor(logging.DEBUG):
                                 self.debug_attachment_state()
@@ -715,7 +715,7 @@ class MainWindow(QMainWindow):
             # Apply the window flags immediately via app coordinator
             if hasattr(self.app_coordinator, '_update_window_flags'):
                 self.app_coordinator._update_window_flags(always_on_top)
-                logger.info(f"✅ Applied always on top setting: {always_on_top}")
+                logger.info(f"✓ Applied always on top setting: {always_on_top}")
             else:
                 logger.warning("App coordinator doesn't have _update_window_flags method")
                 
@@ -893,9 +893,9 @@ class MainWindow(QMainWindow):
                 # Restore the conversation in the REPL widget
                 if hasattr(self.floating_repl.repl_widget, 'restore_conversation'):
                     self.floating_repl.repl_widget.restore_conversation(conversation_id)
-                    logger.info(f"✅ Conversation {conversation_id} restoration initiated in REPL")
+                    logger.info(f"✓ Conversation {conversation_id} restoration initiated in REPL")
                 else:
-                    logger.error("❌ REPL widget doesn't have restore_conversation method")
+                    logger.error("✗ REPL widget doesn't have restore_conversation method")
                 
                 # Update conversation browser to reflect the change
                 if self.conversation_browser:

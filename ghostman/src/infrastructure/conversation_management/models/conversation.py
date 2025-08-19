@@ -229,6 +229,8 @@ class Conversation:
         """Get total message count."""
         # If messages are loaded, use actual count
         if hasattr(self, 'messages') and self.messages:
+            # Update cached count to match actual count
+            self._message_count = len(self.messages)
             return len(self.messages)
         
         # If we have a cached message count from database, use it
@@ -237,6 +239,10 @@ class Conversation:
         
         # Fallback to 0 if no messages loaded and no cached count
         return 0
+    
+    def set_message_count(self, count: int):
+        """Set the cached message count (used for UI updates)."""
+        self._message_count = count
     
     def get_token_count(self) -> int:
         """Get estimated total token count."""

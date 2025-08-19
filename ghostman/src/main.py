@@ -156,15 +156,31 @@ def main():
     
     # Setup logging - check settings for detailed mode first
     debug_mode = args.debug
+    log_retention_days = 10  # default
+    custom_log_dir = None
     try:
         from ghostman.src.infrastructure.storage.settings_manager import settings
         log_mode = settings.get("advanced.log_level", "Standard")
         if log_mode == "Detailed":
             debug_mode = True
+        
+        # Load log retention days
+        log_retention_days = settings.get("advanced.log_retention_days", 10)
+        if not isinstance(log_retention_days, int) or log_retention_days < 1:
+            log_retention_days = 10
+        
+        # Load custom log location (override CLI arg if set in config)
+        config_log_location = settings.get("advanced.log_location", "").strip()
+        if config_log_location and not args.log_dir:  # Only use config if CLI not specified
+            custom_log_dir = config_log_location
+            
     except Exception:
-        pass  # Use command line arg if settings unavailable
+        pass  # Use defaults if settings unavailable
     
-    setup_logging(debug=debug_mode, log_dir=args.log_dir)
+    # Use CLI log_dir if specified, otherwise use config log location, otherwise use default
+    final_log_dir = args.log_dir or custom_log_dir
+    
+    setup_logging(debug=debug_mode, log_dir=final_log_dir, retention_days=log_retention_days)
     
     logger.info("=" * 60)
     logger.info("GHOSTMAN APPLICATION STARTING")

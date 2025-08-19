@@ -45,10 +45,10 @@ class MigrationManager:
         try:
             logger.info(f"Running migrations to revision: {target_revision}")
             command.upgrade(self.alembic_cfg, target_revision)
-            logger.info("✅ Database migrations completed successfully")
+            logger.info("✓ Database migrations completed successfully")
             return True
         except Exception as e:
-            logger.error(f"❌ Migration failed: {e}")
+            logger.error(f"✗ Migration failed: {e}")
             return False
     
     def create_migration(self, message: str, autogenerate: bool = True) -> bool:
@@ -60,10 +60,10 @@ class MigrationManager:
                 message=message, 
                 autogenerate=autogenerate
             )
-            logger.info("✅ Migration file created successfully")
+            logger.info("✓ Migration file created successfully")
             return True
         except Exception as e:
-            logger.error(f"❌ Failed to create migration: {e}")
+            logger.error(f"✗ Failed to create migration: {e}")
             return False
     
     def get_current_revision(self) -> Optional[str]:
@@ -112,11 +112,11 @@ class MigrationManager:
                     # Test query
                     session.execute(text("SELECT 1"))
                 
-            logger.info("✅ Database initialization completed")
+            logger.info("✓ Database initialization completed")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Database initialization failed: {e}")
+            logger.error(f"✗ Database initialization failed: {e}")
             return False
     
     def reset_database(self) -> bool:
@@ -135,7 +135,7 @@ class MigrationManager:
             return False
             
         except Exception as e:
-            logger.error(f"❌ Database reset failed: {e}")
+            logger.error(f"✗ Database reset failed: {e}")
             return False
     
     def get_migration_history(self) -> list:

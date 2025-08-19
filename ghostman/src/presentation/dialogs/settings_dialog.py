@@ -12,7 +12,8 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget,
     QLabel, QLineEdit, QPushButton, QComboBox, QTextEdit,
     QGroupBox, QFormLayout, QCheckBox, QSpinBox, QDoubleSpinBox,
-    QFileDialog, QMessageBox, QSplitter, QListWidget, QListWidgetItem
+    QFileDialog, QMessageBox, QSplitter, QListWidget, QListWidgetItem,
+    QAbstractSpinBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QStandardPaths
 from PyQt6.QtGui import QFont, QIcon
@@ -77,6 +78,7 @@ class SettingsDialog(QDialog):
         self._create_interface_tab()
         self._create_font_tab()
         self._create_advanced_tab()
+        self._create_pki_tab()
         
         # Buttons layout
         button_layout = QHBoxLayout()
@@ -241,7 +243,7 @@ class SettingsDialog(QDialog):
         
         # Decrease button
         self.opacity_decrease_btn = QPushButton("-")
-        self.opacity_decrease_btn.setMaximumWidth(30)
+        self.opacity_decrease_btn.setMaximumWidth(20)
         self.opacity_decrease_btn.clicked.connect(lambda: self._adjust_opacity(-5))
         
         # Opacity spin box
@@ -249,11 +251,12 @@ class SettingsDialog(QDialog):
         self.opacity_percent_spin.setRange(10, 100)
         self.opacity_percent_spin.setSingleStep(5)
         self.opacity_percent_spin.setValue(90)
+        self.opacity_percent_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         self.opacity_percent_spin.valueChanged.connect(self._on_opacity_preview)
         
         # Increase button
         self.opacity_increase_btn = QPushButton("+")
-        self.opacity_increase_btn.setMaximumWidth(30)
+        self.opacity_increase_btn.setMaximumWidth(20)
         self.opacity_increase_btn.clicked.connect(lambda: self._adjust_opacity(5))
         
         opacity_layout.addWidget(self.opacity_decrease_btn)
@@ -303,17 +306,18 @@ class SettingsDialog(QDialog):
         
         # Decrease button with proper styling
         self.ai_font_size_decrease_btn = QPushButton("-")
-        self.ai_font_size_decrease_btn.setMaximumWidth(30)
+        self.ai_font_size_decrease_btn.setMaximumWidth(20)
         self.ai_font_size_decrease_btn.clicked.connect(lambda: self._adjust_ai_font_size(-1))
         
         # Font size spin box
         self.ai_font_size_spin = QSpinBox()
         self.ai_font_size_spin.setRange(6, 72)
         self.ai_font_size_spin.setValue(11)
+        self.ai_font_size_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         
         # Increase button with proper styling
         self.ai_font_size_increase_btn = QPushButton("+")
-        self.ai_font_size_increase_btn.setMaximumWidth(30)
+        self.ai_font_size_increase_btn.setMaximumWidth(20)
         self.ai_font_size_increase_btn.clicked.connect(lambda: self._adjust_ai_font_size(1))
         
         ai_font_size_layout.addWidget(self.ai_font_size_decrease_btn)
@@ -350,17 +354,18 @@ class SettingsDialog(QDialog):
         
         # Decrease button with proper styling
         self.user_font_size_decrease_btn = QPushButton("-")
-        self.user_font_size_decrease_btn.setMaximumWidth(30)
+        self.user_font_size_decrease_btn.setMaximumWidth(20)
         self.user_font_size_decrease_btn.clicked.connect(lambda: self._adjust_user_font_size(-1))
         
         # Font size spin box
         self.user_font_size_spin = QSpinBox()
         self.user_font_size_spin.setRange(6, 72)
         self.user_font_size_spin.setValue(10)
+        self.user_font_size_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         
         # Increase button with proper styling
         self.user_font_size_increase_btn = QPushButton("+")
-        self.user_font_size_increase_btn.setMaximumWidth(30)
+        self.user_font_size_increase_btn.setMaximumWidth(20)
         self.user_font_size_increase_btn.clicked.connect(lambda: self._adjust_user_font_size(1))
         
         user_font_size_layout.addWidget(self.user_font_size_decrease_btn)
@@ -472,6 +477,12 @@ class SettingsDialog(QDialog):
         current_opacity = self.opacity_percent_spin.value()
         new_opacity = max(10, min(100, current_opacity + delta))
         self.opacity_percent_spin.setValue(new_opacity)
+    
+    def _adjust_log_retention(self, delta):
+        """Adjust log retention days by the given delta."""
+        current_retention = self.log_retention_spin.value()
+        new_retention = max(1, min(365, current_retention + delta))
+        self.log_retention_spin.setValue(new_retention)
     
     def _apply_font_changes_immediately(self):
         """Apply font changes immediately without waiting for the Apply button."""
@@ -631,6 +642,54 @@ class SettingsDialog(QDialog):
         self.log_level_combo.setCurrentText("Standard")
         logging_layout.addRow("Logging Mode:", self.log_level_combo)
         
+        # Log location section
+        log_location_layout = QHBoxLayout()
+        self.log_location_edit = QLineEdit()
+        self.log_location_edit.setPlaceholderText("Default log location will be used")
+        self.log_location_edit.setReadOnly(True)
+        self.log_location_browse_btn = QPushButton("Browse...")
+        self.log_location_browse_btn.clicked.connect(self._browse_log_location)
+        self.log_location_default_btn = QPushButton("Use Default")
+        self.log_location_default_btn.clicked.connect(self._use_default_log_location)
+        
+        log_location_layout.addWidget(self.log_location_edit)
+        log_location_layout.addWidget(self.log_location_browse_btn)
+        log_location_layout.addWidget(self.log_location_default_btn)
+        
+        logging_layout.addRow("Log Location:", log_location_layout)
+        
+        # Log retention days with +/- buttons
+        retention_layout = QHBoxLayout()
+        
+        # Decrease button
+        self.log_retention_decrease_btn = QPushButton("-")
+        self.log_retention_decrease_btn.setMaximumWidth(20)
+        self.log_retention_decrease_btn.clicked.connect(lambda: self._adjust_log_retention(-1))
+        
+        # Retention days spin box
+        self.log_retention_spin = QSpinBox()
+        self.log_retention_spin.setRange(1, 365)
+        self.log_retention_spin.setValue(10)  # Default 10 days
+        self.log_retention_spin.setSuffix(" days")
+        self.log_retention_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        
+        # Increase button
+        self.log_retention_increase_btn = QPushButton("+")
+        self.log_retention_increase_btn.setMaximumWidth(20)
+        self.log_retention_increase_btn.clicked.connect(lambda: self._adjust_log_retention(1))
+        
+        retention_layout.addWidget(self.log_retention_decrease_btn)
+        retention_layout.addWidget(self.log_retention_spin)
+        retention_layout.addWidget(self.log_retention_increase_btn)
+        retention_layout.addStretch()
+        
+        logging_layout.addRow("Log Retention:", retention_layout)
+        
+        # Open log folder button
+        self.open_log_folder_btn = QPushButton("Open Log Folder")
+        self.open_log_folder_btn.clicked.connect(self._open_log_folder)
+        logging_layout.addRow("", self.open_log_folder_btn)
+        
         layout.addWidget(logging_group)
         
         # Data Storage Group
@@ -652,6 +711,56 @@ class SettingsDialog(QDialog):
         
         # Create theme tab
         self._create_theme_tab()
+    
+    def _create_pki_tab(self):
+        """Create PKI Authentication settings tab."""
+        try:
+            from ..widgets.pki_settings_widget import PKISettingsWidget
+            
+            # Create PKI settings widget
+            self.pki_widget = PKISettingsWidget()
+            
+            # Connect PKI status changes
+            self.pki_widget.pki_status_changed.connect(self._on_pki_status_changed)
+            
+            # Add as tab
+            self.tab_widget.addTab(self.pki_widget, "PKI Auth")
+            
+        except ImportError as e:
+            logger.warning(f"PKI settings not available: {e}")
+            # Create a placeholder tab
+            placeholder = QWidget()
+            layout = QVBoxLayout(placeholder)
+            
+            info_label = QLabel("""
+            <h3>PKI Authentication Not Available</h3>
+            <p>PKI (Public Key Infrastructure) authentication features are not available 
+            in this installation.</p>
+            
+            <p>To enable PKI authentication:</p>
+            <ul>
+            <li>Ensure the cryptography library is installed</li>
+            <li>Contact your administrator for PKI setup assistance</li>
+            </ul>
+            """)
+            info_label.setWordWrap(True)
+            layout.addWidget(info_label)
+            layout.addStretch()
+            
+            self.tab_widget.addTab(placeholder, "PKI Auth")
+    
+    def _on_pki_status_changed(self, enabled: bool):
+        """Handle PKI authentication status changes."""
+        try:
+            logger.info(f"PKI authentication {'enabled' if enabled else 'disabled'}")
+            
+            # You could add additional handling here, such as:
+            # - Updating other parts of the application
+            # - Refreshing connection settings
+            # - Notifying the main application window
+            
+        except Exception as e:
+            logger.error(f"Error handling PKI status change: {e}")
         
         # Update config path
         self._update_config_path_display()
@@ -1179,7 +1288,7 @@ class SettingsDialog(QDialog):
         
         # Validate required fields
         if not config['model_name'] or not config['base_url']:
-            self._finish_test(False, "❌ Missing model name or base URL")
+            self._finish_test(False, "✗ Missing model name or base URL")
             return
         
         # Run test in a separate thread to avoid blocking UI
@@ -1206,15 +1315,15 @@ class SettingsDialog(QDialog):
                         service.shutdown()
                         
                         if result['success']:
-                            self.finished.emit(True, "✅ Connection successful", result.get('details', {}))
+                            self.finished.emit(True, "✓ Connection successful", result.get('details', {}))
                         else:
-                            self.finished.emit(False, f"❌ {result['message']}", {})
+                            self.finished.emit(False, f"✗ {result['message']}", {})
                     else:
-                        self.finished.emit(False, "❌ Failed to initialize AI service", {})
+                        self.finished.emit(False, "✗ Failed to initialize AI service", {})
                         
                 except Exception as e:
                     logger.error(f"Connection test error: {e}")
-                    self.finished.emit(False, f"❌ Error: {str(e)}", {})
+                    self.finished.emit(False, f"✗ Error: {str(e)}", {})
         
         # Create worker and thread
         self.test_thread = QThread()
@@ -1277,6 +1386,57 @@ class SettingsDialog(QDialog):
         config_dir = self._get_config_dir()
         os.startfile(config_dir)
         logger.debug(f"Opened config folder: {config_dir}")
+    
+    def _browse_log_location(self):
+        """Browse for custom log location."""
+        current_location = self.log_location_edit.text().strip()
+        if not current_location:
+            # Get default log location
+            try:
+                from ...infrastructure.logging.logging_config import _resolve_log_dir
+                current_location = str(_resolve_log_dir())
+            except Exception:
+                current_location = ""
+        
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "Select Log Directory",
+            current_location
+        )
+        
+        if folder:
+            self.log_location_edit.setText(folder)
+            self.log_location_edit.setReadOnly(False)
+            logger.debug(f"Selected custom log location: {folder}")
+    
+    def _use_default_log_location(self):
+        """Reset to default log location."""
+        self.log_location_edit.clear()
+        self.log_location_edit.setPlaceholderText("Default log location will be used")
+        self.log_location_edit.setReadOnly(True)
+        logger.debug("Reset to default log location")
+    
+    def _open_log_folder(self):
+        """Open the current log folder in file explorer."""
+        log_location = self.log_location_edit.text().strip()
+        
+        if not log_location:
+            # Use default location
+            try:
+                from ...infrastructure.logging.logging_config import _resolve_log_dir
+                log_location = str(_resolve_log_dir())
+            except Exception as e:
+                QMessageBox.warning(self, "Error", f"Could not determine log location: {e}")
+                return
+        
+        try:
+            if os.path.exists(log_location):
+                os.startfile(log_location)
+                logger.debug(f"Opened log folder: {log_location}")
+            else:
+                QMessageBox.warning(self, "Error", f"Log directory does not exist: {log_location}")
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Could not open log folder: {e}")
     
     def _save_config(self):
         """Save current configuration to a file."""
@@ -1384,7 +1544,9 @@ class SettingsDialog(QDialog):
                 }
             },
             "advanced": {
-                "log_level": self.log_level_combo.currentText()
+                "log_level": self.log_level_combo.currentText(),
+                "log_location": self.log_location_edit.text().strip(),
+                "log_retention_days": self.log_retention_spin.value()
             }
         }
     
@@ -1510,6 +1672,24 @@ class SettingsDialog(QDialog):
                 self.log_level_combo.setCurrentText("Detailed")
             else:
                 self.log_level_combo.setCurrentText("Standard")
+        
+        if "log_location" in advanced_config:
+            log_location = str(advanced_config["log_location"]).strip()
+            if log_location:
+                self.log_location_edit.setText(log_location)
+                self.log_location_edit.setReadOnly(False)
+            else:
+                self._use_default_log_location()
+        
+        if "log_retention_days" in advanced_config:
+            try:
+                retention_days = int(advanced_config["log_retention_days"])
+                if 1 <= retention_days <= 365:
+                    self.log_retention_spin.setValue(retention_days)
+                else:
+                    self.log_retention_spin.setValue(10)  # default
+            except (ValueError, TypeError):
+                self.log_retention_spin.setValue(10)  # default
     
     def _load_current_settings(self):
         """Load current settings from settings manager."""
@@ -1537,15 +1717,15 @@ class SettingsDialog(QDialog):
                     
                     logger.info("🔄 Applying loaded settings to UI...")
                     self._apply_config_to_ui(current_settings)
-                    logger.info("✅ Settings applied to UI successfully")
+                    logger.info("✓ Settings applied to UI successfully")
                 else:
                     logger.info("📦 No existing settings found in storage")
                     self._set_default_values()
             except Exception as e:
-                logger.error(f"❌ Failed to load settings from storage: {e}")
+                logger.error(f"✗ Failed to load settings from storage: {e}")
                 self._set_default_values()
         else:
-            logger.warning("⚠️  No settings manager available - using defaults")
+            logger.warning("⚠  No settings manager available - using defaults")
             self._set_default_values()
         
         logger.info("=== 📥 SETTINGS LOADING COMPLETE ===")
@@ -1559,7 +1739,13 @@ class SettingsDialog(QDialog):
         self.user_prompt_edit.setPlainText(default_user_prompt)
         logger.info(f"📝 Set default user prompt (length: {len(default_user_prompt)})")
         logger.info(f"🎨 Using default opacity: {self.opacity_percent_spin.value()}%")
-        logger.info("✅ Default values set")
+        
+        # Set default log settings
+        self._use_default_log_location()
+        self.log_retention_spin.setValue(10)  # Default 10 days
+        logger.info(f"📁 Using default log settings: retention={self.log_retention_spin.value()} days")
+        
+        logger.info("✓ Default values set")
     
     def _apply_settings(self):
         """Apply settings without closing dialog."""
@@ -1606,13 +1792,13 @@ class SettingsDialog(QDialog):
                 try:
                     # Save the entire category as a nested structure
                     self.settings_manager.set(category, settings)
-                    logger.info(f"  ✅ Saved category: {category} ({len(settings)} items)")
+                    logger.info(f"  ✓ Saved category: {category} ({len(settings)} items)")
                     saved_count += 1
                 except Exception as e:
-                    logger.error(f"  ❌ Failed to save category {category}: {e}")
+                    logger.error(f"  ✗ Failed to save category {category}: {e}")
             logger.info(f"💾 Settings storage complete: {saved_count} categories saved")
         else:
-            logger.warning("⚠️  No settings manager available - settings not persisted")
+            logger.warning("⚠  No settings manager available - settings not persisted")
         
         # Update font service with new font settings
         if "fonts" in config:
@@ -1623,7 +1809,7 @@ class SettingsDialog(QDialog):
             if "user_input" in fonts_config:
                 user_font = fonts_config["user_input"]
                 font_service.update_font_config('user_input', **user_font)
-            logger.info("✅ Font service updated with new font settings")
+            logger.info("✓ Font service updated with new font settings")
         
         # Emit signal with detailed config
         logger.info(f"📡 Emitting settings_applied signal with {len(config)} categories")
@@ -1637,7 +1823,7 @@ class SettingsDialog(QDialog):
         msg_box.setIcon(QMessageBox.Icon.Information)
         self._apply_messagebox_theme(msg_box)
         msg_box.exec()
-        logger.info("=== ✅ SETTINGS APPLICATION COMPLETE ===")
+        logger.info("=== ✓ SETTINGS APPLICATION COMPLETE ===")
         logger.info("")  # Add blank line for readability
     
     def _ok_clicked(self):

@@ -177,7 +177,7 @@ class HelpDialog(QDialog):
         frame_layout = QVBoxLayout(frame)
         
         # Error icon
-        error_label = QLabel("⚠️")
+        error_label = QLabel("⚠")
         error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         error_label.setStyleSheet("font-size: 48px; margin: 20px;")
         frame_layout.addWidget(error_label)

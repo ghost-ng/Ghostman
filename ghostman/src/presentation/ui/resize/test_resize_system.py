@@ -134,13 +134,13 @@ class TestWidget(QWidget):
                 self.resize_manager.resize_finished.connect(self.on_resize_finished)
             
             self.resize_enabled = True
-            self.status_label.setText("✅ Resize system active")
+            self.status_label.setText("✓ Resize system active")
             self.status_label.setStyleSheet("color: green; font-weight: bold;")
             
             logger.info("Resize system initialized successfully")
             
         except Exception as e:
-            self.status_label.setText(f"❌ Resize system failed: {e}")
+            self.status_label.setText(f"✗ Resize system failed: {e}")
             self.status_label.setStyleSheet("color: red; font-weight: bold;")
             logger.error(f"Failed to initialize resize system: {e}")
             self.resize_manager = None
@@ -161,7 +161,7 @@ class TestWidget(QWidget):
             else:
                 self.resize_manager.set_enabled(True)
                 self.toggle_resize_btn.setText("Disable Resize")
-                self.status_label.setText("✅ Resize system active")
+                self.status_label.setText("✓ Resize system active")
                 self.status_label.setStyleSheet("color: green; font-weight: bold;")
                 self.resize_enabled = True
                 
@@ -178,12 +178,12 @@ class TestWidget(QWidget):
     def on_resize_finished(self, zone, width, height):
         """Handle resize finished."""
         zone_name = zone.value if hasattr(zone, 'value') else str(zone)
-        self.status_label.setText(f"✅ Resize complete ({width}x{height})")
+        self.status_label.setText(f"✓ Resize complete ({width}x{height})")
         self.status_label.setStyleSheet("color: green; font-weight: bold;")
         logger.debug(f"Resize finished: {zone_name} -> {width}x{height}")
         
         # Reset status after a delay
-        QTimer.singleShot(2000, lambda: self.status_label.setText("✅ Resize system active"))
+        QTimer.singleShot(2000, lambda: self.status_label.setText("✓ Resize system active"))
     
     def closeEvent(self, event):
         """Handle close event."""

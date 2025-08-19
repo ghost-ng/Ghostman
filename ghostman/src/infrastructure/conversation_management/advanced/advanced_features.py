@@ -412,11 +412,11 @@ class ConversationAnalyticsService:
                 model_usage=model_usage
             )
             
-            logger.info("✅ Generated conversation analytics")
+            logger.info("✓ Generated conversation analytics")
             return analytics
             
         except Exception as e:
-            logger.error(f"❌ Failed to generate analytics: {e}")
+            logger.error(f"✗ Failed to generate analytics: {e}")
             # Return empty analytics
             return ConversationAnalytics(
                 total_conversations=0,

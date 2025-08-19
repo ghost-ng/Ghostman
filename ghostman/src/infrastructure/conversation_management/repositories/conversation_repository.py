@@ -76,11 +76,11 @@ class ConversationRepository:
                 # Handle tags
                 await self._update_conversation_tags(session, conversation.id, conversation.metadata.tags)
                 
-                logger.info(f"✅ Created conversation: {conversation.id}")
+                logger.info(f"✓ Created conversation: {conversation.id}")
                 return True
                 
         except SQLAlchemyError as e:
-            logger.error(f"❌ Failed to create conversation {conversation.id}: {e}")
+            logger.error(f"✗ Failed to create conversation {conversation.id}: {e}")
             return False
     
     async def get_conversation(self, conversation_id: str, include_messages: bool = True) -> Optional[Conversation]:
@@ -99,7 +99,7 @@ class ConversationRepository:
                 
                 conv_model = query.first()
                 if not conv_model:
-                    logger.warning(f"⚠️ Conversation {conversation_id} not found in database")
+                    logger.warning(f"⚠ Conversation {conversation_id} not found in database")
                     return None
                 
                 logger.debug(f"📋 Found conversation in database: {conv_model.title}")
@@ -121,10 +121,10 @@ class ConversationRepository:
                             preview = domain_message.content[:50] + "..." if len(domain_message.content) > 50 else domain_message.content
                             logger.debug(f"  📨 Message {i+1}: [{domain_message.role.value}] {preview}")
                         except Exception as msg_error:
-                            logger.error(f"❌ Failed to convert message {i+1}: {msg_error}")
+                            logger.error(f"✗ Failed to convert message {i+1}: {msg_error}")
                     
                     conversation.messages = messages
-                    logger.debug(f"✅ Loaded {len(messages)} messages into conversation object")
+                    logger.debug(f"✓ Loaded {len(messages)} messages into conversation object")
                     
                     # Load summary
                     if conv_model.summary:
@@ -133,11 +133,11 @@ class ConversationRepository:
                 else:
                     logger.debug("📋 Skipping message loading (include_messages=False)")
                 
-                logger.debug(f"✅ Successfully loaded conversation {conversation_id} with {len(conversation.messages)} messages")
+                logger.debug(f"✓ Successfully loaded conversation {conversation_id} with {len(conversation.messages)} messages")
                 return conversation
                 
         except SQLAlchemyError as e:
-            logger.error(f"❌ Failed to get conversation {conversation_id}: {e}", exc_info=True)
+            logger.error(f"✗ Failed to get conversation {conversation_id}: {e}", exc_info=True)
             return None
     
     async def update_conversation(self, conversation: Conversation) -> bool:
@@ -174,7 +174,7 @@ class ConversationRepository:
                 return True
                 
         except SQLAlchemyError as e:
-            logger.error(f"❌ Failed to update conversation {conversation.id}: {e}")
+            logger.error(f"✗ Failed to update conversation {conversation.id}: {e}")
             return False
     
     async def delete_conversation(self, conversation_id: str, soft_delete: bool = True) -> bool:
@@ -201,7 +201,7 @@ class ConversationRepository:
                 return True
                 
         except SQLAlchemyError as e:
-            logger.error(f"❌ Failed to delete conversation {conversation_id}: {e}")
+            logger.error(f"✗ Failed to delete conversation {conversation_id}: {e}")
             return False
     
     async def list_conversations(
@@ -240,7 +240,7 @@ class ConversationRepository:
                 return conversations
                 
         except SQLAlchemyError as e:
-            logger.error(f"❌ Failed to list conversations: {e}")
+            logger.error(f"✗ Failed to list conversations: {e}")
             return []
     
     # --- Message Operations ---
@@ -280,7 +280,7 @@ class ConversationRepository:
                     
                     logger.debug(f"📊 Updated conversation message count: {old_count} -> {new_count}")
                 else:
-                    logger.warning(f"⚠️ Conversation {message.conversation_id} not found for message count update")
+                    logger.warning(f"⚠ Conversation {message.conversation_id} not found for message count update")
                 
                 # Update FTS index with new message content
                 await self._update_message_fts(session, message)
@@ -293,11 +293,11 @@ class ConversationRepository:
                     MessageModel.conversation_id == message.conversation_id
                 ).count()
                 
-                logger.debug(f"✅ Added message to conversation {message.conversation_id} (total messages now: {total_messages})")
+                logger.debug(f"✓ Added message to conversation {message.conversation_id} (total messages now: {total_messages})")
                 return True
                 
         except SQLAlchemyError as e:
-            logger.error(f"❌ Failed to add message to conversation {message.conversation_id}: {e}", exc_info=True)
+            logger.error(f"✗ Failed to add message to conversation {message.conversation_id}: {e}", exc_info=True)
             return False
     
     async def get_conversation_messages(
@@ -322,7 +322,7 @@ class ConversationRepository:
                 return [msg_model.to_domain_model() for msg_model in message_models]
                 
         except SQLAlchemyError as e:
-            logger.error(f"❌ Failed to get messages for {conversation_id}: {e}")
+            logger.error(f"✗ Failed to get messages for {conversation_id}: {e}")
             return []
     
     # --- Search Operations ---
@@ -382,7 +382,7 @@ class ConversationRepository:
                 )
                 
         except SQLAlchemyError as e:
-            logger.error(f"❌ Search failed: {e}")
+            logger.error(f"✗ Search failed: {e}")
             return SearchResults(results=[], total_count=0)
     
     # --- Summary Operations ---
@@ -420,7 +420,7 @@ class ConversationRepository:
                 return True
                 
         except SQLAlchemyError as e:
-            logger.error(f"❌ Failed to save summary: {e}")
+            logger.error(f"✗ Failed to save summary: {e}")
             return False
     
     # --- Tag Operations ---
@@ -443,7 +443,7 @@ class ConversationRepository:
                 ]
                 
         except SQLAlchemyError as e:
-            logger.error(f"❌ Failed to get tags: {e}")
+            logger.error(f"✗ Failed to get tags: {e}")
             return []
     
     async def get_conversation_tags(self, conversation_id: str) -> Set[str]:
@@ -457,7 +457,7 @@ class ConversationRepository:
                 return {tag.name for tag in tags}
                 
         except SQLAlchemyError as e:
-            logger.error(f"❌ Failed to get tags for {conversation_id}: {e}")
+            logger.error(f"✗ Failed to get tags for {conversation_id}: {e}")
             return set()
     
     # --- Analytics ---
@@ -507,7 +507,7 @@ class ConversationRepository:
                 return stats
                 
         except SQLAlchemyError as e:
-            logger.error(f"❌ Failed to get conversation stats: {e}")
+            logger.error(f"✗ Failed to get conversation stats: {e}")
             return {}
     
     # --- Helper Methods ---
@@ -744,10 +744,10 @@ class ConversationRepository:
                 session.commit()
                 
                 updated_count = result.rowcount
-                logger.info(f"✅ Updated {updated_count} conversations to status: {new_status.value}")
+                logger.info(f"✓ Updated {updated_count} conversations to status: {new_status.value}")
                 
                 return True
                 
         except SQLAlchemyError as e:
-            logger.error(f"❌ Failed to update all conversations status: {e}")
+            logger.error(f"✗ Failed to update all conversations status: {e}")
             return False

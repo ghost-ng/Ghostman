@@ -296,7 +296,7 @@ class OpenAICompatibleClient:
         for endpoint in test_endpoints:
             response = self._make_request("GET", endpoint)
             if response.success:
-                logger.info("✅ API connection test successful")
+                logger.info("✓ API connection test successful")
                 return response
         
         # If model listing fails, try a minimal chat completion
@@ -309,9 +309,9 @@ class OpenAICompatibleClient:
         
         response = self._make_request("POST", "chat/completions", minimal_request)
         if response.success:
-            logger.info("✅ API connection test successful (chat endpoint)")
+            logger.info("✓ API connection test successful (chat endpoint)")
         else:
-            logger.error(f"❌ API connection test failed: {response.error}")
+            logger.error(f"✗ API connection test failed: {response.error}")
         
         return response
     

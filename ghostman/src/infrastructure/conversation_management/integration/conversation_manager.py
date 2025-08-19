@@ -58,7 +58,7 @@ class ConversationManager:
             self._setup_service_callbacks()
             
             self._initialized = True
-            logger.info("✅ ConversationManager initialized successfully")
+            logger.info("✓ ConversationManager initialized successfully")
             
             # Notify status callbacks
             self._notify_status("initialized", {"success": True})
@@ -66,7 +66,7 @@ class ConversationManager:
             return True
             
         except Exception as e:
-            logger.error(f"❌ ConversationManager initialization failed: {e}")
+            logger.error(f"✗ ConversationManager initialization failed: {e}")
             self._notify_status("initialization_failed", {"error": str(e)})
             return False
     
@@ -113,10 +113,10 @@ class ConversationManager:
                     self._ai_service = None
                     return None
                     
-                logger.info("✅ ConversationAIService initialized")
+                logger.info("✓ ConversationAIService initialized")
                 
             except Exception as e:
-                logger.error(f"❌ AI service initialization failed: {e}")
+                logger.error(f"✗ AI service initialization failed: {e}")
                 self._ai_service = None
                 return None
         
@@ -148,7 +148,7 @@ class ConversationManager:
                 category=category
             )
         except Exception as e:
-            logger.error(f"❌ Failed to create conversation: {e}")
+            logger.error(f"✗ Failed to create conversation: {e}")
             self._notify_status("error", {"operation": "create_conversation", "error": str(e)})
             return None
     
@@ -160,7 +160,7 @@ class ConversationManager:
         try:
             return await self.conversation_service.get_conversation(conversation_id, include_messages=include_messages)
         except Exception as e:
-            logger.error(f"❌ Failed to get conversation: {e}")
+            logger.error(f"✗ Failed to get conversation: {e}")
             return None
     
     async def list_conversations(
@@ -182,7 +182,7 @@ class ConversationManager:
                 sort_order=sort_order
             )
         except Exception as e:
-            logger.error(f"❌ Failed to list conversations: {e}")
+            logger.error(f"✗ Failed to list conversations: {e}")
             return []
     
     async def search_conversations(self, query: SearchQuery) -> SearchResults:
@@ -193,7 +193,7 @@ class ConversationManager:
         try:
             return await self.conversation_service.search_conversations(query)
         except Exception as e:
-            logger.error(f"❌ Search failed: {e}")
+            logger.error(f"✗ Search failed: {e}")
             return SearchResults(results=[], total_count=0)
     
     async def delete_conversation(self, conversation_id: str, permanent: bool = False) -> bool:
@@ -210,7 +210,7 @@ class ConversationManager:
                 })
             return success
         except Exception as e:
-            logger.error(f"❌ Failed to delete conversation: {e}")
+            logger.error(f"✗ Failed to delete conversation: {e}")
             return False
     
     # --- Export Operations ---
@@ -237,7 +237,7 @@ class ConversationManager:
                 })
             return success
         except Exception as e:
-            logger.error(f"❌ Export failed: {e}")
+            logger.error(f"✗ Export failed: {e}")
             return False
     
     async def export_conversations(
@@ -262,7 +262,7 @@ class ConversationManager:
                 })
             return success
         except Exception as e:
-            logger.error(f"❌ Bulk export failed: {e}")
+            logger.error(f"✗ Bulk export failed: {e}")
             return False
     
     # --- Quick Access Methods ---
@@ -297,7 +297,7 @@ class ConversationManager:
         try:
             return await self.conversation_service.get_all_tags()
         except Exception as e:
-            logger.error(f"❌ Failed to get tags: {e}")
+            logger.error(f"✗ Failed to get tags: {e}")
             return []
     
     async def add_tags_to_conversation(self, conversation_id: str, tags: Set[str]) -> bool:
@@ -308,7 +308,7 @@ class ConversationManager:
         try:
             return await self.conversation_service.add_tags_to_conversation(conversation_id, tags)
         except Exception as e:
-            logger.error(f"❌ Failed to add tags: {e}")
+            logger.error(f"✗ Failed to add tags: {e}")
             return False
     
     # --- Analytics and Statistics ---
@@ -343,7 +343,7 @@ class ConversationManager:
             }
             
         except Exception as e:
-            logger.error(f"❌ Failed to get statistics: {e}")
+            logger.error(f"✗ Failed to get statistics: {e}")
             return {}
     
     # --- Maintenance Operations ---
@@ -363,7 +363,7 @@ class ConversationManager:
                 dry_run=dry_run
             )
         except Exception as e:
-            logger.error(f"❌ Cleanup failed: {e}")
+            logger.error(f"✗ Cleanup failed: {e}")
             return {"error": str(e)}
     
     def optimize_database(self) -> bool:
@@ -376,7 +376,7 @@ class ConversationManager:
             self._notify_status("database_optimized", {})
             return True
         except Exception as e:
-            logger.error(f"❌ Database optimization failed: {e}")
+            logger.error(f"✗ Database optimization failed: {e}")
             return False
     
     # --- Event System ---
@@ -416,7 +416,7 @@ class ConversationManager:
                 logger.debug(f"Updated conversation {conversation_id[:8]}... status to {status.value}")
             return success
         except Exception as e:
-            logger.error(f"❌ Failed to update conversation status: {e}")
+            logger.error(f"✗ Failed to update conversation status: {e}")
             return False
     
     def set_conversation_active_simple(self, conversation_id: str) -> bool:
@@ -504,9 +504,9 @@ class ConversationManager:
             
             self._initialized = False
             
-            logger.info("✅ ConversationManager shut down successfully")
+            logger.info("✓ ConversationManager shut down successfully")
             
         except Exception as e:
-            logger.error(f"❌ Error during ConversationManager shutdown: {e}")
+            logger.error(f"✗ Error during ConversationManager shutdown: {e}")
         finally:
             self._notify_status("shutdown", {"success": True})
