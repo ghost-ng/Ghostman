@@ -82,7 +82,7 @@ class StartupService:
             response = self.api_client.test_connection()
             
             if response.success:
-                logger.info("✅ API connection successful")
+                logger.info("✓ API connection successful")
                 self.api_status = True
                 self.api_error_message = None
                 return True, None
@@ -121,7 +121,7 @@ class StartupService:
             preamble_lines.append("⏳ Testing API connection...")
         elif self.api_status is False:
             # API test failed
-            preamble_lines.append("❌ API Connection Error")
+            preamble_lines.append("✗ API Connection Error")
             if self.api_error_message:
                 preamble_lines.append(f"   {self.api_error_message}")
             preamble_lines.append("")
@@ -131,7 +131,7 @@ class StartupService:
             preamble_lines.append("   • Test connection and save")
         else:
             # API test successful - show normal welcome
-            preamble_lines.append("✅ Connected!")
+            preamble_lines.append("✓ Connected!")
             preamble_lines.append("")
             
             # Get custom preamble from settings if available

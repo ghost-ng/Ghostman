@@ -1009,7 +1009,7 @@ class ThemeEditorDialog(QDialog):
         is_valid, issues = self.current_theme.validate()
         
         if is_valid:
-            self.validation_label.setText("✅ Theme looks great! All accessibility checks passed.")
+            self.validation_label.setText("✓ Theme looks great! All accessibility checks passed.")
             self.validation_label.setStyleSheet("""
                 QLabel {
                     padding: 8px;
@@ -1020,7 +1020,7 @@ class ThemeEditorDialog(QDialog):
                 }
             """)
         else:
-            self.validation_label.setText(f"⚠️ {len(issues)} accessibility issue{'s' if len(issues) != 1 else ''} found")
+            self.validation_label.setText(f"⚠ {len(issues)} accessibility issue{'s' if len(issues) != 1 else ''} found")
             self.validation_label.setStyleSheet("""
                 QLabel {
                     padding: 8px;
@@ -1165,7 +1165,7 @@ class ThemeEditorDialog(QDialog):
                 <div class="metric">
                     <strong>Status:</strong> 
                     <span class="{'good' if is_valid else 'warning'}">
-                        {'✅ Passes accessibility checks' if is_valid else f'⚠️ {len(issues)} issue(s) found'}
+                        {'✓ Passes accessibility checks' if is_valid else f'⚠ {len(issues)} issue(s) found'}
                     </span>
                 </div>
             </div>
@@ -1268,13 +1268,13 @@ class ThemeEditorDialog(QDialog):
             # Determine status
             if ratio >= 7.0:
                 status_class = "good"
-                status_text = "AAA ✅"
+                status_text = "AAA ✓"
             elif ratio >= 4.5:
                 status_class = "info"
-                status_text = "AA ✅"
+                status_text = "AA ✓"
             else:
                 status_class = "error"
-                status_text = "Fails ❌"
+                status_text = "Fails ✗"
             
             # Clean up the combination name
             clean_name = combo.replace('_on_', ' on ').replace('_', ' ').title()
@@ -1305,16 +1305,16 @@ class ThemeEditorDialog(QDialog):
         hue_diff = abs(red_hue - green_hue)
         
         if hue_diff < 60 or hue_diff > 300:  # Colors might be confusing
-            analysis += "<span class=\"warning\">⚠️ Success and error colors may be difficult to distinguish for color-blind users</span><br>"
+            analysis += "<span class=\"warning\">⚠ Success and error colors may be difficult to distinguish for color-blind users</span><br>"
         else:
-            analysis += "<span class=\"good\">✅ Success and error colors appear distinguishable</span><br>"
+            analysis += "<span class=\"good\">✓ Success and error colors appear distinguishable</span><br>"
         
         # Check if all status colors are unique
         unique_colors = len(set(status_colors))
         if unique_colors == 4:
-            analysis += "<span class=\"good\">✅ All status colors are unique</span>"
+            analysis += "<span class=\"good\">✓ All status colors are unique</span>"
         else:
-            analysis += f"<span class=\"warning\">⚠️ Only {unique_colors}/4 status colors are unique</span>"
+            analysis += f"<span class=\"warning\">⚠ Only {unique_colors}/4 status colors are unique</span>"
         
         analysis += "</div>"
         return analysis

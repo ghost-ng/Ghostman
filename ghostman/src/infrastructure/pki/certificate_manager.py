@@ -188,13 +188,11 @@ class CertificateManager:
             if not private_key or not certificate:
                 raise P12ImportError("P12 file does not contain required private key and certificate")
             
-            # Calculate file hash for tracking changes
+            # Calculate file hash for tracking changes (without copying the file)
             file_hash = hashlib.sha256(p12_data).hexdigest()
             
-            # Copy P12 file to PKI directory
-            p12_dest = self.pki_dir / "client.p12"
-            with open(p12_dest, 'wb') as f:
-                f.write(p12_data)
+            # Store the original P12 file path for reference (do not copy the file)
+            original_p12_path = p12_path
             
             # Extract and save private key
             key_pem = private_key.private_bytes(
@@ -238,13 +236,13 @@ class CertificateManager:
             
             # Save configuration
             if self.save_config():
-                logger.info("✅ P12 certificate imported successfully")
+                logger.info("✓ P12 certificate imported successfully")
                 return True
             else:
                 raise PKIError("Failed to save PKI configuration")
                 
         except Exception as e:
-            logger.error(f"❌ P12 import failed: {e}")
+            logger.error(f"✗ P12 import failed: {e}")
             # Clean up any partial files
             self._cleanup_certificate_files()
             raise P12ImportError(f"Failed to import P12 file: {e}")
@@ -344,11 +342,11 @@ class CertificateManager:
             if days_until_expiry <= 30:
                 logger.warning(f"Certificate expires in {days_until_expiry} days")
             
-            logger.info("✅ Certificate validation successful")
+            logger.info("✓ Certificate validation successful")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Certificate validation failed: {e}")
+            logger.error(f"✗ Certificate validation failed: {e}")
             return False
     
     def get_client_cert_files(self) -> Tuple[Optional[str], Optional[str]]:
@@ -389,6 +387,70 @@ class CertificateManager:
     def get_certificate_info(self) -> Optional[CertificateInfo]:
         """Get current certificate information."""
         return self._config.certificate_info if self._config else None
+    
+    def import_ca_chain_file(self, ca_chain_path: str) -> bool:
+        """
+        Import CA certificate chain file (supports PEM, CRT, CER formats).
+        
+        Args:
+            ca_chain_path: Path to CA chain file
+            
+        Returns:
+            True if successful
+        """
+        try:
+            if not self._config or not self._config.enabled:
+                raise PKIError("PKI must be configured before importing CA chain")
+            
+            logger.info(f"Importing CA chain file: {ca_chain_path}")
+            
+            # Read CA chain file
+            with open(ca_chain_path, 'rb') as f:
+                ca_data = f.read()
+            
+            # Try to parse as PEM first
+            try:
+                # Check if it's already PEM format
+                if b'-----BEGIN CERTIFICATE-----' in ca_data:
+                    # Already PEM format
+                    chain_pem = ca_data
+                else:
+                    # Try to load as DER (CRT/CER format) and convert to PEM
+                    certificate = x509.load_der_x509_certificate(ca_data)
+                    chain_pem = certificate.public_bytes(serialization.Encoding.PEM)
+                    
+                # Validate the certificate(s)
+                if b'-----BEGIN CERTIFICATE-----' in chain_pem:
+                    # Parse to ensure it's valid
+                    from cryptography.hazmat.primitives.serialization import load_pem_x509_certificates
+                    certificates = load_pem_x509_certificates(chain_pem)
+                    if not certificates:
+                        raise PKIError("No valid certificates found in CA chain file")
+                    logger.info(f"Loaded {len(certificates)} certificate(s) from CA chain")
+                else:
+                    raise PKIError("Invalid certificate format")
+                    
+            except Exception as e:
+                raise PKIError(f"Failed to parse CA chain file: {e}")
+            
+            # Save CA chain to PKI directory
+            chain_dest = self.pki_dir / "ca_chain.pem"
+            with open(chain_dest, 'wb') as f:
+                f.write(chain_pem)
+            
+            # Update configuration
+            self._config.ca_chain_path = str(chain_dest)
+            
+            # Save configuration
+            if self.save_config():
+                logger.info("✓ CA chain imported successfully")
+                return True
+            else:
+                raise PKIError("Failed to save PKI configuration")
+                
+        except Exception as e:
+            logger.error(f"✗ CA chain import failed: {e}")
+            return False
     
     def disable_pki(self) -> bool:
         """Disable PKI authentication."""

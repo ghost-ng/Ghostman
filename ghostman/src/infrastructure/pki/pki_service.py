@@ -43,18 +43,20 @@ class PKIService:
             if self.cert_manager.is_pki_enabled():
                 success = self._apply_pki_to_session()
                 if success:
-                    logger.info("✅ PKI service initialized with authentication")
+                    if not self._initialized:
+                        logger.info("✓ PKI service initialized with authentication")
                 else:
-                    logger.warning("⚠️ PKI service initialized but authentication failed")
+                    logger.warning("⚠ PKI service initialized but authentication failed")
                 self._initialized = True
                 return success
             else:
-                logger.info("PKI service initialized without authentication")
+                if not self._initialized:
+                    logger.info("PKI service initialized without authentication")
                 self._initialized = True
                 return True
                 
         except Exception as e:
-            logger.error(f"❌ PKI service initialization failed: {e}")
+            logger.error(f"✗ PKI service initialization failed: {e}")
             return False
     
     def setup_pki_authentication(
@@ -88,12 +90,12 @@ class PKIService:
             if not self._apply_pki_to_session():
                 return False, "Failed to configure session with PKI"
             
-            logger.info("✅ PKI authentication setup completed")
+            logger.info("✓ PKI authentication setup completed")
             return True, None
             
         except Exception as e:
             error_msg = f"PKI setup failed: {e}"
-            logger.error(f"❌ {error_msg}")
+            logger.error(f"✗ {error_msg}")
             return False, error_msg
     
     def disable_pki_authentication(self) -> bool:
@@ -112,11 +114,11 @@ class PKIService:
             # Disable in session manager
             session_manager.disable_pki()
             
-            logger.info("✅ PKI authentication disabled")
+            logger.info("✓ PKI authentication disabled")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Failed to disable PKI: {e}")
+            logger.error(f"✗ Failed to disable PKI: {e}")
             return False
     
     def validate_current_certificates(self) -> bool:
@@ -211,16 +213,16 @@ class PKIService:
             )
             
             if response.status_code < 400:
-                logger.info("✅ PKI connection test successful")
+                logger.info("✓ PKI connection test successful")
                 return True, None
             else:
                 error_msg = f"HTTP {response.status_code}: {response.reason}"
-                logger.warning(f"⚠️ PKI connection test returned: {error_msg}")
+                logger.warning(f"⚠ PKI connection test returned: {error_msg}")
                 return False, error_msg
                 
         except Exception as e:
             error_msg = f"PKI connection test failed: {e}"
-            logger.error(f"❌ {error_msg}")
+            logger.error(f"✗ {error_msg}")
             return False, error_msg
     
     def get_certificate_expiry_warning(self) -> Optional[str]:

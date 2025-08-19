@@ -145,11 +145,11 @@ class AIService:
                 self.conversation.add_message('system', system_prompt)
             
             self._initialized = True
-            logger.info("✅ AI service initialized successfully")
+            logger.info("✓ AI service initialized successfully")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Failed to initialize AI service: {e}")
+            logger.error(f"✗ Failed to initialize AI service: {e}")
             return False
     
     def _load_config_from_settings(self) -> Dict[str, Any]:
@@ -323,21 +323,21 @@ class AIService:
                     except Exception as e:
                         logger.error(f"Response callback error: {e}")
                 
-                logger.info("✅ AI response received successfully")
+                logger.info("✓ AI response received successfully")
                 return {
                     'success': True,
                     'response': assistant_message,
                     'usage': response.data.get('usage', {})
                 }
             else:
-                logger.error(f"❌ AI API request failed: {response.error}")
+                logger.error(f"✗ AI API request failed: {response.error}")
                 return {
                     'success': False,
                     'error': response.error
                 }
                 
         except Exception as e:
-            logger.error(f"❌ Error sending message to AI: {e}")
+            logger.error(f"✗ Error sending message to AI: {e}")
             return {
                 'success': False,
                 'error': str(e)
@@ -423,11 +423,11 @@ class AIService:
                 ]
                 self.conversation.add_message('system', system_prompt)
             
-            logger.info("✅ AI service configuration updated successfully")
+            logger.info("✓ AI service configuration updated successfully")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Failed to update AI service configuration: {e}")
+            logger.error(f"✗ Failed to update AI service configuration: {e}")
             return False
     
     def clear_conversation(self):
@@ -480,6 +480,111 @@ class AIService:
         self._initialized = False
         self._response_callbacks.clear()
         logger.info("AI service shut down")
+    
+    async def send_message_without_system_prompt_async(
+        self, 
+        message: str,
+        stream: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Send a message to the AI without system prompt (for title generation).
+        
+        Args:
+            message: User message to send
+            stream: Whether to stream the response
+            
+        Returns:
+            Dict with response information
+        """
+        # Run the synchronous method in an executor
+        import asyncio
+        import concurrent.futures
+        
+        # Create executor if not exists
+        if not hasattr(self, '_executor'):
+            self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+        
+        # Run sync method in executor
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            self._executor,
+            lambda: self.send_message_without_system_prompt(message, stream=stream)
+        )
+    
+    def send_message_without_system_prompt(
+        self, 
+        message: str,
+        stream: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Send a message to the AI without system prompt (for title generation).
+        
+        Args:
+            message: User message to send
+            stream: Whether to stream the response
+            
+        Returns:
+            Dict with response information including 'success', 'response', 'error'
+        """
+        if not self._initialized:
+            logger.error("AI service not initialized")
+            return {
+                'success': False,
+                'error': 'AI service not initialized'
+            }
+        
+        try:
+            # Create messages list without system prompt (just the user message)
+            messages = [
+                {
+                    "role": "user",
+                    "content": message
+                }
+            ]
+            
+            request_data = {
+                "model": self._config.get('model_name', 'gpt-3.5-turbo'),
+                "messages": messages,
+                "temperature": self._config.get('temperature', 0.7),
+                "max_tokens": self._config.get('max_tokens', 2000),
+                "stream": stream
+            }
+            
+            logger.debug(f"Sending title generation request (no system prompt): {len(messages)} messages")
+            
+            # Make request using the existing client infrastructure
+            response = self.client.chat_completion(
+                messages=messages,
+                model=request_data["model"],
+                temperature=request_data["temperature"],
+                max_tokens=request_data["max_tokens"],
+                stream=request_data["stream"]
+            )
+            
+            if response.success:
+                # Extract response content using existing method
+                assistant_message = self._extract_response_content(response.data)
+                
+                logger.debug(f"Title generation response received: {len(assistant_message) if assistant_message else 0} chars")
+                
+                return {
+                    'success': True,
+                    'response': assistant_message,
+                    'usage': response.data.get('usage', {})
+                }
+            else:
+                logger.error(f"Title generation API request failed: {response.error}")
+                return {
+                    'success': False,
+                    'error': response.error
+                }
+                    
+        except Exception as e:
+            logger.error(f"Error sending title generation message: {e}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
     
     @property
     def is_initialized(self) -> bool:

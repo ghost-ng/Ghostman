@@ -139,11 +139,11 @@ class DatabaseManager:
             except Exception as e:
                 self._initialized = False
                 raise
-            logger.info("✅ SQLAlchemy database initialized successfully")
+            logger.info("✓ SQLAlchemy database initialized successfully")
             return True
                 
         except Exception as e:
-            logger.error(f"❌ SQLAlchemy database initialization failed: {e}")
+            logger.error(f"✗ SQLAlchemy database initialization failed: {e}")
             return False
     
     def get_engine(self) -> Engine:

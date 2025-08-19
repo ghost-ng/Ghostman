@@ -231,6 +231,10 @@ class ConversationBrowserDialog(QDialog):
         self.conversation_table.itemSelectionChanged.connect(self._on_selection_changed)
         self.conversation_table.itemDoubleClicked.connect(self._on_item_double_clicked)
         
+        # Set up context menu
+        self.conversation_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.conversation_table.customContextMenuRequested.connect(self._show_context_menu)
+        
         layout.addWidget(self.conversation_table)
         
         # Action buttons
@@ -476,11 +480,207 @@ class ConversationBrowserDialog(QDialog):
         """Handle double-click on table item."""
         self._load_selected_conversation()
     
+    def _show_context_menu(self, position):
+        """Show context menu for conversation table."""
+        if not self.conversation_table.itemAt(position):
+            return  # No item at this position
+        
+        # Get the selected conversation
+        current_row = self.conversation_table.currentRow()
+        if current_row < 0:
+            return
+        
+        conversation_id_item = self.conversation_table.item(current_row, 0)
+        if not conversation_id_item:
+            return
+        
+        conversation_id = conversation_id_item.data(Qt.ItemDataRole.UserRole)
+        if not conversation_id:
+            return
+        
+        # Create context menu
+        context_menu = QMenu(self)
+        
+        refresh_title_action = QAction("🔄 Refresh Title", self)
+        refresh_title_action.triggered.connect(lambda: self._refresh_conversation_title(conversation_id))
+        context_menu.addAction(refresh_title_action)
+        
+        set_title_action = QAction("✏️ Set Custom Title", self)
+        set_title_action.triggered.connect(lambda: self._set_custom_title(conversation_id, current_row))
+        context_menu.addAction(set_title_action)
+        
+        # Show menu at cursor position
+        context_menu.exec(self.conversation_table.mapToGlobal(position))
+    
     def _load_selected_conversation(self):
         """Load the selected conversation."""
         if self.selected_conversation_id:
             self.conversation_loaded.emit(self.selected_conversation_id)
             self.close()
+    
+    def _refresh_conversation_title(self, conversation_id: str):
+        """Refresh the conversation title by regenerating it."""
+        try:
+            # Show progress
+            self.progress_bar.setVisible(True)
+            self.progress_bar.setRange(0, 0)
+            self.status_bar.showMessage("Regenerating conversation title...")
+            
+            # Start async title generation
+            self._generate_title_async(conversation_id)
+            
+        except Exception as e:
+            logger.error(f"Failed to refresh conversation title: {e}")
+            QMessageBox.warning(self, "Error", f"Failed to refresh title: {str(e)}")
+            self.progress_bar.setVisible(False)
+    
+    def _set_custom_title(self, conversation_id: str, row: int):
+        """Set a custom title for the conversation."""
+        try:
+            # Get current title
+            current_title_item = self.conversation_table.item(row, 0)
+            current_title = current_title_item.text() if current_title_item else ""
+            
+            # Show input dialog
+            from PyQt6.QtWidgets import QInputDialog
+            new_title, ok = QInputDialog.getText(
+                self, 
+                "Set Conversation Title",
+                "Enter new title:", 
+                QLineEdit.EchoMode.Normal,
+                current_title
+            )
+            
+            if ok and new_title.strip():
+                new_title = new_title.strip()
+                
+                # Update title in database
+                self._update_title_async(conversation_id, new_title, row)
+                
+        except Exception as e:
+            logger.error(f"Failed to set custom title: {e}")
+            QMessageBox.warning(self, "Error", f"Failed to set title: {str(e)}")
+    
+    def _generate_title_async(self, conversation_id: str):
+        """Generate title asynchronously."""
+        def on_complete():
+            try:
+                # Use the conversation manager's title generation service
+                if hasattr(self.conversation_manager, 'conversation_service'):
+                    # Create a simple async runner
+                    async def generate_and_update():
+                        try:
+                            # Generate new title
+                            new_title = await self.conversation_manager.conversation_service.generate_conversation_title(conversation_id)
+                            
+                            if new_title:
+                                # Update title in database
+                                await self.conversation_manager.conversation_service.update_conversation_title(conversation_id, new_title)
+                                
+                                # Update UI on main thread
+                                QTimer.singleShot(0, lambda: self._update_ui_after_title_change(conversation_id, new_title))
+                            else:
+                                QTimer.singleShot(0, lambda: self._show_title_generation_failed())
+                                
+                        except Exception as e:
+                            logger.error(f"Title generation failed: {e}")
+                            QTimer.singleShot(0, lambda: self._show_title_generation_failed(str(e)))
+                    
+                    # Run async operation
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        loop.run_until_complete(generate_and_update())
+                    finally:
+                        loop.close()
+                else:
+                    QTimer.singleShot(0, lambda: self._show_title_generation_failed("Title generation not available"))
+                    
+            except Exception as e:
+                logger.error(f"Async title generation error: {e}")
+                QTimer.singleShot(0, lambda: self._show_title_generation_failed(str(e)))
+        
+        # Run in background
+        QTimer.singleShot(100, on_complete)
+    
+    def _update_title_async(self, conversation_id: str, new_title: str, row: int):
+        """Update title asynchronously."""
+        def on_complete():
+            try:
+                if hasattr(self.conversation_manager, 'conversation_service'):
+                    # Create async runner
+                    async def update_title():
+                        try:
+                            await self.conversation_manager.conversation_service.update_conversation_title(conversation_id, new_title)
+                            
+                            # Update UI on main thread
+                            QTimer.singleShot(0, lambda: self._update_table_title(row, new_title))
+                            
+                        except Exception as e:
+                            logger.error(f"Title update failed: {e}")
+                            QTimer.singleShot(0, lambda: self._show_title_update_failed(str(e)))
+                    
+                    # Run async operation
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        loop.run_until_complete(update_title())
+                    finally:
+                        loop.close()
+                else:
+                    QTimer.singleShot(0, lambda: self._show_title_update_failed("Title update not available"))
+                    
+            except Exception as e:
+                logger.error(f"Async title update error: {e}")
+                QTimer.singleShot(0, lambda: self._show_title_update_failed(str(e)))
+        
+        # Run in background
+        QTimer.singleShot(100, on_complete)
+    
+    def _update_ui_after_title_change(self, conversation_id: str, new_title: str):
+        """Update UI after title has been changed."""
+        try:
+            # Find the row with this conversation ID
+            for row in range(self.conversation_table.rowCount()):
+                item = self.conversation_table.item(row, 0)
+                if item and item.data(Qt.ItemDataRole.UserRole) == conversation_id:
+                    item.setText(new_title)
+                    break
+            
+            self.progress_bar.setVisible(False)
+            self.status_bar.showMessage(f"Title updated successfully", 3000)
+            
+        except Exception as e:
+            logger.error(f"Failed to update UI after title change: {e}")
+            self.progress_bar.setVisible(False)
+    
+    def _update_table_title(self, row: int, new_title: str):
+        """Update the title in the table at the specified row."""
+        try:
+            title_item = self.conversation_table.item(row, 0)
+            if title_item:
+                title_item.setText(new_title)
+            
+            self.progress_bar.setVisible(False)
+            self.status_bar.showMessage(f"Title set successfully", 3000)
+            
+        except Exception as e:
+            logger.error(f"Failed to update table title: {e}")
+            self.progress_bar.setVisible(False)
+    
+    def _show_title_generation_failed(self, error_msg: str = None):
+        """Show error message when title generation fails."""
+        self.progress_bar.setVisible(False)
+        msg = f"Failed to generate title: {error_msg}" if error_msg else "Failed to generate title"
+        self.status_bar.showMessage(msg, 5000)
+        QMessageBox.warning(self, "Title Generation Failed", msg)
+    
+    def _show_title_update_failed(self, error_msg: str):
+        """Show error message when title update fails."""
+        self.progress_bar.setVisible(False)
+        msg = f"Failed to update title: {error_msg}"
+        self.status_bar.showMessage(msg, 5000)
+        QMessageBox.warning(self, "Title Update Failed", msg)
     
     def _search_conversations(self):
         """Search conversations."""

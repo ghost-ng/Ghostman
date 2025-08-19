@@ -44,7 +44,7 @@ class ConversationContextAdapter:
                 logger.error(f"Failed to convert message {msg.id}: {e}")
                 continue
         
-        logger.info(f"✅ Converted {converted_count}/{len(conversation.messages)} messages to conversation context")
+        logger.info(f"✓ Converted {converted_count}/{len(conversation.messages)} messages to conversation context")
         return context
     
     @staticmethod
@@ -87,6 +87,7 @@ class ConversationAIService(AIService):
         self._auto_save_conversations = True
         self._auto_generate_titles = True
         self._auto_generate_summaries = False
+        self._conversation_update_callbacks = []
         
         logger.info("ConversationAIService initialized")
     
@@ -127,11 +128,11 @@ class ConversationAIService(AIService):
             logger.info(f"🔍 NEW CONVERSATION - Conversation ID: {conversation.id}")
             logger.info(f"🔍 NEW CONVERSATION - Current active ID: {self._current_conversation_id}")
             
-            logger.info(f"✅ Started new conversation: {conversation.id}")
+            logger.info(f"✓ Started new conversation: {conversation.id}")
             return conversation.id
             
         except Exception as e:
-            logger.error(f"❌ Failed to start new conversation: {e}")
+            logger.error(f"✗ Failed to start new conversation: {e}")
             return None
     
     async def load_conversation(self, conversation_id: str) -> bool:
@@ -151,11 +152,11 @@ class ConversationAIService(AIService):
             self.conversation.clear()
             await self._load_conversation_context(conversation_id)
             
-            logger.info(f"✅ Loaded conversation: {conversation_id}")
+            logger.info(f"✓ Loaded conversation: {conversation_id}")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Failed to load conversation: {e}")
+            logger.error(f"✗ Failed to load conversation: {e}")
             return False
     
     async def _load_conversation_context(self, conversation_id: str):
@@ -177,7 +178,7 @@ class ConversationAIService(AIService):
                 logger.debug(f"  📄 DB Message {i+1} [{msg.role.value}] at {msg.timestamp}: {preview}")
             
             if not conversation.messages:
-                logger.warning(f"⚠️  No messages found in conversation {conversation_id}")
+                logger.warning(f"⚠  No messages found in conversation {conversation_id}")
             
             # Convert and load messages
             context = ConversationContextAdapter.to_conversation_context(conversation)
@@ -186,7 +187,7 @@ class ConversationAIService(AIService):
             self.conversation.clear()
             self.conversation = context
             
-            logger.info(f"✅ Conversation context loaded: {len(self.conversation.messages)} messages in AI context")
+            logger.info(f"✓ Conversation context loaded: {len(self.conversation.messages)} messages in AI context")
             
             # Verify context was loaded properly
             logger.debug(f"🔍 AI context messages after loading:")
@@ -195,12 +196,12 @@ class ConversationAIService(AIService):
                 logger.debug(f"  🤖 AI Message {i+1} [{msg.role}] at {msg.timestamp}: {preview}")
                 
             if len(self.conversation.messages) != len(conversation.messages):
-                logger.error(f"❌ Context loading mismatch: DB has {len(conversation.messages)} messages, AI context has {len(self.conversation.messages)} messages")
+                logger.error(f"✗ Context loading mismatch: DB has {len(conversation.messages)} messages, AI context has {len(self.conversation.messages)} messages")
             else:
-                logger.debug(f"✅ Context loading verified: {len(self.conversation.messages)} messages loaded correctly")
+                logger.debug(f"✓ Context loading verified: {len(self.conversation.messages)} messages loaded correctly")
                 
         except Exception as e:
-            logger.error(f"❌ Failed to load conversation context for {conversation_id}: {e}", exc_info=True)
+            logger.error(f"✗ Failed to load conversation context for {conversation_id}: {e}", exc_info=True)
     
     # --- Enhanced Message Handling ---
     
@@ -235,13 +236,13 @@ class ConversationAIService(AIService):
                 try:
                     conversation_id = loop.run_until_complete(self.start_new_conversation())
                     if conversation_id:
-                        logger.info(f"✅ Created new conversation for message: {conversation_id}")
+                        logger.info(f"✓ Created new conversation for message: {conversation_id}")
                     else:
-                        logger.error("❌ Failed to create conversation for message")
+                        logger.error("✗ Failed to create conversation for message")
                 finally:
                     loop.close()
             except Exception as e:
-                logger.error(f"❌ Failed to create conversation for message: {e}")
+                logger.error(f"✗ Failed to create conversation for message: {e}")
         
         # Call parent method
         result = super().send_message(message, stream)
@@ -253,7 +254,19 @@ class ConversationAIService(AIService):
         
         # Log the result with updated context info
         if result.get('success'):
-            logger.info(f"✅ Message sent successfully. Context now has: {len(self.conversation.messages)} messages")
+            logger.info(f"✓ Message sent successfully. Context now has: {len(self.conversation.messages)} messages")
+            
+            # Trigger conversation update callbacks to refresh UI immediately
+            if self._current_conversation_id and save_conversation:
+                try:
+                    # Call any registered conversation update callbacks
+                    for callback in getattr(self, '_conversation_update_callbacks', []):
+                        try:
+                            callback(self._current_conversation_id, len(self.conversation.messages))
+                        except Exception as e:
+                            logger.error(f"Conversation update callback error: {e}")
+                except Exception as e:
+                    logger.error(f"Failed to trigger conversation update callbacks: {e}")
             
             # Immediate save to ensure persistence
             if save_conversation and self._auto_save_conversations:
@@ -286,7 +299,7 @@ class ConversationAIService(AIService):
                                     loop.close()
                                     
                         except Exception as e:
-                            logger.error(f"❌ Failed to save conversation immediately: {e}", exc_info=True)
+                            logger.error(f"✗ Failed to save conversation immediately: {e}", exc_info=True)
                     
                     # Try immediate save first
                     save_conversation_immediate()
@@ -300,9 +313,9 @@ class ConversationAIService(AIService):
                         logger.debug(f"Could not schedule backup save: {e}")
                         
                 except Exception as e:
-                    logger.error(f"❌ Failed to save conversation: {e}", exc_info=True)
+                    logger.error(f"✗ Failed to save conversation: {e}", exc_info=True)
         else:
-            logger.error(f"❌ Message send failed: {result.get('error', 'Unknown error')}")
+            logger.error(f"✗ Message send failed: {result.get('error', 'Unknown error')}")
         
         return result
     
@@ -371,9 +384,9 @@ class ConversationAIService(AIService):
                     )
                     
                     if saved_message:
-                        logger.debug(f"✅ Message {i+1} saved successfully with ID: {saved_message.id}")
+                        logger.debug(f"✓ Message {i+1} saved successfully with ID: {saved_message.id}")
                     else:
-                        logger.error(f"❌ Failed to save message {i+1}")
+                        logger.error(f"✗ Failed to save message {i+1}")
                 
                 # Verify all messages were saved by reloading conversation
                 verification_conversation = await self.conversation_service.get_conversation(
@@ -381,7 +394,7 @@ class ConversationAIService(AIService):
                 )
                 
                 if verification_conversation:
-                    logger.info(f"✅ Verification: Database now has {len(verification_conversation.messages)} messages")
+                    logger.info(f"✓ Verification: Database now has {len(verification_conversation.messages)} messages")
                     
                     # Update the AI context to match what's in the database (for consistency)
                     if len(verification_conversation.messages) > len(self.conversation.messages):
@@ -395,7 +408,7 @@ class ConversationAIService(AIService):
                 logger.debug(f"💾 No new messages to save (DB: {existing_message_count}, Context: {current_message_count})")
                     
         except Exception as e:
-            logger.error(f"❌ Failed to save current conversation: {e}", exc_info=True)
+            logger.error(f"✗ Failed to save current conversation: {e}", exc_info=True)
     
     # --- Configuration ---
     
@@ -413,6 +426,22 @@ class ConversationAIService(AIService):
         """Enable or disable automatic summary generation."""
         self._auto_generate_summaries = enabled
         logger.info(f"Auto-generate summaries: {'enabled' if enabled else 'disabled'}")
+    
+    def add_conversation_update_callback(self, callback):
+        """Add a callback to be called when conversation is updated with new messages.
+        
+        Args:
+            callback: Function that takes (conversation_id: str, message_count: int)
+        """
+        if callback not in self._conversation_update_callbacks:
+            self._conversation_update_callbacks.append(callback)
+            logger.debug(f"Added conversation update callback")
+    
+    def remove_conversation_update_callback(self, callback):
+        """Remove a conversation update callback."""
+        if callback in self._conversation_update_callbacks:
+            self._conversation_update_callbacks.remove(callback)
+            logger.debug(f"Removed conversation update callback")
     
     # --- Conversation Info ---
     

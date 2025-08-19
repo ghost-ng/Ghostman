@@ -186,7 +186,7 @@ class ConversationREPLWidget(REPLWidget):
                 self._ai_service.set_auto_save(True)
                 self._ai_service.set_auto_generate_titles(True)
                 
-                logger.info("✅ AI service integration enabled")
+                logger.info("✓ AI service integration enabled")
             
             # Set up status callbacks
             self.conversation_manager.add_status_callback(self._on_conversation_status)
@@ -195,7 +195,7 @@ class ConversationREPLWidget(REPLWidget):
             self._refresh_conversation_list()
             
         except Exception as e:
-            logger.error(f"❌ Failed to set up conversation integration: {e}")
+            logger.error(f"✗ Failed to set up conversation integration: {e}")
     
     def _on_conversation_status(self, status: str, data: Dict[str, Any]):
         """Handle conversation manager status updates."""
@@ -221,7 +221,7 @@ class ConversationREPLWidget(REPLWidget):
             # Run async operation in thread
             QTimer.singleShot(0, self._async_refresh_conversations)
         except Exception as e:
-            logger.error(f"❌ Failed to refresh conversation list: {e}")
+            logger.error(f"✗ Failed to refresh conversation list: {e}")
     
     def _async_refresh_conversations(self):
         """Asynchronously refresh conversations."""
@@ -282,7 +282,7 @@ class ConversationREPLWidget(REPLWidget):
     def _load_conversation(self, conversation_id: str):
         """Load a specific conversation."""
         if not self._ai_service:
-            self.append_output("❌ AI service not available", "error")
+            self.append_output("✗ AI service not available", "error")
             return
         
         try:
@@ -316,11 +316,11 @@ class ConversationREPLWidget(REPLWidget):
                 self.conversation_switched.emit(conversation_id)
                 
             else:
-                self.append_output(f"❌ Failed to load conversation: {conversation_id}", "error")
+                self.append_output(f"✗ Failed to load conversation: {conversation_id}", "error")
             
         except Exception as e:
-            logger.error(f"❌ Failed to load conversation: {e}")
-            self.append_output(f"❌ Error loading conversation: {e}", "error")
+            logger.error(f"✗ Failed to load conversation: {e}")
+            self.append_output(f"✗ Error loading conversation: {e}", "error")
     
     def _display_conversation_messages(self):
         """Display conversation messages in the output area."""
@@ -340,12 +340,12 @@ class ConversationREPLWidget(REPLWidget):
                     self.append_output(f"🤖 ASSISTANT: {msg.content}", "response")
                 
         except Exception as e:
-            logger.error(f"❌ Failed to display conversation messages: {e}")
+            logger.error(f"✗ Failed to display conversation messages: {e}")
     
     def _create_new_conversation(self):
         """Create a new conversation."""
         if not self._ai_service:
-            self.append_output("❌ AI service not available", "error")
+            self.append_output("✗ AI service not available", "error")
             return
         
         try:
@@ -369,18 +369,18 @@ class ConversationREPLWidget(REPLWidget):
                 self._refresh_conversation_list()
                 
             else:
-                self.append_output("❌ Failed to create new conversation", "error")
+                self.append_output("✗ Failed to create new conversation", "error")
                 
         except Exception as e:
-            logger.error(f"❌ Failed to create new conversation: {e}")
-            self.append_output(f"❌ Error creating conversation: {e}", "error")
+            logger.error(f"✗ Failed to create new conversation: {e}")
+            self.append_output(f"✗ Error creating conversation: {e}", "error")
     
     def _browse_conversations(self):
         """Open conversation browser dialog."""
         self.append_output("🔍 Opening conversation browser...", "info")
         
         if not self.conversation_manager:
-            self.append_output("❌ Conversation manager not available", "error")
+            self.append_output("✗ Conversation manager not available", "error")
             return
         
         try:
@@ -398,11 +398,11 @@ class ConversationREPLWidget(REPLWidget):
             browser.raise_()
             browser.activateWindow()
             
-            self.append_output("✅ Conversation browser opened", "info")
+            self.append_output("✓ Conversation browser opened", "info")
             
         except Exception as e:
-            logger.error(f"❌ Failed to open conversation browser: {e}")
-            self.append_output(f"❌ Error opening conversation browser: {e}", "error")
+            logger.error(f"✗ Failed to open conversation browser: {e}")
+            self.append_output(f"✗ Error opening conversation browser: {e}", "error")
     
     def _on_browser_conversation_loaded(self, conversation_id: str):
         """Handle conversation loaded from browser."""
@@ -416,7 +416,7 @@ class ConversationREPLWidget(REPLWidget):
     def _export_current_conversation(self):
         """Export the current conversation."""
         if not self._current_conversation_id:
-            self.append_output("❌ No active conversation to export", "warning")
+            self.append_output("✗ No active conversation to export", "warning")
             return
         
         self.append_output("📤 Exporting current conversation...", "info")
@@ -486,7 +486,7 @@ class ConversationREPLWidget(REPLWidget):
     def _list_recent_conversations(self):
         """List recent conversations."""
         if not self.conversation_manager:
-            self.append_output("❌ Conversation manager not available", "error")
+            self.append_output("✗ Conversation manager not available", "error")
             return
         
         try:
@@ -534,8 +534,8 @@ class ConversationREPLWidget(REPLWidget):
             self._lister_thread.start()
             
         except Exception as e:
-            logger.error(f"❌ Failed to list conversations: {e}")
-            self.append_output(f"❌ Error listing conversations: {e}", "error")
+            logger.error(f"✗ Failed to list conversations: {e}")
+            self.append_output(f"✗ Error listing conversations: {e}", "error")
     
     def _search_conversations(self, search_term: str):
         """Search conversations."""
@@ -546,7 +546,7 @@ class ConversationREPLWidget(REPLWidget):
     def _export_current_conversation_format(self, format_type: str):
         """Export current conversation in specific format."""
         if not self._current_conversation_id:
-            self.append_output("❌ No active conversation to export", "warning")
+            self.append_output("✗ No active conversation to export", "warning")
             return
         
         self.append_output(f"📤 Exporting to {format_type.upper()} format...", "info")
@@ -555,7 +555,7 @@ class ConversationREPLWidget(REPLWidget):
     def _show_current_conversation_info(self):
         """Show information about current conversation."""
         if not self._ai_service or not self._current_conversation_id:
-            self.append_output("❌ No active conversation", "warning")
+            self.append_output("✗ No active conversation", "warning")
             return
         
         try:
@@ -576,16 +576,16 @@ class ConversationREPLWidget(REPLWidget):
                 if conv_info.get('category'):
                     self.append_output(f"  Category: {conv_info['category']}", "normal")
             else:
-                self.append_output("❌ Could not retrieve conversation info", "error")
+                self.append_output("✗ Could not retrieve conversation info", "error")
                 
         except Exception as e:
-            logger.error(f"❌ Failed to get conversation info: {e}")
-            self.append_output(f"❌ Error getting conversation info: {e}", "error")
+            logger.error(f"✗ Failed to get conversation info: {e}")
+            self.append_output(f"✗ Error getting conversation info: {e}", "error")
     
     def _add_tags_to_current_conversation(self, tags: set):
         """Add tags to the current conversation."""
         if not self.conversation_manager or not self._current_conversation_id:
-            self.append_output("❌ No active conversation", "warning")
+            self.append_output("✗ No active conversation", "warning")
             return
         
         try:
@@ -596,13 +596,13 @@ class ConversationREPLWidget(REPLWidget):
             )
             
             if success:
-                self.append_output(f"✅ Added tags: {', '.join(tags)}", "info")
+                self.append_output(f"✓ Added tags: {', '.join(tags)}", "info")
             else:
-                self.append_output("❌ Failed to add tags", "error")
+                self.append_output("✗ Failed to add tags", "error")
                 
         except Exception as e:
-            logger.error(f"❌ Failed to add tags: {e}")
-            self.append_output(f"❌ Error adding tags: {e}", "error")
+            logger.error(f"✗ Failed to add tags: {e}")
+            self.append_output(f"✗ Error adding tags: {e}", "error")
     
     # --- Override AI message handling ---
     
@@ -634,12 +634,12 @@ class ConversationREPLWidget(REPLWidget):
                     if result['success']:
                         self.response_received.emit(result['response'], True)
                     else:
-                        error_msg = f"❌ AI Error: {result.get('error', 'Unknown error')}"
+                        error_msg = f"✗ AI Error: {result.get('error', 'Unknown error')}"
                         self.response_received.emit(error_msg, False)
                         
                 except Exception as e:
                     logger.error(f"AI worker error: {e}")
-                    self.response_received.emit(f"❌ Error: {str(e)}", False)
+                    self.response_received.emit(f"✗ Error: {str(e)}", False)
         
         # Create and start worker thread
         self.ai_thread = QThread()

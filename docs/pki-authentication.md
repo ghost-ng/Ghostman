@@ -4,12 +4,13 @@
 1. [PKI System Overview](#pki-system-overview)
 2. [Architecture & Components](#architecture--components)
 3. [Setup Workflow](#setup-workflow)
-4. [API Methods](#api-methods)
-5. [Configuration](#configuration)
-6. [File Storage](#file-storage)
-7. [Error Handling](#error-handling)
-8. [Security Considerations](#security-considerations)
-9. [Troubleshooting](#troubleshooting)
+4. [PKI Setup and Re-use Workflow](#pki-setup-and-re-use-workflow)
+5. [API Methods](#api-methods)
+6. [Configuration](#configuration)
+7. [File Storage](#file-storage)
+8. [Error Handling](#error-handling)
+9. [Security Considerations](#security-considerations)
+10. [Troubleshooting](#troubleshooting)
 
 ## PKI System Overview
 
@@ -136,9 +137,9 @@ The PKI system consists of several interconnected components:
 ```
 User opens PKI wizard or settings
          ↓
-   Choose authentication mode:
-   • Enterprise PKI Authentication
-   • Standard Authentication (Default)
+  Choose authentication mode:
+  • Enterprise PKI Authentication
+  • Standard Authentication (Default)
 ```
 
 #### 2. P12 Certificate Import
@@ -204,6 +205,57 @@ pki/
 ├── ca_chain.pem        # CA certificate chain (if provided)
 └── pki_config.json     # PKI configuration metadata
 ```
+
+## PKI Setup and Re-use Workflow
+
+### First-Time Setup
+When a user first imports a P12 certificate:
+
+1. **Certificate Import**: User selects P12 file and provides password through the PKI wizard
+2. **Certificate Extraction**: System reads (but never modifies) the original P12 file and extracts:
+   - Client certificate → saved as `client.crt` in PKI directory
+   - Private key → saved as `client.pem` in PKI directory  
+   - CA chain (if present) → saved as `ca_chain.pem` in PKI directory
+3. **Configuration Storage**: PKI configuration saved to `pki_config.json` with:
+   - Certificate paths and validation status
+   - File hash for integrity checking
+   - Last validation timestamp
+4. **Session Integration**: Extracted certificates automatically applied to HTTP session manager
+5. **P12 File**: Original P12 file remains untouched at its original location
+
+### Subsequent Application Starts
+When the application starts after PKI has been configured:
+
+1. **Automatic Loading**: PKI service calls `cert_manager.load_config()` on startup
+2. **Configuration Check**: System loads `pki_config.json` and verifies:
+   - PKI is enabled in configuration
+   - Certificate files exist at stored paths
+   - Certificates are still valid (not expired)
+3. **Session Application**: If valid, certificates automatically applied to session manager
+4. **No Re-import Needed**: User doesn't need to re-import P12 or re-enter passwords
+5. **Status Display**: PKI settings widget shows current status and certificate details
+
+### Certificate File Locations
+All PKI files are stored in the user's AppData directory:
+
+- **Windows**: `%APPDATA%\Ghostman\pki\`
+- **Linux/Mac**: `~/.ghostman/pki/`
+
+Storage structure:
+```
+pki/
+├── pki_config.json     # PKI configuration and status
+├── client.crt          # Client certificate (PEM format)
+├── client.pem          # Private key (PEM format)
+└── ca_chain.pem        # CA certificate chain (optional)
+```
+
+### Important Notes
+- **Security**: Original P12 passwords are never stored
+- **File Integrity**: Original P12 files are never modified or moved
+- **Automatic Validation**: Certificates validated on each application start
+- **Expiry Monitoring**: System warns when certificates approach expiration
+- **Cross-Platform**: Storage locations follow OS conventions
 
 ## API Methods
 

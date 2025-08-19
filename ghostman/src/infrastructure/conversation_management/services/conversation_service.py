@@ -99,11 +99,11 @@ class ConversationService:
                 except Exception as e:
                     logger.error(f"Conversation created callback error: {e}")
             
-            logger.info(f"✅ Created conversation: {conversation.id} - {conversation.title}")
+            logger.info(f"✓ Created conversation: {conversation.id} - {conversation.title}")
             return conversation
             
         except Exception as e:
-            logger.error(f"❌ Failed to create conversation: {e}")
+            logger.error(f"✗ Failed to create conversation: {e}")
             raise ConversationServiceError(f"Failed to create conversation: {e}")
     
     async def get_conversation(self, conversation_id: str, include_messages: bool = True) -> Optional[Conversation]:
@@ -111,7 +111,7 @@ class ConversationService:
         try:
             return await self.repository.get_conversation(conversation_id, include_messages)
         except Exception as e:
-            logger.error(f"❌ Failed to get conversation {conversation_id}: {e}")
+            logger.error(f"✗ Failed to get conversation {conversation_id}: {e}")
             return None
     
     async def update_conversation_title(self, conversation_id: str, title: str) -> bool:
@@ -135,7 +135,7 @@ class ConversationService:
             return success
             
         except Exception as e:
-            logger.error(f"❌ Failed to update conversation title: {e}")
+            logger.error(f"✗ Failed to update conversation title: {e}")
             return False
     
     async def update_conversation_status(self, conversation_id: str, status: 'ConversationStatus') -> bool:
@@ -160,7 +160,7 @@ class ConversationService:
             return success
             
         except Exception as e:
-            logger.error(f"❌ Failed to update conversation status: {e}")
+            logger.error(f"✗ Failed to update conversation status: {e}")
             return False
     
     async def set_conversation_as_active(self, conversation_id: str) -> bool:
@@ -181,12 +181,12 @@ class ConversationService:
             success = await self.update_conversation_status(conversation_id, ConversationStatus.ACTIVE)
             
             if success:
-                logger.info(f"✅ Conversation {conversation_id[:8]}... is now active, all others are pinned")
+                logger.info(f"✓ Conversation {conversation_id[:8]}... is now active, all others are pinned")
             
             return success
             
         except Exception as e:
-            logger.error(f"❌ Failed to set conversation as active: {e}")
+            logger.error(f"✗ Failed to set conversation as active: {e}")
             return False
     
     async def add_message_to_conversation(
@@ -233,7 +233,7 @@ class ConversationService:
             return message
             
         except Exception as e:
-            logger.error(f"❌ Failed to add message: {e}")
+            logger.error(f"✗ Failed to add message: {e}")
             return None
     
     async def archive_conversation(self, conversation_id: str) -> bool:
@@ -252,7 +252,7 @@ class ConversationService:
             return success
             
         except Exception as e:
-            logger.error(f"❌ Failed to archive conversation: {e}")
+            logger.error(f"✗ Failed to archive conversation: {e}")
             return False
     
     async def delete_conversation(self, conversation_id: str, permanent: bool = False) -> bool:
@@ -274,7 +274,7 @@ class ConversationService:
             return success
             
         except Exception as e:
-            logger.error(f"❌ Failed to delete conversation: {e}")
+            logger.error(f"✗ Failed to delete conversation: {e}")
             return False
     
     async def restore_conversation(self, conversation_id: str) -> bool:
@@ -288,7 +288,7 @@ class ConversationService:
             return await self.repository.update_conversation(conversation)
             
         except Exception as e:
-            logger.error(f"❌ Failed to restore conversation: {e}")
+            logger.error(f"✗ Failed to restore conversation: {e}")
             return False
     
     # --- Conversation Management ---
@@ -304,7 +304,7 @@ class ConversationService:
         try:
             return await self.repository.list_conversations(status, limit, offset, sort_order)
         except Exception as e:
-            logger.error(f"❌ Failed to list conversations: {e}")
+            logger.error(f"✗ Failed to list conversations: {e}")
             return []
     
     async def search_conversations(self, query: SearchQuery) -> SearchResults:
@@ -312,7 +312,7 @@ class ConversationService:
         try:
             return await self.repository.search_conversations(query)
         except Exception as e:
-            logger.error(f"❌ Search failed: {e}")
+            logger.error(f"✗ Search failed: {e}")
             return SearchResults(results=[], total_count=0)
     
     async def get_recent_conversations(self, days: int = 7, limit: int = 10) -> List[Conversation]:
@@ -342,7 +342,7 @@ class ConversationService:
             return await self.repository.update_conversation(conversation)
             
         except Exception as e:
-            logger.error(f"❌ Failed to add tags: {e}")
+            logger.error(f"✗ Failed to add tags: {e}")
             return False
     
     async def remove_tags_from_conversation(self, conversation_id: str, tags: Set[str]) -> bool:
@@ -356,7 +356,7 @@ class ConversationService:
             return await self.repository.update_conversation(conversation)
             
         except Exception as e:
-            logger.error(f"❌ Failed to remove tags: {e}")
+            logger.error(f"✗ Failed to remove tags: {e}")
             return False
     
     async def get_all_tags(self, min_usage: int = 1) -> List[Dict[str, Any]]:
@@ -364,7 +364,7 @@ class ConversationService:
         try:
             return await self.repository.get_all_tags(min_usage)
         except Exception as e:
-            logger.error(f"❌ Failed to get tags: {e}")
+            logger.error(f"✗ Failed to get tags: {e}")
             return []
     
     # --- Active Conversation Management ---
@@ -391,7 +391,7 @@ class ConversationService:
         try:
             return await self.summary_service.generate_summary(conversation_id)
         except Exception as e:
-            logger.error(f"❌ Failed to generate summary: {e}")
+            logger.error(f"✗ Failed to generate summary: {e}")
             return False
     
     async def generate_conversation_title(self, conversation_id: str) -> Optional[str]:
@@ -399,7 +399,7 @@ class ConversationService:
         try:
             return await self.summary_service.generate_title(conversation_id)
         except Exception as e:
-            logger.error(f"❌ Failed to generate title: {e}")
+            logger.error(f"✗ Failed to generate title: {e}")
             return None
     
     async def get_conversation_summary(self, conversation_id: str) -> Optional[str]:
@@ -410,7 +410,7 @@ class ConversationService:
                 return conversation.summary.summary
             return None
         except Exception as e:
-            logger.error(f"❌ Failed to get summary: {e}")
+            logger.error(f"✗ Failed to get summary: {e}")
             return None
     
     # --- Export Operations ---
@@ -420,7 +420,7 @@ class ConversationService:
         try:
             return await self.export_service.export_conversation(conversation_id, format, file_path)
         except Exception as e:
-            logger.error(f"❌ Export failed: {e}")
+            logger.error(f"✗ Export failed: {e}")
             return False
     
     async def export_conversations(
@@ -433,7 +433,7 @@ class ConversationService:
         try:
             return await self.export_service.export_conversations(conversation_ids, format, file_path)
         except Exception as e:
-            logger.error(f"❌ Bulk export failed: {e}")
+            logger.error(f"✗ Bulk export failed: {e}")
             return False
     
     # --- Analytics ---
@@ -454,7 +454,7 @@ class ConversationService:
             return stats
             
         except Exception as e:
-            logger.error(f"❌ Failed to get statistics: {e}")
+            logger.error(f"✗ Failed to get statistics: {e}")
             return {}
     
     # --- Event System ---
@@ -565,7 +565,7 @@ class ConversationService:
             return cleanup_stats
             
         except Exception as e:
-            logger.error(f"❌ Cleanup failed: {e}")
+            logger.error(f"✗ Cleanup failed: {e}")
             return {'error': str(e)}
     
     async def shutdown(self):
@@ -580,4 +580,4 @@ class ConversationService:
         # Reset active conversation
         self._active_conversation_id = None
         
-        logger.info("✅ Conversation service shut down")
+        logger.info("✓ Conversation service shut down")

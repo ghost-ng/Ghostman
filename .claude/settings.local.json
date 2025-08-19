@@ -83,7 +83,9 @@
       "Bash(gh workflow run:*)",
       "Bash(gh run list:*)",
       "Bash(gh run view:*)",
-      "Bash(git tag:*)"
+      "Bash(git tag:*)",
+      "Bash(del test_fixes.py)",
+      "Bash(del manual_validation.py)"
     ],
     "deny": []
   }

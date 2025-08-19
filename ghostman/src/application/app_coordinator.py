@@ -258,7 +258,7 @@ class AppCoordinator(QObject):
                                 finally:
                                     loop.close()
                             except Exception as e:
-                                logger.error(f"❌ Failed to save conversation with title: {e}")
+                                logger.error(f"✗ Failed to save conversation with title: {e}")
                         
                         # Schedule the save operation
                         QTimer.singleShot(100, save_with_title)
@@ -272,7 +272,7 @@ class AppCoordinator(QObject):
                 logger.debug("REPL widget not available to save conversation state")
                 
         except Exception as e:
-            logger.error(f"❌ Failed to save current conversation state: {e}")
+            logger.error(f"✗ Failed to save current conversation state: {e}")
     
     def _cleanup_on_shutdown(self):
         """Comprehensive cleanup operations on application shutdown."""
@@ -294,17 +294,17 @@ class AppCoordinator(QObject):
                 if hasattr(repl_widget, 'conversation_manager') and repl_widget.conversation_manager:
                     try:
                         repl_widget.conversation_manager.shutdown()
-                        logger.info("✅ Conversation manager shutdown complete")
+                        logger.info("✓ Conversation manager shutdown complete")
                     except Exception as e:
-                        logger.error(f"❌ Failed to shutdown conversation manager: {e}")
+                        logger.error(f"✗ Failed to shutdown conversation manager: {e}")
                 
                 # Stop any running timers in REPL widget
                 if hasattr(repl_widget, 'autosave_timer') and repl_widget.autosave_timer:
                     try:
                         repl_widget.autosave_timer.stop()
-                        logger.debug("✅ Autosave timer stopped")
+                        logger.debug("✓ Autosave timer stopped")
                     except Exception as e:
-                        logger.error(f"❌ Failed to stop autosave timer: {e}")
+                        logger.error(f"✗ Failed to stop autosave timer: {e}")
             
             # 3. Clear any temporary data
             try:
@@ -318,14 +318,14 @@ class AppCoordinator(QObject):
                     except:
                         pass  # Ignore errors cleaning temp files
                 if ghostman_temp_files:
-                    logger.debug(f"✅ Cleaned up {len(ghostman_temp_files)} temporary files")
+                    logger.debug(f"✓ Cleaned up {len(ghostman_temp_files)} temporary files")
             except Exception as e:
                 logger.debug(f"Temp file cleanup failed: {e}")
             
-            logger.info("✅ Cleanup operations completed successfully")
+            logger.info("✓ Cleanup operations completed successfully")
             
         except Exception as e:
-            logger.error(f"❌ Error during cleanup operations: {e}")
+            logger.error(f"✗ Error during cleanup operations: {e}")
     
     def _restore_current_conversation_state(self):
         """Restore the last active conversation from settings."""
@@ -351,10 +351,10 @@ class AppCoordinator(QObject):
                 else:
                     logger.debug("REPL widget not available for conversation restoration")
             else:
-                logger.debug("❌ No previous conversation to restore")
+                logger.debug("✗ No previous conversation to restore")
                     
         except Exception as e:
-            logger.error(f"❌ Failed to restore conversation state: {e}", exc_info=True)
+            logger.error(f"✗ Failed to restore conversation state: {e}", exc_info=True)
     
     def _on_state_changed(self, event: StateChangeEvent):
         """Handle state change events from the state machine."""
@@ -535,33 +535,33 @@ class AppCoordinator(QObject):
                 logger.info("🎨 Applying interface settings...")
                 self._apply_interface_settings(config["interface"])
                 settings_applied += len(config["interface"]) if isinstance(config["interface"], dict) else 1
-                logger.info("✅ Interface settings applied")
+                logger.info("✓ Interface settings applied")
             
             # Apply AI model settings  
             if "ai_model" in config:
                 logger.info("🤖 Applying AI model settings...")
                 self._apply_ai_model_settings(config["ai_model"])
                 settings_applied += len(config["ai_model"]) if isinstance(config["ai_model"], dict) else 1
-                logger.info("✅ AI model settings applied")
+                logger.info("✓ AI model settings applied")
             
             # Apply advanced settings
             if "advanced" in config:
                 logger.info("🔍 Applying advanced settings...")
                 self._apply_advanced_settings(config["advanced"])
                 settings_applied += len(config["advanced"]) if isinstance(config["advanced"], dict) else 1
-                logger.info("✅ Advanced settings applied")
+                logger.info("✓ Advanced settings applied")
             
             # Apply font settings
             if "fonts" in config:
                 logger.info("🔤 Applying font settings...")
                 self._apply_font_settings(config["fonts"])
                 settings_applied += len(config["fonts"]) if isinstance(config["fonts"], dict) else 1
-                logger.info("✅ Font settings applied")
+                logger.info("✓ Font settings applied")
             
-            logger.info(f"=== ✅ SETTINGS SUCCESSFULLY APPLIED: {settings_applied} items ===")
+            logger.info(f"=== ✓ SETTINGS SUCCESSFULLY APPLIED: {settings_applied} items ===")
             
         except Exception as e:
-            logger.error(f"❌ Failed to apply settings to running application: {e}")
+            logger.error(f"✗ Failed to apply settings to running application: {e}")
             import traceback
             logger.error(f"📝 Stack trace: {traceback.format_exc()}")
         
@@ -587,7 +587,7 @@ class AppCoordinator(QObject):
             logger.info(f"  🎛️  {key}: {value}")
         
         if not self._main_window:
-            logger.warning("⚠️  No main window available - interface settings skipped")
+            logger.warning("⚠  No main window available - interface settings skipped")
             return
         
         settings_processed = 0
@@ -606,15 +606,15 @@ class AppCoordinator(QObject):
                 if hasattr(self._main_window, 'floating_repl') and self._main_window.floating_repl:
                     logger.info("🪟 Applying opacity to floating REPL panels...")
                     self._main_window.floating_repl.set_panel_opacity(panel_opacity)
-                    logger.info(f"✅ Floating REPL panel opacity applied: {panel_opacity:.3f} ({opacity_percent}%)")
+                    logger.info(f"✓ Floating REPL panel opacity applied: {panel_opacity:.3f} ({opacity_percent}%)")
                     settings_processed += 1
                 else:
-                    logger.warning("⚠️  Floating REPL not available for panel opacity setting")
+                    logger.warning("⚠  Floating REPL not available for panel opacity setting")
                 
                 # Avatar window opacity remains unchanged (fully opaque)
                 logger.info("🎯 Avatar window opacity unchanged - panel opacity only affects REPL backgrounds")
             else:
-                logger.error(f"❌ Invalid opacity type: {type(opacity_percent)} (expected int/float)")
+                logger.error(f"✗ Invalid opacity type: {type(opacity_percent)} (expected int/float)")
         
         # Apply always on top
         if "always_on_top" in interface_config:
@@ -622,10 +622,10 @@ class AppCoordinator(QObject):
             logger.debug(f"📌 Processing always on top setting: {always_on_top}")
             try:
                 self._update_window_flags(always_on_top)
-                logger.info(f"✅ Always on top applied: {always_on_top}")
+                logger.info(f"✓ Always on top applied: {always_on_top}")
                 settings_processed += 1
             except Exception as e:
-                logger.error(f"❌ Failed to apply always on top: {e}")
+                logger.error(f"✗ Failed to apply always on top: {e}")
         
         logger.info(f"🎨 Interface settings processing complete: {settings_processed}/{len(interface_config)} applied")
     
@@ -666,12 +666,29 @@ class AppCoordinator(QObject):
                 logger.info("🔍 Detailed logging mode enabled - verbose logging active")
             else:
                 logger.info("📝 Standard logging mode - normal verbosity")
-            logger.info(f"⚠️  Logging changes require application restart to take full effect")
+            logger.info(f"⚠  Logging changes require application restart to take full effect")
+            settings_processed += 1
+        
+        # Apply log location settings
+        if "log_location" in advanced_config:
+            log_location = advanced_config["log_location"]
+            if log_location:
+                logger.info(f"📁 Custom log location: {log_location}")
+            else:
+                logger.info("📁 Using default log location")
+            logger.info(f"⚠  Log location changes require application restart to take full effect")
+            settings_processed += 1
+        
+        # Apply log retention settings
+        if "log_retention_days" in advanced_config:
+            retention_days = advanced_config["log_retention_days"]
+            logger.info(f"🗑️ Log retention: {retention_days} days")
+            logger.info(f"⚠  Log retention changes require application restart to take full effect")
             settings_processed += 1
         
         # Log any additional advanced settings
         for key, value in advanced_config.items():
-            if key not in ["log_level"]:
+            if key not in ["log_level", "log_location", "log_retention_days"]:
                 logger.info(f"  🔧 Advanced {key}: {value}")
                 settings_processed += 1
         

@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QFrame, QMessageBox, QProgressBar
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QIcon
 
 from ...infrastructure.pki import pki_service, CertificateInfo
 from ..wizards.pki_wizard import show_pki_wizard
@@ -294,6 +294,7 @@ class PKISettingsWidget(QWidget):
         # Default fallback
         return "lite"
     
+    
     def _create_status_group(self, parent_layout):
         """Create PKI status group."""
         status_group = QGroupBox("PKI Authentication Status")
@@ -304,9 +305,29 @@ class PKISettingsWidget(QWidget):
         status_frame_layout = QHBoxLayout()
         status_frame_layout.setContentsMargins(0, 0, 0, 0)
         
+        # Create horizontal layout for status icon and text
+        status_content_layout = QHBoxLayout()
+        status_content_layout.setContentsMargins(0, 0, 0, 0)
+        status_content_layout.setSpacing(5)
+        
+        # Status icon
+        self.status_icon = QLabel()
+        self.status_icon.setFixedSize(16, 16)
+        self.status_icon.setScaledContents(True)
+        status_content_layout.addWidget(self.status_icon)
+        
+        # Status text
         self.status_label = QLabel("Status: Checking...")
         self.status_label.setStyleSheet("font-weight: bold; font-size: 12px;")
-        status_frame_layout.addWidget(self.status_label)
+        status_content_layout.addWidget(self.status_label)
+        
+        # Hide icon initially during checking
+        self.status_icon.hide()
+        
+        # Create container widget for the status content
+        status_container = QWidget()
+        status_container.setLayout(status_content_layout)
+        status_frame_layout.addWidget(status_container)
         
         status_frame_layout.addStretch()
         
@@ -398,7 +419,31 @@ class PKISettingsWidget(QWidget):
     
     def _show_enabled_status(self, status: Dict[str, Any]):
         """Show enabled PKI status."""
-        self.status_label.setText("Status: ✅ PKI Authentication Enabled")
+        # Load green check icon
+        try:
+            check_icon_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", 
+                "assets", "icons", "check_green.png"
+            )
+            
+            if os.path.exists(check_icon_path):
+                from PyQt6.QtGui import QPixmap
+                check_pixmap = QPixmap(check_icon_path)
+                scaled_pixmap = check_pixmap.scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                self.status_icon.setPixmap(scaled_pixmap)
+                self.status_icon.show()
+                self.status_label.setText("PKI Authentication Enabled")
+                logger.debug("Loaded green check icon")
+            else:
+                # Fallback to text symbol
+                self.status_icon.hide()
+                self.status_label.setText("✓ PKI Authentication Enabled")
+                logger.warning(f"Check icon not found: {check_icon_path}")
+        except Exception as e:
+            logger.error(f"Failed to load check icon: {e}")
+            self.status_icon.hide()
+            self.status_label.setText("✓ PKI Authentication Enabled")
+        
         self.status_label.setStyleSheet("color: #28a745; font-weight: bold; font-size: 12px;")
         
         cert_info = status.get('certificate_info')
@@ -424,7 +469,32 @@ Last validated: {status.get('last_validation', 'Unknown')}"""
     
     def _show_invalid_status(self, status: Dict[str, Any]):
         """Show invalid PKI status."""
-        self.status_label.setText("Status: ⚠️ PKI Configuration Invalid")
+        # Load warning icon
+        try:
+            icon_variant = self._get_icon_variant()
+            warning_icon_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", 
+                "assets", "icons", "warning_color.png"
+            )
+            
+            if os.path.exists(warning_icon_path):
+                from PyQt6.QtGui import QPixmap
+                warning_pixmap = QPixmap(warning_icon_path)
+                scaled_pixmap = warning_pixmap.scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                self.status_icon.setPixmap(scaled_pixmap)
+                self.status_icon.show()
+                self.status_label.setText("PKI Configuration Invalid")
+                logger.debug("Loaded warning icon: warning_color.png")
+            else:
+                # Fallback to text symbol
+                self.status_icon.hide()
+                self.status_label.setText("⚠ PKI Configuration Invalid")
+                logger.warning(f"Warning icon not found: {warning_icon_path}")
+        except Exception as e:
+            logger.error(f"Failed to load warning icon: {e}")
+            self.status_icon.hide()
+            self.status_label.setText("⚠ PKI Configuration Invalid")
+        
         self.status_label.setStyleSheet("color: #fd7e14; font-weight: bold; font-size: 12px;")
         
         errors = status.get('errors', [])
@@ -448,7 +518,33 @@ Last validated: {status.get('last_validation', 'Unknown')}"""
     
     def _show_disabled_status(self):
         """Show disabled PKI status."""
-        self.status_label.setText("Status: ⚪ PKI Authentication Disabled")
+        # Load warning icon
+        try:
+            icon_variant = self._get_icon_variant()
+            warning_icon_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", 
+                "assets", "icons", "warning_color.png"
+            )
+            
+            if os.path.exists(warning_icon_path):
+                from PyQt6.QtGui import QPixmap
+                warning_pixmap = QPixmap(warning_icon_path)
+                # Scale icon to appropriate size
+                scaled_pixmap = warning_pixmap.scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                self.status_icon.setPixmap(scaled_pixmap)
+                self.status_label.setText("PKI Authentication Disabled")
+                logger.debug("Loaded warning icon: warning_color.png")
+            else:
+                # Fallback to text symbol - hide icon and show symbol in text
+                self.status_icon.hide()
+                self.status_label.setText("⚠ PKI Authentication Disabled")
+                logger.warning(f"Warning icon not found: {warning_icon_path}")
+        except Exception as e:
+            logger.error(f"Failed to load warning icon: {e}")
+            # Fallback to text symbol - hide icon and show symbol in text
+            self.status_icon.hide()
+            self.status_label.setText("⚠ PKI Authentication Disabled")
+        
         self.status_label.setStyleSheet("color: #6c757d; font-weight: bold; font-size: 12px;")
         
         self.status_details.setText("""PKI authentication is disabled. Standard authentication methods are in use.
@@ -463,7 +559,46 @@ You can enable PKI authentication if your organization requires certificate-base
     
     def _show_error_status(self, error: str):
         """Show error status."""
-        self.status_label.setText("Status: ❌ PKI Service Error")
+        # Load error icon
+        try:
+            icon_variant = self._get_icon_variant()
+            error_icon_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", 
+                "assets", "icons", f"x_{icon_variant}.png"
+            )
+            
+            if os.path.exists(error_icon_path):
+                from PyQt6.QtGui import QPixmap
+                error_pixmap = QPixmap(error_icon_path)
+                scaled_pixmap = error_pixmap.scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                self.status_icon.setPixmap(scaled_pixmap)
+                self.status_icon.show()
+                self.status_label.setText("PKI Service Error")
+                logger.debug(f"Loaded error icon: x_{icon_variant}.png")
+            else:
+                # Try the red error icon as fallback
+                error_icon_path = os.path.join(
+                    os.path.dirname(__file__), "..", "..", "..", 
+                    "assets", "icons", "x_red.png"
+                )
+                if os.path.exists(error_icon_path):
+                    from PyQt6.QtGui import QPixmap
+                    error_pixmap = QPixmap(error_icon_path)
+                    scaled_pixmap = error_pixmap.scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                    self.status_icon.setPixmap(scaled_pixmap)
+                    self.status_icon.show()
+                    self.status_label.setText("PKI Service Error")
+                    logger.debug("Loaded red error icon")
+                else:
+                    # Fallback to text symbol
+                    self.status_icon.hide()
+                    self.status_label.setText("✗ PKI Service Error")
+                    logger.warning(f"Error icon not found: {error_icon_path}")
+        except Exception as e:
+            logger.error(f"Failed to load error icon: {e}")
+            self.status_icon.hide()
+            self.status_label.setText("✗ PKI Service Error")
+        
         self.status_label.setStyleSheet("color: #dc3545; font-weight: bold; font-size: 12px;")
         
         self.status_details.setText(f"Error checking PKI status: {error}")
@@ -493,13 +628,38 @@ You can enable PKI authentication if your organization requires certificate-base
             else:
                 formatted_expiry = str(not_valid_after)
             
+            # Get storage location information
+            storage_info = ""
+            try:
+                pki_service.initialize()  # Ensure service is initialized
+                cert_path, key_path = pki_service.cert_manager.get_client_cert_files()
+                ca_path = pki_service.cert_manager.get_ca_chain_file()
+                pki_dir = str(pki_service.cert_manager.pki_dir)
+                
+                storage_info = f"""
+
+📁 Certificate Storage Locations:
+PKI Directory: {pki_dir}
+Client Certificate: {cert_path if cert_path else 'Not available'}
+Private Key: {key_path if key_path else 'Not available'}"""
+                
+                if ca_path:
+                    storage_info += f"""
+CA Chain: {ca_path}"""
+                else:
+                    storage_info += f"""
+CA Chain: Not configured"""
+                    
+            except Exception as e:
+                logger.debug(f"Could not get storage info: {e}")
+            
             details = f"""Subject: {cert_info.get('subject', 'N/A')}
 Issuer: {cert_info.get('issuer', 'N/A')}
 Serial Number: {cert_info.get('serial_number', 'N/A')}
 Valid Until: {formatted_expiry}
 Days Until Expiry: {cert_info.get('days_until_expiry', 'N/A')}
 Key Usage: {', '.join(cert_info.get('key_usage', []))}
-Fingerprint: {cert_info.get('fingerprint', 'N/A')[:32]}..."""
+Fingerprint: {cert_info.get('fingerprint', 'N/A')[:32]}...{storage_info}"""
             
             self.cert_details.setText(details)
             
@@ -513,7 +673,7 @@ Fingerprint: {cert_info.get('fingerprint', 'N/A')[:32]}..."""
         if warnings:
             # Show warning in status details
             current_text = self.status_details.text()
-            warning_text = "\n⚠️ " + "\n⚠️ ".join(warnings)
+            warning_text = "\n⚠ " + "\n⚠ ".join(warnings)
             self.status_details.setText(current_text + warning_text)
     
     def _show_setup_wizard(self):

@@ -708,7 +708,21 @@ class ValidationPage(QWizardPage):
             success, error = pki_service.setup_pki_authentication(p12_path, password)
             
             if success:
-                self._log_result("✅ Certificate imported successfully")
+                self._log_result("✓ Certificate imported successfully")
+                self.progress_bar.setValue(60)
+                
+                # Import CA chain if provided
+                ca_chain_path = self.wizard.wizard_data.get('ca_chain_path')
+                if ca_chain_path:
+                    self.status_label.setText("Importing CA chain...")
+                    self._log_result(f"🔗 Importing CA chain: {ca_chain_path}")
+                    
+                    ca_success = pki_service.cert_manager.import_ca_chain_file(ca_chain_path)
+                    if ca_success:
+                        self._log_result("✓ CA chain imported successfully")
+                    else:
+                        self._log_result("⚠ CA chain import failed, proceeding without it")
+                
                 self.progress_bar.setValue(80)
                 
                 # Get certificate info
@@ -720,21 +734,21 @@ class ValidationPage(QWizardPage):
                     self._log_result(f"📅 Valid until: {info['not_valid_after']}")
                     
                     if info['days_until_expiry'] <= 30:
-                        self._log_result(f"⚠️ Certificate expires in {info['days_until_expiry']} days")
+                        self._log_result(f"⚠ Certificate expires in {info['days_until_expiry']} days")
                 
                 self.status_label.setText("Validation completed successfully")
                 self.test_button.setEnabled(True)
                 self._validation_complete = True
                 
             else:
-                self._log_result(f"❌ Certificate import failed: {error}")
+                self._log_result(f"✗ Certificate import failed: {error}")
                 self.status_label.setText("Validation failed")
                 
             self.progress_bar.setValue(100)
             self.completeChanged.emit()
             
         except Exception as e:
-            self._log_result(f"❌ Validation error: {e}")
+            self._log_result(f"✗ Validation error: {e}")
             self.status_label.setText("Validation error")
             self.progress_bar.setValue(100)
             logger.error(f"PKI validation error: {e}")
@@ -743,7 +757,7 @@ class ValidationPage(QWizardPage):
         """Test PKI connection to specified URL."""
         test_url = self.test_url_edit.text().strip()
         if not test_url:
-            self._log_result("❌ Please enter a test URL")
+            self._log_result("✗ Please enter a test URL")
             return
         
         self._log_result(f"🌐 Testing connection to: {test_url}")
@@ -751,11 +765,11 @@ class ValidationPage(QWizardPage):
         try:
             success, error = pki_service.test_pki_connection(test_url)
             if success:
-                self._log_result("✅ Connection test successful")
+                self._log_result("✓ Connection test successful")
             else:
-                self._log_result(f"❌ Connection test failed: {error}")
+                self._log_result(f"✗ Connection test failed: {error}")
         except Exception as e:
-            self._log_result(f"❌ Connection test error: {e}")
+            self._log_result(f"✗ Connection test error: {e}")
     
     def _log_result(self, message: str):
         """Add message to results text."""
@@ -794,7 +808,7 @@ class SummaryPage(QWizardPage):
         if mode == 'standard':
             summary = """
             <h3>Standard Authentication Configured</h3>
-            <p>✅ Ghostman is configured to use standard authentication methods.</p>
+            <p>✓ Ghostman is configured to use standard authentication methods.</p>
             
             <h4>What's configured:</h4>
             <ul>
@@ -814,7 +828,7 @@ class SummaryPage(QWizardPage):
                 cert_info = status.get('certificate_info', {})
                 summary = f"""
                 <h3>PKI Authentication Configured</h3>
-                <p>✅ Enterprise certificate authentication is now active.</p>
+                <p>✓ Enterprise certificate authentication is now active.</p>
                 
                 <h4>Certificate Details:</h4>
                 <ul>
@@ -846,7 +860,7 @@ class SummaryPage(QWizardPage):
             else:
                 summary = """
                 <h3>PKI Setup Incomplete</h3>
-                <p>❌ There was an issue configuring PKI authentication.</p>
+                <p>✗ There was an issue configuring PKI authentication.</p>
                 
                 <p>You can:</p>
                 <ul>

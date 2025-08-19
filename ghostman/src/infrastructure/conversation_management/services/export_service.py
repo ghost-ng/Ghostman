@@ -71,7 +71,7 @@ class ExportService:
                 
         except Exception as e:
             conv_id = conversation_or_id if isinstance(conversation_or_id, str) else conversation.id
-            logger.error(f"❌ Export failed for {conv_id}: {e}")
+            logger.error(f"✗ Export failed for {conv_id}: {e}")
             return False
     
     async def export_conversations(
@@ -121,7 +121,7 @@ class ExportService:
                 return False
                 
         except Exception as e:
-            logger.error(f"❌ Bulk export failed: {e}")
+            logger.error(f"✗ Bulk export failed: {e}")
             return False
     
     async def _export_json(
@@ -158,11 +158,11 @@ class ExportService:
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(export_data, f, indent=2, ensure_ascii=False)
             
-            logger.info(f"✅ Exported {len(conversations)} conversations to JSON: {file_path}")
+            logger.info(f"✓ Exported {len(conversations)} conversations to JSON: {file_path}")
             return True
             
         except Exception as e:
-            logger.error(f"❌ JSON export failed: {e}")
+            logger.error(f"✗ JSON export failed: {e}")
             return False
     
     async def _export_txt(
@@ -216,11 +216,11 @@ class ExportService:
                     
                     f.write("=" * 80 + "\n\n")
             
-            logger.info(f"✅ Exported {len(conversations)} conversations to TXT: {file_path}")
+            logger.info(f"✓ Exported {len(conversations)} conversations to TXT: {file_path}")
             return True
             
         except Exception as e:
-            logger.error(f"❌ TXT export failed: {e}")
+            logger.error(f"✗ TXT export failed: {e}")
             return False
     
     async def _export_markdown(
@@ -286,11 +286,11 @@ class ExportService:
                     
                     f.write("---\n\n")
             
-            logger.info(f"✅ Exported {len(conversations)} conversations to Markdown: {file_path}")
+            logger.info(f"✓ Exported {len(conversations)} conversations to Markdown: {file_path}")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Markdown export failed: {e}")
+            logger.error(f"✗ Markdown export failed: {e}")
             return False
     
     async def _export_html(
@@ -415,11 +415,11 @@ class ExportService:
 </body>
 </html>""")
             
-            logger.info(f"✅ Exported {len(conversations)} conversations to HTML: {file_path}")
+            logger.info(f"✓ Exported {len(conversations)} conversations to HTML: {file_path}")
             return True
             
         except Exception as e:
-            logger.error(f"❌ HTML export failed: {e}")
+            logger.error(f"✗ HTML export failed: {e}")
             return False
     
     def _escape_html(self, text: str) -> str:

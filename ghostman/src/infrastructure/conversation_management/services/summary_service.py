@@ -127,14 +127,14 @@ Respond with ONLY the title, no other text.
             success = await self.repository.save_conversation_summary(summary)
             
             if success:
-                logger.info(f"✅ Generated summary for conversation: {conversation_id}")
+                logger.info(f"✓ Generated summary for conversation: {conversation_id}")
             else:
-                logger.error(f"❌ Failed to save summary for conversation: {conversation_id}")
+                logger.error(f"✗ Failed to save summary for conversation: {conversation_id}")
             
             return success
             
         except Exception as e:
-            logger.error(f"❌ Summary generation failed for {conversation_id}: {e}")
+            logger.error(f"✗ Summary generation failed for {conversation_id}: {e}")
             return False
     
     async def generate_title(self, conversation_id: str) -> Optional[str]:
@@ -164,9 +164,9 @@ Respond with ONLY the title, no other text.
             # Generate title prompt
             prompt = self.TITLE_PROMPT_TEMPLATE.format(content=title_content)
             
-            # Call AI service asynchronously
+            # Call AI service asynchronously without system prompt (to avoid markdown formatting)
             logger.info(f"Generating title for conversation: {conversation_id}")
-            result = await ai_service.send_message_async(prompt)
+            result = await ai_service.send_message_without_system_prompt_async(prompt)
             
             if not result.get('success', False):
                 logger.error(f"AI title generation failed: {result.get('error', 'Unknown error')}")
@@ -181,14 +181,14 @@ Respond with ONLY the title, no other text.
                 title = title[:97] + "..."
             
             if title:
-                logger.info(f"✅ Generated title for conversation {conversation_id}: {title}")
+                logger.info(f"✓ Generated title for conversation {conversation_id}: {title}")
                 return title
             else:
                 logger.warning(f"Empty title generated for conversation: {conversation_id}")
                 return None
             
         except Exception as e:
-            logger.error(f"❌ Title generation failed for {conversation_id}: {e}")
+            logger.error(f"✗ Title generation failed for {conversation_id}: {e}")
             return None
     
     async def get_conversation_summary(self, conversation_id: str) -> Optional[ConversationSummary]:
@@ -197,7 +197,7 @@ Respond with ONLY the title, no other text.
             conversation = await self.repository.get_conversation(conversation_id, include_messages=False)
             return conversation.summary if conversation else None
         except Exception as e:
-            logger.error(f"❌ Failed to get summary for {conversation_id}: {e}")
+            logger.error(f"✗ Failed to get summary for {conversation_id}: {e}")
             return None
     
     async def regenerate_summary(self, conversation_id: str) -> bool:
@@ -231,7 +231,7 @@ Respond with ONLY the title, no other text.
                 await asyncio.sleep(0.5)
                 
             except Exception as e:
-                logger.error(f"❌ Batch summary failed for {conv_id}: {e}")
+                logger.error(f"✗ Batch summary failed for {conv_id}: {e}")
                 results[conv_id] = False
         
         return results
@@ -327,7 +327,7 @@ Respond with ONLY the title, no other text.
     
     async def _get_ai_service(self):
         """Get AI service instance."""
-        if self._ai_service:
+        if self._ai_service and self._ai_service.is_initialized:
             return self._ai_service
         
         try:
@@ -339,8 +339,14 @@ Respond with ONLY the title, no other text.
             
             # Initialize with current settings
             if ai_service.initialize():
-                self._ai_service = ai_service
-                return ai_service
+                # Verify the service is actually initialized and has a client
+                if ai_service.is_initialized and ai_service.client:
+                    self._ai_service = ai_service
+                    logger.info("AI service initialized successfully for summary service")
+                    return ai_service
+                else:
+                    logger.error("AI service initialization incomplete - missing client")
+                    return None
             else:
                 logger.error("Failed to initialize AI service for summaries")
                 return None
@@ -372,7 +378,7 @@ Respond with ONLY the title, no other text.
             return summary_stats
             
         except Exception as e:
-            logger.error(f"❌ Failed to get summary statistics: {e}")
+            logger.error(f"✗ Failed to get summary statistics: {e}")
             return {}
     
     def shutdown(self):

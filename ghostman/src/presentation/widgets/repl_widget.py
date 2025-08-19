@@ -958,12 +958,12 @@ class REPLWidget(QWidget):
         try:
             self.conversation_manager = ConversationManager()
             if self.conversation_manager.initialize():
-                logger.info("✅ Conversation manager initialized successfully")
+                logger.info("✓ Conversation manager initialized successfully")
             else:
-                logger.error("❌ Failed to initialize conversation manager")
+                logger.error("✗ Failed to initialize conversation manager")
                 self.conversation_manager = None
         except Exception as e:
-            logger.error(f"❌ Conversation manager initialization failed: {e}")
+            logger.error(f"✗ Conversation manager initialization failed: {e}")
             self.conversation_manager = None
     
     def _perform_startup_tasks(self):
@@ -992,7 +992,7 @@ class REPLWidget(QWidget):
             logger.info(f"Startup tasks completed - first_run: {startup_result.get('first_run')}, api_status: {startup_result.get('api_status')}")
             
         except Exception as e:
-            logger.error(f"❌ Failed to perform startup tasks: {e}")
+            logger.error(f"✗ Failed to perform startup tasks: {e}")
             # Fallback to basic welcome message
             self.append_output("💬 Ghostman AI Assistant", "system")
             self.append_output("Type your message or 'help' for commands", "system")
@@ -1018,7 +1018,7 @@ class REPLWidget(QWidget):
                 loop.run_until_complete(self._load_conversations())
             logger.debug("Deferred conversation loading initiated successfully")
         except Exception as e:
-            logger.error(f"❌ Failed deferred conversation loading: {e}", exc_info=True)
+            logger.error(f"✗ Failed deferred conversation loading: {e}", exc_info=True)
             # Ensure state is valid
             self.conversations_list = []
             self.current_conversation = None
@@ -1035,7 +1035,7 @@ class REPLWidget(QWidget):
             if hasattr(self.conversation_manager, 'fix_multiple_active_conversations'):
                 fixed = self.conversation_manager.fix_multiple_active_conversations()
                 if fixed:
-                    logger.debug("✅ Verified conversation uniqueness")
+                    logger.debug("✓ Verified conversation uniqueness")
             
             # Get recent conversations (all statuses) for the conversation UI
             conversations = await self.conversation_manager.list_conversations(limit=20)
@@ -1048,7 +1048,7 @@ class REPLWidget(QWidget):
                 # Find the active conversation
                 active_conversations = [c for c in conversations if c.status == ConversationStatus.ACTIVE]
                 if len(active_conversations) > 1:
-                    logger.warning(f"⚠️  Found {len(active_conversations)} active conversations after cleanup - this should not happen")
+                    logger.warning(f"⚠  Found {len(active_conversations)} active conversations after cleanup - this should not happen")
                     # Use the first one but log the issue
                     active_conversations = active_conversations[:1]
                 if active_conversations:
@@ -1068,7 +1068,7 @@ class REPLWidget(QWidget):
                 QTimer.singleShot(50, self._refresh_conversation_selector)
             
         except Exception as e:
-            logger.error(f"❌ Failed to load conversations: {e}", exc_info=True)
+            logger.error(f"✗ Failed to load conversations: {e}", exc_info=True)
             # Ensure state is valid even if conversation loading fails
             self.conversations_list = []
             self.current_conversation = None
@@ -2254,7 +2254,7 @@ class REPLWidget(QWidget):
         logger.info(f"🎨 REPL panel opacity change requested: {opacity:.3f}")
         
         if not isinstance(opacity, (float, int)):
-            logger.error(f"❌ Invalid opacity type: {type(opacity)} (expected float/int)")
+            logger.error(f"✗ Invalid opacity type: {type(opacity)} (expected float/int)")
             return
             
         old_val = self._panel_opacity
@@ -2267,7 +2267,7 @@ class REPLWidget(QWidget):
         logger.info(f"🎨 Applying panel opacity: {old_val:.3f} -> {new_val:.3f}")
         self._panel_opacity = new_val
         self._apply_styles()
-        logger.info(f"✅ REPL panel opacity applied successfully: {new_val:.3f}")
+        logger.info(f"✓ REPL panel opacity applied successfully: {new_val:.3f}")
     
     def refresh_fonts(self):
         """Refresh fonts from font service when settings change."""
@@ -2291,7 +2291,7 @@ class REPLWidget(QWidget):
             # Re-render existing content with new fonts
             self._refresh_existing_output()
             
-            logger.info("✅ Fonts refreshed from settings")
+            logger.info("✓ Fonts refreshed from settings")
             
         except Exception as e:
             logger.error(f"Failed to refresh fonts: {e}")
@@ -2471,13 +2471,13 @@ class REPLWidget(QWidget):
         if self.conversation_manager:
             success = self.conversation_manager.set_conversation_active_simple(conversation.id)
             if success:
-                logger.info(f"✅ Set conversation {conversation.id[:8]}... as active (enforcing uniqueness)")
+                logger.info(f"✓ Set conversation {conversation.id[:8]}... as active (enforcing uniqueness)")
                 # Update local conversation status
                 conversation.status = ConversationStatus.ACTIVE
                 # Refresh the conversation selector UI
                 self._refresh_conversation_selector()
             else:
-                logger.error(f"❌ Failed to set conversation {conversation.id[:8]}... as active")
+                logger.error(f"✗ Failed to set conversation {conversation.id[:8]}... as active")
         
         # Switch to new conversation
         self.current_conversation = conversation
@@ -2498,7 +2498,7 @@ class REPLWidget(QWidget):
                 # Use the proper method to set conversation and load context
                 ai_service.set_current_conversation(conversation.id)
                 
-                logger.info(f"✅ AI service context updated for conversation: {conversation.id}")
+                logger.info(f"✓ AI service context updated for conversation: {conversation.id}")
         
         # Reset idle detector for new conversation
         self.idle_detector.reset_activity(conversation.id)
@@ -2506,7 +2506,7 @@ class REPLWidget(QWidget):
         # Emit signal for external components
         self.conversation_changed.emit(conversation.id)
         
-        logger.info(f"✅ Switched to conversation: {conversation.title}")
+        logger.info(f"✓ Switched to conversation: {conversation.title}")
     
     def _create_new_conversation(self):
         """Create a new conversation."""
@@ -2542,11 +2542,11 @@ class REPLWidget(QWidget):
                     self._switch_to_conversation(conversation)
                     
                     self.append_output(f"✨ Created new conversation: {conversation.title}", "system")
-                    logger.info(f"✅ New conversation created: {conversation.id}")
+                    logger.info(f"✓ New conversation created: {conversation.id}")
                 
             except Exception as e:
-                logger.error(f"❌ Failed to create conversation: {e}")
-                self.append_output("❌ Failed to create new conversation", "error")
+                logger.error(f"✗ Failed to create conversation: {e}")
+                self.append_output("✗ Failed to create new conversation", "error")
         
         # Run async task
         try:
@@ -2592,7 +2592,7 @@ class REPLWidget(QWidget):
     def _on_export_requested(self):
         """Handle export request for current conversation."""
         if not self.current_conversation:
-            self.append_output("⚠️ No conversation selected for export", "warning")
+            self.append_output("⚠ No conversation selected for export", "warning")
             return
         
         logger.info(f"📤 Export requested for conversation: {self.current_conversation.id}")
@@ -2710,16 +2710,16 @@ class REPLWidget(QWidget):
         
         if success:
             if hasattr(self, 'summary_notification'):
-                self.summary_notification.setText("✅ Summary generated")
-            logger.info(f"✅ Summary generated for conversation: {conversation_id}")
+                self.summary_notification.setText("✓ Summary generated")
+            logger.info(f"✓ Summary generated for conversation: {conversation_id}")
             
             # Update conversation data if it's the current one
             if self.current_conversation and self.current_conversation.id == conversation_id:
                 self._refresh_current_conversation()
         else:
             if hasattr(self, 'summary_notification'):
-                self.summary_notification.setText("❌ Summary failed")
-            logger.warning(f"❌ Summary generation failed for conversation: {conversation_id}")
+                self.summary_notification.setText("✗ Summary failed")
+            logger.warning(f"✗ Summary generation failed for conversation: {conversation_id}")
         
         # Hide progress after delay
         QTimer.singleShot(3000, self._hide_summary_notification)
@@ -3123,17 +3123,17 @@ class REPLWidget(QWidget):
                             
                             if result.get('success', False):
                                 response_content = result['response']
-                                logger.info(f"✅ AI response received with context (context size: {len(ai_service.conversation.messages)} messages)")
+                                logger.info(f"✓ AI response received with context (context size: {len(ai_service.conversation.messages)} messages)")
                                 logger.info(f"🔍 AI WORKER SUCCESS - Response length: {len(response_content) if response_content else 0}")
                                 logger.info(f"🔍 AI WORKER SUCCESS - Response content: '{response_content}'")
                                 self.response_received.emit(response_content, True)
                             else:
-                                error_msg = f"❌ AI Error: {result.get('error', 'Unknown error')}"
+                                error_msg = f"✗ AI Error: {result.get('error', 'Unknown error')}"
                                 logger.error(f"AI service error: {error_msg}")
                                 self.response_received.emit(error_msg, False)
                             return
                         else:
-                            logger.warning("⚠️  Conversation manager AI service not available")
+                            logger.warning("⚠  Conversation manager AI service not available")
                     
                     # Only fallback to basic AI service if conversation manager not available
                     logger.warning("🔄 Falling back to basic AI service (context may be lost)")
@@ -3141,7 +3141,7 @@ class REPLWidget(QWidget):
                     
                     if not ai_service or not ai_service.is_initialized:
                         self.response_received.emit(
-                            "❌ AI service not available. Please configure AI settings first.", 
+                            "✗ AI service not available. Please configure AI settings first.", 
                             False
                         )
                         return
@@ -3152,17 +3152,17 @@ class REPLWidget(QWidget):
                     
                     if result.get('success', False):
                         response_content = result['response']
-                        logger.warning("⚠️  Using basic AI service - conversation context may be limited")
+                        logger.warning("⚠  Using basic AI service - conversation context may be limited")
                         logger.info(f"🔍 BASIC AI WORKER SUCCESS - Response length: {len(response_content) if response_content else 0}")
                         logger.info(f"🔍 BASIC AI WORKER SUCCESS - Response content: '{response_content}'")
                         self.response_received.emit(response_content, True)
                     else:
-                        error_msg = f"❌ AI Error: {result.get('error', 'Unknown error')}"
+                        error_msg = f"✗ AI Error: {result.get('error', 'Unknown error')}"
                         self.response_received.emit(error_msg, False)
                         
                 except Exception as e:
                     logger.error(f"Enhanced AI worker error: {e}")
-                    self.response_received.emit(f"❌ Error: {str(e)}", False)
+                    self.response_received.emit(f"✗ Error: {str(e)}", False)
             
             def _get_basic_ai_service(self):
                 """Get basic AI service instance as fallback."""
@@ -3274,7 +3274,7 @@ class REPLWidget(QWidget):
                     loop.run_until_complete(self._load_conversations())
                 logger.debug("Conversation reload initiated successfully")
             except Exception as e:
-                logger.error(f"❌ Failed to load conversations after setting manager: {e}", exc_info=True)
+                logger.error(f"✗ Failed to load conversations after setting manager: {e}", exc_info=True)
         logger.info("Conversation manager set for REPL widget")
     
     def get_current_conversation_id(self) -> Optional[str]:
@@ -3305,7 +3305,7 @@ class REPLWidget(QWidget):
                 loop.run_until_complete(self._restore_conversation_async(conversation_id))
                 
         except Exception as e:
-            logger.error(f"❌ Failed to restore conversation {conversation_id}: {e}", exc_info=True)
+            logger.error(f"✗ Failed to restore conversation {conversation_id}: {e}", exc_info=True)
     
     async def _restore_conversation_async(self, conversation_id: str):
         """Restore conversation asynchronously."""
@@ -3317,8 +3317,8 @@ class REPLWidget(QWidget):
             # Simple atomic database operation: set this conversation as active, all others as pinned
             success = self.conversation_manager.set_conversation_active_simple(conversation_id)
             if not success:
-                logger.error(f"❌ Failed to set conversation {conversation_id} as active in database")
-                self.append_output("❌ Failed to restore conversation", "error")
+                logger.error(f"✗ Failed to set conversation {conversation_id} as active in database")
+                self.append_output("✗ Failed to restore conversation", "error")
                 return
             
             # Load the conversation from database with messages
@@ -3327,7 +3327,7 @@ class REPLWidget(QWidget):
             if conversation:
                 # Set as current conversation and update AI context
                 self.current_conversation = conversation
-                logger.info(f"✅ Restored conversation: {conversation.title}")
+                logger.info(f"✓ Restored conversation: {conversation.title}")
                 
                 # Start autosave timer for the restored conversation
                 self._start_autosave_timer()
@@ -3364,12 +3364,12 @@ class REPLWidget(QWidget):
                 self.idle_detector.reset_activity(conversation_id)
                 
             else:
-                logger.warning(f"⚠️  Conversation {conversation_id} not found in database")
-                self.append_output(f"⚠️ Could not restore conversation {conversation_id[:8]}... (not found)", "warning")
+                logger.warning(f"⚠  Conversation {conversation_id} not found in database")
+                self.append_output(f"⚠ Could not restore conversation {conversation_id[:8]}... (not found)", "warning")
                 
         except Exception as e:
-            logger.error(f"❌ Failed to restore conversation {conversation_id}: {e}", exc_info=True)
-            self.append_output(f"❌ Failed to restore conversation: {str(e)}", "error")
+            logger.error(f"✗ Failed to restore conversation {conversation_id}: {e}", exc_info=True)
+            self.append_output(f"✗ Failed to restore conversation: {str(e)}", "error")
     
     def _has_unsaved_messages(self) -> bool:
         """Check if current conversation has unsaved messages."""
@@ -3487,7 +3487,7 @@ class REPLWidget(QWidget):
         layout.addWidget(conversation_list)
         
         # Warning label
-        warning_label = QLabel("⚠️ This action cannot be undone. Deleted conversations will be permanently removed.")
+        warning_label = QLabel("⚠ This action cannot be undone. Deleted conversations will be permanently removed.")
         warning_color = self.theme_manager.current_theme.status_error if (self.theme_manager and THEME_SYSTEM_AVAILABLE) else "#ff6b6b"
         warning_label.setStyleSheet(f"color: {warning_color}; font-weight: bold;")
         warning_label.setWordWrap(True)
@@ -3534,7 +3534,7 @@ class REPLWidget(QWidget):
         reply = QMessageBox.question(
             dialog,
             "Confirm Deletion",
-            f"Are you sure you want to delete {count} conversation{'s' if count > 1 else ''}?\n\n{titles_preview}\n\n⚠️ This action cannot be undone.",
+            f"Are you sure you want to delete {count} conversation{'s' if count > 1 else ''}?\n\n{titles_preview}\n\n⚠ This action cannot be undone.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )
@@ -3564,11 +3564,11 @@ class REPLWidget(QWidget):
             await self._load_conversations()
             
             # Update UI
-            self.append_output(f"✅ Deleted {deleted_count} conversation{'s' if deleted_count != 1 else ''}", "system")
+            self.append_output(f"✓ Deleted {deleted_count} conversation{'s' if deleted_count != 1 else ''}", "system")
             
         except Exception as e:
             logger.error(f"Failed to delete conversations: {e}")
-            self.append_output(f"❌ Failed to delete conversations: {str(e)}", "error")
+            self.append_output(f"✗ Failed to delete conversations: {str(e)}", "error")
     
     def _autosave_current_conversation(self):
         """Autosave the current conversation if it has messages."""
@@ -3602,7 +3602,7 @@ class REPLWidget(QWidget):
                 if ai_service and hasattr(ai_service, '_save_current_conversation'):
                     await ai_service._save_current_conversation()
                     self.last_autosave_time = datetime.now()
-                    logger.debug(f"✅ Autosaved conversation: {self.current_conversation.id}")
+                    logger.debug(f"✓ Autosaved conversation: {self.current_conversation.id}")
         except Exception as e:
             logger.error(f"Failed to perform autosave: {e}")
     
@@ -3652,9 +3652,9 @@ class REPLWidget(QWidget):
                         conversation = new_loop.run_until_complete(self._create_conversation_async(title, message))
                         if conversation:
                             self.current_conversation = conversation
-                            logger.info(f"✅ Auto-created conversation synchronously: {conversation.title}")
+                            logger.info(f"✓ Auto-created conversation synchronously: {conversation.title}")
                         else:
-                            logger.error("❌ Failed to create conversation - None returned")
+                            logger.error("✗ Failed to create conversation - None returned")
                     finally:
                         new_loop.close()
                         asyncio.set_event_loop(loop)  # Restore original loop
@@ -3663,12 +3663,12 @@ class REPLWidget(QWidget):
                     conversation = loop.run_until_complete(self._create_conversation_async(title, message))
                     if conversation:
                         self.current_conversation = conversation
-                        logger.info(f"✅ Auto-created conversation: {conversation.title}")
+                        logger.info(f"✓ Auto-created conversation: {conversation.title}")
                     else:
-                        logger.error("❌ Failed to create conversation - None returned")
+                        logger.error("✗ Failed to create conversation - None returned")
                         
             except Exception as loop_error:
-                logger.error(f"❌ Loop error during conversation creation: {loop_error}")
+                logger.error(f"✗ Loop error during conversation creation: {loop_error}")
                 # Fallback: try direct sync creation
                 logger.info("🔄 Attempting fallback conversation creation...")
                 try:
@@ -3699,13 +3699,13 @@ class REPLWidget(QWidget):
                         success = self.conversation_manager.set_conversation_active_simple(conversation_id)
                         if success:
                             temp_conversation.status = ConversationStatus.ACTIVE
-                            logger.info(f"✅ Set temp conversation as active with uniqueness enforced")
+                            logger.info(f"✓ Set temp conversation as active with uniqueness enforced")
                     
                 except Exception as fallback_error:
-                    logger.error(f"❌ Fallback conversation creation also failed: {fallback_error}")
+                    logger.error(f"✗ Fallback conversation creation also failed: {fallback_error}")
                 
         except Exception as e:
-            logger.error(f"❌ Failed to auto-create conversation: {e}", exc_info=True)
+            logger.error(f"✗ Failed to auto-create conversation: {e}", exc_info=True)
     
     async def _create_conversation_async(self, title: str, initial_message: str):
         """Create conversation asynchronously."""
@@ -3721,11 +3721,11 @@ class REPLWidget(QWidget):
                 # Add to conversations list
                 if conversation not in self.conversations_list:
                     self.conversations_list.insert(0, conversation)
-                logger.info(f"✅ Created conversation: {conversation.title}")
+                logger.info(f"✓ Created conversation: {conversation.title}")
                 return conversation
             
         except Exception as e:
-            logger.error(f"❌ Failed to create conversation async: {e}")
+            logger.error(f"✗ Failed to create conversation async: {e}")
         
         return None
     
@@ -3741,7 +3741,7 @@ class REPLWidget(QWidget):
             )
             
             if db_conversation:
-                logger.info(f"✅ Saved temporary conversation to database: {db_conversation.id}")
+                logger.info(f"✓ Saved temporary conversation to database: {db_conversation.id}")
                 
                 # Update the current conversation reference to use the database version
                 self.current_conversation = db_conversation
@@ -3757,10 +3757,10 @@ class REPLWidget(QWidget):
                         ai_service.set_current_conversation(db_conversation.id)
                         logger.debug(f"🔄 Synced AI service to database conversation: {db_conversation.id}")
             else:
-                logger.error(f"❌ Failed to save temporary conversation to database")
+                logger.error(f"✗ Failed to save temporary conversation to database")
                 
         except Exception as e:
-            logger.error(f"❌ Failed to save temporary conversation to database: {e}", exc_info=True)
+            logger.error(f"✗ Failed to save temporary conversation to database: {e}", exc_info=True)
     
     def refresh_conversations(self):
         """Refresh the conversations list from the database."""
@@ -3776,7 +3776,7 @@ class REPLWidget(QWidget):
                 loop.run_until_complete(self._load_conversations())
             logger.debug("Conversation refresh initiated successfully")
         except Exception as e:
-            logger.error(f"❌ Failed to refresh conversations: {e}", exc_info=True)
+            logger.error(f"✗ Failed to refresh conversations: {e}", exc_info=True)
     
     def create_new_conversation_with_title(self, title: str):
         """Create a new conversation with a specific title."""
@@ -3803,11 +3803,11 @@ class REPLWidget(QWidget):
                     self._switch_to_conversation(conversation)
                     
                     self.append_output(f"✨ Created conversation: {conversation.title}", "system")
-                    logger.info(f"✅ Conversation created with title: {title}")
+                    logger.info(f"✓ Conversation created with title: {title}")
                 
             except Exception as e:
-                logger.error(f"❌ Failed to create conversation with title: {e}")
-                self.append_output("❌ Failed to create new conversation", "error")
+                logger.error(f"✗ Failed to create conversation with title: {e}")
+                self.append_output("✗ Failed to create new conversation", "error")
         
         # Run async task
         try:
@@ -3896,9 +3896,9 @@ class REPLWidget(QWidget):
                 main_window.debug_attachment_state()
                 self._display_response("🔍 Debug info logged to console. Check debug logs for attachment state details.", "system")
             else:
-                self._display_response("❌ Could not find main window for debugging.", "error")
+                self._display_response("✗ Could not find main window for debugging.", "error")
         except Exception as e:
-            self._display_response(f"❌ Debug command failed: {e}", "error")
+            self._display_response(f"✗ Debug command failed: {e}", "error")
     
     
     def _load_pin_icon_immediate(self):
@@ -3938,12 +3938,12 @@ class REPLWidget(QWidget):
                     
                     logger.error(f"🔥 ICON FORCED: Text='{self.pin_btn.text()}', IconNull={self.pin_btn.icon().isNull()}")
                 else:
-                    logger.error(f"❌ QIcon creation failed for: {pin_icon_path}")
+                    logger.error(f"✗ QIcon creation failed for: {pin_icon_path}")
             else:
-                logger.error(f"❌ Pin icon file not found: {pin_icon_path}")
+                logger.error(f"✗ Pin icon file not found: {pin_icon_path}")
                 
         except Exception as e:
-            logger.error(f"❌ Failed to force load pin icon: {e}")
+            logger.error(f"✗ Failed to force load pin icon: {e}")
             # Clear everything on error - NO EMOJI FALLBACK
             self.pin_btn.setText("")
             self.pin_btn.setIcon(QIcon())
@@ -3966,7 +3966,7 @@ class REPLWidget(QWidget):
             else:
                 # Reset to normal styling - SAME AS MOVE BUTTON
                 self._style_title_button(self.pin_btn)
-                logger.debug("⚪ Pin mode OFF - reset to normal styling")
+                logger.debug("⚠ Pin mode OFF - reset to normal styling")
             
             # Reload icon after styling to preserve it
             self._load_pin_icon_immediate()
@@ -4035,7 +4035,7 @@ class REPLWidget(QWidget):
         """Start a new conversation with optional saving of current."""
         try:
             if not self.conversation_manager:
-                self.append_output("⚠️ Conversation management not available", "error")
+                self.append_output("⚠ Conversation management not available", "error")
                 return
             
             # Get AI service for conversation integration
@@ -4044,7 +4044,7 @@ class REPLWidget(QWidget):
                 ai_service = self.conversation_manager.get_ai_service()
             
             if not ai_service or not hasattr(ai_service, 'conversation_service'):
-                self.append_output("⚠️ AI service doesn't support conversation management", "error")
+                self.append_output("⚠ AI service doesn't support conversation management", "error")
                 return
             
             async def create_new_conversation():
@@ -4072,7 +4072,7 @@ class REPLWidget(QWidget):
                     if new_id:
                         # Refresh conversation list
                         await self._load_conversations()
-                        self.append_output("✅ Started new conversation", "system")
+                        self.append_output("✓ Started new conversation", "system")
                         if save_current and current_id:
                             self.append_output("💾 Previous conversation saved with auto-generated title", "system")
                         
@@ -4080,11 +4080,11 @@ class REPLWidget(QWidget):
                         self.append_output("💬 Ghostman Conversation Manager v2.0", "system")
                         self.append_output("🚀 New conversation started - type your message or 'help' for commands", "system")
                     else:
-                        self.append_output("❌ Failed to start new conversation", "error")
+                        self.append_output("✗ Failed to start new conversation", "error")
                         
                 except Exception as e:
                     logger.error(f"Failed to create new conversation: {e}")
-                    self.append_output(f"❌ Error creating new conversation: {e}", "error")
+                    self.append_output(f"✗ Error creating new conversation: {e}", "error")
             
             # Use Qt timer to safely handle async operations
             from PyQt6.QtCore import QTimer
@@ -4100,13 +4100,13 @@ class REPLWidget(QWidget):
                         loop.close()
                 except Exception as e:
                     logger.error(f"Failed to execute new conversation async: {e}")
-                    self.append_output(f"❌ Error: {e}", "error")
+                    self.append_output(f"✗ Error: {e}", "error")
             
             QTimer.singleShot(100, run_async)
             
         except Exception as e:
             logger.error(f"New conversation failed: {e}")
-            self.append_output(f"❌ Error: {e}", "error")
+            self.append_output(f"✗ Error: {e}", "error")
     
     def _title_mouse_press(self, event):
         """Handle mouse press on title bar for drag functionality."""
@@ -4546,7 +4546,7 @@ class REPLWidget(QWidget):
             self.current_conversation = None
             self.conversations_list.clear()
             
-            logger.info("✅ Enhanced REPL Widget shut down successfully")
+            logger.info("✓ Enhanced REPL Widget shut down successfully")
             
         except Exception as e:
-            logger.error(f"❌ Error during REPL widget shutdown: {e}")
+            logger.error(f"✗ Error during REPL widget shutdown: {e}")
