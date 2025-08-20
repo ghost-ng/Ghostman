@@ -278,41 +278,21 @@ class OpenAICompatibleClient:
     
     def test_connection(self) -> APIResponse:
         """
-        Test the API connection.
+        Test the API connection with a single request.
         
         Returns:
             APIResponse indicating success or failure
         """
         logger.info("Testing API connection...")
         
-        # For OpenAI-compatible APIs, try to list models or make a minimal request
-        # This varies by provider, so we'll try a few common endpoints
-        
-        test_endpoints = [
-            "models",  # Standard OpenAI endpoint
-            "v1/models",  # Alternative path
-        ]
-        
-        for endpoint in test_endpoints:
-            response = self._make_request("GET", endpoint)
-            if response.success:
-                logger.info("✓ API connection test successful")
-                return response
-        
-        # If model listing fails, try a minimal chat completion
-        minimal_request = {
-            "model": "gpt-3.5-turbo",  # Will be overridden by actual model
-            "messages": [{"role": "user", "content": "test"}],
-            "max_completion_tokens": 1,
-            "temperature": 0
-        }
-        
-        response = self._make_request("POST", "chat/completions", minimal_request)
+        # Try the most common endpoint first - models listing
+        response = self._make_request("GET", "models")
         if response.success:
-            logger.info("✓ API connection test successful (chat endpoint)")
-        else:
-            logger.error(f"✗ API connection test failed: {response.error}")
+            logger.info("✓ API connection test successful")
+            return response
         
+        # If models endpoint fails, the API is likely not working
+        logger.error(f"✗ API connection test failed: {response.error}")
         return response
     
     def chat_completion(

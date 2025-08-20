@@ -131,6 +131,9 @@ class AIService:
             if not self._validate_config():
                 return False
             
+            # Configure PKI if enabled before creating API client
+            self._configure_pki_if_enabled()
+            
             # Create API client
             self.client = OpenAICompatibleClient(
                 base_url=self._config['base_url'],
@@ -187,6 +190,31 @@ class AIService:
         
         logger.debug("Configuration validation passed")
         return True
+    
+    def _configure_pki_if_enabled(self):
+        """Configure PKI authentication if enabled."""
+        try:
+            from ..pki.pki_service import pki_service
+            
+            if pki_service.cert_manager.is_pki_enabled():
+                cert_info = pki_service.cert_manager.get_certificate_files()
+                ca_bundle_path = pki_service.cert_manager.get_ca_chain_file()
+                
+                if cert_info:
+                    from .session_manager import session_manager
+                    session_manager.configure_pki(
+                        cert_path=cert_info[0],  # client cert path
+                        key_path=cert_info[1],   # client key path
+                        ca_path=ca_bundle_path   # CA bundle path (can be None)
+                    )
+                    logger.info(f"✓ PKI configured for AI service: cert={cert_info[0]}, ca={'Yes' if ca_bundle_path else 'Default'}")
+                else:
+                    logger.warning("PKI is enabled but certificate files not available")
+            else:
+                logger.debug("PKI not enabled, using default SSL configuration")
+                
+        except Exception as e:
+            logger.error(f"Failed to configure PKI for AI service: {e}")
     
     def test_connection(self) -> Dict[str, Any]:
         """
@@ -401,6 +429,9 @@ class AIService:
             # Validate new configuration
             if not self._validate_config():
                 return False
+            
+            # Reconfigure PKI if needed
+            self._configure_pki_if_enabled()
             
             # Reinitialize client if needed
             if self.client:

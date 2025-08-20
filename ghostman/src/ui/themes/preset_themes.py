@@ -17,7 +17,6 @@ def get_preset_themes() -> Dict[str, ColorSystem]:
         Dictionary mapping theme names to ColorSystem objects
     """
     return {
-        "default": get_default_theme(),
         "dark_matrix": get_dark_matrix_theme(),
         "midnight_blue": get_midnight_blue_theme(),
         "forest_green": get_forest_green_theme(),
@@ -41,48 +40,10 @@ def get_preset_themes() -> Dict[str, ColorSystem]:
         "openai_like": get_openai_like_theme(),
         "openui_like": get_openui_like_theme(),
         "openwebui_like": get_openwebui_like_theme(),
+        "moonlight": get_moonlight_theme(),
+        "fireswamp": get_fireswamp_theme(),
     }
 
-
-def get_default_theme() -> ColorSystem:
-    """Default dark theme with green accents."""
-    return ColorSystem(
-        # Primary colors
-        primary="#4CAF50",
-        primary_hover="#45a049",
-        secondary="#2196F3",
-        secondary_hover="#1976D2",
-        
-        # Backgrounds
-        background_primary="#1a1a1a",
-        background_secondary="#2a2a2a",
-        background_tertiary="#3a3a3a",
-        background_overlay="#000000cc",
-        
-        # Text
-        text_primary="#ffffff",
-        text_secondary="#cccccc",
-        text_tertiary="#888888",
-        text_disabled="#555555",
-        
-        # Interactive
-        interactive_normal="#4a4a4a",
-        interactive_hover="#5a5a5a",
-        interactive_active="#6a6a6a",
-        interactive_disabled="#333333",
-        
-        # Status
-        status_success="#4CAF50",
-        status_warning="#FF9800",
-        status_error="#F44336",
-        status_info="#2196F3",
-        
-        # Borders
-        border_primary="#444444",
-        border_secondary="#333333",
-        border_focus="#4CAF50",
-        separator="#2a2a2a",
-    )
 
 
 def get_dark_matrix_theme() -> ColorSystem:
@@ -984,4 +945,86 @@ def get_openwebui_like_theme() -> ColorSystem:
         border_secondary="#2a2a2a",
         border_focus="#8b5cf6",
         separator="#2a2a2a",
+    )
+
+
+def get_moonlight_theme() -> ColorSystem:
+    """Elegant moonlight theme with dark blues, purples, and silver accents."""
+    return ColorSystem(
+        # Primary colors - Cool moonlight blues and purples
+        primary="#7dd3fc",  # Light sky blue (moonbeam)
+        primary_hover="#38bdf8",  # Slightly deeper blue
+        secondary="#c084fc",  # Light purple (moon glow)
+        secondary_hover="#a855f7",  # Deeper purple
+        
+        # Backgrounds - Deep night blues with subtle purple tints
+        background_primary="#0f1419",  # Very deep blue-black
+        background_secondary="#1e293b",  # Slate blue
+        background_tertiary="#334155",  # Lighter slate
+        background_overlay="#0f141980",  # Semi-transparent deep blue
+        
+        # Text - Silver and light blue tones
+        text_primary="#f1f5f9",  # Bright silver-white
+        text_secondary="#cbd5e1",  # Light silver-blue
+        text_tertiary="#b8bcc8",  # Medium silver-blue (improved contrast)
+        text_disabled="#64748b",  # Muted slate
+        
+        # Interactive - Subtle blues with moonlight glow
+        interactive_normal="#1e293b",  # Dark slate
+        interactive_hover="#334155",  # Medium slate
+        interactive_active="#475569",  # Light slate
+        interactive_disabled="#0f1419",  # Very dark
+        
+        # Status - Cool tones matching the moonlight theme
+        status_success="#22d3ee",  # Cyan (cool success)
+        status_warning="#fbbf24",  # Warm amber (contrast)
+        status_error="#f87171",  # Soft red
+        status_info="#7dd3fc",  # Light blue (matches primary)
+        
+        # Borders - Subtle silver-blue tones
+        border_primary="#475569",  # Medium slate
+        border_secondary="#334155",  # Dark slate
+        border_focus="#7dd3fc",  # Light blue focus
+        separator="#1e293b",  # Dark separator
+    )
+
+
+def get_fireswamp_theme() -> ColorSystem:
+    """Warm fireswamp theme with earthy oranges, reds, and browns inspired by fantasy."""
+    return ColorSystem(
+        # Primary colors - Warm fire and ember tones
+        primary="#f97316",  # Bright orange (flame)
+        primary_hover="#ea580c",  # Deeper orange
+        secondary="#dc2626",  # Rich red (ember)
+        secondary_hover="#b91c1c",  # Deep red
+        
+        # Backgrounds - Deep earth and shadow tones
+        background_primary="#1c1917",  # Very dark brown (rich earth)
+        background_secondary="#292524",  # Dark brown
+        background_tertiary="#44403c",  # Medium brown
+        background_overlay="#1c191780",  # Semi-transparent dark brown
+        
+        # Text - Warm light tones like firelight
+        text_primary="#fef7ed",  # Warm white (firelight)
+        text_secondary="#fed7aa",  # Light orange (warm glow)
+        text_tertiary="#fdba74",  # Medium orange
+        text_disabled="#78716c",  # Muted brown
+        
+        # Interactive - Warm earth tones with fire accents
+        interactive_normal="#44403c",  # Medium brown
+        interactive_hover="#57534e",  # Lighter brown
+        interactive_active="#6b7280",  # Gray-brown (ash)
+        interactive_disabled="#292524",  # Dark brown
+        
+        # Status - Warm earthy status colors
+        status_success="#65a30d",  # Forest green (nature)
+        status_warning="#f59e0b",  # Amber (warm warning)
+        status_error="#dc2626",  # Red (matches secondary)
+        status_info="#2563eb",  # Blue (cool contrast)
+        
+        # Borders - Earthy brown tones
+        border_primary="#78716c",  # Light brown
+        border_secondary="#57534e",  # Medium brown
+        border_focus="#f97316",  # Orange focus (matches primary)
+        separator="#44403c",  # Dark brown separator
     )

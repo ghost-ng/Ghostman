@@ -64,7 +64,8 @@ class SessionManager:
         backoff_factor: float = 0.3,
         pool_connections: int = 10,
         pool_maxsize: int = 20,
-        pool_block: bool = False
+        pool_block: bool = False,
+        disable_ssl_verification: bool = False
     ) -> None:
         """
         Configure the session with connection pooling and retry settings.
@@ -76,6 +77,7 @@ class SessionManager:
             pool_connections: Number of connection pools to cache
             pool_maxsize: Maximum number of connections in each pool
             pool_block: Whether to block when pool is at max capacity
+            disable_ssl_verification: Whether to disable SSL certificate verification
         """
         with self._session_lock:
             # Close existing session if it exists
@@ -131,7 +133,15 @@ class SessionManager:
             if self._pki_config:
                 self._apply_pki_config()
             
-            logger.info(f"Session configured: timeout={timeout}s, retries={max_retries}, pool_size={pool_maxsize}")
+            # Disable SSL verification if requested
+            if disable_ssl_verification:
+                self._session.verify = False
+                # Suppress SSL warnings
+                import urllib3
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                logger.info("SSL verification disabled globally for session")
+            
+            logger.info(f"Session configured: timeout={timeout}s, retries={max_retries}, pool_size={pool_maxsize}, ssl_verify={not disable_ssl_verification}")
     
     def configure_pki(
         self,

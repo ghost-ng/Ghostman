@@ -29,7 +29,7 @@ class SettingsDialog(QDialog):
     Comprehensive settings dialog for Ghostman configuration.
     
     Features:
-    - AI Model configuration with presets and custom entries
+    - AI Settings configuration with presets and custom entries
     - Base URL and API key configuration
     - Save/Load configuration profiles
     - All configs stored in APPDATA location
@@ -113,12 +113,12 @@ class SettingsDialog(QDialog):
         logger.debug("Settings UI initialized")
     
     def _create_ai_model_tab(self):
-        """Create AI Model configuration tab."""
+        """Create AI Settings configuration tab."""
         tab = QWidget()
         layout = QVBoxLayout(tab)
         
         # Model Configuration Group
-        model_group = QGroupBox("AI Model Configuration")
+        model_group = QGroupBox("AI Settings Configuration")
         model_layout = QFormLayout(model_group)
         
         # Model presets
@@ -156,12 +156,66 @@ class SettingsDialog(QDialog):
         self.temperature_spin.setRange(0.0, 2.0)
         self.temperature_spin.setSingleStep(0.1)
         self.temperature_spin.setValue(0.7)
-        params_layout.addRow("Temperature:", self.temperature_spin)
+        self.temperature_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        
+        # Temperature +/- buttons with proper styling and alignment
+        temp_container = QWidget()
+        temp_layout = QHBoxLayout(temp_container)
+        temp_layout.setContentsMargins(0, 0, 0, 0)
+        temp_layout.setSpacing(2)
+        temp_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)  # Center vertically
+        
+        temp_layout.addWidget(self.temperature_spin)
+        
+        self.temperature_decrease_btn = QPushButton("-")
+        self.temperature_decrease_btn.setMaximumWidth(20)
+        self.temperature_decrease_btn.setFixedHeight(self.temperature_spin.sizeHint().height())  # Match spinbox height
+        self.temperature_decrease_btn.clicked.connect(lambda: self.temperature_spin.setValue(
+            max(self.temperature_spin.minimum(), self.temperature_spin.value() - self.temperature_spin.singleStep())
+        ))
+        temp_layout.addWidget(self.temperature_decrease_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+        
+        self.temperature_increase_btn = QPushButton("+")
+        self.temperature_increase_btn.setMaximumWidth(20)
+        self.temperature_increase_btn.setFixedHeight(self.temperature_spin.sizeHint().height())  # Match spinbox height
+        self.temperature_increase_btn.clicked.connect(lambda: self.temperature_spin.setValue(
+            min(self.temperature_spin.maximum(), self.temperature_spin.value() + self.temperature_spin.singleStep())
+        ))
+        temp_layout.addWidget(self.temperature_increase_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+        
+        params_layout.addRow("Temperature:", temp_container)
         
         self.max_tokens_spin = QSpinBox()
         self.max_tokens_spin.setRange(1, 32000)
         self.max_tokens_spin.setValue(2000)
-        params_layout.addRow("Max Tokens:", self.max_tokens_spin)
+        self.max_tokens_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        
+        # Max Tokens +/- buttons with proper styling and alignment
+        tokens_container = QWidget()
+        tokens_layout = QHBoxLayout(tokens_container)
+        tokens_layout.setContentsMargins(0, 0, 0, 0)
+        tokens_layout.setSpacing(2)
+        tokens_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)  # Center vertically
+        
+        tokens_layout.addWidget(self.max_tokens_spin)
+        
+        self.max_tokens_decrease_btn = QPushButton("-")
+        self.max_tokens_decrease_btn.setMaximumWidth(20)
+        self.max_tokens_decrease_btn.setFixedHeight(self.max_tokens_spin.sizeHint().height())  # Match spinbox height
+        self.max_tokens_decrease_btn.clicked.connect(lambda: self.max_tokens_spin.setValue(
+            max(self.max_tokens_spin.minimum(), self.max_tokens_spin.value() - 100)  # Decrease by 100
+        ))
+        tokens_layout.addWidget(self.max_tokens_decrease_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+        
+        self.max_tokens_increase_btn = QPushButton("+")
+        self.max_tokens_increase_btn.setMaximumWidth(20)
+        self.max_tokens_increase_btn.setFixedHeight(self.max_tokens_spin.sizeHint().height())  # Match spinbox height
+        self.max_tokens_increase_btn.clicked.connect(lambda: self.max_tokens_spin.setValue(
+            min(self.max_tokens_spin.maximum(), self.max_tokens_spin.value() + 100)  # Increase by 100
+        ))
+        tokens_layout.addWidget(self.max_tokens_increase_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+        
+        params_layout.addRow("Max Tokens:", tokens_container)
         
         # System Prompt - Split into user customizable and hardcoded base
         system_prompt_group = QGroupBox("AI Assistant Instructions")
@@ -227,7 +281,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(test_group)
         
         layout.addStretch()
-        self.tab_widget.addTab(tab, "AI Model")
+        self.tab_widget.addTab(tab, "AI Settings")
     
     def _create_interface_tab(self):
         """Create Interface settings tab."""
@@ -552,12 +606,81 @@ class SettingsDialog(QDialog):
                 """
                 
                 # Apply to all +/- buttons
+                self.temperature_decrease_btn.setStyleSheet(plus_minus_style)
+                self.temperature_increase_btn.setStyleSheet(plus_minus_style)
+                self.max_tokens_decrease_btn.setStyleSheet(plus_minus_style)
+                self.max_tokens_increase_btn.setStyleSheet(plus_minus_style)
                 self.ai_font_size_decrease_btn.setStyleSheet(plus_minus_style)
                 self.ai_font_size_increase_btn.setStyleSheet(plus_minus_style)
                 self.user_font_size_decrease_btn.setStyleSheet(plus_minus_style)
                 self.user_font_size_increase_btn.setStyleSheet(plus_minus_style)
                 self.opacity_decrease_btn.setStyleSheet(plus_minus_style)
                 self.opacity_increase_btn.setStyleSheet(plus_minus_style)
+                self.log_retention_decrease_btn.setStyleSheet(plus_minus_style)
+                self.log_retention_increase_btn.setStyleSheet(plus_minus_style)
+                
+                # Modern scroll bar styling
+                scrollbar_style = f"""
+                QScrollBar:vertical {{
+                    background-color: {colors.background_secondary};
+                    width: 12px;
+                    border: none;
+                    border-radius: 6px;
+                    margin: 0px;
+                }}
+                QScrollBar::handle:vertical {{
+                    background-color: {colors.border_primary};
+                    border-radius: 6px;
+                    min-height: 20px;
+                    margin: 2px;
+                }}
+                QScrollBar::handle:vertical:hover {{
+                    background-color: {colors.secondary};
+                }}
+                QScrollBar::handle:vertical:pressed {{
+                    background-color: {colors.primary};
+                }}
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                    border: none;
+                    background: none;
+                    height: 0px;
+                    width: 0px;
+                }}
+                QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                    background: none;
+                }}
+                QScrollBar:horizontal {{
+                    background-color: {colors.background_secondary};
+                    height: 12px;
+                    border: none;
+                    border-radius: 6px;
+                    margin: 0px;
+                }}
+                QScrollBar::handle:horizontal {{
+                    background-color: {colors.border_primary};
+                    border-radius: 6px;
+                    min-width: 20px;
+                    margin: 2px;
+                }}
+                QScrollBar::handle:horizontal:hover {{
+                    background-color: {colors.secondary};
+                }}
+                QScrollBar::handle:horizontal:pressed {{
+                    background-color: {colors.primary};
+                }}
+                QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+                    border: none;
+                    background: none;
+                    height: 0px;
+                    width: 0px;
+                }}
+                QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
+                    background: none;
+                }}
+                """
+                
+                # Apply scroll bar styling to the dialog
+                self.setStyleSheet(self.styleSheet() + scrollbar_style)
                 
                 # Style the spinboxes to remove arrows and look cleaner
                 spinbox_style = f"""
@@ -578,10 +701,13 @@ class SettingsDialog(QDialog):
                 }}
                 """
                 
-                # Apply to opacity and font size spinboxes
+                # Apply to all spinboxes
+                self.temperature_spin.setStyleSheet(spinbox_style)
+                self.max_tokens_spin.setStyleSheet(spinbox_style)
                 self.opacity_percent_spin.setStyleSheet(spinbox_style)
                 self.ai_font_size_spin.setStyleSheet(spinbox_style)
                 self.user_font_size_spin.setStyleSheet(spinbox_style)
+                self.log_retention_spin.setStyleSheet(spinbox_style)
                 
                 # Apply uniform button style to regular buttons using ButtonStyleManager
                 regular_button_style = ButtonStyleManager.get_unified_button_style(colors, "push", "medium")
@@ -1272,13 +1398,13 @@ class SettingsDialog(QDialog):
             logger.debug("API key visibility: HIDDEN")
     
     def _test_connection(self):
-        """Test the AI model connection."""
+        """Test the AI model connection using unified API test service."""
         self.test_btn.setEnabled(False)
         self.test_status_label.setText("Testing...")
         self.test_status_label.setStyleSheet("color: orange;")
         
         # Get current configuration
-        config = {
+        config_dict = {
             'model_name': self.model_name_edit.text().strip(),
             'base_url': self.base_url_edit.text().strip(),
             'api_key': self.api_key_edit.text().strip(),
@@ -1287,66 +1413,73 @@ class SettingsDialog(QDialog):
         }
         
         # Validate required fields
-        if not config['model_name'] or not config['base_url']:
+        if not config_dict['model_name'] or not config_dict['base_url']:
             self._finish_test(False, "✗ Missing model name or base URL")
             return
         
-        # Run test in a separate thread to avoid blocking UI
-        from PyQt6.QtCore import QThread, QObject, pyqtSignal
+        # Import unified API test service
+        from ...infrastructure.ai.api_test_service import APITestConfig, get_api_test_service
         
-        class ConnectionTester(QObject):
-            finished = pyqtSignal(bool, str, dict)
-            
-            def __init__(self, config):
-                super().__init__()
-                self.config = config
-            
-            def run(self):
-                try:
-                    from ...infrastructure.ai.ai_service import AIService
-                    
-                    # Create temporary AI service for testing
-                    service = AIService()
-                    success = service.initialize(self.config)
-                    
-                    if success:
-                        # Test the actual connection
-                        result = service.test_connection()
-                        service.shutdown()
-                        
-                        if result['success']:
-                            self.finished.emit(True, "✓ Connection successful", result.get('details', {}))
-                        else:
-                            self.finished.emit(False, f"✗ {result['message']}", {})
-                    else:
-                        self.finished.emit(False, "✗ Failed to initialize AI service", {})
-                        
-                except Exception as e:
-                    logger.error(f"Connection test error: {e}")
-                    self.finished.emit(False, f"✗ Error: {str(e)}", {})
+        # Create test configuration with max 3 attempts 
+        # Note: SSL verification will be automatically configured based on PKI status
+        test_config = APITestConfig(
+            model_name=config_dict['model_name'],
+            base_url=config_dict['base_url'],
+            api_key=config_dict['api_key'],
+            temperature=config_dict['temperature'],
+            max_tokens=config_dict['max_tokens'],
+            timeout=30,
+            max_test_attempts=3,
+            disable_ssl_verification=True  # Will be overridden if PKI is enabled with CA bundle
+        )
         
-        # Create worker and thread
-        self.test_thread = QThread()
-        self.test_worker = ConnectionTester(config)
-        self.test_worker.moveToThread(self.test_thread)
+        # Get the unified test service
+        self.api_test_service = get_api_test_service()
         
-        # Connect signals
-        self.test_thread.started.connect(self.test_worker.run)
-        self.test_worker.finished.connect(self._on_test_finished)
-        self.test_worker.finished.connect(self.test_thread.quit)
-        self.test_worker.finished.connect(self.test_worker.deleteLater)
-        self.test_thread.finished.connect(self.test_thread.deleteLater)
+        # Connect signals for progress updates
+        self.api_test_service.test_started.connect(self._on_test_started)
+        self.api_test_service.test_attempt.connect(self._on_test_attempt)
+        self.api_test_service.test_completed.connect(self._on_test_completed)
         
-        # Start the test
-        self.test_thread.start()
-        logger.debug("Connection test initiated")
+        # Start asynchronous test
+        self.api_test_service.test_api_config_async(
+            test_config,
+            progress_callback=self._update_test_progress
+        )
+        
+        logger.debug("Unified API connection test initiated")
     
-    def _on_test_finished(self, success: bool, message: str, details: dict):
-        """Handle connection test completion."""
-        self._finish_test(success, message)
+    def _on_test_started(self):
+        """Handle test start."""
+        logger.debug("API test started")
+    
+    def _on_test_attempt(self, attempt: int, total_attempts: int):
+        """Handle test attempt progress."""
+        self.test_status_label.setText(f"Testing... (attempt {attempt}/{total_attempts})")
+        logger.debug(f"API test attempt {attempt}/{total_attempts}")
+    
+    def _update_test_progress(self, message: str):
+        """Update test progress message."""
+        self.test_status_label.setText(message)
+    
+    def _on_test_completed(self, result):
+        """Handle unified API test completion."""
+        # Disconnect signals to avoid multiple connections
+        try:
+            self.api_test_service.test_started.disconnect(self._on_test_started)
+            self.api_test_service.test_attempt.disconnect(self._on_test_attempt)
+            self.api_test_service.test_completed.disconnect(self._on_test_completed)
+        except Exception as e:
+            logger.warning(f"Error disconnecting test signals: {e}")
         
-        if details and logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f"Connection test details: {details}")
+        # Process result
+        if result.success:
+            self._finish_test(True, "✓ Connection successful")
+            if result.details and logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"Connection test details: {result.details}")
+        else:
+            self._finish_test(False, result.message)
+            logger.warning(f"Connection test failed after {result.total_attempts} attempts: {result.message}")
     
     def _finish_test(self, success: bool, message: str):
         """Finish the connection test and update UI."""
@@ -1552,7 +1685,7 @@ class SettingsDialog(QDialog):
     
     def _apply_config_to_ui(self, config: Dict[str, Any]):
         """Apply configuration to UI elements."""
-        # AI Model settings
+        # AI Settings
         ai_config = config.get("ai_model", {})
         if "preset" in ai_config:
             index = self.model_preset_combo.findText(str(ai_config["preset"]))
@@ -1778,7 +1911,7 @@ class SettingsDialog(QDialog):
         if "ai_model" in config:
             model_name = config["ai_model"].get("model_name", "not set")
             base_url = config["ai_model"].get("base_url", "not set")
-            logger.info(f"🤖 AI Model config: {model_name} at {base_url}")
+            logger.info(f"🤖 AI Settings config: {model_name} at {base_url}")
         
         if "advanced" in config:
             log_level = config["advanced"].get("log_level", "not set")

@@ -85,8 +85,8 @@ class ThemeManager(QObject):
             self._preset_themes = get_preset_themes()
             logger.info(f"Loaded {len(self._preset_themes)} preset themes")
         except ImportError:
-            logger.warning("Preset themes not available, using default theme only")
-            self._preset_themes = {"default": ColorSystem()}
+            logger.warning("Preset themes not available, using openai_like theme only")
+            self._preset_themes = {"openai_like": ColorSystem()}
     
     def _load_custom_themes(self):
         """Load custom themes from disk (themes folder)."""
@@ -133,15 +133,15 @@ class ThemeManager(QObject):
     def _load_current_theme(self):
         """Load the current theme from settings."""
         try:
-            theme_name = settings.get('ui.theme', 'default')
+            theme_name = settings.get('ui.theme', 'openai_like')
             if self.has_theme(theme_name):
                 self.set_theme(theme_name)
             else:
-                logger.warning(f"Saved theme '{theme_name}' not found, using default")
-                self.set_theme('default')
+                logger.warning(f"Saved theme '{theme_name}' not found, using openai_like")
+                self.set_theme('openai_like')
         except Exception as e:
             logger.error(f"Failed to load current theme: {e}")
-            self.set_theme('default')
+            self.set_theme('openai_like')
     
     @property
     def current_theme(self) -> ColorSystem:
@@ -337,9 +337,9 @@ class ThemeManager(QObject):
             if theme_file.exists():
                 theme_file.unlink()
             
-            # If this was the current theme, switch to default
+            # If this was the current theme, switch to openai_like
             if self._current_theme_name == name:
-                self.set_theme('default')
+                self.set_theme('openai_like')
             
             # Emit signal
             self.theme_deleted.emit(name)

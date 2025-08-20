@@ -754,16 +754,18 @@ class ValidationPage(QWizardPage):
             logger.error(f"PKI validation error: {e}")
     
     def _test_connection(self):
-        """Test PKI connection to specified URL."""
+        """Test PKI connection to specified URL with max 3 attempts."""
         test_url = self.test_url_edit.text().strip()
         if not test_url:
             self._log_result("✗ Please enter a test URL")
             return
         
         self._log_result(f"🌐 Testing connection to: {test_url}")
+        self._log_result("📡 Using max 3 attempts with SSL verification disabled")
         
         try:
-            success, error = pki_service.test_pki_connection(test_url)
+            # Test with max 3 attempts as per requirement
+            success, error = pki_service.test_pki_connection(test_url, max_attempts=3)
             if success:
                 self._log_result("✓ Connection test successful")
             else:

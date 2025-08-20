@@ -189,41 +189,80 @@ class PKIService:
             logger.error(f"Failed to apply PKI to session: {e}")
             return False
     
-    def test_pki_connection(self, test_url: str) -> Tuple[bool, Optional[str]]:
+    def test_pki_connection(self, test_url: str, max_attempts: int = 3) -> Tuple[bool, Optional[str]]:
         """
-        Test PKI authentication with a given URL.
+        Test PKI authentication with a given URL with retry logic.
         
         Args:
             test_url: URL to test PKI authentication against
+            max_attempts: Maximum number of test attempts (default: 3)
             
         Returns:
             Tuple of (success, error_message)
         """
-        try:
-            logger.info(f"Testing PKI connection to: {test_url}")
-            
-            if not self.cert_manager.is_pki_enabled():
-                return False, "PKI is not enabled"
-            
-            # Make a simple request to test PKI
-            response = session_manager.make_request(
-                method="GET",
-                url=test_url,
-                timeout=10
-            )
-            
-            if response.status_code < 400:
-                logger.info("✓ PKI connection test successful")
-                return True, None
-            else:
-                error_msg = f"HTTP {response.status_code}: {response.reason}"
-                logger.warning(f"⚠ PKI connection test returned: {error_msg}")
-                return False, error_msg
+        logger.info(f"Testing PKI connection to: {test_url} (max {max_attempts} attempts)")
+        
+        if not self.cert_manager.is_pki_enabled():
+            return False, "PKI is not enabled"
+        
+        last_error = None
+        
+        # Configure session with CA bundle verification (not disabled SSL)
+        ca_bundle_path = self.cert_manager.get_ca_chain_file()
+        
+        session_manager.configure_session(
+            timeout=10,
+            max_retries=0,  # Disable all lower-level retries - we handle retries here
+            disable_ssl_verification=False  # Use proper SSL verification with CA bundle
+        )
+        
+        # Configure session to use CA bundle if available
+        if ca_bundle_path:
+            try:
+                with session_manager.get_session() as session:
+                    session.verify = ca_bundle_path
+                logger.info(f"PKI test configured to use CA bundle: {ca_bundle_path}")
+            except Exception as e:
+                logger.error(f"Failed to configure CA bundle for PKI test: {e}")
+        else:
+            logger.warning("PKI enabled but no CA bundle available for verification")
+        
+        for attempt in range(1, max_attempts + 1):
+            try:
+                logger.info(f"PKI test attempt {attempt}/{max_attempts}")
                 
-        except Exception as e:
-            error_msg = f"PKI connection test failed: {e}"
-            logger.error(f"✗ {error_msg}")
-            return False, error_msg
+                # Make a simple request to test PKI
+                response = session_manager.make_request(
+                    method="GET",
+                    url=test_url,
+                    timeout=10
+                )
+                
+                if response.status_code < 400:
+                    logger.info(f"✓ PKI connection test successful on attempt {attempt}")
+                    return True, None
+                else:
+                    last_error = f"HTTP {response.status_code}: {response.reason}"
+                    logger.warning(f"⚠ PKI test attempt {attempt} returned: {last_error}")
+                    
+            except Exception as e:
+                last_error = f"PKI connection test failed: {e}"
+                logger.error(f"✗ PKI test attempt {attempt} error: {last_error}")
+            
+            # Wait before retry (except on last attempt)
+            if attempt < max_attempts:
+                import time
+                time.sleep(2)  # 2 second delay between attempts
+        
+        # All attempts failed - provide user-friendly error message
+        from ..ai.api_test_service import _get_user_friendly_error
+        friendly_error = _get_user_friendly_error(last_error) if last_error else "Unknown error"
+        
+        # Log technical error for debugging
+        logger.error(f"✗ PKI test failed after {max_attempts} attempts. Last technical error: {last_error}")
+        
+        # Return user-friendly error
+        return False, f"PKI connection failed after {max_attempts} attempts: {friendly_error}"
     
     def get_certificate_expiry_warning(self) -> Optional[str]:
         """

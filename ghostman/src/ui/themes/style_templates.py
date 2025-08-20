@@ -926,6 +926,64 @@ class StyleTemplates:
             color: {colors.text_tertiary};
         }}
         
+        /* Modern scroll bar styling */
+        QScrollBar:vertical {{
+            background-color: {colors.background_secondary};
+            width: 12px;
+            border: none;
+            border-radius: 6px;
+            margin: 0px;
+        }}
+        QScrollBar::handle:vertical {{
+            background-color: {colors.border_primary};
+            border-radius: 6px;
+            min-height: 20px;
+            margin: 2px;
+        }}
+        QScrollBar::handle:vertical:hover {{
+            background-color: {colors.secondary};
+        }}
+        QScrollBar::handle:vertical:pressed {{
+            background-color: {colors.primary};
+        }}
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+            border: none;
+            background: none;
+            height: 0px;
+            width: 0px;
+        }}
+        QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+            background: none;
+        }}
+        QScrollBar:horizontal {{
+            background-color: {colors.background_secondary};
+            height: 12px;
+            border: none;
+            border-radius: 6px;
+            margin: 0px;
+        }}
+        QScrollBar::handle:horizontal {{
+            background-color: {colors.border_primary};
+            border-radius: 6px;
+            min-width: 20px;
+            margin: 2px;
+        }}
+        QScrollBar::handle:horizontal:hover {{
+            background-color: {colors.secondary};
+        }}
+        QScrollBar::handle:horizontal:pressed {{
+            background-color: {colors.primary};
+        }}
+        QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+            border: none;
+            background: none;
+            height: 0px;
+            width: 0px;
+        }}
+        QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
+            background: none;
+        }}
+        
         /* ComboBox styling */
         QComboBox {{
             background-color: {colors.background_tertiary};
