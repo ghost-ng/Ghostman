@@ -45,7 +45,7 @@ class GhostmanApplication:
         
         # Create Qt application
         app = QApplication(sys.argv)
-        app.setApplicationName("Ghostman")
+        app.setApplicationName("GhostmanApp")
         app.setApplicationVersion("1.0.0")
         app.setOrganizationName("Ghostman")
         app.setQuitOnLastWindowClosed(False)  # Keep running when main window closes

@@ -18,6 +18,8 @@ pytest>=7.0.0
 pytest-asyncio>=0.21.0
 pytest-qt>=4.2.0
 
+markdown
+
 # Optional dependencies for enhanced functionality
 # anthropic>=0.7.0  # For native Anthropic API support (alternative to OpenAI-compatible)
 # httpx>=0.24.0     # Alternative HTTP client (requests is now used by default)

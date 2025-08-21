@@ -54,6 +54,7 @@ class AvatarWidget(SimpleAvatarArrowMixin, AvatarResizableMixin, QWidget):
     minimize_requested = pyqtSignal()
     settings_requested = pyqtSignal()
     conversations_requested = pyqtSignal()
+    quit_requested = pyqtSignal()
     
     # Resize signals (from mixin)
     resize_started = pyqtSignal(object)  # HitZone
@@ -411,6 +412,13 @@ class AvatarWidget(SimpleAvatarArrowMixin, AvatarResizableMixin, QWidget):
         about_action.triggered.connect(lambda: logger.info("About Ghostman clicked"))
         context_menu.addAction(about_action)
         
+        context_menu.addSeparator()
+        
+        # Quit action
+        quit_action = QAction("Quit Ghostman", self)
+        quit_action.triggered.connect(self._on_quit_clicked)
+        context_menu.addAction(quit_action)
+        
         # Show the menu
         logger.debug("Showing avatar context menu...")
         context_menu.exec(pos)
@@ -422,6 +430,13 @@ class AvatarWidget(SimpleAvatarArrowMixin, AvatarResizableMixin, QWidget):
         logger.debug("Emitting conversations_requested signal...")
         self.conversations_requested.emit()
         logger.debug("conversations_requested signal emitted")
+    
+    def _on_quit_clicked(self):
+        """Handle quit menu item clicked."""
+        logger.info("🚪 Quit Ghostman clicked by user")
+        logger.debug("Emitting quit_requested signal...")
+        self.quit_requested.emit()
+        logger.debug("quit_requested signal emitted")
     
     def closeEvent(self, event):
         """Handle widget close event."""

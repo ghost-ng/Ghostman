@@ -51,32 +51,24 @@ class JSONFormatter(logging.Formatter):
 def _resolve_log_dir() -> Path:
     """Determine the unified log directory under AppData/Ghostman/logs.
 
-    Mirrors SettingsManager path conventions (Ghostman/configs sibling directory).
+    Uses the same path as config_paths to ensure consistency.
     """
-    # Prefer Qt AppDataLocation for consistent cross‑platform behavior
-    base_path: Path | None = None
-    try:
-        if QStandardPaths:
-            base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
-            if base:
-                base_path = Path(base)
-    except Exception:  # pragma: no cover
-        base_path = None
-
-    if base_path is None:
-        # Fallback: LOCALAPPDATA on Windows, ~/.local/share on *nix
-        if os.name == 'nt':
-            base_env = os.environ.get('LOCALAPPDATA', str(Path.home()))
-            base_path = Path(base_env)
+    # Use the same logic as config_paths for consistency
+    if os.name == 'nt':  # Windows
+        appdata = os.environ.get('APPDATA')
+        if appdata:
+            base_path = Path(appdata) / "Ghostman"
         else:
-            base_path = Path.home() / '.local' / 'share'
-
-    # Avoid double Ghostman nesting
-    if base_path.name.lower() == 'ghostman':
-        ghostman_root = base_path
+            base_path = Path.home() / "AppData" / "Roaming" / "Ghostman"
     else:
-        ghostman_root = base_path / 'Ghostman'
-    log_dir = ghostman_root / 'logs'
+        # Fallback for other platforms - use XDG standard
+        xdg_data_home = os.environ.get('XDG_DATA_HOME')
+        if xdg_data_home:
+            base_path = Path(xdg_data_home) / "ghostman"
+        else:
+            base_path = Path.home() / ".local" / "share" / "ghostman"
+    
+    log_dir = base_path / 'logs'
     log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir
 
@@ -97,7 +89,7 @@ def cleanup_old_logs(log_dir: Path, retention_days: int) -> int:
         cleaned_count = 0
         
         # Pattern for rotated log files (both main and error logs)
-        patterns = ['ghostman.log.*', 'ghostman_errors.log.*']
+        patterns = ['ghostman-*.log', 'ghostman-errors-*.log']
         
         for pattern in patterns:
             log_files = list(log_dir.glob(pattern))
@@ -168,13 +160,14 @@ def setup_logging(debug: bool = False, log_dir: str | None = None, retention_day
         backupCount=retention_days,  # Keep specified number of days
         encoding='utf-8'
     )
-    file_handler.suffix = '%Y-%m-%d'  # Add date suffix to rotated files
+    file_handler.suffix = '-%Y-%m-%d.log'  # Format: ghostman-YYYY-MM-DD.log
+    file_handler.extMatch = None  # Disable default extension matching
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(JSONFormatter())
     root_logger.addHandler(file_handler)
     
     # Daily rotating error file handler
-    error_file = str(log_dir_path / 'ghostman_errors.log')
+    error_file = str(log_dir_path / 'ghostman-errors.log')
     error_handler = logging.handlers.TimedRotatingFileHandler(
         error_file,
         when='midnight',
@@ -182,7 +175,8 @@ def setup_logging(debug: bool = False, log_dir: str | None = None, retention_day
         backupCount=retention_days,
         encoding='utf-8'
     )
-    error_handler.suffix = '%Y-%m-%d'
+    error_handler.suffix = '-%Y-%m-%d.log'  # Format: ghostman-errors-YYYY-MM-DD.log
+    error_handler.extMatch = None  # Disable default extension matching
     error_handler.setLevel(logging.ERROR)
     error_handler.setFormatter(JSONFormatter())
     root_logger.addHandler(error_handler)

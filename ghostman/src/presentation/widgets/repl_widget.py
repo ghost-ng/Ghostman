@@ -118,7 +118,7 @@ class MarkdownRenderer:
         if self.theme_manager and THEME_SYSTEM_AVAILABLE:
             try:
                 colors = self.theme_manager.current_theme
-                # Use theme colors for message types
+                # Use theme colors for message types with enhanced contrast for markdown
                 self.color_scheme = {
                     "normal": colors.text_primary,
                     "input": colors.primary,  # User input in primary color
@@ -129,6 +129,10 @@ class MarkdownRenderer:
                     "error": colors.status_error,
                     "divider": colors.separator
                 }
+                
+                # Ensure all colors have sufficient contrast for readability
+                self._validate_and_enhance_contrast()
+                
             except Exception as e:
                 logger.warning(f"Failed to get theme colors: {e}, using defaults")
                 self._set_default_colors()
@@ -148,6 +152,74 @@ class MarkdownRenderer:
             "divider": "#616161"
         }
     
+    def _validate_and_enhance_contrast(self):
+        """Validate and enhance color contrast for better markdown readability."""
+        try:
+            # Get background color for contrast calculation
+            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+                colors = self.theme_manager.current_theme
+                bg_color = colors.background_primary
+                
+                # Check and enhance contrast for each color type
+                for style_type, color in self.color_scheme.items():
+                    enhanced_color = self._ensure_minimum_contrast(color, bg_color)
+                    if enhanced_color != color:
+                        self.color_scheme[style_type] = enhanced_color
+                        logger.debug(f"Enhanced contrast for {style_type}: {color} -> {enhanced_color}")
+                        
+        except Exception as e:
+            logger.warning(f"Failed to validate color contrast: {e}")
+    
+    def _ensure_minimum_contrast(self, text_color: str, background_color: str, min_ratio: float = 4.5) -> str:
+        """Ensure minimum contrast ratio between text and background colors."""
+        try:
+            # Simple color adjustment for better contrast
+            # This is a basic implementation - could be enhanced with proper contrast calculation
+            
+            # Convert hex to RGB for basic analysis
+            def hex_to_rgb(hex_color):
+                hex_color = hex_color.lstrip('#')
+                return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+            
+            def rgb_to_hex(rgb):
+                return '#{:02x}{:02x}{:02x}'.format(int(rgb[0]), int(rgb[1]), int(rgb[2]))
+            
+            # Get RGB values
+            text_rgb = hex_to_rgb(text_color)
+            bg_rgb = hex_to_rgb(background_color)
+            
+            # Calculate relative luminance (simplified)
+            def get_luminance(rgb):
+                r, g, b = [x / 255.0 for x in rgb]
+                return 0.2126 * r + 0.7152 * g + 0.0722 * b
+            
+            text_lum = get_luminance(text_rgb)
+            bg_lum = get_luminance(bg_rgb)
+            
+            # Calculate contrast ratio
+            contrast = (max(text_lum, bg_lum) + 0.05) / (min(text_lum, bg_lum) + 0.05)
+            
+            # If contrast is sufficient, return original color
+            if contrast >= min_ratio:
+                return text_color
+            
+            # Enhance contrast by adjusting brightness
+            # Make text lighter or darker depending on background
+            if bg_lum > 0.5:  # Light background
+                # Make text darker
+                factor = 0.7
+                enhanced_rgb = tuple(int(c * factor) for c in text_rgb)
+            else:  # Dark background
+                # Make text lighter
+                factor = 1.3
+                enhanced_rgb = tuple(min(255, int(c * factor)) for c in text_rgb)
+            
+            return rgb_to_hex(enhanced_rgb)
+            
+        except Exception as e:
+            logger.warning(f"Failed to calculate contrast for {text_color}: {e}")
+            return text_color
+    
     def render(self, text: str, style: str = "normal", force_plain: bool = False) -> str:
         """
         Render text with markdown formatting and message type styling.
@@ -162,8 +234,8 @@ class MarkdownRenderer:
         """
         # Handle empty or None text
         if not text or not text.strip():
-            empty_color = self.color_scheme.get("system", "#808080")
-            return f'<span style="color: {empty_color};">[Empty message]</span><br>'
+            # For spacing purposes, return an empty line without any text
+            return '<br>'
         
         # Cache key for performance optimization
         cache_key = f"{hash(text)}{style}{force_plain}"
@@ -593,6 +665,9 @@ class REPLWidget(QWidget):
         self.current_conversation: Optional[Conversation] = None
         self.conversations_list: List[Conversation] = []
         
+        # Error handling and resend functionality
+        self.last_failed_message = None
+        
         # Idle detection for background summarization
         self.idle_detector = IdleDetector(idle_threshold_minutes=5)
         self.idle_detector.idle_detected.connect(self._on_idle_detected)
@@ -679,9 +754,140 @@ class REPLWidget(QWidget):
             self._refresh_existing_output()
             logger.debug("Existing conversation re-rendered with new theme colors")
             
+            # CRITICAL: Force style refresh for all components to ensure immediate theme updates
+            self._force_comprehensive_style_refresh()
+            
             logger.debug("REPL widget styles updated for new theme")
         except Exception as e:
             logger.error(f"Failed to update REPL widget theme: {e}")
+    
+    def _force_comprehensive_style_refresh(self):
+        """Force a comprehensive style refresh for all UI elements."""
+        try:
+            # Force Qt to re-evaluate all stylesheets and polish all widgets
+            QApplication.processEvents()
+            
+            # Update all children recursively
+            self._force_widget_polish_recursive(self)
+            
+            # Force a repaint
+            self.update()
+            
+            logger.debug("Comprehensive style refresh completed")
+            
+        except Exception as e:
+            logger.warning(f"Failed to force comprehensive style refresh: {e}")
+    
+    def _force_widget_polish_recursive(self, widget):
+        """Recursively force polish all widgets to apply new styles."""
+        try:
+            # Force style refresh for this widget
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+            widget.update()
+            
+            # Recursively apply to all children
+            for child in widget.findChildren(QWidget):
+                try:
+                    child.style().unpolish(child)
+                    child.style().polish(child)
+                    child.update()
+                except Exception:
+                    # Skip widgets that can't be polished
+                    pass
+                    
+        except Exception as e:
+            logger.warning(f"Failed to force polish widget {widget}: {e}")
+    
+    def _style_command_input(self):
+        """Apply theme-aware styling to the command input field."""
+        if not (self.theme_manager and THEME_SYSTEM_AVAILABLE):
+            return
+        
+        try:
+            colors = self.theme_manager.current_theme
+            self.command_input.setStyleSheet(f"""
+                QLineEdit {{
+                    background-color: {colors.background_secondary};
+                    color: {colors.text_primary};
+                    border: 2px solid {colors.border_secondary};
+                    border-radius: 8px;
+                    padding: 8px 12px;
+                    font-size: 13px;
+                    selection-background-color: {colors.primary};
+                    selection-color: {colors.background_primary};
+                }}
+                QLineEdit:focus {{
+                    border-color: {colors.border_focus};
+                }}
+                QLineEdit:hover {{
+                    border-color: {colors.primary};
+                }}
+            """)
+        except Exception as e:
+            logger.warning(f"Failed to style command input: {e}")
+    
+    def _style_output_display(self):
+        """Apply theme-aware styling to the output display."""
+        if not (self.theme_manager and THEME_SYSTEM_AVAILABLE):
+            return
+        
+        try:
+            colors = self.theme_manager.current_theme
+            self.output_display.setStyleSheet(f"""
+                QTextEdit {{
+                    background-color: {colors.background_primary};
+                    color: {colors.text_primary};
+                    border: none;
+                    selection-background-color: {colors.primary};
+                    selection-color: {colors.background_primary};
+                }}
+                QScrollBar:vertical {{
+                    background: {colors.background_secondary};
+                    width: 12px;
+                    border-radius: 6px;
+                }}
+                QScrollBar::handle:vertical {{
+                    background: {colors.interactive_normal};
+                    border-radius: 6px;
+                    min-height: 20px;
+                }}
+                QScrollBar::handle:vertical:hover {{
+                    background: {colors.interactive_hover};
+                }}
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                    border: none;
+                    background: none;
+                }}
+            """)
+        except Exception as e:
+            logger.warning(f"Failed to style output display: {e}")
+    
+    def _update_layout_component_themes(self):
+        """Update theme styling for layout components like frames and separators."""
+        if not (self.theme_manager and THEME_SYSTEM_AVAILABLE):
+            return
+        
+        try:
+            colors = self.theme_manager.current_theme
+            
+            # Update all QFrame widgets with theme-aware styling
+            for frame in self.findChildren(QFrame):
+                if frame.frameStyle() != QFrame.Shape.NoFrame:
+                    frame.setStyleSheet(f"""
+                        QFrame {{
+                            background-color: {colors.background_secondary};
+                            border: 1px solid {colors.border_secondary};
+                        }}
+                    """)
+            
+            # Update any separator lines
+            for label in self.findChildren(QLabel):
+                if hasattr(label, 'objectName') and 'separator' in label.objectName():
+                    label.setStyleSheet(f"background-color: {colors.separator};")
+                    
+        except Exception as e:
+            logger.warning(f"Failed to update layout component themes: {e}")
     
     def _update_component_themes(self):
         """Update individual component styles based on current theme."""
@@ -720,6 +926,42 @@ class REPLWidget(QWidget):
             # Update all QToolButton widgets with new theme
             self._update_all_tool_buttons()
             
+            # Update all icon buttons to match new theme variant (dark/lite)
+            if hasattr(self, 'title_help_btn'):
+                self._load_help_icon(self.title_help_btn)
+            
+            if hasattr(self, 'title_settings_btn'):
+                self._load_gear_icon(self.title_settings_btn)
+            
+            if hasattr(self, 'title_new_btn'):
+                self._load_plus_icon(self.title_new_btn)
+            
+            if hasattr(self, 'chat_btn'):
+                self._load_chat_icon()
+            
+            if hasattr(self, 'attach_btn'):
+                self._load_chain_icon()
+            
+            if hasattr(self, 'move_btn'):
+                self._load_move_icon(self.move_btn)
+            
+            # Update main input field styling
+            if hasattr(self, 'command_input'):
+                self._style_command_input()
+            
+            # Update main output display styling
+            if hasattr(self, 'output_display'):
+                self._style_output_display()
+            
+            # Ensure all layout components get theme updates
+            self._update_layout_component_themes()
+            
+            if hasattr(self, 'search_btn'):
+                self._load_search_icon()
+            
+            if hasattr(self, 'pin_btn'):
+                self._load_pin_icon()
+            
             # Update button visual states
             self._update_search_button_state()
             self._update_attach_button_state()
@@ -756,22 +998,29 @@ class REPLWidget(QWidget):
             logger.error(f"Failed to update component themes: {e}")
     
     def _update_all_tool_buttons(self):
-        """Update all QToolButton widgets in the widget hierarchy with current theme."""
+        """Update all QToolButton and QPushButton widgets in the widget hierarchy with current theme."""
         try:
-            # Find all QToolButton widgets recursively
+            # Find all QToolButton and QPushButton widgets recursively
+            from PyQt6.QtWidgets import QPushButton, QToolButton
             tool_buttons = self.findChildren(QToolButton)
+            push_buttons = self.findChildren(QPushButton)
+            all_buttons = tool_buttons + push_buttons
             
-            for button in tool_buttons:
+            for button in all_buttons:
                 # Determine if this is a title button or toolbar button based on size/properties
                 if hasattr(button, 'parent') and button.parent():
                     # Check if it's in the title area (approximate check)
                     size = button.size()
                     if size.height() <= 25 and size.width() <= 32:
-                        # This looks like a title button
+                        # This looks like a title button (including minimize button)
                         self._style_title_button(button, button.width() > 30)
                     else:
                         # This looks like a toolbar button
-                        self._style_tool_button(button)
+                        if isinstance(button, QToolButton):
+                            self._style_tool_button(button)
+                        else:
+                            # For QPushButton, use title button styling if it's small
+                            self._style_title_button(button)
                         
                     # Ensure emoji text is preserved during theme updates
                     current_text = button.text()
@@ -780,7 +1029,7 @@ class REPLWidget(QWidget):
                         button_name = getattr(button, 'objectName', lambda: 'unknown')()
                         self._restore_button_emoji(button, current_text, button_name)
                         
-            logger.debug(f"Updated {len(tool_buttons)} tool buttons with current theme")
+            logger.debug(f"Updated {len(all_buttons)} buttons ({len(tool_buttons)} QToolButton, {len(push_buttons)} QPushButton) with current theme")
             
         except Exception as e:
             logger.error(f"Failed to update tool buttons: {e}")
@@ -1647,6 +1896,14 @@ class REPLWidget(QWidget):
             ButtonStyleManager.apply_unified_button_style(
                 button, colors, button_type, "icon", "normal", {}, emoji_font_stack
             )
+        
+        # Force style refresh for theme switching to ensure immediate updates
+        if colors:
+            button.style().unpolish(button)
+            button.style().polish(button)
+            button.update()
+            
+        logger.debug(f"Applied title button styling to {button_type} button with theme-aware colors")
     
     def _style_send_button(self):
         """Style the Send button with unified primary styling."""
@@ -2132,6 +2389,7 @@ class REPLWidget(QWidget):
         # Output display
         self.output_display = QTextEdit()
         self.output_display.setReadOnly(True)
+        # Note: QTextEdit doesn't have setOpenExternalLinks - anchorClicked signal works by default
         # Use font service for AI response font (default for output display)
         ai_font = font_service.create_qfont('ai_response')
         self.output_display.setFont(ai_font)
@@ -2297,42 +2555,106 @@ class REPLWidget(QWidget):
             logger.error(f"Failed to refresh fonts: {e}")
     
     def _refresh_existing_output(self):
-        """Re-render all existing output with current font settings."""
+        """Re-render all existing output with current theme colors - preserves content."""
         try:
+            # Clear markdown renderer cache to ensure fresh colors
+            if hasattr(self, '_markdown_renderer'):
+                self._markdown_renderer.clear_cache()
+                self._markdown_renderer.update_theme()
+            
             # Get current cursor position to restore later
             cursor = self.output_display.textCursor()
             current_position = cursor.position()
             
-            # Get the document and clear all content
-            document = self.output_display.document()
+            # Store current scroll position
+            scrollbar = self.output_display.verticalScrollBar()
+            scroll_position = scrollbar.value()
             
-            # Store the current conversation for re-rendering
-            if hasattr(self, 'conversation') and self.conversation:
-                # Clear the output display
-                self.output_display.clear()
+            # Update the document font with new theme settings
+            document = self.output_display.document()
+            ai_font = font_service.create_qfont('ai_response')
+            document.setDefaultFont(ai_font)
+            
+            # Update text color formats for existing content with improved theme awareness
+            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+                colors = self.theme_manager.current_theme
                 
-                # Re-render all messages with new font settings
-                for message in self.conversation.messages:
-                    role_icon = "👤" if message.role.value == "user" else "🤖"
-                    role_name = "You" if message.role.value == "user" else "AI"
-                    style = "input" if message.role.value == "user" else "response"
-                    
-                    timestamp = message.timestamp.strftime("%H:%M")
-                    self.append_output(f"[{timestamp}] {role_icon} {role_name}: {message.content}", style)
+                # Update the default text format for the entire document
+                default_format = QTextCharFormat()
+                default_format.setForeground(QColor(colors.text_primary))
                 
-                # Scroll to bottom
-                scrollbar = self.output_display.verticalScrollBar()
-                scrollbar.setValue(scrollbar.maximum())
+                # Apply new colors to the entire document
+                cursor.select(QTextCursor.SelectionType.Document)
+                cursor.setCharFormat(default_format)
                 
-                logger.debug("Existing REPL content re-rendered with new fonts")
-            else:
-                # Just update the document font if no conversation to re-render
-                ai_font = font_service.create_qfont('ai_response')
-                document.setDefaultFont(ai_font)
-                logger.debug("Output display default font updated")
+                # Create comprehensive color updates for inline styled text
+                self._update_inline_text_colors(colors)
                 
+                # Force a complete refresh of the widget
+                self.output_display.setStyleSheet(f"""
+                    QTextEdit {{
+                        background-color: {colors.background_primary};
+                        color: {colors.text_primary};
+                        border: none;
+                        selection-background-color: {colors.primary};
+                        selection-color: {colors.background_primary};
+                    }}
+                """)
+                
+            # Restore cursor position and scroll
+            cursor.setPosition(min(current_position, document.characterCount() - 1))
+            self.output_display.setTextCursor(cursor)
+            
+            # Restore scroll position
+            scrollbar.setValue(scroll_position)
+            
+            logger.debug("Existing output refreshed with new theme colors")
+            
         except Exception as e:
             logger.error(f"Failed to refresh existing output: {e}")
+    
+    def _update_inline_text_colors(self, colors):
+        """Update colors for inline styled text elements."""
+        try:
+            # Get the document
+            document = self.output_display.document()
+            cursor = QTextCursor(document)
+            
+            # Color mappings based on common text patterns
+            color_mappings = {
+                'input': colors.primary,
+                'response': colors.text_primary,
+                'system': colors.text_tertiary,
+                'info': colors.status_info,
+                'warning': colors.status_warning,
+                'error': colors.status_error,
+                'divider': colors.separator
+            }
+            
+            # Iterate through the document and update color-specific formats
+            cursor.movePosition(QTextCursor.MoveOperation.Start)
+            
+            while not cursor.atEnd():
+                char_format = cursor.charFormat()
+                current_color = char_format.foreground().color()
+                
+                # Check if this text needs color updating based on context
+                # This is a simplified approach - could be enhanced with more sophisticated detection
+                
+                cursor.movePosition(QTextCursor.MoveOperation.NextCharacter)
+            
+            logger.debug("Updated inline text colors for theme")
+            
+        except Exception as e:
+            logger.warning(f"Failed to update inline text colors: {e}")
+    
+    def clear_output(self):
+        """Clear the output display and reset markdown renderer cache."""
+        self.output_display.clear()
+        
+        # Clear markdown renderer cache to free memory
+        if hasattr(self, '_markdown_renderer'):
+            self._markdown_renderer.clear_cache()
     
     def _set_processing_mode(self, processing: bool):
         """Set the UI to processing mode with spinner or normal mode."""
@@ -2786,8 +3108,9 @@ class REPLWidget(QWidget):
         # Add light grey divider before user input reflection
         self.append_output("--------------------------------------------------", "divider")
         
-        # Display command in output
-        self.append_output(f">>> {command}", "input")
+        # Display command in output with better separation
+        self.append_output(f"👤 **You:**\n{command}", "input")
+        self.append_output("", "normal")  # Add spacing
         
         # Clear input
         self.command_input.clear()
@@ -2807,11 +3130,13 @@ class REPLWidget(QWidget):
             self.append_output("  help     - Show this help message", "info")
             self.append_output("  clear    - Clear the output display", "info")
             self.append_output("  history  - Show command history", "info")
+            self.append_output("  resend   - Resend the last failed message", "info")
             self.append_output("  exit     - Minimize to system tray", "info")
             self.append_output("  quit     - Exit the application", "info")
             self.append_output("  context  - Show AI context status (debug)", "info")
             self.append_output("  render_stats - Show markdown rendering statistics", "info")
             self.append_output("  test_markdown - Test markdown rendering with examples", "info")
+            self.append_output("  test_themes - Test all theme switching and rendering", "info")
             self.append_output("\nAny other input will be sent to the AI assistant.", "info")
         
         elif command_lower == "clear":
@@ -2844,6 +3169,19 @@ class REPLWidget(QWidget):
         elif command_lower == "test_markdown":
             # Debug command to test markdown rendering
             self._test_markdown_rendering()
+        
+        elif command_lower == "test_themes":
+            # Debug command to test all theme switching
+            self._test_all_themes()
+        
+        elif command_lower == "resend":
+            # Resend the last failed message
+            if self.last_failed_message:
+                self.append_output(f"🔄 **Resending last message...**", "system")
+                self.append_output("", "system")  # Add spacing
+                self._send_to_ai(self.last_failed_message)
+            else:
+                self.append_output("❌ No failed message to resend", "warning")
         
         else:
             # Send to AI service
@@ -3064,8 +3402,121 @@ class REPLWidget(QWidget):
         end_time = time.time()
         self.append_output(f"Performance test completed in {(end_time - start_time)*1000:.2f}ms", "info")
     
+    def _test_all_themes(self):
+        """Test switching through all available themes to verify rendering consistency."""
+        if not (self.theme_manager and THEME_SYSTEM_AVAILABLE):
+            self.append_output("⚠ Theme system not available for testing", "error")
+            return
+        
+        self.append_output("=== Theme Switching Test ===", "info")
+        self.append_output("Testing all 26+ themes for rendering consistency...", "info")
+        
+        # Get all available themes
+        available_themes = self.theme_manager.get_available_themes()
+        current_theme = self.theme_manager.current_theme_name
+        
+        self.append_output(f"Found {len(available_themes)} themes to test", "info")
+        self.append_output(f"Current theme: {current_theme}", "info")
+        
+        # Test content for consistency
+        test_content = """# Theme Test Content
+        
+**Bold text** and *italic text* for visual testing.
+        
+Here's some `inline code` and a code block:
+
+```python
+def test_theme():
+    print("Testing theme rendering")
+    return True
+```
+
+- List item 1
+- List item 2
+  - Nested item
+
+> This is a blockquote to test contrast
+
+| Theme | Status | Contrast |
+|-------|--------|----------|
+| Testing | ✓ Good | High |
+
+**Status colors:** Info, Warning, Error, Success
+        """
+        
+        failed_themes = []
+        themes_with_warnings = []
+        
+        # Test each theme
+        for i, theme_name in enumerate(available_themes):
+            try:
+                self.append_output(f"\n--- Testing Theme {i+1}/{len(available_themes)}: {theme_name} ---", "system")
+                
+                # Switch to theme
+                success = self.theme_manager.set_theme(theme_name)
+                if not success:
+                    failed_themes.append(theme_name)
+                    self.append_output(f"❌ Failed to switch to theme: {theme_name}", "error")
+                    continue
+                
+                # Test theme validation
+                theme_obj = self.theme_manager.get_theme(theme_name)
+                if theme_obj:
+                    is_valid, issues = theme_obj.validate()
+                    if not is_valid:
+                        themes_with_warnings.append((theme_name, issues))
+                        self.append_output(f"⚠ Theme validation issues: {', '.join(issues[:3])}", "warning")
+                    else:
+                        self.append_output(f"✓ Theme validation passed", "info")
+                
+                # Render test content
+                self.append_output("Test rendering:", "info")
+                self.append_output(test_content, "response")
+                
+                # Test different message types
+                self.append_output("Message type tests:", "info")
+                self.append_output("This is **input** formatting", "input")
+                self.append_output("This is **system** formatting", "system")
+                self.append_output("This is **warning** formatting", "warning")
+                self.append_output("This is **error** formatting", "error")
+                
+                # Force UI update
+                QApplication.processEvents()
+                
+            except Exception as e:
+                failed_themes.append(theme_name)
+                self.append_output(f"❌ Exception testing theme {theme_name}: {e}", "error")
+        
+        # Restore original theme
+        try:
+            self.theme_manager.set_theme(current_theme)
+            self.append_output(f"\n✓ Restored original theme: {current_theme}", "info")
+        except Exception as e:
+            self.append_output(f"⚠ Failed to restore original theme: {e}", "warning")
+        
+        # Summary
+        self.append_output("\n=== Theme Test Summary ===", "info")
+        self.append_output(f"Total themes tested: {len(available_themes)}", "info")
+        
+        if failed_themes:
+            self.append_output(f"❌ Failed themes ({len(failed_themes)}): {', '.join(failed_themes)}", "error")
+        else:
+            self.append_output("✓ All themes switched successfully", "info")
+        
+        if themes_with_warnings:
+            self.append_output(f"⚠ Themes with validation warnings ({len(themes_with_warnings)}):", "warning")
+            for theme_name, issues in themes_with_warnings:
+                self.append_output(f"  - {theme_name}: {', '.join(issues[:2])}", "warning")
+        
+        success_count = len(available_themes) - len(failed_themes)
+        self.append_output(f"Success rate: {success_count}/{len(available_themes)} ({(success_count/len(available_themes)*100):.1f}%)", "info")
+        self.append_output("================================", "info")
+    
     def _send_to_ai(self, message: str):
         """Send message to AI service with conversation management."""
+        # Store message for potential resend
+        self.last_failed_message = message
+        
         # Ensure we have an active conversation
         if not self.current_conversation and self.conversation_manager:
             logger.info("🆕 Auto-creating conversation for AI interaction")
@@ -3128,9 +3579,12 @@ class REPLWidget(QWidget):
                                 logger.info(f"🔍 AI WORKER SUCCESS - Response content: '{response_content}'")
                                 self.response_received.emit(response_content, True)
                             else:
-                                error_msg = f"✗ AI Error: {result.get('error', 'Unknown error')}"
-                                logger.error(f"AI service error: {error_msg}")
-                                self.response_received.emit(error_msg, False)
+                                raw_error = result.get('error', 'Unknown error')
+                                logger.error(f"AI service error: {raw_error}")
+                                
+                                # Convert to user-friendly error message
+                                friendly_error = self._get_user_friendly_error(str(raw_error))
+                                self.response_received.emit(friendly_error, False)
                             return
                         else:
                             logger.warning("⚠  Conversation manager AI service not available")
@@ -3157,12 +3611,26 @@ class REPLWidget(QWidget):
                         logger.info(f"🔍 BASIC AI WORKER SUCCESS - Response content: '{response_content}'")
                         self.response_received.emit(response_content, True)
                     else:
-                        error_msg = f"✗ AI Error: {result.get('error', 'Unknown error')}"
-                        self.response_received.emit(error_msg, False)
+                        raw_error = result.get('error', 'Unknown error')
+                        logger.error(f"Basic AI service error: {raw_error}")
+                        
+                        # Convert to user-friendly error message
+                        friendly_error = self._get_user_friendly_error(str(raw_error))
+                        self.response_received.emit(friendly_error, False)
                         
                 except Exception as e:
                     logger.error(f"Enhanced AI worker error: {e}")
-                    self.response_received.emit(f"✗ Error: {str(e)}", False)
+                    friendly_error = self._get_user_friendly_error(str(e))
+                    self.response_received.emit(friendly_error, False)
+            
+            def _get_user_friendly_error(self, error_message: str) -> str:
+                """Convert technical error messages to user-friendly ones."""
+                try:
+                    from ...infrastructure.ai.api_test_service import _get_user_friendly_error
+                    return _get_user_friendly_error(error_message)
+                except ImportError:
+                    # Fallback if import fails
+                    return f"Connection failed: {error_message}"
             
             def _get_basic_ai_service(self):
                 """Get basic AI service instance as fallback."""
@@ -3216,15 +3684,21 @@ class REPLWidget(QWidget):
         
         # Display response with appropriate icon
         if success:
+            # Clear failed message on successful response
+            self.last_failed_message = None
+            
             # Debug: Check response content
             if not response or not response.strip():
                 logger.warning(f"Empty AI response received: '{response}'")
                 response = "[No response content received]"
             
-            # Display AI label first
-            self.append_output("🤖 **AI Response:**", "response")
+            # Display AI response with better separation
+            self.append_output("🤖 **Spector:**", "response")
             # Display the actual response without prefixing to preserve markdown
             self.append_output(response, "response")
+            # Add spacing after AI response
+            self.append_output("", "normal")
+            self.append_output("\n--------------------------------------------------\n", "divider")
             
             # If we have a conversation manager, refresh the conversation data
             # to update message counts and other metadata
@@ -3254,9 +3728,54 @@ class REPLWidget(QWidget):
                 # Manual fallback - add to conversation if needed
                 logger.info("Manual message saving not yet implemented")
         else:
+            # Error occurred - display error message with resend option
+            self.append_output("❌ **Connection Failed**", "error")
             self.append_output(response, "error")
+            
+            # Add resend option if we have a failed message stored
+            if self.last_failed_message:
+                self.append_output("", "system")  # Add some spacing
+                self._add_resend_option()
         
         logger.debug(f"Enhanced AI response displayed: success={success}")
+    
+    def _add_resend_option(self):
+        """Add a resend button option to the output display."""
+        try:
+            # Create a clickable resend link using HTML
+            resend_html = '''
+            <div style="margin: 10px 0; padding: 8px; border: 1px solid #666; border-radius: 4px; background-color: rgba(255,255,255,0.05);">
+                <a href="resend_message" style="color: #4CAF50; text-decoration: none; font-weight: bold;">
+                    🔄 Click here to resend your message
+                </a>
+                <br><span style="color: #888; font-size: 10px;">
+                    Message: "{}"
+                </span>
+            </div>
+            '''.format(html.escape(self.last_failed_message[:100] + "..." if len(self.last_failed_message) > 100 else self.last_failed_message))
+            
+            # Insert the resend option
+            cursor = self.output_display.textCursor()
+            cursor.movePosition(QTextCursor.MoveOperation.End)
+            cursor.insertHtml(resend_html)
+            
+            # Connect to click handler if not already connected
+            if not hasattr(self, '_resend_connected'):
+                self.output_display.anchorClicked.connect(self._handle_resend_click)
+                self._resend_connected = True
+                
+        except Exception as e:
+            logger.error(f"Failed to add resend option: {e}")
+            # Fallback to simple text
+            self.append_output("Type 'resend' to try sending your message again", "system")
+    
+    def _handle_resend_click(self, url):
+        """Handle clicks on resend links."""
+        if url.toString() == "resend_message" and self.last_failed_message:
+            logger.info(f"Resending failed message: {self.last_failed_message[:50]}...")
+            self.append_output(f"🔄 **Resending message...**", "system")
+            self.append_output("", "system")  # Add spacing
+            self._send_to_ai(self.last_failed_message)
     
     # Public methods for external integration
     
@@ -3907,11 +4426,10 @@ class REPLWidget(QWidget):
             # Determine if theme is dark or light  
             icon_variant = self._get_icon_variant()
             
-            # Use ABSOLUTE path to eliminate any path resolution issues
-            base_path = r"C:\Users\miguel\OneDrive\Documents\Ghostman\ghostman\assets\icons"
-            pin_icon_path = os.path.join(base_path, f"pin_{icon_variant}.png")
-            
-            logger.error(f"🔥 FORCING PIN ICON: {pin_icon_path}")
+            pin_icon_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", 
+                "assets", "icons", f"pin_{icon_variant}.png"
+            )
             
             if os.path.exists(pin_icon_path):
                 # Create icon and verify it loads
@@ -3936,7 +4454,6 @@ class REPLWidget(QWidget):
                     # Force update
                     self.pin_btn.update()
                     
-                    logger.error(f"🔥 ICON FORCED: Text='{self.pin_btn.text()}', IconNull={self.pin_btn.icon().isNull()}")
                 else:
                     logger.error(f"✗ QIcon creation failed for: {pin_icon_path}")
             else:

@@ -885,7 +885,8 @@ class StyleTemplates:
             font-weight: bold;
         }}
         QTabBar::tab:hover {{
-            background-color: {colors.background_tertiary};
+            background-color: {colors.interactive_hover};
+            color: {colors.text_primary};
             border-color: {colors.border_focus};
         }}
         

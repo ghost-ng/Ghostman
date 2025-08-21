@@ -35,7 +35,14 @@ class PKIService:
         Returns:
             True if PKI is enabled and configured
         """
+        # If already initialized, just return current status silently
+        if self._initialized:
+            #logger.debug("PKI service already initialized, returning cached status")
+            return self.cert_manager.is_pki_enabled()
+        
         try:
+            logger.debug("Initializing PKI service...")
+            
             # Load current configuration
             self.cert_manager.load_config()
             
@@ -43,21 +50,25 @@ class PKIService:
             if self.cert_manager.is_pki_enabled():
                 success = self._apply_pki_to_session()
                 if success:
-                    if not self._initialized:
-                        logger.info("✓ PKI service initialized with authentication")
+                    logger.info("✓ PKI service initialized with authentication")
                 else:
                     logger.warning("⚠ PKI service initialized but authentication failed")
                 self._initialized = True
                 return success
             else:
-                if not self._initialized:
-                    logger.info("PKI service initialized without authentication")
+                logger.info("PKI service initialized without authentication")
                 self._initialized = True
                 return True
                 
         except Exception as e:
             logger.error(f"✗ PKI service initialization failed: {e}")
+            self._initialized = False
             return False
+    
+    def reset_initialization(self):
+        """Reset initialization state to allow re-initialization after configuration changes."""
+        self._initialized = False
+        logger.debug("PKI service initialization state reset")
     
     def setup_pki_authentication(
         self, 
@@ -90,6 +101,9 @@ class PKIService:
             if not self._apply_pki_to_session():
                 return False, "Failed to configure session with PKI"
             
+            # Reset initialization state to apply new configuration
+            self.reset_initialization()
+            
             logger.info("✓ PKI authentication setup completed")
             return True, None
             
@@ -113,6 +127,9 @@ class PKIService:
             
             # Disable in session manager
             session_manager.disable_pki()
+            
+            # Reset initialization state after disabling
+            self.reset_initialization()
             
             logger.info("✓ PKI authentication disabled")
             return True

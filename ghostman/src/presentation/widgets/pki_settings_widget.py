@@ -63,10 +63,7 @@ class PKISettingsWidget(QWidget):
         self._apply_theme_styling()
         self._refresh_status()
         
-        # Auto-refresh status every 30 seconds
-        self._refresh_timer = QTimer()
-        self._refresh_timer.timeout.connect(self._refresh_status)
-        self._refresh_timer.start(30000)  # 30 seconds
+        # No auto-refresh timer - PKI status rarely changes and manual refresh is available
         
         logger.debug("PKI Settings Widget initialized")
     
@@ -377,6 +374,12 @@ class PKISettingsWidget(QWidget):
         self.setup_button.clicked.connect(self._show_setup_wizard)
         actions_layout.addWidget(self.setup_button)
         
+        # Manual refresh button
+        self.refresh_button = QPushButton("Refresh Status")
+        self.refresh_button.clicked.connect(self._refresh_status)
+        self.refresh_button.setMaximumWidth(120)
+        actions_layout.addWidget(self.refresh_button)
+        
         # Enable/Disable button
         self.toggle_button = QPushButton("Disable PKI")
         self.toggle_button.clicked.connect(self._toggle_pki)
@@ -631,7 +634,7 @@ You can enable PKI authentication if your organization requires certificate-base
             # Get storage location information
             storage_info = ""
             try:
-                pki_service.initialize()  # Ensure service is initialized
+                # Service should already be initialized by _refresh_status
                 cert_path, key_path = pki_service.cert_manager.get_client_cert_files()
                 ca_path = pki_service.cert_manager.get_ca_chain_file()
                 pki_dir = str(pki_service.cert_manager.pki_dir)
@@ -682,8 +685,8 @@ Fingerprint: {cert_info.get('fingerprint', 'N/A')[:32]}...{storage_info}"""
             result = show_pki_wizard(self)
             
             if result is not None:
-                # Refresh status after wizard completion
-                QTimer.singleShot(500, self._refresh_status)
+                # Refresh status immediately after wizard completion
+                self._refresh_status()
                 
                 # Emit signal for main application
                 self.pki_status_changed.emit(result)
@@ -740,6 +743,7 @@ Fingerprint: {cert_info.get('fingerprint', 'N/A')[:32]}...{storage_info}"""
     
     def _test_connection(self):
         """Test PKI connection."""
+        progress = None
         try:
             # Simple dialog to get test URL
             from PyQt6.QtWidgets import QInputDialog
@@ -752,33 +756,65 @@ Fingerprint: {cert_info.get('fingerprint', 'N/A')[:32]}...{storage_info}"""
             )
             
             if ok and url.strip():
-                # Show progress
+                # Show progress dialog
                 progress = QMessageBox(self)
                 progress.setWindowTitle("Testing Connection")
                 progress.setText("Testing PKI connection...")
                 progress.setStandardButtons(QMessageBox.StandardButton.NoButton)
                 progress.show()
                 
-                # Test connection
-                success, error = pki_service.test_pki_connection(url.strip())
-                progress.close()
+                # Process events to ensure dialog is shown
+                from PyQt6.QtWidgets import QApplication
+                QApplication.processEvents()
                 
-                if success:
-                    QMessageBox.information(
-                        self,
-                        "Connection Test Successful",
-                        f"PKI authentication test to {url} was successful."
-                    )
-                else:
-                    QMessageBox.warning(
-                        self,
-                        "Connection Test Failed",
-                        f"PKI authentication test to {url} failed:\n{error}"
-                    )
+                try:
+                    # Test connection
+                    success, error = pki_service.test_pki_connection(url.strip())
+                    
+                    # Ensure progress is closed
+                    if progress:
+                        progress.close()
+                        progress = None
+                    
+                    if success:
+                        QMessageBox.information(
+                            self,
+                            "Connection Successful",
+                            f"✅ PKI authentication test successful!\n\nURL: {url}\n\nYour certificate is working correctly."
+                        )
+                    else:
+                        QMessageBox.warning(
+                            self,
+                            "Connection Failed",
+                            f"❌ PKI authentication test failed:\n\n{error}\n\nPlease check your certificate configuration."
+                        )
+                except Exception as test_error:
+                    # Ensure progress is closed on error
+                    if progress:
+                        progress.close()
+                        progress = None
+                    raise test_error
             
         except Exception as e:
+            # Ensure progress is closed on any error
+            if progress:
+                progress.close()
+                progress = None
+            
             logger.error(f"Failed to test PKI connection: {e}")
-            QMessageBox.critical(self, "Test Error", f"Failed to test PKI connection:\n{e}")
+            
+            # User-friendly error message
+            error_msg = "An error occurred while testing the PKI connection."
+            if "PKI is not enabled" in str(e):
+                error_msg = "PKI authentication is not enabled. Please configure PKI first."
+            elif "No such host" in str(e) or "Name or service not known" in str(e):
+                error_msg = "Could not connect to the server. Please check the URL and your internet connection."
+            elif "certificate" in str(e).lower():
+                error_msg = "Certificate error. Please check your PKI configuration."
+            else:
+                error_msg = f"Connection test failed: {e}"
+            
+            QMessageBox.critical(self, "Test Error", error_msg)
     
     def get_pki_status(self) -> Optional[Dict[str, Any]]:
         """Get current PKI status."""
@@ -786,5 +822,5 @@ Fingerprint: {cert_info.get('fingerprint', 'N/A')[:32]}...{storage_info}"""
     
     def cleanup(self):
         """Cleanup resources."""
-        if hasattr(self, '_refresh_timer'):
-            self._refresh_timer.stop()
+        # No timer to cleanup since we removed the auto-refresh
+        logger.debug("PKI Settings Widget cleaned up")

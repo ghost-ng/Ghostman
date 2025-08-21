@@ -30,12 +30,22 @@ def _get_user_friendly_error(error_message: str) -> str:
     """
     error_lower = error_message.lower()
     
+    # PKI-specific errors
+    if 'pki is not enabled' in error_lower:
+        return "PKI authentication is not configured - please set up PKI first"
+    
     # SSL/Certificate errors
     if any(ssl_term in error_lower for ssl_term in [
         'ssl', 'certificate', 'tlsv1_unrecognized_name', 'ssl_error', 
-        'certificate verify failed', 'hostname doesn\'t match'
+        'certificate verify failed', 'hostname doesn\'t match', 'ssl handshake failed',
+        'client certificate', 'pki', 'ca bundle'
     ]):
-        return "SSL certificate error - check server URL or disable SSL verification"
+        if 'client certificate' in error_lower or 'pki' in error_lower:
+            return "PKI client certificate error - check your certificate configuration"
+        elif 'ca bundle' in error_lower or 'certificate verify failed' in error_lower:
+            return "Server certificate verification failed - check CA chain or disable SSL verification"
+        else:
+            return "SSL certificate error - check server URL or disable SSL verification"
     
     # Network/Connection errors
     if any(net_term in error_lower for net_term in [
@@ -83,6 +93,19 @@ def _get_user_friendly_error(error_message: str) -> str:
         'not found', '404'
     ]):
         return "Model or endpoint not found - check model name and base URL"
+    
+    # Temperature/parameter errors
+    if 'temperature' in error_lower and ('unsupported' in error_lower or 'not support' in error_lower):
+        if 'only the default' in error_lower or 'only' in error_lower and '1' in error_lower:
+            return "🌡️ Temperature not supported by this model - using default value (1.0). Some reasoning models like GPT-5/o1 only support fixed temperature."
+        else:
+            return "🌡️ Temperature value not supported - check model documentation for valid range"
+    
+    # Other parameter errors
+    if any(param_term in error_lower for param_term in [
+        'unsupported parameter', 'parameter not supported', 'invalid parameter'
+    ]):
+        return "⚙️ Model parameter not supported - check model documentation for valid parameters"
     
     # Invalid request format
     if any(format_term in error_lower for format_term in [

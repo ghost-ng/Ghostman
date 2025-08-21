@@ -42,6 +42,8 @@ def get_preset_themes() -> Dict[str, ColorSystem]:
         "openwebui_like": get_openwebui_like_theme(),
         "moonlight": get_moonlight_theme(),
         "fireswamp": get_fireswamp_theme(),
+        "cyber": get_cyber_theme(),
+        "steampunk": get_steampunk_theme(),
     }
 
 
@@ -416,43 +418,43 @@ def get_ocean_deep_theme() -> ColorSystem:
 
 
 def get_lilac_theme() -> ColorSystem:
-    """Soft lilac purple theme with elegant pastel accents."""
+    """Soft lilac purple theme with much lighter text and lilac highlights."""
     return ColorSystem(
-        # Primary colors
-        primary="#a176b6",
-        primary_hover="#9461a8",
-        secondary="#b894c7",
-        secondary_hover="#c4a3d1",
+        # Primary colors - soft lilac and lavender
+        primary="#c8a8d8",  # Soft lilac
+        primary_hover="#b896c8",  # Slightly darker lilac
+        secondary="#d8c8e8",  # Very light lavender
+        secondary_hover="#c8b8d8",  # Light lavender
         
-        # Backgrounds
-        background_primary="#1a0f1d",
-        background_secondary="#2b1830",
-        background_tertiary="#3d2142",
-        background_overlay="#000000cc",
+        # Backgrounds - very dark with subtle purple tints
+        background_primary="#1a1520",  # Very dark purple-black
+        background_secondary="#2a2030",  # Dark purple-gray
+        background_tertiary="#3a3040",  # Medium purple-gray
+        background_overlay="#00000080",
         
-        # Text
-        text_primary="#f0e6f3",
-        text_secondary="#dcc8e0",
-        text_tertiary="#c8aacf",
-        text_disabled="#5a4960",
+        # Text - much lighter for better readability
+        text_primary="#f8f6fa",  # Near-white with slight purple tint
+        text_secondary="#e8e0f0",  # Very light purple-white
+        text_tertiary="#d0c8d8",  # Light purple-gray
+        text_disabled="#605860",  # Dark purple-gray
         
-        # Interactive
-        interactive_normal="#4a3350",
-        interactive_hover="#5c4063",
-        interactive_active="#6e4d75",
-        interactive_disabled="#2b1830",
+        # Interactive - cohesive purple theme
+        interactive_normal="#4a3050",  # Dark purple
+        interactive_hover="#5a4060",  # Medium purple
+        interactive_active="#c8a8d8",  # Lilac accent
+        interactive_disabled="#2a2030",
         
-        # Status
-        status_success="#7cb342",
-        status_warning="#ffb74d",
-        status_error="#e57373",
-        status_info="#64b5f6",
+        # Status - purple-tinted variants
+        status_success="#8fb996",  # Soft mint green
+        status_warning="#d4b06a",  # Warm gold
+        status_error="#d67b7b",   # Soft red
+        status_info="#a8c8d8",    # Soft blue
         
         # Borders
-        border_primary="#5a4960",
-        border_secondary="#4a3350",
-        border_focus="#a176b6",
-        separator="#3d2142",
+        border_primary="#5a4060",
+        border_secondary="#3a3040", 
+        border_focus="#c8a8d8",  # Lilac highlight
+        separator="#3a3040",
     )
 
 
@@ -717,16 +719,16 @@ def get_solarized_light_theme() -> ColorSystem:
         background_tertiary="#e3dcc6",
         background_overlay="#00000080",
         
-        # Text
+        # Text - improved contrast for readability
         text_primary="#073642",
-        text_secondary="#586e75",
+        text_secondary="#2c5866",  # Darker for better contrast against light bg
         text_tertiary="#405a63",
         text_disabled="#93a1a1",
         
-        # Interactive
+        # Interactive - Enhanced hover distinction
         interactive_normal="#d3d0c8",
-        interactive_hover="#c8c5bd",
-        interactive_active="#bdb9b1",
+        interactive_hover="#b8b5ad",  # More distinct hover
+        interactive_active="#a3a09a",  # More distinct active
         interactive_disabled="#eee8d5",
         
         # Status
@@ -758,15 +760,15 @@ def get_solarized_dark_theme() -> ColorSystem:
         background_tertiary="#0e4853",
         background_overlay="#000000cc",
         
-        # Text
+        # Text - improved contrast for REPL readability
         text_primary="#b3c5c7",
-        text_secondary="#93a1a1",
+        text_secondary="#c5d7d9",  # Lighter for better contrast
         text_tertiary="#839496",
         text_disabled="#073642",
         
         # Interactive - using Solarized base01/base1 for better button visibility
-        interactive_normal="rgba(88, 110, 117, 0.3)",  # Solarized base01 with transparency
-        interactive_hover="rgba(147, 161, 161, 0.4)",  # Solarized base1 with transparency
+        interactive_normal="rgba(147, 161, 161, 0.4)",  # Solarized base1 with transparency
+        interactive_hover="rgba(88, 110, 117, 0.3)",  # Solarized base01 with transparency
         interactive_active="rgba(42, 161, 152, 0.5)",  # Solarized cyan with transparency
         interactive_disabled="#073642",
         
@@ -799,9 +801,9 @@ def get_dracula_theme() -> ColorSystem:
         background_tertiary="#6272a4",
         background_overlay="#000000cc",
         
-        # Text
+        # Text - improved contrast for REPL messages
         text_primary="#f8f8f2",
-        text_secondary="#e6e6e1",
+        text_secondary="#f0f0ea",  # Lighter for better contrast against #6272a4 bg
         text_tertiary="#d4d4cf",
         text_disabled="#6272a4",
         
@@ -826,13 +828,13 @@ def get_dracula_theme() -> ColorSystem:
 
 
 def get_openai_like_theme() -> ColorSystem:
-    """OpenAI-inspired clean minimal theme with subtle grays."""
+    """OpenAI-inspired clean theme with enhanced accessibility compliance."""
     return ColorSystem(
-        # Primary colors - OpenAI uses very subtle, professional colors
-        primary="#10a37f",  # OpenAI's green accent
-        primary_hover="#0d8968",
-        secondary="#6f7780",  # Muted gray
-        secondary_hover="#5c646e",
+        # Primary colors - Enhanced distinction and accessibility
+        primary="#0d8a68",           # Darker green for better contrast
+        primary_hover="#0a6b52",     # More distinct hover
+        secondary="#4a5568",         # Darker gray for better contrast
+        secondary_hover="#2d3748",   # Much more distinct hover
         
         # Backgrounds - Very clean whites and light grays
         background_primary="#ffffff",
@@ -840,28 +842,28 @@ def get_openai_like_theme() -> ColorSystem:
         background_tertiary="#ececf1",
         background_overlay="#00000020",
         
-        # Text - Clean, readable grays
-        text_primary="#2d333a",
-        text_secondary="#6f7780",
-        text_tertiary="#9ca3af",
-        text_disabled="#d1d5db",
+        # Text - Enhanced contrast for accessibility
+        text_primary="#1a202c",      # Much darker for better contrast
+        text_secondary="#2d3748",    # Darker secondary text
+        text_tertiary="#4a5568",     # Darker tertiary text
+        text_disabled="#a0aec0",     # Lighter disabled text
         
-        # Interactive - Subtle, clean backgrounds
-        interactive_normal="#f9fafb",
-        interactive_hover="#f3f4f6",
-        interactive_active="#e5e7eb",
-        interactive_disabled="#f9fafb",
+        # Interactive - More distinct hover states
+        interactive_normal="#f7fafc",    # Slightly more tinted
+        interactive_hover="#edf2f7",     # More distinct hover
+        interactive_active="#cbd5e0",    # Much more distinct active
+        interactive_disabled="#f7fafc",
         
-        # Status
-        status_success="#10a37f",
-        status_warning="#f59e0b",
-        status_error="#ef4444",
-        status_info="#3b82f6",
+        # Status - Enhanced distinction and accessibility
+        status_success="#198754",    # Darker green for better contrast
+        status_warning="#d97706",    # Amber/orange for better contrast than yellow
+        status_error="#dc3545",      # Distinct red
+        status_info="#0d6efd",       # Bright blue, distinct from others
         
         # Borders
         border_primary="#d1d5db",
         border_secondary="#e5e7eb",
-        border_focus="#10a37f",
+        border_focus="#0d8a68",      # Updated to match new primary
         separator="#e5e7eb",
     )
 
@@ -908,43 +910,43 @@ def get_openui_like_theme() -> ColorSystem:
 
 
 def get_openwebui_like_theme() -> ColorSystem:
-    """Open WebUI inspired dark theme with purple accents and chat-like design."""
+    """OpenWebUI inspired dark theme with authentic chat interface design."""
     return ColorSystem(
-        # Primary colors - OpenWebUI style with purple/violet accents
-        primary="#8b5cf6",  # Violet primary (typical OpenWebUI accent)
-        primary_hover="#7c3aed",
-        secondary="#64748b",  # Slate gray
-        secondary_hover="#475569",
+        # Primary colors - Modern blue accent (typical OpenWebUI style)
+        primary="#3b82f6",  # Blue primary (more typical for OpenWebUI)
+        primary_hover="#2563eb",  # Darker blue on hover
+        secondary="#6b7280",  # Neutral gray
+        secondary_hover="#4b5563",  # Darker gray
         
-        # Backgrounds - Very dark like modern chat apps
-        background_primary="#0f0f0f",  # Almost black main background
-        background_secondary="#1a1a1a",  # Dark sidebar/secondary areas
-        background_tertiary="#262626",  # Slightly lighter for inputs/cards
-        background_overlay="#00000090",
+        # Backgrounds - Modern dark chat interface
+        background_primary="#111827",  # Dark gray (not pure black)
+        background_secondary="#1f2937",  # Slightly lighter sidebar
+        background_tertiary="#374151",  # Input/card backgrounds
+        background_overlay="#00000080",  # Semi-transparent overlay
         
-        # Text - High contrast for readability
-        text_primary="#ffffff",  # Pure white for main text
-        text_secondary="#e5e5e5",  # Light gray for secondary text
-        text_tertiary="#a3a3a3",  # Medium gray for hints
-        text_disabled="#737373",  # Darker gray for disabled
+        # Text - Optimized for chat readability
+        text_primary="#f9fafb",  # Near white for main text
+        text_secondary="#d1d5db",  # Light gray for secondary
+        text_tertiary="#9ca3af",  # Medium gray for placeholders
+        text_disabled="#6b7280",  # Muted gray for disabled
         
-        # Interactive - Purple-tinted dark backgrounds
-        interactive_normal="#2a2a2a",
-        interactive_hover="#3a3a3a",
-        interactive_active="#4a4a4a",
-        interactive_disabled="#1a1a1a",
+        # Interactive - Subtle and modern
+        interactive_normal="#374151",  # Neutral dark gray
+        interactive_hover="#4b5563",  # Slightly lighter on hover
+        interactive_active="#3b82f6",  # Blue accent for active states
+        interactive_disabled="#1f2937",  # Very dark for disabled
         
-        # Status - Modern, vibrant colors
-        status_success="#22c55e",  # Green
-        status_warning="#f59e0b",  # Orange
+        # Status - Clean and professional
+        status_success="#10b981",  # Emerald green
+        status_warning="#f59e0b",  # Amber
         status_error="#ef4444",   # Red
-        status_info="#8b5cf6",    # Violet (matches primary)
+        status_info="#3b82f6",    # Blue (matches primary)
         
-        # Borders - Subtle but visible
-        border_primary="#404040",
-        border_secondary="#2a2a2a",
-        border_focus="#8b5cf6",
-        separator="#2a2a2a",
+        # Borders - Subtle contrast
+        border_primary="#4b5563",  # Medium gray border
+        border_secondary="#374151",  # Darker border
+        border_focus="#3b82f6",  # Blue focus border
+        separator="#374151",  # Separator lines
     )
 
 
@@ -1027,4 +1029,86 @@ def get_fireswamp_theme() -> ColorSystem:
         border_secondary="#57534e",  # Medium brown
         border_focus="#f97316",  # Orange focus (matches primary)
         separator="#44403c",  # Dark brown separator
+    )
+
+
+def get_cyber_theme() -> ColorSystem:
+    """Cyberpunk theme with neon colors and digital aesthetic."""
+    return ColorSystem(
+        # Primary colors - electric cyan and neon magenta
+        primary="#00d4ff",  # Electric cyan
+        primary_hover="#00b8e6",  # Darker cyan
+        secondary="#ff0080",  # Neon magenta
+        secondary_hover="#e6006b",  # Darker magenta
+        
+        # Backgrounds - deep blacks with blue undertones
+        background_primary="#0a0a0f",  # Deep black with blue hint
+        background_secondary="#141420",  # Dark blue-black
+        background_tertiary="#1e1e30",  # Medium blue-black
+        background_overlay="#000000d0",  # Dark overlay
+        
+        # Text - bright cyan-white for digital glow
+        text_primary="#e6fdff",  # Bright cyan-white
+        text_secondary="#b3f0ff",  # Light cyan
+        text_tertiary="#80e6ff",  # Medium cyan
+        text_disabled="#334d66",  # Dark blue-gray
+        
+        # Interactive - cyberpunk button states
+        interactive_normal="#1a2332",  # Dark blue-gray
+        interactive_hover="#2d3a4f",  # Medium blue-gray
+        interactive_active="#00d4ff",  # Electric cyan active
+        interactive_disabled="#0f1419",  # Very dark
+        
+        # Status - neon accent colors
+        status_success="#00ff41",  # Electric green
+        status_warning="#ffbf00",  # Electric amber
+        status_error="#ff2d6d",   # Electric red
+        status_info="#00d4ff",    # Electric cyan
+        
+        # Borders - neon blue tones
+        border_primary="#004d66",  # Dark cyan
+        border_secondary="#1a2332",  # Dark blue-gray
+        border_focus="#00d4ff",  # Electric cyan focus
+        separator="#1a2332",  # Dark separator
+    )
+
+
+def get_steampunk_theme() -> ColorSystem:
+    """Victorian industrial steampunk theme with copper and brass tones."""
+    return ColorSystem(
+        # Primary colors - polished copper and antique brass
+        primary="#d2691e",  # Polished copper
+        primary_hover="#b8550c",  # Darker copper
+        secondary="#b5a642",  # Antique brass
+        secondary_hover="#9c8f38",  # Darker brass
+        
+        # Backgrounds - aged leather and dark wood
+        background_primary="#1a1612",  # Dark aged leather
+        background_secondary="#2a211a",  # Medium brown leather
+        background_tertiary="#3d2f22",  # Light brown leather
+        background_overlay="#00000099",  # Warm dark overlay
+        
+        # Text - warm cream and aged paper
+        text_primary="#faf6f0",  # Warm cream
+        text_secondary="#e6d7c3",  # Aged paper
+        text_tertiary="#d4c0a1",  # Old parchment
+        text_disabled="#5c4a38",  # Dark brown
+        
+        # Interactive - aged metal states
+        interactive_normal="#4a3b2a",  # Dark aged bronze
+        interactive_hover="#5c4833",  # Medium bronze
+        interactive_active="#d2691e",  # Copper active
+        interactive_disabled="#2a211a",  # Very dark brown
+        
+        # Status - vintage industrial colors
+        status_success="#6b8e23",  # Olive green (oxidized copper)
+        status_warning="#daa520",  # Goldenrod (polished brass)
+        status_error="#b22222",   # Fire brick red
+        status_info="#4682b4",    # Steel blue
+        
+        # Borders - oxidized metal tones
+        border_primary="#8b6914",  # Dark brass
+        border_secondary="#4a3b2a",  # Dark bronze
+        border_focus="#d2691e",  # Copper focus
+        separator="#3d2f22",  # Dark brown separator
     )

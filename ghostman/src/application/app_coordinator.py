@@ -144,6 +144,7 @@ class AppCoordinator(QObject):
             self._main_window.close_requested.connect(self._show_tray_mode)
             self._main_window.settings_requested.connect(self._show_settings)
             self._main_window.help_requested.connect(self._show_help)
+            self._main_window.quit_requested.connect(self._quit_application)
             # Note: conversations signal is handled directly in MainWindow
             
             logger.debug("UI components initialized successfully")
@@ -686,9 +687,26 @@ class AppCoordinator(QObject):
             logger.info(f"⚠  Log retention changes require application restart to take full effect")
             settings_processed += 1
         
+        # Apply SSL verification settings
+        if "ignore_ssl_verification" in advanced_config:
+            ignore_ssl = advanced_config["ignore_ssl_verification"]
+            logger.info(f"🔒 SSL verification: {'DISABLED' if ignore_ssl else 'ENABLED'}")
+            
+            # Apply to session manager
+            try:
+                from ..infrastructure.ai.session_manager import session_manager
+                # Configure session with SSL verification setting
+                session_manager.configure_session(
+                    disable_ssl_verification=ignore_ssl
+                )
+                logger.info(f"✓ SSL verification setting applied to session manager")
+            except Exception as e:
+                logger.error(f"Failed to apply SSL verification setting: {e}")
+            settings_processed += 1
+        
         # Log any additional advanced settings
         for key, value in advanced_config.items():
-            if key not in ["log_level", "log_location", "log_retention_days"]:
+            if key not in ["log_level", "log_location", "log_retention_days", "ignore_ssl_verification"]:
                 logger.info(f"  🔧 Advanced {key}: {value}")
                 settings_processed += 1
         

@@ -7,6 +7,8 @@ presets, and custom model support.
 
 import logging
 import os
+import json
+import requests
 from typing import Dict, Any, Optional
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget,
@@ -15,7 +17,7 @@ from PyQt6.QtWidgets import (
     QFileDialog, QMessageBox, QSplitter, QListWidget, QListWidgetItem,
     QAbstractSpinBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QStandardPaths
+from PyQt6.QtCore import Qt, pyqtSignal, QStandardPaths, QTimer
 from PyQt6.QtGui import QFont, QIcon
 
 # Import font service for font configuration
@@ -121,11 +123,11 @@ class SettingsDialog(QDialog):
         model_group = QGroupBox("AI Settings Configuration")
         model_layout = QFormLayout(model_group)
         
-        # Model presets
+        # Model profiles
         self.model_preset_combo = QComboBox()
-        self._populate_model_presets()
-        self.model_preset_combo.currentTextChanged.connect(self._on_preset_changed)
-        model_layout.addRow("Model Preset:", self.model_preset_combo)
+        self._populate_model_profiles()
+        self.model_preset_combo.currentTextChanged.connect(self._on_profile_changed)
+        model_layout.addRow("Model Profile:", self.model_preset_combo)
         
         # Custom model fields
         self.model_name_edit = QLineEdit()
@@ -141,10 +143,28 @@ class SettingsDialog(QDialog):
         self.api_key_edit.setPlaceholderText("Enter your API key")
         model_layout.addRow("API Key:", self.api_key_edit)
         
-        # Show/Hide API key button
+        # API key buttons row
+        api_buttons_layout = QHBoxLayout()
+        
         show_key_btn = QPushButton("Show/Hide Key")
         show_key_btn.clicked.connect(self._toggle_api_key_visibility)
-        model_layout.addRow("", show_key_btn)
+        api_buttons_layout.addWidget(show_key_btn)
+        
+        self.show_models_btn = QPushButton("Show Models")
+        self.show_models_btn.clicked.connect(self._show_models)
+        api_buttons_layout.addWidget(self.show_models_btn)
+        
+        # Add spinner label next to Show Models button
+        self.show_models_spinner_label = QLabel()
+        self.show_models_spinner_label.setFixedSize(20, 20)
+        self.show_models_spinner_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.show_models_spinner_label.hide()  # Initially hidden
+        api_buttons_layout.addWidget(self.show_models_spinner_label)
+        
+        api_buttons_layout.addStretch()
+        api_buttons_widget = QWidget()
+        api_buttons_widget.setLayout(api_buttons_layout)
+        model_layout.addRow("", api_buttons_widget)
         
         layout.addWidget(model_group)
         
@@ -185,6 +205,12 @@ class SettingsDialog(QDialog):
         
         params_layout.addRow("Temperature:", temp_container)
         
+        # Temperature description
+        temp_description = QLabel("Controls randomness: 0.0 = deterministic, 1.0 = creative")
+        temp_description.setStyleSheet("color: #666; font-size: 11px; font-style: italic; margin-left: 4px;")
+        temp_description.setWordWrap(True)
+        params_layout.addRow("", temp_description)
+        
         self.max_tokens_spin = QSpinBox()
         self.max_tokens_spin.setRange(1, 32000)
         self.max_tokens_spin.setValue(2000)
@@ -216,6 +242,15 @@ class SettingsDialog(QDialog):
         tokens_layout.addWidget(self.max_tokens_increase_btn, 0, Qt.AlignmentFlag.AlignVCenter)
         
         params_layout.addRow("Max Tokens:", tokens_container)
+        
+        # Max tokens description
+        max_tokens_desc = QLabel("Maximum tokens the model can generate in response. Lower values = shorter responses, faster generation.")
+        max_tokens_desc.setStyleSheet("color: #666; font-size: 10px; font-style: italic; margin-top: 2px;")
+        max_tokens_desc.setWordWrap(True)
+        params_layout.addRow("", max_tokens_desc)
+        
+        # Connect manual changes to switch to Custom profile
+        self._setup_auto_custom_profile()
         
         # System Prompt - Split into user customizable and hardcoded base
         system_prompt_group = QGroupBox("AI Assistant Instructions")
@@ -818,6 +853,22 @@ class SettingsDialog(QDialog):
         
         layout.addWidget(logging_group)
         
+        # Security Group
+        security_group = QGroupBox("Security")
+        security_layout = QFormLayout(security_group)
+        
+        # SSL verification checkbox
+        self.ignore_ssl_check = QCheckBox("Ignore SSL certificate verification (Not recommended)")
+        self.ignore_ssl_check.setChecked(True)  # Default to checked as requested
+        self.ignore_ssl_check.setToolTip(
+            "When checked, SSL certificate verification is disabled. "
+            "This is useful for development environments with self-signed certificates "
+            "but should be disabled in production for security."
+        )
+        security_layout.addRow("", self.ignore_ssl_check)
+        
+        layout.addWidget(security_group)
+        
         # Data Storage Group
         storage_group = QGroupBox("Data Storage")
         storage_layout = QFormLayout(storage_group)
@@ -854,7 +905,7 @@ class SettingsDialog(QDialog):
             
         except ImportError as e:
             logger.warning(f"PKI settings not available: {e}")
-            # Create a placeholder tab
+            # Create a themed placeholder tab
             placeholder = QWidget()
             layout = QVBoxLayout(placeholder)
             
@@ -873,6 +924,10 @@ class SettingsDialog(QDialog):
             layout.addWidget(info_label)
             layout.addStretch()
             
+            # Store placeholder for theme updates
+            self.pki_placeholder = placeholder
+            self.pki_placeholder_label = info_label
+            
             self.tab_widget.addTab(placeholder, "PKI Auth")
     
     def _on_pki_status_changed(self, enabled: bool):
@@ -889,6 +944,38 @@ class SettingsDialog(QDialog):
             logger.error(f"Error handling PKI status change: {e}")
         
         # Update config path
+    
+    def _apply_pki_placeholder_theme(self, colors):
+        """Apply theme styling to PKI placeholder widget."""
+        if not hasattr(self, 'pki_placeholder') or not self.pki_placeholder:
+            return
+            
+        try:
+            placeholder_style = f"""
+            QWidget {{
+                background-color: {colors.background_primary};
+                color: {colors.text_primary};
+            }}
+            QLabel {{
+                color: {colors.text_primary};
+                background-color: transparent;
+            }}
+            """
+            self.pki_placeholder.setStyleSheet(placeholder_style)
+            
+        except Exception as e:
+            logger.warning(f"Failed to apply PKI placeholder theme: {e}")
+            # Apply fallback styling
+            self.pki_placeholder.setStyleSheet("""
+            QWidget {
+                background-color: #2b2b2b;
+                color: #ffffff;
+            }
+            QLabel {
+                color: #ffffff;
+                background-color: transparent;
+            }
+            """)
         self._update_config_path_display()
     
     def _create_theme_tab(self):
@@ -1289,104 +1376,249 @@ class SettingsDialog(QDialog):
         except ImportError:
             logger.warning("Theme system not available")
     
-    def _populate_model_presets(self):
-        """Populate the model preset combo box."""
-        presets = [
+    def _populate_model_profiles(self):
+        """Populate the model profile combo box with modern AI models."""
+        profiles = [
             "Custom",
-            "OpenAI GPT-4",
+            # Latest Anthropic Models (Primary)
+            "Anthropic Claude 3.5 Sonnet (Latest)",
+            "Anthropic Claude 3.5 Haiku (Fast)",
+            "Anthropic Claude 3 Opus (Best Quality)",
+            # Latest OpenAI Models
+            "OpenAI GPT-5 (Latest)",
+            "OpenAI GPT-5-mini (Fast)",
+            "OpenAI GPT-5-nano (Ultra Fast)",
+            "OpenAI GPT-4o (Current)",
+            "OpenAI o3-mini (Latest Reasoning)",
+            "OpenAI o1-preview (Reasoning)",
+            "OpenAI o1-mini (Fast Reasoning)",
             "OpenAI GPT-4 Turbo",
-            "OpenAI GPT-3.5 Turbo",
-            "Anthropic Claude 3 Opus",
-            "Anthropic Claude 3 Sonnet",
-            "Anthropic Claude 3 Haiku",
-            "OpenRouter GPT-4",
-            "OpenRouter Claude",
+            "OpenAI GPT-4o-mini (Fast)",
+            # Latest Google Models
+            "Google Gemini 2.5 Pro (Latest)",
+            "Google Gemini 2.5 Flash (Fast)",
+            # OpenRouter Options
+            "OpenRouter GPT-4o",
+            "OpenRouter Claude 3.5 Sonnet",
+            # Local Models
             "Local Ollama",
             "Local LM Studio"
         ]
         
-        for preset in presets:
-            self.model_preset_combo.addItem(preset)
+        for profile in profiles:
+            self.model_preset_combo.addItem(profile)
     
-    def _on_preset_changed(self, preset_name: str):
-        """Handle preset selection change."""
-        logger.debug(f"Preset changed to: {preset_name}")
-        if preset_name == "Custom":
-            logger.debug("Custom preset selected - no auto-fill")
+    def _on_profile_changed(self, profile_name: str):
+        """Handle model profile selection change."""
+        logger.debug(f"Model profile changed to: {profile_name}")
+        if profile_name == "Custom":
+            logger.debug("Custom profile selected - no auto-fill")
             return
         
-        # Define preset configurations
-        presets = {
-            "OpenAI GPT-4": {
-                "model_name": "gpt-4",
-                "base_url": "https://api.openai.com/v1",
-                "temperature": 0.7,
-                "max_tokens": 2000
+        # Set flag to prevent auto-switching to Custom during preset updates
+        self._updating_from_preset = True
+        
+        # Define comprehensive model profiles with optimized settings and limits
+        profiles = {
+            # Anthropic Claude Models
+            "Anthropic Claude 3.5 Sonnet (Latest)": {
+                "model_name": "claude-3-5-sonnet-20241022",
+                "base_url": "https://api.anthropic.com/v1",
+                "temperature": 1.0,  # Anthropic default, range 0.0-1.0
+                "max_tokens": 8192,
+                "max_tokens_limit": 8192
             },
-            "OpenAI GPT-4 Turbo": {
-                "model_name": "gpt-4-turbo-preview",
-                "base_url": "https://api.openai.com/v1",
-                "temperature": 0.7,
-                "max_tokens": 4000
+            "Anthropic Claude 3.5 Haiku (Fast)": {
+                "model_name": "claude-3-5-haiku-20241022",
+                "base_url": "https://api.anthropic.com/v1",
+                "temperature": 1.0,  # Anthropic default, range 0.0-1.0
+                "max_tokens": 8192,
+                "max_tokens_limit": 8192
             },
-            "OpenAI GPT-3.5 Turbo": {
-                "model_name": "gpt-3.5-turbo",
-                "base_url": "https://api.openai.com/v1",
-                "temperature": 0.7,
-                "max_tokens": 2000
-            },
-            "Anthropic Claude 3 Opus": {
+            "Anthropic Claude 3 Opus (Best Quality)": {
                 "model_name": "claude-3-opus-20240229",
                 "base_url": "https://api.anthropic.com/v1",
-                "temperature": 0.7,
-                "max_tokens": 2000
+                "temperature": 1.0,  # Anthropic default, range 0.0-1.0
+                "max_tokens": 4096,
+                "max_tokens_limit": 4096
             },
-            "Anthropic Claude 3 Sonnet": {
-                "model_name": "claude-3-sonnet-20240229",
-                "base_url": "https://api.anthropic.com/v1",
-                "temperature": 0.7,
-                "max_tokens": 2000
+            
+            # Latest OpenAI Models
+            "OpenAI GPT-5 (Latest)": {
+                "model_name": "gpt-5",
+                "base_url": "https://api.openai.com/v1",
+                "temperature": 1.0,  # GPT-5/o1 models only support 1.0
+                "max_tokens": 128000,
+                "max_tokens_limit": 128000
             },
-            "Anthropic Claude 3 Haiku": {
-                "model_name": "claude-3-haiku-20240307",
-                "base_url": "https://api.anthropic.com/v1",
-                "temperature": 0.7,
-                "max_tokens": 2000
+            "OpenAI GPT-5-mini (Fast)": {
+                "model_name": "gpt-5-mini",
+                "base_url": "https://api.openai.com/v1",
+                "temperature": 1.0,  # GPT-5/o1 models only support 1.0
+                "max_tokens": 128000,
+                "max_tokens_limit": 128000
             },
-            "OpenRouter GPT-4": {
-                "model_name": "openai/gpt-4",
+            "OpenAI GPT-5-nano (Ultra Fast)": {
+                "model_name": "gpt-5-nano",
+                "base_url": "https://api.openai.com/v1",
+                "temperature": 1.0,  # GPT-5/o1 models only support 1.0
+                "max_tokens": 128000,
+                "max_tokens_limit": 128000
+            },
+            "OpenAI GPT-4o (Current)": {
+                "model_name": "gpt-4o",
+                "base_url": "https://api.openai.com/v1",
+                "temperature": 1.0,  # OpenAI default, range 0-2
+                "max_tokens": 4096,
+                "max_tokens_limit": 4096
+            },
+            "OpenAI o3-mini (Latest Reasoning)": {
+                "model_name": "o3-mini",
+                "base_url": "https://api.openai.com/v1",
+                "temperature": 1.0,
+                "max_tokens": 100000,
+                "max_tokens_limit": 100000
+            },
+            
+            # Google Gemini Models
+            "Google Gemini 2.5 Pro (Latest)": {
+                "model_name": "gemini-2.5-pro",
+                "base_url": "https://generativelanguage.googleapis.com/v1beta",
+                "temperature": 1.0,  # Gemini default, range 0.0-2.0
+                "max_tokens": 65536,
+                "max_tokens_limit": 65536
+            },
+            "Google Gemini 2.5 Flash (Fast)": {
+                "model_name": "gemini-2.5-flash",
+                "base_url": "https://generativelanguage.googleapis.com/v1beta",
+                "temperature": 1.0,  # Gemini default, range 0.0-2.0
+                "max_tokens": 65536,
+                "max_tokens_limit": 65536
+            },
+            
+            # OpenAI Reasoning Models
+            "OpenAI o1-preview (Reasoning)": {
+                "model_name": "o1-preview",
+                "base_url": "https://api.openai.com/v1",
+                "temperature": 1.0,
+                "max_tokens": 32768,
+                "max_tokens_limit": 32768
+            },
+            "OpenAI o1-mini (Fast Reasoning)": {
+                "model_name": "o1-mini",
+                "base_url": "https://api.openai.com/v1",
+                "temperature": 1.0,
+                "max_tokens": 65536,
+                "max_tokens_limit": 65536
+            },
+            
+            # Legacy Models
+            "OpenAI GPT-4 Turbo": {
+                "model_name": "gpt-4-turbo",
+                "base_url": "https://api.openai.com/v1",
+                "temperature": 0.7,
+                "max_tokens": 4096,
+                "max_tokens_limit": 4096
+            },
+            "OpenAI GPT-4o-mini (Fast)": {
+                "model_name": "gpt-4o-mini",
+                "base_url": "https://api.openai.com/v1",
+                "temperature": 1.0,  # OpenAI default, range 0-2
+                "max_tokens": 16384,
+                "max_tokens_limit": 16384
+            },
+            
+            # OpenRouter Models
+            "OpenRouter GPT-4o": {
+                "model_name": "openai/gpt-4o",
                 "base_url": "https://openrouter.ai/api/v1",
-                "temperature": 0.7,
-                "max_tokens": 2000
+                "temperature": 1.0,  # OpenAI via OpenRouter, range 0-2
+                "max_tokens": 4096,
+                "max_tokens_limit": 4096
             },
-            "OpenRouter Claude": {
-                "model_name": "anthropic/claude-3-sonnet",
+            "OpenRouter Claude 3.5 Sonnet": {
+                "model_name": "anthropic/claude-3.5-sonnet",
                 "base_url": "https://openrouter.ai/api/v1",
-                "temperature": 0.7,
-                "max_tokens": 2000
+                "temperature": 1.0,  # Anthropic via OpenRouter, range 0.0-1.0
+                "max_tokens": 8192,
+                "max_tokens_limit": 8192
             },
+            
+            # Local Models
             "Local Ollama": {
-                "model_name": "llama2",
+                "model_name": "llama3.1",
                 "base_url": "http://localhost:11434/v1",
-                "temperature": 0.7,
-                "max_tokens": 2000
+                "temperature": 0.8,  # Ollama default, range 0.0-1.0
+                "max_tokens": 2000,
+                "max_tokens_limit": 32768
             },
             "Local LM Studio": {
                 "model_name": "local-model",
                 "base_url": "http://localhost:1234/v1",
-                "temperature": 0.7,
-                "max_tokens": 2000
+                "temperature": 0.8,  # Local model default, range varies
+                "max_tokens": 2000,
+                "max_tokens_limit": 32768
             }
         }
         
-        if preset_name in presets:
-            preset = presets[preset_name]
-            self.model_name_edit.setText(preset["model_name"])
-            self.base_url_edit.setText(preset["base_url"])
-            self.temperature_spin.setValue(preset["temperature"])
-            self.max_tokens_spin.setValue(preset["max_tokens"])
+        if profile_name in profiles:
+            profile = profiles[profile_name]
+            # Preserve the existing API key when changing profiles
+            current_api_key = self.api_key_edit.text()
+            self.model_name_edit.setText(profile["model_name"])
+            self.base_url_edit.setText(profile["base_url"])
+            self.temperature_spin.setValue(profile["temperature"])
+            # Keep the API key unchanged - user's API key should persist across profile changes
+            if current_api_key:
+                self.api_key_edit.setText(current_api_key)
             
-            logger.debug(f"Applied preset: {preset_name}")
+            # Set max tokens range based on model limits
+            max_tokens_limit = profile.get("max_tokens_limit", 32000)
+            self.max_tokens_spin.setRange(1, max_tokens_limit)
+            self.max_tokens_spin.setValue(profile["max_tokens"])
+            
+            logger.debug(f"Applied model profile: {profile_name} (max tokens limit: {max_tokens_limit})")
+        else:
+            # Reset to default range for custom profiles
+            self.max_tokens_spin.setRange(1, 200000)
+            logger.debug(f"Unknown profile: {profile_name}, using default max tokens range")
+        
+        # Reset flag after updating all fields
+        self._updating_from_preset = False
+    
+    def _setup_auto_custom_profile(self):
+        """Set up signal connections to automatically switch to Custom profile when user makes manual changes."""
+        # Track if we're programmatically updating (to avoid switching to Custom during preset selection)
+        self._updating_from_preset = False
+        
+        # Connect text field changes
+        self.model_name_edit.textChanged.connect(self._on_manual_change)
+        self.base_url_edit.textChanged.connect(self._on_manual_change)
+        self.api_key_edit.textChanged.connect(self._on_manual_change)
+        
+        # Connect parameter changes
+        self.temperature_spin.valueChanged.connect(self._on_manual_change)
+        self.max_tokens_spin.valueChanged.connect(self._on_manual_change)
+        
+        # Connect button clicks for temperature and max tokens
+        self.temperature_decrease_btn.clicked.connect(self._on_manual_change)
+        self.temperature_increase_btn.clicked.connect(self._on_manual_change)
+        self.max_tokens_decrease_btn.clicked.connect(self._on_manual_change)
+        self.max_tokens_increase_btn.clicked.connect(self._on_manual_change)
+    
+    def _on_manual_change(self):
+        """Handle manual changes to switch profile to Custom."""
+        # Don't switch to Custom if we're updating from a preset selection
+        if self._updating_from_preset:
+            return
+            
+        # Don't switch if already on Custom
+        if self.model_preset_combo.currentText() == "Custom":
+            return
+            
+        # Switch to Custom profile
+        self.model_preset_combo.setCurrentText("Custom")
+        logger.debug("Switched to Custom profile due to manual setting change")
     
     def _toggle_api_key_visibility(self):
         """Toggle API key visibility."""
@@ -1492,6 +1724,78 @@ class SettingsDialog(QDialog):
             self.test_status_label.setStyleSheet("color: red; font-weight: bold;")
         
         logger.info(f"Connection test completed: {success} - {message}")
+    
+    def _show_models(self):
+        """Show available models from the API endpoint."""
+        try:
+            # Get current configuration
+            base_url = self.base_url_edit.text().strip()
+            api_key = self.api_key_edit.text().strip()
+            
+            if not base_url:
+                QMessageBox.warning(self, "Show Models", "Please enter a Base URL first.")
+                return
+                
+            if not api_key:
+                QMessageBox.warning(self, "Show Models", "Please enter an API Key first.")
+                return
+            
+            # Disable button and start spinner
+            self.show_models_btn.setEnabled(False)
+            self._start_show_models_spinner()
+            
+            # Create and show models dialog
+            dialog = ModelsDialog(base_url, api_key, self)
+            dialog.model_selected.connect(self._on_model_selected)
+            dialog.loading_finished.connect(self._stop_show_models_spinner)
+            dialog.finished.connect(lambda: self._reset_show_models_button())
+            dialog.show()
+            
+        except Exception as e:
+            logger.error(f"Failed to show models: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to show models:\n{str(e)}")
+            self._reset_show_models_button()
+    
+    def _reset_show_models_button(self):
+        """Reset the show models button state."""
+        self._stop_show_models_spinner()
+        self.show_models_btn.setEnabled(True)
+    
+    def _start_show_models_spinner(self):
+        """Start the spinner animation next to the Show Models button."""
+        # Initialize spinner if not already done
+        if not hasattr(self, '_show_models_spinner_timer'):
+            from PyQt6.QtCore import QTimer
+            self._show_models_spinner_timer = QTimer()
+            self._show_models_spinner_timer.timeout.connect(self._update_show_models_spinner)
+            self._show_models_spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+            self._show_models_spinner_index = 0
+        
+        # Show spinner label and start animation
+        self.show_models_spinner_label.show()
+        self._show_models_spinner_timer.start(100)  # Update every 100ms
+        self._update_show_models_spinner()
+    
+    def _stop_show_models_spinner(self):
+        """Stop the spinner animation next to the Show Models button."""
+        if hasattr(self, '_show_models_spinner_timer'):
+            self._show_models_spinner_timer.stop()
+        self.show_models_spinner_label.hide()
+    
+    def _update_show_models_spinner(self):
+        """Update the spinner animation next to the Show Models button."""
+        try:
+            if hasattr(self, '_show_models_spinner_chars') and hasattr(self, '_show_models_spinner_index'):
+                self._show_models_spinner_index = (self._show_models_spinner_index + 1) % len(self._show_models_spinner_chars)
+                spinner_char = self._show_models_spinner_chars[self._show_models_spinner_index]
+                self.show_models_spinner_label.setText(spinner_char)
+        except Exception as e:
+            logger.error(f"Failed to update show models spinner: {e}")
+    
+    def _on_model_selected(self, model_name: str):
+        """Handle model selection from the models dialog."""
+        self.model_name_edit.setText(model_name)
+        logger.info(f"Model selected: {model_name}")
     
     def _get_config_dir(self) -> str:
         """Get the configuration directory path (aligned with SettingsManager)."""
@@ -1679,7 +1983,8 @@ class SettingsDialog(QDialog):
             "advanced": {
                 "log_level": self.log_level_combo.currentText(),
                 "log_location": self.log_location_edit.text().strip(),
-                "log_retention_days": self.log_retention_spin.value()
+                "log_retention_days": self.log_retention_spin.value(),
+                "ignore_ssl_verification": self.ignore_ssl_check.isChecked()
             }
         }
     
@@ -1823,6 +2128,9 @@ class SettingsDialog(QDialog):
                     self.log_retention_spin.setValue(10)  # default
             except (ValueError, TypeError):
                 self.log_retention_spin.setValue(10)  # default
+        
+        if "ignore_ssl_verification" in advanced_config:
+            self.ignore_ssl_check.setChecked(bool(advanced_config["ignore_ssl_verification"]))
     
     def _load_current_settings(self):
         """Load current settings from settings manager."""
@@ -1868,7 +2176,7 @@ class SettingsDialog(QDialog):
         """Set default values when no settings are available."""
         logger.info("🔧 Setting default values...")
         # Set default user prompt (purely identity/role, no behavioral or formatting instructions)
-        default_user_prompt = "You are Ghostman, a desktop AI assistant."
+        default_user_prompt = "Your name is Spector, a friendly ghost AI assistant that helps with anything - be friendly, courteous, and a tadbit sassy!"
         self.user_prompt_edit.setPlainText(default_user_prompt)
         logger.info(f"📝 Set default user prompt (length: {len(default_user_prompt)})")
         logger.info(f"🎨 Using default opacity: {self.opacity_percent_spin.value()}%")
@@ -2045,6 +2353,18 @@ class SettingsDialog(QDialog):
             theme_manager = get_theme_manager()
             style = StyleTemplates.get_settings_dialog_style(theme_manager.current_theme)
             self.setStyleSheet(style)
+            
+            # Update PKI widget theme if it exists
+            if hasattr(self, 'pki_widget') and self.pki_widget:
+                self.pki_widget._apply_theme_styling()
+            
+            # Update PKI placeholder theme if it exists
+            if hasattr(self, 'pki_placeholder') and self.pki_placeholder:
+                self._apply_pki_placeholder_theme(theme_manager.current_theme)
+            
+            # Update button styles to match new theme
+            self._apply_uniform_button_styles()
+                
             logger.debug(f"Applied theme: {theme_manager.current_theme_name}")
         except ImportError:
             logger.warning("Theme system not available, using fallback dark theme")
@@ -2052,6 +2372,19 @@ class SettingsDialog(QDialog):
     
     def _apply_fallback_theme(self):
         """Apply fallback dark theme styling when theme system is not available."""
+        # Update PKI placeholder with fallback theme if it exists
+        if hasattr(self, 'pki_placeholder') and self.pki_placeholder:
+            self.pki_placeholder.setStyleSheet("""
+            QWidget {
+                background-color: #2b2b2b;
+                color: #ffffff;
+            }
+            QLabel {
+                color: #ffffff;
+                background-color: transparent;
+            }
+            """)
+        
         self.setStyleSheet("""
             /* Main dialog styling */
             QDialog {
@@ -2220,3 +2553,372 @@ class SettingsDialog(QDialog):
                 height: 2px;
             }
         """)
+
+
+class ModelsDialog(QDialog):
+    """Dialog for displaying and selecting available AI models from an API endpoint."""
+    
+    model_selected = pyqtSignal(str)  # Emitted when a model is selected
+    loading_finished = pyqtSignal()   # Emitted when models loading completes
+    
+    def __init__(self, base_url: str, api_key: str, parent=None):
+        super().__init__(parent)
+        self.base_url = base_url
+        self.api_key = api_key
+        self.models = []
+        
+        self.setWindowTitle("Available Models")
+        self.setModal(True)
+        self.resize(400, 500)
+        
+        self._init_ui()
+        self._apply_theme()
+        
+        # Defer the network request until after the dialog is shown
+        # This allows the parent's spinner to start animating before the blocking network request
+        # Alternative: For long-running requests, consider using QThread instead
+        QTimer.singleShot(50, self._load_models)
+    
+    def _init_ui(self):
+        """Initialize the UI components."""
+        layout = QVBoxLayout(self)
+        
+        # Header
+        header_label = QLabel("Select a model from the API endpoint:")
+        layout.addWidget(header_label)
+        
+        # Status label
+        self.status_label = QLabel("Loading models...")
+        layout.addWidget(self.status_label)
+        
+        # Models list
+        self.models_list = QListWidget()
+        self.models_list.itemDoubleClicked.connect(self._on_model_double_clicked)
+        self.models_list.itemSelectionChanged.connect(self._on_selection_changed)
+        layout.addWidget(self.models_list)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        
+        self.apply_btn = QPushButton("Apply")
+        self.apply_btn.clicked.connect(self._on_apply_clicked)
+        self.apply_btn.setEnabled(False)
+        button_layout.addWidget(self.apply_btn)
+        
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(self.cancel_btn)
+        
+        layout.addLayout(button_layout)
+    
+    def _load_models(self):
+        """Load models from the API endpoint."""
+        try:
+            # Determine the models endpoint based on the base URL
+            models_url = self._get_models_endpoint()
+            
+            if models_url is None:
+                # Handle APIs without models endpoint (like Anthropic)
+                self._load_predefined_models()
+                self.loading_finished.emit()
+                return
+            
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            response = requests.get(models_url, headers=headers, timeout=10)
+            response.raise_for_status()
+            
+            data = response.json()
+            self._parse_models_response(data)
+            
+        except Exception as e:
+            logger.error(f"Failed to load models: {e}")
+            error_message = self._get_user_friendly_error(e)
+            self.status_label.setText(error_message)
+            self.status_label.setStyleSheet("color: red;")
+        finally:
+            # Always emit loading finished, whether success or error
+            self.loading_finished.emit()
+    
+    def _get_user_friendly_error(self, error: Exception) -> str:
+        """Convert technical error to user-friendly message."""
+        error_str = str(error).lower()
+        
+        # Connection errors
+        if "connection" in error_str or "network" in error_str or "timeout" in error_str:
+            return "❌ Connection failed - Check your internet connection and Base URL"
+        
+        # Authentication errors  
+        if "401" in error_str or "unauthorized" in error_str or "authentication" in error_str:
+            return "🔑 Authentication failed - Check your API key"
+        
+        # Forbidden access
+        if "403" in error_str or "forbidden" in error_str:
+            return "🚫 Access denied - Your API key may not have permission"
+        
+        # Rate limiting
+        if "429" in error_str or "rate limit" in error_str or "too many requests" in error_str:
+            return "⏳ Rate limited - Too many requests, please wait and try again"
+        
+        # Server errors
+        if "500" in error_str or "502" in error_str or "503" in error_str or "504" in error_str:
+            return "🔧 Server error - The API service is experiencing issues"
+        
+        # Invalid URL
+        if "invalid url" in error_str or "malformed" in error_str:
+            return "🔗 Invalid Base URL - Please check the URL format"
+        
+        # SSL/TLS errors
+        if "ssl" in error_str or "certificate" in error_str:
+            return "🔒 SSL certificate error - Check HTTPS settings"
+        
+        # API not found
+        if "404" in error_str or "not found" in error_str:
+            return "❓ API endpoint not found - Check your Base URL"
+        
+        # JSON parsing errors
+        if "json" in error_str or "decode" in error_str:
+            return "📄 Invalid response format - API returned unexpected data"
+        
+        # Generic fallback with truncated message
+        if len(str(error)) > 80:
+            return f"❌ Error: {str(error)[:80]}... (see logs for details)"
+        else:
+            return f"❌ Error: {str(error)}"
+    
+    def _get_models_endpoint(self) -> str:
+        """Get the appropriate models endpoint for the API."""
+        base_url = self.base_url.rstrip('/')
+        
+        # Handle different API providers
+        if 'openai.com' in base_url or 'openrouter.ai' in base_url:
+            return f"{base_url}/models"
+        elif 'anthropic.com' in base_url:
+            # Anthropic doesn't have a public models endpoint, use predefined list
+            return None
+        elif 'localhost' in base_url or '127.0.0.1' in base_url:
+            # Local APIs (Ollama, LM Studio, etc.)
+            return f"{base_url}/models"
+        else:
+            # Default to OpenAI-compatible endpoint
+            return f"{base_url}/models"
+    
+    def _load_predefined_models(self):
+        """Load predefined models for APIs without models endpoint."""
+        base_url = self.base_url.rstrip('/')
+        
+        if 'anthropic.com' in base_url:
+            # Anthropic Claude models
+            self.models = [
+                "claude-3-5-sonnet-20241022",
+                "claude-3-5-haiku-20241022", 
+                "claude-3-opus-20240229",
+                "claude-3-sonnet-20240229",
+                "claude-3-haiku-20240307"
+            ]
+        else:
+            # Generic fallback
+            self.models = ["Ask user to check API documentation"]
+        
+        # Populate the list widget
+        self.models_list.clear()
+        for model in self.models:
+            item = QListWidgetItem(model)
+            self.models_list.addItem(item)
+        
+        self.status_label.setText(f"Showing {len(self.models)} predefined models")
+        self.status_label.setStyleSheet("color: blue;")
+    
+    def _parse_models_response(self, data):
+        """Parse the models response and populate the list."""
+        try:
+            if not data:
+                raise ValueError("Empty response from API")
+            
+            # Handle different response formats
+            if isinstance(data, dict):
+                if 'data' in data:
+                    # OpenAI/OpenRouter format
+                    models_data = data['data']
+                elif 'models' in data:
+                    # Alternative format
+                    models_data = data['models']
+                else:
+                    raise ValueError("Unexpected response format")
+            elif isinstance(data, list):
+                # Direct list format (some local APIs)
+                models_data = data
+            else:
+                raise ValueError("Unexpected response format")
+            
+            # Extract model names
+            self.models = []
+            for model in models_data:
+                if isinstance(model, dict):
+                    model_id = model.get('id') or model.get('name') or model.get('model')
+                    if model_id:
+                        self.models.append(model_id)
+                elif isinstance(model, str):
+                    self.models.append(model)
+            
+            if not self.models:
+                raise ValueError("No models found in response")
+            
+            # Sort models for better organization
+            self.models.sort()
+            
+            # Populate the list widget
+            self.models_list.clear()
+            for model in self.models:
+                item = QListWidgetItem(model)
+                self.models_list.addItem(item)
+            
+            self.status_label.setText(f"Found {len(self.models)} models")
+            self.status_label.setStyleSheet("color: green;")
+            
+        except Exception as e:
+            logger.error(f"Failed to parse models response: {e}")
+            self.status_label.setText(f"Error parsing models: {str(e)}")
+            self.status_label.setStyleSheet("color: red;")
+    
+    def _on_model_double_clicked(self, item):
+        """Handle double-click on a model item."""
+        self._select_model(item.text())
+    
+    def _on_apply_clicked(self):
+        """Handle apply button click."""
+        current_item = self.models_list.currentItem()
+        if current_item:
+            self._select_model(current_item.text())
+    
+    def _select_model(self, model_name: str):
+        """Select a model and emit the signal."""
+        self.model_selected.emit(model_name)
+        self.accept()
+    
+    def _on_selection_changed(self):
+        """Handle list selection changes."""
+        self.apply_btn.setEnabled(self.models_list.currentItem() is not None)
+    
+    def _apply_theme(self):
+        """Apply current theme styling to the models dialog."""
+        try:
+            from ...ui.themes.theme_manager import get_theme_manager
+            from ...ui.themes.style_templates import StyleTemplates
+            
+            theme_manager = get_theme_manager()
+            style = self._get_models_dialog_style(theme_manager.current_theme)
+            self.setStyleSheet(style)
+            logger.debug(f"Applied theme to ModelsDialog: {theme_manager.current_theme_name}")
+        except ImportError:
+            logger.warning("Theme system not available, using fallback dark theme")
+            self._apply_fallback_theme()
+    
+    def _apply_fallback_theme(self):
+        """Apply fallback dark theme styling when theme system is not available."""
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #2b2b2b;
+                color: #ffffff;
+            }
+            QLabel {
+                color: #ffffff;
+            }
+            QListWidget {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                border: 1px solid #555555;
+                border-radius: 4px;
+            }
+            QListWidget::item {
+                padding: 8px;
+                border-bottom: 1px solid #555555;
+            }
+            QListWidget::item:selected {
+                background-color: #4CAF50;
+            }
+            QListWidget::item:hover {
+                background-color: #4a4a4a;
+            }
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton:disabled {
+                background-color: #666666;
+                color: #999999;
+            }
+        """)
+    
+    def _get_models_dialog_style(self, colors):
+        """Generate comprehensive styling for the models dialog."""
+        return f"""
+        /* Main dialog styling */
+        QDialog {{
+            background-color: {colors.background_primary};
+            color: {colors.text_primary};
+        }}
+        
+        /* Label styling */
+        QLabel {{
+            color: {colors.text_primary};
+            font-weight: bold;
+            margin-bottom: 10px;
+        }}
+        
+        /* List widget styling */
+        QListWidget {{
+            background-color: {colors.background_tertiary};
+            color: {colors.text_primary};
+            border: 1px solid {colors.border_primary};
+            border-radius: 4px;
+        }}
+        QListWidget::item {{
+            padding: 8px;
+            border-bottom: 1px solid {colors.separator};
+        }}
+        QListWidget::item:selected {{
+            background-color: {colors.primary};
+            color: {colors.background_primary};
+        }}
+        QListWidget::item:hover {{
+            background-color: {colors.interactive_hover};
+            color: {colors.text_primary};
+        }}
+        QListWidget::item:selected:hover {{
+            background-color: {colors.primary_hover};
+            color: {colors.background_primary};
+            font-weight: bold;
+        }}
+        
+        /* Button styling */
+        QPushButton {{
+            background-color: {colors.primary};
+            color: {colors.background_primary};
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            min-width: 80px;
+            font-weight: bold;
+        }}
+        QPushButton:hover {{
+            background-color: {colors.primary_hover};
+        }}
+        QPushButton:pressed {{
+            background-color: {colors.primary_hover};
+        }}
+        QPushButton:disabled {{
+            background-color: {colors.interactive_disabled};
+            color: {colors.text_disabled};
+        }}
+        """

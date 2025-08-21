@@ -320,14 +320,54 @@ class AIService:
                 preview = msg['content'][:100] + "..." if len(msg['content']) > 100 else msg['content']
                 logger.debug(f"  Message {i+1} [{msg['role']}]: {preview}")
             
+            # Prepare parameters for API request
+            model_name = self._config['model_name']
+            api_params = {
+                'messages': api_messages,
+                'model': model_name,
+                'temperature': self._config['temperature'],
+                'max_tokens': self._config.get('max_tokens'),
+                'stream': stream
+            }
+            
+            # Add GPT-5 specific parameters for better responses
+            if model_name.startswith('gpt-5'):
+                # Default verbosity to 'medium' for gpt-5-nano to ensure content generation
+                api_params['verbosity'] = 'medium'
+                logger.debug(f"Using default verbosity 'medium' for {model_name}")
+                
+                # Set reasoning_effort to 'low' for gpt-5-nano for faster responses
+                if 'nano' in model_name.lower():
+                    api_params['reasoning_effort'] = 'low'
+                    logger.debug(f"Using reasoning_effort 'low' for {model_name}")
+                    
+                    # Adjust max_tokens for gpt-5-nano to account for reasoning tokens
+                    current_max_tokens = api_params.get('max_tokens', 2000)
+                    if current_max_tokens:
+                        # gpt-5-nano uses reasoning tokens + response tokens
+                        # We need to ensure enough tokens for both reasoning and actual response
+                        if current_max_tokens < 200:
+                            # Small requests need more tokens for reasoning overhead
+                            adjusted_tokens = max(200, current_max_tokens * 3)
+                        elif current_max_tokens > 4096:
+                            # Large requests should be capped but still allow reasoning
+                            adjusted_tokens = 4096
+                        else:
+                            # Medium requests - add buffer for reasoning tokens
+                            adjusted_tokens = min(4096, current_max_tokens + 100)
+                        
+                        api_params['max_tokens'] = adjusted_tokens
+                        logger.info(f"Adjusted max_tokens from {current_max_tokens} to {adjusted_tokens} for {model_name} (reasoning + response)")
+            
             # Make API request
-            response = self.client.chat_completion(
-                messages=api_messages,
-                model=self._config['model_name'],
-                temperature=self._config['temperature'],
-                max_tokens=self._config.get('max_tokens'),
-                stream=stream
-            )
+            response = self.client.chat_completion(**api_params)
+            
+            # Log raw response for debugging gpt-5-nano
+            if model_name.startswith('gpt-5'):
+                logger.info(f"🔍 GPT-5 RAW RESPONSE - Success: {response.success}")
+                logger.info(f"🔍 GPT-5 RAW RESPONSE - Status code: {response.status_code}")
+                logger.info(f"🔍 GPT-5 RAW RESPONSE - Data keys: {list(response.data.keys()) if response.data else None}")
+                logger.info(f"🔍 GPT-5 RAW RESPONSE - Full data: {response.data}")
             
             if response.success:
                 # Extract response content
@@ -376,20 +416,53 @@ class AIService:
         try:
             # Debug: Log the full API response structure
             logger.info(f"🔍 EXTRACTING RESPONSE CONTENT - Raw API response keys: {list(api_response.keys())}")
-            logger.info(f"🔍 EXTRACTING RESPONSE CONTENT - Full API response: {api_response}")
+            logger.debug(f"🔍 EXTRACTING RESPONSE CONTENT - Full API response: {api_response}")
+            
+            # Check for empty or null response first
+            if not api_response:
+                logger.error("🔍 EXTRACTING - API response is empty or None")
+                return "[No response content received]"
             
             # Standard OpenAI format
             if 'choices' in api_response and api_response['choices']:
                 choice = api_response['choices'][0]
                 logger.info(f"🔍 EXTRACTING - Found choices format, choice keys: {list(choice.keys())}")
-                if 'message' in choice:
-                    content = choice['message'].get('content', '')
-                    logger.info(f"🔍 EXTRACTING - Extracted from message.content: '{content}'")
-                    return content
+                
+                # Handle different choice formats
+                if 'message' in choice and choice['message']:
+                    message = choice['message']
+                    content = message.get('content', '')
+                    logger.info(f"🔍 EXTRACTING - Message content type: {type(content)}, value: '{content}'")
+                    
+                    # Handle empty content specifically
+                    if content is None or content == '':
+                        logger.warning("🔍 EXTRACTING - Message content is empty or None")
+                        # Check if there's a finish_reason that explains why
+                        finish_reason = choice.get('finish_reason', 'unknown')
+                        logger.warning(f"🔍 EXTRACTING - Finish reason: {finish_reason}")
+                        return f"[No response content received - finish_reason: {finish_reason}]"
+                    
+                    return str(content)
+                    
                 elif 'text' in choice:
                     content = choice['text']
                     logger.info(f"🔍 EXTRACTING - Extracted from text: '{content}'")
-                    return content
+                    return str(content) if content is not None else "[No text content]"
+                
+                elif 'delta' in choice and 'content' in choice['delta']:
+                    # Streaming format
+                    content = choice['delta']['content']
+                    logger.info(f"🔍 EXTRACTING - Extracted from delta.content: '{content}'")
+                    return str(content) if content is not None else "[No delta content]"
+                
+                else:
+                    logger.warning(f"🔍 EXTRACTING - Choice has unexpected format: {choice}")
+                    return f"[Unexpected choice format: {list(choice.keys())}]"
+            
+            # Check if choices array is empty
+            elif 'choices' in api_response:
+                logger.warning("🔍 EXTRACTING - Choices array is empty")
+                return "[No choices in response]"
             
             # Anthropic Claude format
             if 'content' in api_response:
@@ -398,19 +471,34 @@ class AIService:
                 if isinstance(content, list) and content:
                     extracted = content[0].get('text', '')
                     logger.info(f"🔍 EXTRACTING - Extracted from content[0].text: '{extracted}'")
-                    return extracted
+                    return str(extracted) if extracted else "[No text in content array]"
                 elif isinstance(content, str):
                     logger.info(f"🔍 EXTRACTING - Extracted from content string: '{content}'")
-                    return content
+                    return content if content else "[Empty content string]"
+            
+            # Check for error in response
+            if 'error' in api_response:
+                error_info = api_response['error']
+                logger.error(f"🔍 EXTRACTING - API returned error: {error_info}")
+                return f"[API Error: {error_info}]"
             
             # Fallback - try to find any text content
-            response_str = str(api_response)
-            logger.warning(f"🔍 EXTRACTING - Unrecognized response format, returning as string: {response_str[:100]}...")
-            return response_str
+            logger.warning(f"🔍 EXTRACTING - Unrecognized response format. Available keys: {list(api_response.keys())}")
+            
+            # Check specific keys that might contain content
+            potential_content_keys = ['text', 'output', 'result', 'response', 'data']
+            for key in potential_content_keys:
+                if key in api_response and api_response[key]:
+                    logger.info(f"🔍 EXTRACTING - Found content in '{key}': {api_response[key]}")
+                    return str(api_response[key])
+            
+            return f"[Unrecognized response format - keys: {list(api_response.keys())}]"
             
         except Exception as e:
             logger.error(f"🔍 EXTRACTING - Failed to extract response content: {e}")
-            return "Sorry, I couldn't process the response properly."
+            import traceback
+            logger.error(f"🔍 EXTRACTING - Stack trace: {traceback.format_exc()}")
+            return f"[Error processing response: {str(e)}]"
     
     def update_config(self, config: Dict[str, Any]) -> bool:
         """
@@ -573,24 +661,36 @@ class AIService:
                 }
             ]
             
-            request_data = {
-                "model": self._config.get('model_name', 'gpt-3.5-turbo'),
+            model_name = self._config.get('model_name', 'gpt-3.5-turbo')
+            api_params = {
+                "model": model_name,
                 "messages": messages,
                 "temperature": self._config.get('temperature', 0.7),
                 "max_tokens": self._config.get('max_tokens', 2000),
                 "stream": stream
             }
             
+            # Add GPT-5 specific parameters for better responses
+            if model_name.startswith('gpt-5'):
+                # Default verbosity to 'medium' for gpt-5-nano to ensure content generation
+                api_params['verbosity'] = 'medium'
+                logger.debug(f"Using default verbosity 'medium' for {model_name} (title generation)")
+                
+                # Set reasoning_effort to 'low' for gpt-5-nano for faster responses
+                if 'nano' in model_name.lower():
+                    api_params['reasoning_effort'] = 'low'
+                    logger.debug(f"Using reasoning_effort 'low' for {model_name} (title generation)")
+                    
+                    # Limit max_tokens for gpt-5-nano to avoid issues (titles should be short anyway)
+                    current_max_tokens = api_params.get('max_tokens', 2000)
+                    if current_max_tokens and current_max_tokens > 100:
+                        api_params['max_tokens'] = 100
+                        logger.info(f"Reduced max_tokens from {current_max_tokens} to 100 for {model_name} title generation")
+            
             logger.debug(f"Sending title generation request (no system prompt): {len(messages)} messages")
             
             # Make request using the existing client infrastructure
-            response = self.client.chat_completion(
-                messages=messages,
-                model=request_data["model"],
-                temperature=request_data["temperature"],
-                max_tokens=request_data["max_tokens"],
-                stream=request_data["stream"]
-            )
+            response = self.client.chat_completion(**api_params)
             
             if response.success:
                 # Extract response content using existing method

@@ -565,20 +565,20 @@ class CertificateChainPage(QWizardPage):
         
         # Info section
         info_label = QLabel("""
-        <h4>About Certificate Chains:</h4>
-        <p>Some organizations require additional Certificate Authority (CA) certificates 
-        to validate the certificate chain. This is typically needed in enterprise 
-        environments with internal CAs.</p>
+        <h4>About Certificate Chains (Optional):</h4>
+        <p><b>Most users can skip this step.</b> Certificate Authority (CA) chains are only 
+        needed in specific enterprise environments with internal certificate authorities.</p>
         
-        <p><b>Common scenarios:</b></p>
+        <p><b>You may need this if:</b></p>
         <ul>
-        <li>Internal corporate certificate authorities</li>
-        <li>Custom root certificates</li>
-        <li>Intermediate certificate authorities</li>
+        <li>Your organization uses internal corporate certificate authorities</li>
+        <li>You have custom root certificates that must be trusted</li>
+        <li>You're connecting to services with intermediate certificate authorities</li>
+        <li>You receive SSL/TLS verification errors during authentication</li>
         </ul>
         
-        <p>If you're unsure, you can skip this step and add CA certificates later 
-        if authentication fails.</p>
+        <p><b>Recommendation:</b> Skip this step initially. You can always run this wizard 
+        again to add CA certificates if needed.</p>
         """)
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
@@ -761,17 +761,36 @@ class ValidationPage(QWizardPage):
             return
         
         self._log_result(f"🌐 Testing connection to: {test_url}")
-        self._log_result("📡 Using max 3 attempts with SSL verification disabled")
+        self._log_result("📡 Using max 3 attempts with SSL verification")
+        
+        # Disable the test button during testing
+        self.test_button.setEnabled(False)
+        self.test_button.setText("Testing...")
         
         try:
             # Test with max 3 attempts as per requirement
             success, error = pki_service.test_pki_connection(test_url, max_attempts=3)
             if success:
-                self._log_result("✓ Connection test successful")
+                self._log_result("✅ Connection test successful!")
+                self._log_result("🎉 Your PKI authentication is working correctly")
             else:
-                self._log_result(f"✗ Connection test failed: {error}")
+                self._log_result(f"❌ Connection test failed: {error}")
+                self._log_result("💡 Check your URL and certificate configuration")
         except Exception as e:
-            self._log_result(f"✗ Connection test error: {e}")
+            # User-friendly error message
+            error_msg = str(e)
+            if "PKI is not enabled" in error_msg:
+                self._log_result("✗ PKI authentication is not enabled")
+            elif "No such host" in error_msg or "Name or service not known" in error_msg:
+                self._log_result("✗ Could not connect to server - check URL and internet connection")
+            elif "certificate" in error_msg.lower():
+                self._log_result("✗ Certificate error - check PKI configuration")
+            else:
+                self._log_result(f"✗ Connection test error: {error_msg}")
+        finally:
+            # Re-enable the test button
+            self.test_button.setEnabled(True)
+            self.test_button.setText("Test Connection")
     
     def _log_result(self, message: str):
         """Add message to results text."""

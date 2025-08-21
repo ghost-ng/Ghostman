@@ -178,12 +178,23 @@ class OpenAICompatibleClient:
             try:
                 logger.debug(f"API request attempt {attempt + 1}: {method} {url}")
                 
+                # Prepare headers with API key
+                headers = {
+                    "Content-Type": "application/json",
+                    "User-Agent": "Ghostman/1.0"
+                }
+                
+                # Add Authorization header if API key is provided
+                if self.api_key:
+                    headers["Authorization"] = f"Bearer {self.api_key}"
+                
                 # Make the request using session manager
                 response = session_manager.make_request(
                     method=method,
                     url=url,
                     json=data if data else None,
                     params=params,
+                    headers=headers,
                     timeout=self.timeout
                 )
                 
@@ -302,6 +313,8 @@ class OpenAICompatibleClient:
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         stream: bool = False,
+        verbosity: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
         **kwargs
     ) -> APIResponse:
         """
@@ -313,6 +326,8 @@ class OpenAICompatibleClient:
             temperature: Sampling temperature (0.0 to 2.0)
             max_tokens: Maximum tokens to generate
             stream: Whether to stream the response
+            verbosity: Response verbosity level for GPT-5 models ('low', 'medium', 'high')
+            reasoning_effort: Reasoning effort for GPT-5 models ('low', 'medium', 'high')
             **kwargs: Additional parameters to pass to the API
             
         Returns:
@@ -329,14 +344,30 @@ class OpenAICompatibleClient:
         original_max_tokens = max_tokens
         
         if max_tokens is not None:
-            # Default to the newer parameter name for OpenAI models
+            # Use max_completion_tokens for GPT-5 models and newer OpenAI models
             if self.base_url and 'openai.com' in self.base_url:
-                data["max_completion_tokens"] = max_tokens
+                # GPT-5 models (including gpt-5-nano) require max_completion_tokens
+                if model.startswith('gpt-5') or model.startswith('o1'):
+                    data["max_completion_tokens"] = max_tokens
+                    logger.debug(f"Using max_completion_tokens for {model}: {max_tokens}")
+                else:
+                    # Older models still use max_tokens
+                    data["max_tokens"] = max_tokens
+                    logger.debug(f"Using max_tokens for {model}: {max_tokens}")
             else:
                 data["max_tokens"] = max_tokens
         
         if stream:
             data["stream"] = True
+        
+        # Add GPT-5 specific parameters if provided
+        if model.startswith('gpt-5') and self.base_url and 'openai.com' in self.base_url:
+            if verbosity is not None:
+                data["verbosity"] = verbosity
+                logger.debug(f"Using verbosity for {model}: {verbosity}")
+            if reasoning_effort is not None:
+                data["reasoning_effort"] = reasoning_effort
+                logger.debug(f"Using reasoning_effort for {model}: {reasoning_effort}")
         
         logger.debug(f"Chat completion request: model={model}, messages={len(messages)}")
         

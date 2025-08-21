@@ -1,181 +1,98 @@
-# ghost-ng
+# Ghostman
 
-A sleek, AI-powered desktop assistant with floating widgets and conversation management.
+A beautiful AI chat application featuring Spector, your friendly desktop AI assistant. Chat with multiple AI providers through an elegant floating interface with extensive customization options.
 
 ## Features
 
-- 🤖 **AI-Powered Chat**: Integrated OpenAI API support with streaming responses
-- 👻 **Floating Avatar**: Moveable avatar widget with personality animations
-- 💬 **Conversation Management**: Persistent conversation history with browser interface
-- 🎨 **Rich Theming**: 23+ built-in themes including OpenAI-like, Arctic White, Cyberpunk, and more
-- 🪟 **Frameless Windows**: Modern borderless UI with custom resize handles
-- ⚙️ **Comprehensive Settings**: Font customization, opacity controls, and advanced configuration
-- 📌 **System Tray Integration**: Minimize to tray with quick access controls
-- 🔄 **Real-time Sync**: Live conversation updates and status management
+- **Floating Chat Interface** - Moveable avatar window that opens into a full chat interface
+- **Multiple AI Providers** - Support for OpenAI, Anthropic, Google, and local models
+- **26 Built-in Themes** - From Matrix green to Arctic white, cyberpunk to steampunk
+- **Conversation Management** - Save, load, and browse all your conversations
+- **Enterprise Security** - PKI authentication for secure environments
+- **Full Customization** - Fonts, opacity, window behavior, and more
+- **System Tray Integration** - Always accessible, minimize to tray
+- **Professional Features** - Settings profiles, advanced logging, SSL support
 
-## Installation
+## Quick Start
 
-### Prerequisites
+### Installation
 
-- Python 3.12+
-- Windows 10/11, macOS, or Linux
+1. **Requirements**: Python 3.12+ and Windows 10/11, macOS, or Linux
 
-### Quick Start
-
-1. **Clone the repository:**
+2. **Download and Setup**:
    ```bash
-   git clone https://github.com/ghost-ng/ghost-ng.git
-   cd ghost-ng
-   ```
-
-2. **Set up virtual environment:**
-   ```bash
+   git clone https://github.com/ghost-ng/Ghostman.git
+   cd Ghostman
    python -m venv venv
    venv\Scripts\activate  # Windows
-   source venv/bin/activate  # macOS/Linux
-   ```
-
-3. **Install dependencies:**
-   ```bash
+   # source venv/bin/activate  # macOS/Linux
    pip install -r requirements.txt
    ```
 
-4. **Configure API:**
-   - Get an OpenAI API key from [OpenAI Platform](https://platform.openai.com/)
-   - Run ghost-ng and enter your API key in settings
+3. **Get Your API Key**:
+   - OpenAI: Get your key from [OpenAI Platform](https://platform.openai.com/)
+   - Anthropic: Visit [Anthropic Console](https://console.anthropic.com/)
+   - Google: Access [Google AI Studio](https://makersuite.google.com/)
 
-5. **Run ghost-ng:**
+4. **Run Ghostman**:
    ```bash
    python -m ghostman
-   # or
-   ghost-ng
    ```
 
-## Usage
+### First Time Setup
 
-### Basic Operation
+1. **Configure Your AI Model**: Click the gear icon and enter your API key in the AI Model tab
+2. **Choose a Theme**: Pick from 26 beautiful themes in the Interface tab
+3. **Start Chatting**: Click on Spector (the avatar) to open the chat window
 
-- **Start**: Launch via system tray or avatar mode
-- **Chat**: Type in the REPL window for AI conversations
-- **Settings**: Access via gear icon or system tray menu
-- **Themes**: Choose from 23+ themes in Settings > Appearance
+## Usage Basics
 
-### Keyboard Shortcuts
+### Chat Interface
+- **Open Chat**: Click on Spector's avatar or use the system tray
+- **Send Messages**: Type your message and press Ctrl+Enter
+- **New Conversation**: Click the "+" button or press Ctrl+N
+- **Browse History**: Click the conversation browser icon
 
-- `Ctrl+Enter`: Send message
-- `Ctrl+N`: New conversation
-- `Ctrl+,`: Open settings
-- `Alt+H`: Toggle always on top
+### Window Controls
+- **Move Around**: Drag Spector's avatar anywhere on your screen
+- **Always on Top**: Keep the chat window above other applications
+- **Adjust Opacity**: Make windows semi-transparent
+- **Minimize to Tray**: Hide completely but keep running in the background
 
-### Conversation Management
+### Themes
 
-- **Active Conversations**: Only one conversation active at a time
-- **Status Types**: Active (🔥), Pinned (📌), Archived (📦)
-- **Search**: Full-text search across all conversations
-- **Export**: JSON, TXT, Markdown, HTML formats
+Choose from 26 professionally designed themes:
 
-## Configuration
+**Dark Themes**: Dark Matrix, Midnight Blue, Forest Green, Sunset Orange, Royal Purple, Cyberpunk, Earth Tones, Ocean Deep, Lilac, Forest, Firefly, Mintly, Ocean, Pulse, Solarized Dark, Dracula, OpenWebUI-like, Moonlight, Fireswamp, Cyber, Steampunk
 
-### Settings Location
+**Light Themes**: Arctic White, Sunburst, Solarized Light, OpenAI-like, OpenUI-like
 
-- Windows: `%APPDATA%/Ghostman/configs/`
-- macOS: `~/Library/Application Support/Ghostman/configs/`
-- Linux: `~/.config/Ghostman/configs/`
-- Config file: `settings.json`
-- Logs: `logs/` subdirectory
-
-### Theme Customization
-
-Themes can be customized in Settings > Appearance. Built-in themes include:
-
-- **OpenAI-like**: Clean minimal design inspired by ChatGPT
-- **Arctic White**: High-contrast light theme
-- **Cyberpunk**: Neon-accented dark theme
-- **Dracula**: Popular purple-accented theme
-- **Solarized**: Classic developer themes (light/dark)
-
-## Architecture
-
-```
-ghostman/
-├── src/
-│   ├── application/           # App coordination & services
-│   ├── domain/               # Business logic & models  
-│   ├── infrastructure/       # External services & storage
-│   │   ├── ai/              # OpenAI integration
-│   │   ├── conversation_management/  # Chat persistence
-│   │   ├── logging/         # Logging configuration
-│   │   └── storage/         # Settings management
-│   ├── presentation/        # UI components
-│   │   ├── dialogs/         # Settings, browsers
-│   │   ├── ui/              # Main windows, resize system
-│   │   └── widgets/         # Avatar, REPL, floating windows
-│   └── ui/                  # Themes & styling
-│       └── themes/          # Color systems & templates
-├── assets/                  # Icons, animations, sprites
-├── docs/                   # Documentation
-├── tests/                  # Test suites
-└── requirements.txt        # Dependencies
-```
-
-## Development
-
-### Setting Up Development Environment
-
-1. Install development dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-2. Run tests:
-   ```bash
-   python -m pytest tests/
-   ```
-
-3. Build executable:
-   ```bash
-   python build.py
-   ```
-
-### Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## Releases
-
-Releases are automatically built and published when version tags are pushed:
-
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-This triggers automated builds for:
-- Windows executable (PyInstaller)
-- Python wheel package
-- Source distribution
+Each theme is carefully designed for different moods and environments - from professional work to creative projects.
 
 ## Documentation
 
-- [Theme System Guide](docs/guides/THEME_SYSTEM_GUIDE.md)
-- [Conversation Management](docs/guides/CONVERSATION_MANAGEMENT_GUIDE.md)
-- [Color Reference](docs/guides/COLOR_VARIABLE_REFERENCE.md)
-- [Architecture Analysis](docs/analysis/)
+- **Complete User Guide**: [docs/help.md](docs/help.md) - Comprehensive help covering all features
+- **GitHub Repository**: [https://github.com/ghost-ng/Ghostman/](https://github.com/ghost-ng/Ghostman/)
 
-## License
+## Settings Overview
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+- **Interface**: Themes, opacity, window behavior
+- **AI Model**: Provider selection, API keys, response settings
+- **Fonts**: Customize text appearance for AI responses and user input
+- **Advanced**: Logging levels, SSL settings, debugging options
+- **PKI Auth**: Enterprise certificate authentication
+
+## Keyboard Shortcuts
+
+- `Ctrl+Enter` - Send message
+- `Ctrl+N` - New conversation
+- `Ctrl+,` - Open settings
+- `Alt+H` - Toggle always on top
 
 ## Support
 
-- **Issues**: Report bugs on [GitHub Issues](https://github.com/ghost-ng/ghost-ng/issues)
-- **Discussions**: Join [GitHub Discussions](https://github.com/ghost-ng/ghost-ng/discussions) for questions
-- **Documentation**: Check the `docs/` directory for detailed guides
+Having trouble? Check the [complete help guide](docs/help.md) for detailed instructions on every feature, troubleshooting tips, and advanced configuration options.
 
 ---
 
-**Made with 👻 and ❤️ by the ghost-ng team**
+**Meet Spector, your AI companion for desktop productivity and creativity.**

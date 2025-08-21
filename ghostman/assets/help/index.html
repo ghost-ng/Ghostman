@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ghost-ng Help Documentation</title>
+    <title>Ghostman Help Documentation</title>
     <link rel="stylesheet" href="css/help.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,8 +15,8 @@
         <header class="header">
             <div class="header-content">
                 <div class="logo">
-                    <h1>👻 ghost-ng</h1>
-                    <span class="version">v1.0.0</span>
+                    <h1>👻 Ghostman</h1>
+                    <span class="version">Meet Spector, your AI companion</span>
                 </div>
                 <nav class="nav">
                     <a href="#getting-started" class="nav-link">Getting Started</a>
@@ -48,7 +48,7 @@
                         <h3>Core Features</h3>
                         <ul>
                             <li><a href="#chat-interface">Chat Interface</a></li>
-                            <li><a href="#avatar-widget">Avatar Widget</a></li>
+                            <li><a href="#avatar-widget">Spector (Avatar)</a></li>
                             <li><a href="#conversation-management">Conversations</a></li>
                             <li><a href="#themes">Themes & Styling</a></li>
                         </ul>
@@ -80,8 +80,8 @@
             <!-- Welcome Section -->
             <section id="welcome" class="content-section">
                 <div class="hero">
-                    <h1>Welcome to ghost-ng</h1>
-                    <p class="hero-subtitle">Your AI-powered desktop assistant with floating widgets and conversation management</p>
+                    <h1>Welcome to Ghostman</h1>
+                    <p class="hero-subtitle">Meet Spector, your friendly AI desktop companion with beautiful themes and conversation management</p>
                     <div class="hero-features">
                         <div class="feature-item">
                             <span class="feature-icon">🤖</span>
@@ -114,9 +114,9 @@
                     </div>
                     
                     <ol class="step-list">
-                        <li>Download the latest ghost-ng installer from <a href="https://github.com/ghost-ng/ghost-ng/releases" target="_blank">GitHub Releases</a></li>
-                        <li>Run the installer and follow the setup wizard</li>
-                        <li>Launch ghost-ng from your desktop shortcut or Start menu</li>
+                        <li>Download from <a href="https://github.com/ghost-ng/Ghostman/releases" target="_blank">GitHub Releases</a></li>
+                        <li>Install Python 3.12+ and dependencies</li>
+                        <li>Run: python -m ghostman</li>
                         <li>Configure your API key in Settings (see API Setup below)</li>
                     </ol>
                 </div>
@@ -124,7 +124,7 @@
                 <div id="first-run" class="subsection">
                     <h3>First Run</h3>
                     <ol class="step-list">
-                        <li>Launch ghost-ng from your desktop or command line</li>
+                        <li>Launch Ghostman from your desktop or command line</li>
                         <li>The application will start in system tray mode</li>
                         <li>Right-click the tray icon and select "Show Avatar" to open the main interface</li>
                         <li>Click the gear icon to open settings and configure your API key</li>
@@ -134,7 +134,7 @@
                 <div id="api-setup" class="subsection">
                     <h3>API Setup</h3>
                     <div class="warning-box">
-                        <p><strong>⚠️ Important:</strong> You need an AI service API key to use ghost-ng's features.</p>
+                        <p><strong>⚠️ Important:</strong> You need an AI service API key to use Ghostman's features.</p>
                     </div>
                     
                     <h4>OpenAI Setup (Recommended)</h4>
@@ -143,20 +143,22 @@
                         <li>Create an account or sign in</li>
                         <li>Go to API Keys section and create a new key</li>
                         <li>Copy the API key</li>
-                        <li>In ghost-ng, click the gear icon → AI Model</li>
+                        <li>In Ghostman, click the gear icon → AI Model</li>
                         <li>Paste your API key in the API Key field</li>
                         <li>Click "Test Connection" to verify</li>
                     </ol>
                     
-                    <h4>OpenAI-Compatible Services</h4>
-                    <p>ghost-ng also works with OpenAI-compatible API providers:</p>
+                    <h4>Other AI Providers</h4>
                     <ul>
-                        <li><strong>Anthropic Claude:</strong> Use with proxy services</li>
-                        <li><strong>Local AI:</strong> Ollama, LM Studio, or similar</li>
-                        <li><strong>Azure OpenAI:</strong> Enterprise deployments</li>
-                        <li><strong>Custom endpoints:</strong> Any OpenAI-compatible API</li>
+                        <li><strong>Anthropic Claude:</strong> Direct API support with native integration</li>
+                        <li><strong>Google Gemini:</strong> Native support for Gemini 2.5 Pro/Flash models</li>
+                        <li><strong>Local AI:</strong> Ollama, LM Studio with OpenAI-compatible APIs</li>
+                        <li><strong>OpenRouter:</strong> Access to multiple models through one API</li>
                     </ul>
-                    <p>Configure the Base URL and API key in Settings → AI Model for alternative providers.</p>
+                    
+                    <div class="info-box">
+                        <p><strong>💡 Pro Tip:</strong> Use the model profile dropdown to quickly switch between preset configurations. Each profile automatically sets the correct temperature, max tokens, and endpoints for optimal performance.</p>
+                    </div>
                 </div>
             </section>
 
@@ -166,7 +168,7 @@
 
                 <div id="chat-interface" class="subsection">
                     <h3>Chat Interface (REPL)</h3>
-                    <p>The main chat interface where you interact with the AI assistant.</p>
+                    <p>The main chat interface where you interact with Spector, your AI assistant.</p>
                     
                     <div class="feature-grid">
                         <div class="feature-card">
@@ -192,8 +194,8 @@
                 </div>
 
                 <div id="avatar-widget" class="subsection">
-                    <h3>Avatar Widget</h3>
-                    <p>A floating, draggable avatar that provides quick access to ghost-ng features.</p>
+                    <h3>Spector (Avatar Widget)</h3>
+                    <p>A floating, draggable avatar (Spector) that provides quick access to Ghostman features.</p>
                     
                     <div class="info-box">
                         <p><strong>Avatar Modes:</strong></p>
@@ -234,24 +236,34 @@
 
                 <div id="themes" class="subsection">
                     <h3>Themes & Styling</h3>
-                    <p>Choose from 23+ built-in themes or create your own custom themes.</p>
+                    <p>Choose from 26 built-in themes perfectly designed for different moods and environments.</p>
                     
-                    <div class="theme-showcase">
-                        <div class="theme-item">
-                            <div class="theme-preview openai-like"></div>
-                            <span>OpenAI-like</span>
+                    <div class="info-box">
+                        <h4>🎨 Theme Categories</h4>
+                        <p><strong>Dark Themes (21):</strong> dark_matrix, midnight_blue, forest_green, sunset_orange, royal_purple, cyberpunk, earth_tones, ocean_deep, lilac, forest, firefly, mintly, ocean, pulse, solarized_dark, dracula, openwebui_like, moonlight, fireswamp, cyber, steampunk</p>
+                        <p><strong>Light Themes (5):</strong> arctic_white, sunburst, solarized_light, openai_like, openui_like</p>
+                    </div>
+                    
+                    
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>🌟 Popular Themes</h4>
+                            <ul>
+                                <li><strong>lilac:</strong> Soft purple with much lighter text</li>
+                                <li><strong>cyber:</strong> Full cyberpunk neon aesthetic</li>
+                                <li><strong>steampunk:</strong> Victorian copper and brass</li>
+                                <li><strong>moonlight:</strong> Silver and blue night theme</li>
+                            </ul>
                         </div>
-                        <div class="theme-item">
-                            <div class="theme-preview arctic-white"></div>
-                            <span>Arctic White</span>
-                        </div>
-                        <div class="theme-item">
-                            <div class="theme-preview cyberpunk"></div>
-                            <span>Cyberpunk</span>
-                        </div>
-                        <div class="theme-item">
-                            <div class="theme-preview dracula"></div>
-                            <span>Dracula</span>
+                        
+                        <div class="feature-card">
+                            <h4>💼 Work-Friendly</h4>
+                            <ul>
+                                <li><strong>arctic_white:</strong> Clean professional look</li>
+                                <li><strong>openai_like:</strong> OpenAI-inspired design</li>
+                                <li><strong>midnight_blue:</strong> Deep blue professional</li>
+                                <li><strong>solarized_light/dark:</strong> Popular developer themes</li>
+                            </ul>
                         </div>
                     </div>
                 </div>
@@ -263,42 +275,54 @@
                 
                 <div class="settings-grid">
                     <div class="settings-card">
-                        <h4>🎨 Appearance</h4>
+                        <h4>🎨 Interface</h4>
                         <ul>
-                            <li>Theme selection</li>
-                            <li>Font family and size</li>
-                            <li>Window opacity</li>
-                            <li>Icon sizing</li>
+                            <li>26 built-in themes</li>
+                            <li>Window opacity control</li>
+                            <li>Always on top toggle</li>
+                            <li>Start minimized option</li>
+                            <li>Close to tray behavior</li>
                         </ul>
                     </div>
                     
                     <div class="settings-card">
                         <h4>🤖 AI Model</h4>
                         <ul>
+                            <li>Multiple providers (OpenAI, Anthropic, Google)</li>
+                            <li>Preset model profiles</li>
                             <li>API key configuration</li>
-                            <li>Model selection</li>
-                            <li>Temperature and parameters</li>
-                            <li>System/user prompts</li>
+                            <li>Temperature settings (auto-adjusted per model)</li>
+                            <li>Custom system prompts</li>
                         </ul>
                     </div>
                     
                     <div class="settings-card">
-                        <h4>🖥️ Interface</h4>
+                        <h4>📝 Fonts</h4>
                         <ul>
-                            <li>Always on top toggle</li>
-                            <li>Start minimized option</li>
-                            <li>Close to tray behavior</li>
-                            <li>Window positioning</li>
+                            <li>AI response font customization</li>
+                            <li>User input font settings</li>
+                            <li>Font size adjustments</li>
+                            <li>System font integration</li>
                         </ul>
                     </div>
                     
                     <div class="settings-card">
                         <h4>🔧 Advanced</h4>
                         <ul>
-                            <li>Logging level</li>
-                            <li>Debug mode</li>
-                            <li>Database management</li>
-                            <li>Import/export settings</li>
+                            <li>Logging levels (Standard/Debug)</li>
+                            <li>Log retention settings</li>
+                            <li>SSL verification options</li>
+                            <li>Configuration export/import</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="settings-card">
+                        <h4>🔐 PKI Auth</h4>
+                        <ul>
+                            <li>Enterprise certificate authentication</li>
+                            <li>PKI setup wizard</li>
+                            <li>Certificate status monitoring</li>
+                            <li>Connection testing</li>
                         </ul>
                     </div>
                 </div>
@@ -312,35 +336,35 @@
                     <div class="shortcuts-category">
                         <h4>Chat Interface</h4>
                         <div class="shortcut-item">
-                            <kbd>Enter</kbd>
+                            <kbd>Ctrl</kbd> + <kbd>Enter</kbd>
                             <span>Send message</span>
                         </div>
                         <div class="shortcut-item">
-                            <kbd>↑</kbd> / <kbd>↓</kbd>
-                            <span>Navigate message history</span>
+                            <kbd>Shift</kbd> + <kbd>Enter</kbd>
+                            <span>New line (without sending)</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>N</kbd>
+                            <span>New conversation</span>
                         </div>
                         <div class="shortcut-item">
                             <kbd>Ctrl</kbd> + <kbd>F</kbd>
                             <span>Search conversations</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <kbd>Esc</kbd>
-                            <span>Close search</span>
                         </div>
                     </div>
                     
                     <div class="shortcuts-category">
                         <h4>Window Management</h4>
                         <div class="shortcut-item">
-                            <kbd>Ctrl</kbd> + <kbd>H</kbd>
-                            <span>Hide chat window</span>
+                            <kbd>Ctrl</kbd> + <kbd>,</kbd>
+                            <span>Open settings</span>
                         </div>
                         <div class="shortcut-item">
-                            <kbd>Ctrl</kbd> + <kbd>M</kbd>
-                            <span>Minimize to tray</span>
+                            <kbd>Alt</kbd> + <kbd>H</kbd>
+                            <span>Toggle always on top</span>
                         </div>
                         <div class="shortcut-item">
-                            Click avatar
+                            Click Spector
                             <span>Show/hide chat</span>
                         </div>
                         <div class="shortcut-item">
@@ -359,14 +383,14 @@
                     <h3>Frequently Asked Questions</h3>
                     
                     <div class="faq-item">
-                        <h4>❓ ghost-ng won't start or crashes immediately</h4>
+                        <h4>❓ Ghostman won't start or crashes immediately</h4>
                         <div class="faq-answer">
                             <p>Try these solutions:</p>
                             <ul>
-                                <li>Restart the application</li>
-                                <li>Check if you have the latest version installed</li>
-                                <li>Try running as administrator (Windows only)</li>
+                                <li>Ensure Python 3.12+ is installed</li>
+                                <li>Run: python -m pip install -r requirements.txt</li>
                                 <li>Check logs in: <code>%APPDATA%/Ghostman/logs/</code> (Windows)</li>
+                                <li>Try: python -m ghostman --debug for verbose output</li>
                             </ul>
                         </div>
                     </div>
@@ -376,10 +400,25 @@
                         <div class="faq-answer">
                             <p>Common API issues:</p>
                             <ul>
-                                <li>Verify your OpenAI API key is valid and has credits</li>
+                                <li>Verify your API key is valid and has credits</li>
                                 <li>Check internet connectivity</li>
-                                <li>Ensure firewall isn't blocking the connection</li>
-                                <li>Try a different model (GPT-3.5-turbo vs GPT-4)</li>
+                                <li>Try different model profiles (preset configurations)</li>
+                                <li>For Anthropic: Get key from <a href="https://console.anthropic.com/" target="_blank">Anthropic Console</a></li>
+                                <li>For Google: Get key from <a href="https://makersuite.google.com/" target="_blank">Google AI Studio</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div class="faq-item">
+                        <h4>❓ Temperature not supported error</h4>
+                        <div class="faq-answer">
+                            <p>If you see "Temperature not supported by this model":</p>
+                            <ul>
+                                <li>This is normal for some models (GPT-5/o1 reasoning models)</li>
+                                <li>Switch to a preset model profile for automatic temperature</li>
+                                <li>For Claude models: Use temperature 0.0-1.0 range</li>
+                                <li>For OpenAI models: Use temperature 0-2 range</li>
+                                <li>For reasoning models: Temperature is fixed at 1.0</li>
                             </ul>
                         </div>
                     </div>
@@ -414,30 +453,10 @@ Linux: ~/.config/Ghostman/logs/</code></pre>
             <section id="contact" class="content-section">
                 <h2>Contact & Support</h2>
                 
-                <div class="contact-grid">
-                    <div class="contact-item">
-                        <h4>🐛 Bug Reports</h4>
-                        <p>Found a bug? Report it on our GitHub issues page.</p>
-                        <a href="https://github.com/ghost-ng/ghost-ng/issues" target="_blank" class="btn btn-primary">Report Bug</a>
-                    </div>
-                    
-                    <div class="contact-item">
-                        <h4>💬 Discussions</h4>
-                        <p>Join the community for questions and discussions.</p>
-                        <a href="https://github.com/ghost-ng/ghost-ng/discussions" target="_blank" class="btn btn-secondary">Join Discussion</a>
-                    </div>
-                    
-                    <div class="contact-item">
-                        <h4>📚 Documentation</h4>
-                        <p>Full documentation and guides on GitHub.</p>
-                        <a href="https://github.com/ghost-ng/ghost-ng/tree/main/docs" target="_blank" class="btn btn-secondary">View Docs</a>
-                    </div>
-                    
-                    <div class="contact-item">
-                        <h4>🏷️ Releases</h4>
-                        <p>Download the latest version and view changelog.</p>
-                        <a href="https://github.com/ghost-ng/ghost-ng/releases" target="_blank" class="btn btn-secondary">Latest Release</a>
-                    </div>
+                <div class="contact-item">
+                    <h4>🐛 Bug Reports</h4>
+                    <p>Found a bug? Report it on our GitHub issues page.</p>
+                    <a href="https://github.com/ghost-ng/Ghostman/issues" target="_blank" class="btn btn-primary">Report Bug</a>
                 </div>
             </section>
         </main>
