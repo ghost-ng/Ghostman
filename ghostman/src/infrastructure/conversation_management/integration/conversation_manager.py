@@ -491,9 +491,16 @@ class ConversationManager:
             
             # Shutdown conversation service
             if self.conversation_service:
-                loop = asyncio.get_event_loop()
-                if not loop.is_running():
-                    loop.run_until_complete(self.conversation_service.shutdown())
+                try:
+                    loop = asyncio.get_event_loop()
+                    if not loop.is_closed() and not loop.is_running():
+                        loop.run_until_complete(self.conversation_service.shutdown())
+                    elif hasattr(self.conversation_service, 'shutdown_sync'):
+                        # If there's a synchronous shutdown method, use it
+                        self.conversation_service.shutdown_sync()
+                except RuntimeError:
+                    # Event loop is already closed, just skip async shutdown
+                    logger.debug("Event loop already closed, skipping async shutdown")
             
             # Close database connections
             if self.db_manager:

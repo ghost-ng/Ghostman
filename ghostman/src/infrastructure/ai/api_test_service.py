@@ -271,17 +271,20 @@ class APITestService(QObject):
         return final_result
     
     def _configure_session_for_testing(self, config: APITestConfig):
-        """Configure session manager for API testing with proper PKI handling."""
+        """Configure session manager for API testing with proper PKI and ignore_ssl handling."""
         try:
             # Check if PKI is configured and get CA bundle path
             from ..pki.pki_service import pki_service
             ca_bundle_path = None
             
-            if pki_service.cert_manager.is_pki_enabled():
+            # Always respect the ignore_ssl setting from config first
+            if config.disable_ssl_verification:
+                logger.info("SSL verification disabled by ignore_ssl setting")
+            elif pki_service.cert_manager.is_pki_enabled():
                 ca_bundle_path = pki_service.cert_manager.get_ca_chain_file()
                 if ca_bundle_path:
                     logger.info(f"PKI is enabled, using CA bundle for verification: {ca_bundle_path}")
-                    # When PKI is configured, use CA bundle instead of disabling SSL
+                    # Only use PKI CA verification if ignore_ssl is not set
                     config.disable_ssl_verification = False
                 else:
                     logger.warning("PKI is enabled but no CA chain file found")
@@ -294,7 +297,7 @@ class APITestService(QObject):
                 disable_ssl_verification=config.disable_ssl_verification
             )
             
-            # If we have a CA bundle path, configure the session to use it
+            # If we have a CA bundle path and SSL verification is enabled, configure the session to use it
             if ca_bundle_path and not config.disable_ssl_verification:
                 with self.session_manager.get_session() as session:
                     session.verify = ca_bundle_path
@@ -380,6 +383,80 @@ class APITestService(QObject):
                     ai_service.shutdown()
                 except Exception as e:
                     logger.error(f"Error shutting down AI service: {e}")
+
+
+def test_network_connection_consolidated(
+    base_url: str, 
+    api_key: str = "", 
+    model_name: str = "gpt-3.5-turbo",
+    pki_config: Optional[Dict[str, Any]] = None,
+    ignore_ssl: bool = True,
+    max_attempts: int = 3,
+    timeout: int = 30
+) -> APITestResult:
+    """
+    Consolidated network test function that replaces all separate test functions.
+    
+    This single function handles all network testing scenarios:
+    - Standard API testing with/without SSL verification
+    - PKI authentication testing
+    - Session manager integration
+    - Configurable retry logic
+    
+    Args:
+        base_url: API base URL to test
+        api_key: API key for authentication
+        model_name: Model name to test with
+        pki_config: Optional PKI configuration dict with cert paths
+        ignore_ssl: Whether to ignore SSL certificate verification
+        max_attempts: Maximum number of retry attempts
+        timeout: Request timeout in seconds
+        
+    Returns:
+        APITestResult with success status and details
+    """
+    logger.info(f"🌐 Starting consolidated network test: {base_url}")
+    logger.info(f"🔧 Config: model={model_name}, pki={bool(pki_config)}, ignore_ssl={ignore_ssl}, attempts={max_attempts}")
+    
+    # Configure PKI if provided
+    if pki_config:
+        try:
+            from ..pki.pki_service import pki_service
+            if pki_config.get('cert_path') and pki_config.get('key_path'):
+                logger.info(f"🔐 Configuring PKI with cert: {pki_config['cert_path']}")
+                # Use the session manager's configure_pki method
+                from .session_manager import session_manager
+                session_manager.configure_pki(
+                    cert_path=pki_config['cert_path'],
+                    key_path=pki_config['key_path'],
+                    ca_path=pki_config.get('ca_path')
+                )
+                logger.info("✓ PKI configuration applied to session manager")
+            else:
+                logger.warning("PKI config provided but missing cert_path or key_path")
+        except Exception as e:
+            logger.warning(f"Failed to configure PKI for test: {e}")
+            # Don't fail the entire test, just log the warning and continue
+    
+    # Create test configuration
+    config = APITestConfig(
+        model_name=model_name,
+        base_url=base_url,
+        api_key=api_key,
+        timeout=timeout,
+        max_test_attempts=max_attempts,
+        disable_ssl_verification=ignore_ssl
+    )
+    
+    # Run the test
+    test_service = get_api_test_service()
+    result = test_service.test_api_config_sync(config)
+    
+    logger.info(f"🏁 Consolidated network test result: {'✓ SUCCESS' if result.success else '✗ FAILED'}")
+    if not result.success:
+        logger.debug(f"🔍 Test failure details: {result.message}")
+    
+    return result
 
 
 # Global instance for reuse

@@ -742,12 +742,14 @@ Fingerprint: {cert_info.get('fingerprint', 'N/A')[:32]}...{storage_info}"""
             QMessageBox.critical(self, "Error", f"Failed to toggle PKI authentication:\n{e}")
     
     def _test_connection(self):
-        """Test PKI connection."""
-        progress = None
+        """Test PKI connection using consolidated network test function."""
+        from PyQt6.QtWidgets import QInputDialog, QProgressDialog
+        from PyQt6.QtCore import QThread, pyqtSignal
+        from ...infrastructure.ai.api_test_service import test_network_connection_consolidated
+        from ...infrastructure.storage.settings_manager import settings
+        
         try:
             # Simple dialog to get test URL
-            from PyQt6.QtWidgets import QInputDialog
-            
             url, ok = QInputDialog.getText(
                 self,
                 "Test PKI Connection",
@@ -756,11 +758,16 @@ Fingerprint: {cert_info.get('fingerprint', 'N/A')[:32]}...{storage_info}"""
             )
             
             if ok and url.strip():
-                # Show progress dialog
-                progress = QMessageBox(self)
+                # Get ignore_ssl setting from settings
+                ignore_ssl = settings.get('advanced.ignore_ssl_verification', False)
+                
+                # Create proper modal progress dialog
+                progress = QProgressDialog("Testing PKI connection...", "Cancel", 0, 0, self)
                 progress.setWindowTitle("Testing Connection")
-                progress.setText("Testing PKI connection...")
-                progress.setStandardButtons(QMessageBox.StandardButton.NoButton)
+                progress.setWindowModality(Qt.WindowModality.WindowModal)
+                progress.setMinimumDuration(0)  # Show immediately
+                progress.setCancelButton(None)  # No cancel button for now
+                progress.setRange(0, 0)  # Indeterminate progress
                 progress.show()
                 
                 # Process events to ensure dialog is shown
@@ -768,38 +775,55 @@ Fingerprint: {cert_info.get('fingerprint', 'N/A')[:32]}...{storage_info}"""
                 QApplication.processEvents()
                 
                 try:
-                    # Test connection
-                    success, error = pki_service.test_pki_connection(url.strip())
+                    # Get PKI configuration for test
+                    pki_config = None
+                    if pki_service.cert_manager.is_pki_enabled():
+                        cert_path, key_path = pki_service.cert_manager.get_client_cert_files()
+                        ca_path = pki_service.cert_manager.get_ca_chain_file()
+                        pki_config = {
+                            'cert_path': cert_path,
+                            'key_path': key_path,
+                            'ca_path': ca_path
+                        }
                     
-                    # Ensure progress is closed
-                    if progress:
-                        progress.close()
-                        progress = None
+                    # Test connection using consolidated function
+                    result = test_network_connection_consolidated(
+                        base_url=url.strip(),
+                        api_key="test",  # Dummy API key for connection test
+                        model_name="test-model",  # Dummy model for connection test
+                        pki_config=pki_config,
+                        ignore_ssl=ignore_ssl,
+                        max_attempts=3,
+                        timeout=15
+                    )
                     
-                    if success:
+                    # Close progress dialog
+                    progress.close()
+                    
+                    if result.success:
                         QMessageBox.information(
                             self,
                             "Connection Successful",
-                            f"✅ PKI authentication test successful!\n\nURL: {url}\n\nYour certificate is working correctly."
+                            f"✅ PKI authentication test successful!\n\nURL: {url}\nSSL Verification: {'Disabled' if ignore_ssl else 'Enabled'}\n\nYour certificate is working correctly."
                         )
                     else:
                         QMessageBox.warning(
                             self,
                             "Connection Failed",
-                            f"❌ PKI authentication test failed:\n\n{error}\n\nPlease check your certificate configuration."
+                            f"❌ PKI authentication test failed:\n\n{result.message}\n\nSSL Verification: {'Disabled' if ignore_ssl else 'Enabled'}\n\nPlease check your certificate configuration."
                         )
+                        
                 except Exception as test_error:
                     # Ensure progress is closed on error
-                    if progress:
-                        progress.close()
-                        progress = None
+                    progress.close()
                     raise test_error
             
         except Exception as e:
             # Ensure progress is closed on any error
-            if progress:
+            try:
                 progress.close()
-                progress = None
+            except:
+                pass
             
             logger.error(f"Failed to test PKI connection: {e}")
             
@@ -814,7 +838,13 @@ Fingerprint: {cert_info.get('fingerprint', 'N/A')[:32]}...{storage_info}"""
             else:
                 error_msg = f"Connection test failed: {e}"
             
-            QMessageBox.critical(self, "Test Error", error_msg)
+            # Create proper modal error dialog
+            error_dialog = QMessageBox(self)
+            error_dialog.setWindowTitle("Test Error")
+            error_dialog.setText(error_msg)
+            error_dialog.setIcon(QMessageBox.Icon.Critical)
+            error_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+            error_dialog.exec()
     
     def get_pki_status(self) -> Optional[Dict[str, Any]]:
         """Get current PKI status."""

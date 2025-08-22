@@ -2612,7 +2612,7 @@ class ModelsDialog(QDialog):
         layout.addLayout(button_layout)
     
     def _load_models(self):
-        """Load models from the API endpoint."""
+        """Load models from the API endpoint using session manager."""
         try:
             # Determine the models endpoint based on the base URL
             models_url = self._get_models_endpoint()
@@ -2623,12 +2623,33 @@ class ModelsDialog(QDialog):
                 self.loading_finished.emit()
                 return
             
+            # Import session manager and get ignore_ssl setting
+            from ...infrastructure.ai.session_manager import session_manager
+            from ...infrastructure.storage.settings_manager import settings
+            
+            # Get ignore_ssl setting
+            ignore_ssl = settings.get('advanced.ignore_ssl_verification', True)
+            
+            # Configure session manager with proper SSL settings
+            session_manager.configure_session(
+                timeout=10,
+                max_retries=2,
+                disable_ssl_verification=ignore_ssl
+            )
+            
+            # Prepare headers
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json"
             }
             
-            response = requests.get(models_url, headers=headers, timeout=10)
+            # Make request using session manager
+            response = session_manager.make_request(
+                method="GET",
+                url=models_url,
+                headers=headers,
+                timeout=10
+            )
             response.raise_for_status()
             
             data = response.json()

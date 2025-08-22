@@ -206,43 +206,53 @@ class PKIService:
             logger.error(f"Failed to apply PKI to session: {e}")
             return False
     
-    def test_pki_connection(self, test_url: str, max_attempts: int = 3) -> Tuple[bool, Optional[str]]:
+    def test_pki_connection(self, test_url: str, max_attempts: int = 3, ignore_ssl: bool = False) -> Tuple[bool, Optional[str]]:
         """
         Test PKI authentication with a given URL with retry logic.
         
         Args:
             test_url: URL to test PKI authentication against
             max_attempts: Maximum number of test attempts (default: 3)
+            ignore_ssl: Whether to ignore SSL certificate verification (default: False)
             
         Returns:
             Tuple of (success, error_message)
         """
-        logger.info(f"Testing PKI connection to: {test_url} (max {max_attempts} attempts)")
+        logger.info(f"Testing PKI connection to: {test_url} (max {max_attempts} attempts, ignore_ssl={ignore_ssl})")
         
         if not self.cert_manager.is_pki_enabled():
             return False, "PKI is not enabled"
         
         last_error = None
         
-        # Configure session with CA bundle verification (not disabled SSL)
-        ca_bundle_path = self.cert_manager.get_ca_chain_file()
-        
-        session_manager.configure_session(
-            timeout=10,
-            max_retries=0,  # Disable all lower-level retries - we handle retries here
-            disable_ssl_verification=False  # Use proper SSL verification with CA bundle
-        )
-        
-        # Configure session to use CA bundle if available
-        if ca_bundle_path:
-            try:
-                with session_manager.get_session() as session:
-                    session.verify = ca_bundle_path
-                logger.info(f"PKI test configured to use CA bundle: {ca_bundle_path}")
-            except Exception as e:
-                logger.error(f"Failed to configure CA bundle for PKI test: {e}")
+        # Configure session based on ignore_ssl setting
+        if ignore_ssl:
+            logger.info("SSL verification disabled for PKI test due to ignore_ssl setting")
+            session_manager.configure_session(
+                timeout=10,
+                max_retries=0,  # Disable all lower-level retries - we handle retries here
+                disable_ssl_verification=True  # Disable SSL verification per setting
+            )
         else:
-            logger.warning("PKI enabled but no CA bundle available for verification")
+            # Use CA bundle verification when SSL verification is enabled
+            ca_bundle_path = self.cert_manager.get_ca_chain_file()
+            
+            session_manager.configure_session(
+                timeout=10,
+                max_retries=0,  # Disable all lower-level retries - we handle retries here
+                disable_ssl_verification=False  # Use proper SSL verification with CA bundle
+            )
+            
+            # Configure session to use CA bundle if available
+            if ca_bundle_path:
+                try:
+                    with session_manager.get_session() as session:
+                        session.verify = ca_bundle_path
+                    logger.info(f"PKI test configured to use CA bundle: {ca_bundle_path}")
+                except Exception as e:
+                    logger.error(f"Failed to configure CA bundle for PKI test: {e}")
+            else:
+                logger.warning("PKI enabled but no CA bundle available for verification")
         
         for attempt in range(1, max_attempts + 1):
             try:

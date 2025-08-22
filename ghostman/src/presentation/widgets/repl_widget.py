@@ -1007,6 +1007,11 @@ class REPLWidget(QWidget):
             all_buttons = tool_buttons + push_buttons
             
             for button in all_buttons:
+                # Special handling for send button
+                if button == getattr(self, 'send_button', None):
+                    self._style_send_button()
+                    continue
+                    
                 # Determine if this is a title button or toolbar button based on size/properties
                 if hasattr(button, 'parent') and button.parent():
                     # Check if it's in the title area (approximate check)
@@ -1825,9 +1830,20 @@ class REPLWidget(QWidget):
         colors = self.theme_manager.current_theme if self.theme_manager and THEME_SYSTEM_AVAILABLE else None
         emoji_font_stack = self._get_emoji_font_stack()
         
-        # Use unified button styling system with consistent 8px padding
+        # Apply theme-aware styling for better visibility (all themes)
+        special_colors = {}
+        if colors:
+            # Use a darker/more contrasted approach for all themes
+            special_colors = {
+                "text": colors.text_primary,  # Use primary text color
+                "background": colors.background_tertiary,  # Use tertiary background for better contrast
+                "hover": colors.interactive_hover,  # Use theme's hover color
+                "active": colors.interactive_active  # Use theme's active color
+            }
+        
+        # Use unified button styling system with special colors if needed
         ButtonStyleManager.apply_unified_button_style(
-            button, colors, "tool", "icon", "normal", None, emoji_font_stack
+            button, colors, "tool", "icon", "normal", special_colors, emoji_font_stack
         )
     
     def _apply_move_button_toggle_style(self, button: QToolButton):
@@ -1891,10 +1907,22 @@ class REPLWidget(QWidget):
             # Use the dedicated plus button styling method
             ButtonStyleManager.apply_plus_button_style(button, colors, emoji_font_stack)
         else:
-            # Use standard unified styling
+            # Apply theme-aware styling for better visibility
+            # Only apply special colors to QToolButtons (icon buttons), NOT QPushButtons (minimize)
+            special_colors = {}
+            if isinstance(button, QToolButton) and colors:
+                # Use a darker/more contrasted approach for all themes
+                special_colors = {
+                    "text": colors.text_primary,  # Use primary text color
+                    "background": colors.background_tertiary,  # Use tertiary background for better contrast
+                    "hover": colors.interactive_hover,  # Use theme's hover color
+                    "active": colors.interactive_active  # Use theme's active color
+                }
+            
+            # Use standard unified styling with special colors if needed
             logger.info(f"Applying unified icon styling to {button_type} button")
             ButtonStyleManager.apply_unified_button_style(
-                button, colors, button_type, "icon", "normal", {}, emoji_font_stack
+                button, colors, button_type, "icon", "normal", special_colors, emoji_font_stack
             )
         
         # Force style refresh for theme switching to ensure immediate updates
@@ -1909,7 +1937,28 @@ class REPLWidget(QWidget):
         """Style the Send button with unified primary styling."""
         colors = self.theme_manager.current_theme if self.theme_manager and THEME_SYSTEM_AVAILABLE else None
         
-        # Use primary state for send button
+        # If no theme is available yet, apply a basic style to avoid unstyled button
+        if not colors:
+            # Apply a basic green send button style as fallback
+            self.send_button.setStyleSheet("""
+                QPushButton {
+                    background-color: #10b981;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 6px 12px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #059669;
+                }
+                QPushButton:pressed {
+                    background-color: #047857;
+                }
+            """)
+            return
+        
+        # Use primary state for send button with theme colors
         ButtonStyleManager.apply_unified_button_style(
             self.send_button, colors, "push", "small", "toggle"
         )
@@ -1934,9 +1983,17 @@ class REPLWidget(QWidget):
                     "active": colors.primary if colors else "#e6940b"
                 }
             else:
-                # Use normal state
+                # Apply theme-aware darker styling for better visibility (all themes)
                 state = "normal"
-                special_colors = None
+                special_colors = {}
+                if colors:
+                    # Use a darker/more contrasted approach for all themes
+                    special_colors = {
+                        "text": colors.text_primary,  # Use primary text color
+                        "background": colors.background_tertiary,  # Use tertiary background for better contrast
+                        "hover": colors.interactive_hover,  # Use theme's hover color
+                        "active": colors.interactive_active  # Use theme's active color
+                    }
             
             # Apply unified styling
             ButtonStyleManager.apply_unified_button_style(
@@ -1968,9 +2025,17 @@ class REPLWidget(QWidget):
                     "active": colors.status_success if colors else "#45a049"
                 }
             else:
-                # Use normal state for detached
+                # Apply theme-aware darker styling for better visibility (all themes)
                 state = "normal"
-                special_colors = None
+                special_colors = {}
+                if colors:
+                    # Use a darker/more contrasted approach for all themes
+                    special_colors = {
+                        "text": colors.text_primary,  # Use primary text color
+                        "background": colors.background_tertiary,  # Use tertiary background for better contrast
+                        "hover": colors.interactive_hover,  # Use theme's hover color
+                        "active": colors.interactive_active  # Use theme's active color
+                    }
             
             # Apply unified styling
             ButtonStyleManager.apply_unified_button_style(
@@ -2447,7 +2512,7 @@ class REPLWidget(QWidget):
             colors = self.theme_manager.current_theme
             alpha = max(0.0, min(1.0, self._panel_opacity))
             
-            # Generate themed style with opacity
+            # Generate themed style with opacity (includes border-radius)
             style = StyleTemplates.get_repl_panel_style(colors, alpha)
             
             # Add input field styles
@@ -2471,6 +2536,7 @@ class REPLWidget(QWidget):
             lineedit_style = f"#repl-root QLineEdit {{ background-color: {child_bg}; color: {colors.text_primary}; border: 1px solid {colors.border_primary}; border-radius: 3px; padding: 5px; selection-background-color: {colors.secondary}; selection-color: {colors.text_primary}; }}"
             lineedit_focus_style = f"#repl-root QLineEdit:focus {{ border: 2px solid {colors.border_focus}; }}"
             
+            # Properly combine all styles (root style includes border-radius)
             combined_style = f"{style} {textedit_style} {lineedit_style} {lineedit_focus_style}"
             
             
@@ -2496,7 +2562,7 @@ class REPLWidget(QWidget):
         logger.debug(f"  📝 Text area background: {textedit_bg}")
         logger.debug(f"  ⌨️  Input background: {lineedit_bg}")
         # Use simple string formatting to avoid CSS syntax issues
-        root_style = f"#repl-root {{ background-color: {panel_bg}; border-radius: 6px; }}"
+        root_style = f"#repl-root {{ background-color: {panel_bg}; border-radius: 10px 10px 0px 0px; }}"
         textedit_fallback = f"#repl-root QTextEdit {{ background-color: {textedit_bg}; color: #f0f0f0; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 5px; padding: 5px; }}"
         lineedit_fallback = f"#repl-root QLineEdit {{ background-color: {lineedit_bg}; color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 3px; padding: 5px; }}"
         lineedit_focus_fallback = "#repl-root QLineEdit:focus { border: 1px solid #4CAF50; }"

@@ -384,7 +384,7 @@ class StyleTemplates:
         return f"""
         #repl-root {{
             background-color: {panel_bg};
-            border-radius: 6px;
+            border-radius: 10px 10px 0px 0px;
             border: 1px solid {colors.border_primary};
         }}
         """

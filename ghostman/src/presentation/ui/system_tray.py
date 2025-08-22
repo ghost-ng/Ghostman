@@ -29,7 +29,6 @@ class EnhancedSystemTray(QObject):
     show_avatar_requested = pyqtSignal()
     settings_requested = pyqtSignal()
     help_requested = pyqtSignal()
-    about_requested = pyqtSignal()
     quit_requested = pyqtSignal()
     
     def __init__(self, app_coordinator):
@@ -83,11 +82,6 @@ class EnhancedSystemTray(QObject):
         help_action = QAction("Help...", self.context_menu)
         help_action.triggered.connect(self.help_requested.emit)
         self.context_menu.addAction(help_action)
-        
-        # About action
-        about_action = QAction("About ghost-ng", self.context_menu)
-        about_action.triggered.connect(self.about_requested.emit)
-        self.context_menu.addAction(about_action)
         
         self.context_menu.addSeparator()
         
