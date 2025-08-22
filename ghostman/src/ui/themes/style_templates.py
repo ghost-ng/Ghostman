@@ -366,24 +366,14 @@ class StyleTemplates:
     
     @staticmethod
     def get_repl_panel_style(colors: ColorSystem, opacity: float = 0.9) -> str:
-        """Style for REPL panel with TRUE transparency support."""
-        # For true transparency, don't set any background on root - let it stay transparent
-        if opacity >= 0.99:
-            # Fully opaque - use original hex color for root
-            panel_bg = colors.background_secondary
-            border_color = colors.border_primary
-        else:
-            # TRUE TRANSPARENCY - no background, no border
-            return f"""
-            #repl-root {{
-                background-color: transparent;
-                border: none;
-            }}
-            """
+        """Style for REPL panel - NO opacity applied to root (only output display gets opacity)."""
+        # Root panel always fully opaque to keep UI controls visible
+        panel_bg = colors.background_secondary
+        border_color = colors.border_primary
         
         return f"""
         #repl-root {{
-            background-color: {panel_bg};
+            background-color: {panel_bg} !important;
             border-radius: 10px 10px 0px 0px;
             border: 1px solid {border_color};
         }}

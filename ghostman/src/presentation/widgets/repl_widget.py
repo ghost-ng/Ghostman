@@ -701,6 +701,11 @@ class REPLWidget(QWidget):
         self._init_ui()
         self._apply_styles()
         self._update_component_themes()  # Apply theme to all components after UI init
+        
+        # CRITICAL: Apply opacity immediately after initialization
+        # This ensures opacity takes effect on startup
+        self._apply_startup_opacity()
+        
         self._init_conversation_manager()
         
         # Load conversations after UI is fully initialized
@@ -857,9 +862,10 @@ class REPLWidget(QWidget):
                     # Fallback for non-hex colors
                     bg_color = f"rgba(30, 30, 30, {alpha:.3f})"
             
+            # CRITICAL: Use !important to prevent style overrides
             self.output_display.setStyleSheet(f"""
                 QTextEdit {{
-                    background-color: {bg_color};
+                    background-color: {bg_color} !important;
                     color: {colors.text_primary};
                     border: none;
                     selection-background-color: {colors.primary};
@@ -883,8 +889,20 @@ class REPLWidget(QWidget):
                     background: none;
                 }}
             """)
+            
+            logger.debug(f"Applied output display opacity: {alpha:.3f} (bg: {bg_color})")
         except Exception as e:
             logger.warning(f"Failed to style output display: {e}")
+            # Fallback styling with manual opacity
+            alpha = max(0.0, min(1.0, self._panel_opacity))
+            bg_color = f"rgba(30, 30, 30, {alpha:.3f})"
+            self.output_display.setStyleSheet(f"""
+                QTextEdit {{
+                    background-color: {bg_color} !important;
+                    color: #ffffff;
+                    border: none;
+                }}
+            """)
     
     def _update_layout_component_themes(self):
         """Update theme styling for layout components like frames and separators."""
@@ -1111,7 +1129,7 @@ class REPLWidget(QWidget):
                 "}"
             )
         else:
-            # Fallback to improved colors without background - force opacity to 1.0
+            # Fallback to improved colors without background - keep transparent 
             if processing:
                 color = "#FF9800"  # Material orange
             else:
@@ -1222,19 +1240,20 @@ class REPLWidget(QWidget):
                 }}
             """
         else:
-            return """
-                QLineEdit {
-                    background-color: rgba(30, 30, 30, 0.8);
+            # Fallback styles - ALWAYS fully opaque
+            return f"""
+                QLineEdit {{
+                    background-color: rgba(30, 30, 30, 1.0);
                     color: #ffffff;
                     border: 1px solid rgba(255, 255, 255, 0.3);
                     padding: 4px 6px;
                     border-radius: 3px;
                     font-size: 11px;
-                }
-                QLineEdit:focus {
+                }}
+                QLineEdit:focus {{
                     border-color: #FFA500;
-                    background-color: rgba(40, 40, 40, 0.9);
-                }
+                    background-color: rgba(40, 40, 40, 1.0);
+                }}
             """
     
     def _init_conversation_manager(self):
@@ -1423,17 +1442,18 @@ class REPLWidget(QWidget):
         """Initialize title bar with new conversation and help buttons."""
         # Create a frame for the title bar to make it more visible and draggable
         self.title_frame = QFrame()
-        # Apply theme-aware styling
+        # Apply theme-aware styling - ALWAYS fully opaque
         if self.theme_manager and THEME_SYSTEM_AVAILABLE:
             self.title_frame.setStyleSheet(StyleTemplates.get_title_frame_style(self.theme_manager.current_theme))
         else:
-            self.title_frame.setStyleSheet("""
-                QFrame {
-                    background-color: rgba(40, 40, 40, 0.8);
+            # Fallback styles - ALWAYS fully opaque
+            self.title_frame.setStyleSheet(f"""
+                QFrame {{
+                    background-color: rgba(40, 40, 40, 1.0);
                     border: 1px solid rgba(255, 255, 255, 0.2);
                     border-radius: 5px;
                     margin: 0px;
-                }
+                }}
             """)
         
         # Enable drag functionality for the title frame
@@ -1626,17 +1646,22 @@ class REPLWidget(QWidget):
 
     def _init_search_bar(self, parent_layout):
         """Initialize in-conversation search bar."""
-        # Search bar frame (initially hidden)
+        # Search bar frame (initially hidden) - ALWAYS fully opaque
         self.search_frame = QFrame()
         self.search_frame.setVisible(False)
-        self.search_frame.setStyleSheet("""
-            QFrame {
-                background-color: rgba(40, 40, 40, 0.9);
-                border: 1px solid rgba(255, 165, 0, 0.5);
-                border-radius: 4px;
-                margin: 2px;
-            }
-        """)
+        # Use theme-based styling or opaque fallback
+        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+            from ..ui.themes.style_templates import StyleTemplates
+            self.search_frame.setStyleSheet(StyleTemplates.get_search_frame_style(self.theme_manager.current_theme))
+        else:
+            self.search_frame.setStyleSheet(f"""
+                QFrame {{{{
+                    background-color: rgba(40, 40, 40, 1.0);
+                    border: 1px solid rgba(255, 165, 0, 0.5);
+                    border-radius: 4px;
+                    margin: 2px;
+                }}}}
+            """)
         
         search_layout = QHBoxLayout(self.search_frame)
         search_layout.setContentsMargins(8, 4, 8, 4)
@@ -1904,7 +1929,7 @@ class REPLWidget(QWidget):
         parent_layout.addLayout(toolbar_layout)
     
     def _style_conversation_selector(self):
-        """Apply custom styling to conversation selector."""
+        """Apply custom styling to conversation selector - ALWAYS fully opaque."""
         if self.theme_manager and THEME_SYSTEM_AVAILABLE:
             colors = self.theme_manager.current_theme
             # Use theme colors for conversation selector
@@ -1915,8 +1940,8 @@ class REPLWidget(QWidget):
             
             style = f"QComboBox {{background-color: {bg_color}; color: {text_color}; border: 1px solid {border_color}; border-radius: 5px; padding: 5px 10px; font-size: 11px;}} QComboBox:hover {{border: 1px solid {focus_color};}} QComboBox::drop-down {{border: none; width: 20px;}} QComboBox::down-arrow {{image: none; border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 5px solid {text_color}; margin-top: 2px;}} QComboBox QAbstractItemView {{background-color: {colors.background_primary}; color: {text_color}; selection-background-color: {colors.primary}; border: 1px solid {border_color}; outline: none;}}"
         else:
-            # Fallback styles
-            style = "QComboBox {background-color: rgba(40, 40, 40, 0.8); color: white; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 5px; padding: 5px 10px; font-size: 11px;} QComboBox:hover {border: 1px solid #4CAF50;} QComboBox::drop-down {border: none; width: 20px;} QComboBox::down-arrow {image: none; border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 5px solid white; margin-top: 2px;} QComboBox QAbstractItemView {background-color: rgba(30, 30, 30, 0.95); color: white; selection-background-color: #4CAF50; border: 1px solid rgba(255, 255, 255, 0.3); outline: none;}"
+            # Fallback styles - ALWAYS fully opaque
+            style = f"QComboBox {{background-color: rgba(40, 40, 40, 1.0); color: white; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 5px; padding: 5px 10px; font-size: 11px;}} QComboBox:hover {{border: 1px solid #4CAF50;}} QComboBox::drop-down {{border: none; width: 20px;}} QComboBox::down-arrow {{image: none; border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 5px solid white; margin-top: 2px;}} QComboBox QAbstractItemView {{background-color: rgba(30, 30, 30, 1.0); color: white; selection-background-color: #4CAF50; border: 1px solid rgba(255, 255, 255, 0.3); outline: none;}}"
         
         self.conversation_selector.setStyleSheet(style)
     
@@ -2606,31 +2631,21 @@ class REPLWidget(QWidget):
             self._apply_legacy_styles()
     
     def _apply_themed_styles(self):
-        """Apply styles using the theme system."""
+        """Apply styles using the theme system - NO opacity for UI components."""
         try:
             colors = self.theme_manager.current_theme
-            alpha = max(0.0, min(1.0, self._panel_opacity))
             
-            # Generate themed style with opacity (includes border-radius)
-            style = StyleTemplates.get_repl_panel_style(colors, alpha)
+            # Generate themed style WITHOUT opacity (root panel stays opaque)
+            style = StyleTemplates.get_repl_panel_style(colors)
             
             # Add input field styles
             input_style = StyleTemplates.get_input_field_style(colors)
             
-            # Handle child element backgrounds based on opacity
-            if alpha >= 1.0:
-                # Fully opaque - use original hex color
-                child_bg = colors.background_tertiary
-            elif colors.background_tertiary.startswith('#'):
-                # Transparent - convert to rgba with correct opacity (alpha is 0.0-1.0)
-                r = int(colors.background_tertiary[1:3], 16)
-                g = int(colors.background_tertiary[3:5], 16)
-                b = int(colors.background_tertiary[5:7], 16)
-                child_bg = f"rgba({r}, {g}, {b}, {alpha:.3f})"
-            else:
-                child_bg = colors.background_tertiary
+            # Child element backgrounds - ALWAYS fully opaque for UI controls
+            child_bg = colors.background_tertiary
             
             # Combine styles using string formatting to avoid CSS syntax issues
+            # UI components (input fields, etc.) stay fully opaque
             textedit_style = f"#repl-root QTextEdit {{ background-color: {child_bg}; color: {colors.text_primary}; border: 1px solid {colors.border_secondary}; border-radius: 5px; padding: 5px; selection-background-color: {colors.secondary}; selection-color: {colors.text_primary}; }}"
             lineedit_style = f"#repl-root QLineEdit {{ background-color: {child_bg}; color: {colors.text_primary}; border: 1px solid {colors.border_primary}; border-radius: 3px; padding: 5px; selection-background-color: {colors.secondary}; selection-color: {colors.text_primary}; }}"
             lineedit_focus_style = f"#repl-root QLineEdit:focus {{ border: 2px solid {colors.border_focus}; }}"
@@ -2640,7 +2655,7 @@ class REPLWidget(QWidget):
             
             
             self.setStyleSheet(combined_style)
-            logger.debug("🎨 Applied themed REPL styles")
+            logger.debug("🎨 Applied themed REPL styles (no opacity for UI controls)")
             
         except Exception as e:
             logger.error(f"Failed to apply themed styles: {e}")
@@ -2648,23 +2663,16 @@ class REPLWidget(QWidget):
             self._apply_legacy_styles()
     
     def _apply_legacy_styles(self):
-        """Apply legacy hardcoded styles as fallback."""
-        # Clamp opacity
-        alpha = max(0.0, min(1.0, self._panel_opacity))
-        
-        # For true transparency, make root transparent when opacity < 1
-        if alpha >= 0.99:
-            panel_bg = "rgba(30, 30, 30, 1.0)"
-            border_style = "border-radius: 10px 10px 0px 0px;"
-        else:
-            panel_bg = "transparent"
-            border_style = "border: none;"
+        """Apply legacy hardcoded styles as fallback - NO opacity for UI controls."""
+        # Root panel always opaque for UI controls
+        panel_bg = "rgba(30, 30, 30, 1.0)"
+        border_style = "border-radius: 10px 10px 0px 0px;"
             
-        # Use rgba for child elements to control actual opacity
-        textedit_bg = f"rgba(20, 20, 20, {alpha:.3f})"
-        lineedit_bg = f"rgba(40, 40, 40, {alpha:.3f})"
+        # UI elements always fully opaque (opacity only applied to output display separately)
+        textedit_bg = "rgba(20, 20, 20, 1.0)"
+        lineedit_bg = "rgba(40, 40, 40, 1.0)"
         
-        logger.debug(f"🎨 CSS colors generated:")
+        logger.debug(f"🎨 Legacy CSS colors generated (no opacity for UI controls):")
         logger.debug(f"  📦 Panel background: {panel_bg}")
         logger.debug(f"  📝 Text area background: {textedit_bg}")
         logger.debug(f"  ⌨️  Input background: {lineedit_bg}")
@@ -2704,6 +2712,132 @@ class REPLWidget(QWidget):
             self._style_output_display()
             
         logger.info(f"✓ REPL panel opacity applied successfully: {new_val:.3f}")
+        
+        # Force immediate visual update by refreshing all themed components
+        self._refresh_opacity_dependent_styles()
+    
+    def _apply_startup_opacity(self):
+        """Apply opacity settings immediately after widget initialization.
+        
+        This method ensures opacity takes immediate visual effect on startup
+        by forcing a style refresh after all components are initialized.
+        """
+        try:
+            # Force immediate application of opacity to output display
+            if hasattr(self, 'output_display'):
+                self._style_output_display()
+            
+            # Apply opacity to command input if needed
+            if hasattr(self, 'command_input'):
+                self._style_command_input_with_opacity()
+                
+            # Apply opacity to title frame
+            if hasattr(self, 'title_frame'):
+                self._style_title_frame_with_opacity()
+                
+            logger.info(f"🎨 Startup opacity applied: {self._panel_opacity:.3f} ({int(self._panel_opacity * 100)}%)")
+        except Exception as e:
+            logger.error(f"Failed to apply startup opacity: {e}")
+    
+    def _refresh_opacity_dependent_styles(self):
+        """Refresh all styles that depend on opacity settings."""
+        try:
+            # Re-apply output display styling with current opacity
+            if hasattr(self, 'output_display'):
+                self._style_output_display()
+                
+            # Re-apply command input styling
+            if hasattr(self, 'command_input'):
+                self._style_command_input_with_opacity()
+                
+            # Re-apply title frame styling
+            if hasattr(self, 'title_frame'):
+                self._style_title_frame_with_opacity()
+                
+            logger.debug("Refreshed all opacity-dependent styles")
+        except Exception as e:
+            logger.warning(f"Failed to refresh opacity-dependent styles: {e}")
+    
+    def _style_command_input_with_opacity(self):
+        """Apply command input styling - ALWAYS fully opaque."""
+        try:
+            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+                colors = self.theme_manager.current_theme
+                
+                # Command input ALWAYS fully opaque for UI clarity
+                input_bg = colors.background_secondary
+                
+                self.command_input.setStyleSheet(f"""
+                    QLineEdit {{
+                        background-color: {input_bg} !important;
+                        color: {colors.text_primary};
+                        border: 2px solid {colors.border_secondary};
+                        border-radius: 8px;
+                        padding: 8px 12px;
+                        font-size: 13px;
+                        selection-background-color: {colors.primary};
+                        selection-color: {colors.background_primary};
+                    }}
+                    QLineEdit:focus {{
+                        border-color: {colors.border_focus};
+                        background-color: {input_bg} !important;
+                    }}
+                """)
+            else:
+                # Fallback styling without theme system - ALWAYS fully opaque
+                input_bg = "rgba(40, 40, 40, 1.0)"
+                self.command_input.setStyleSheet(f"""
+                    QLineEdit {{
+                        background-color: {input_bg} !important;
+                        color: #ffffff;
+                        border: 2px solid rgba(255, 255, 255, 0.3);
+                        border-radius: 8px;
+                        padding: 8px 12px;
+                        font-size: 13px;
+                    }}
+                    QLineEdit:focus {{
+                        border-color: #FFA500;
+                        background-color: {input_bg} !important;
+                    }}
+                """)
+        except Exception as e:
+            logger.warning(f"Failed to style command input: {e}")
+    
+    def _style_title_frame_with_opacity(self):
+        """Apply title frame styling - ALWAYS fully opaque."""
+        try:
+            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+                colors = self.theme_manager.current_theme
+                
+                # Title frame ALWAYS fully opaque for UI clarity
+                frame_bg = colors.background_tertiary
+                
+                self.title_frame.setStyleSheet(f"""
+                    QFrame {{
+                        background-color: {frame_bg} !important;
+                        border: 1px solid {colors.border_secondary};
+                        border-radius: 4px;
+                        padding: 0px;
+                    }}
+                    QLabel {{
+                        color: {colors.text_primary};
+                        font-weight: bold;
+                    }}
+                """)
+            else:
+                # Fallback styling - ALWAYS fully opaque
+                frame_bg = "rgba(40, 40, 40, 1.0)"
+                self.title_frame.setStyleSheet(f"""
+                    QFrame {{
+                        background-color: {frame_bg} !important;
+                        border: 1px solid rgba(255, 255, 255, 0.2);
+                        border-radius: 5px;
+                        margin: 0px;
+                        padding: 4px;
+                    }}
+                """)
+        except Exception as e:
+            logger.warning(f"Failed to style title frame: {e}")
     
     def refresh_fonts(self):
         """Refresh fonts from font service when settings change."""
