@@ -2294,7 +2294,7 @@ class SettingsDialog(QDialog):
         """Handle opacity preview changes for immediate visual feedback."""
         # Convert percent to float (0.1 to 1.0)
         opacity_float = max(0.1, min(1.0, value / 100.0))
-        logger.debug(f"Opacity preview: {value}% -> {opacity_float:.2f}")
+        logger.info(f"🎨 Opacity preview: {value}% -> {opacity_float:.2f}")
         
         # Emit signal for live preview (parent window can connect to this)
         self.opacity_preview_changed.emit(opacity_float)
