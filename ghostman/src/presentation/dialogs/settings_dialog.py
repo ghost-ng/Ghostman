@@ -2287,8 +2287,8 @@ class SettingsDialog(QDialog):
         self.accept()
     
     def get_current_config(self) -> Dict[str, Any]:
-        """Get the current configuration."""
-        return self.current_config
+        """Get the current configuration from UI state."""
+        return self._get_current_config()
     
     def _on_opacity_preview(self, value: int):
         """Handle opacity preview changes for immediate visual feedback."""
