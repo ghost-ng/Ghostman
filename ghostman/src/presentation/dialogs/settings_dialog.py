@@ -48,7 +48,6 @@ class SettingsDialog(QDialog):
         
         self._init_ui()
         self._load_current_settings()
-        self._apply_uniform_button_styles()
         
         logger.info("SettingsDialog initialized")
     
@@ -81,6 +80,9 @@ class SettingsDialog(QDialog):
         self._create_font_tab()
         self._create_advanced_tab()
         self._create_pki_tab()
+        
+        # Apply styling after all UI elements are created
+        self._apply_uniform_button_styles()
         
         # Buttons layout
         button_layout = QHBoxLayout()
@@ -640,19 +642,31 @@ class SettingsDialog(QDialog):
                 }}
                 """
                 
-                # Apply to all +/- buttons
-                self.temperature_decrease_btn.setStyleSheet(plus_minus_style)
-                self.temperature_increase_btn.setStyleSheet(plus_minus_style)
-                self.max_tokens_decrease_btn.setStyleSheet(plus_minus_style)
-                self.max_tokens_increase_btn.setStyleSheet(plus_minus_style)
-                self.ai_font_size_decrease_btn.setStyleSheet(plus_minus_style)
-                self.ai_font_size_increase_btn.setStyleSheet(plus_minus_style)
-                self.user_font_size_decrease_btn.setStyleSheet(plus_minus_style)
-                self.user_font_size_increase_btn.setStyleSheet(plus_minus_style)
-                self.opacity_decrease_btn.setStyleSheet(plus_minus_style)
-                self.opacity_increase_btn.setStyleSheet(plus_minus_style)
-                self.log_retention_decrease_btn.setStyleSheet(plus_minus_style)
-                self.log_retention_increase_btn.setStyleSheet(plus_minus_style)
+                # Apply to all +/- buttons (check if they exist first)
+                if hasattr(self, 'temperature_decrease_btn'):
+                    self.temperature_decrease_btn.setStyleSheet(plus_minus_style)
+                if hasattr(self, 'temperature_increase_btn'):
+                    self.temperature_increase_btn.setStyleSheet(plus_minus_style)
+                if hasattr(self, 'max_tokens_decrease_btn'):
+                    self.max_tokens_decrease_btn.setStyleSheet(plus_minus_style)
+                if hasattr(self, 'max_tokens_increase_btn'):
+                    self.max_tokens_increase_btn.setStyleSheet(plus_minus_style)
+                if hasattr(self, 'ai_font_size_decrease_btn'):
+                    self.ai_font_size_decrease_btn.setStyleSheet(plus_minus_style)
+                if hasattr(self, 'ai_font_size_increase_btn'):
+                    self.ai_font_size_increase_btn.setStyleSheet(plus_minus_style)
+                if hasattr(self, 'user_font_size_decrease_btn'):
+                    self.user_font_size_decrease_btn.setStyleSheet(plus_minus_style)
+                if hasattr(self, 'user_font_size_increase_btn'):
+                    self.user_font_size_increase_btn.setStyleSheet(plus_minus_style)
+                if hasattr(self, 'opacity_decrease_btn'):
+                    self.opacity_decrease_btn.setStyleSheet(plus_minus_style)
+                if hasattr(self, 'opacity_increase_btn'):
+                    self.opacity_increase_btn.setStyleSheet(plus_minus_style)
+                if hasattr(self, 'log_retention_decrease_btn'):
+                    self.log_retention_decrease_btn.setStyleSheet(plus_minus_style)
+                if hasattr(self, 'log_retention_increase_btn'):
+                    self.log_retention_increase_btn.setStyleSheet(plus_minus_style)
                 
                 # Modern scroll bar styling
                 scrollbar_style = f"""

@@ -85,6 +85,11 @@ class MainWindow(QMainWindow):
         if hasattr(self.floating_repl, 'window_moved'):
             self.floating_repl.window_moved.connect(self._on_repl_moved)
         
+        # Configure file services if app coordinator is available
+        if hasattr(self.app_coordinator, 'configure_file_services_for_repl'):
+            self.app_coordinator.configure_file_services_for_repl()
+            logger.debug("Requested file service configuration for REPL")
+        
         # Set window background
         self._set_window_style()
         

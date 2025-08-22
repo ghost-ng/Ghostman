@@ -15,6 +15,8 @@ from ..domain.models.app_state import AppState, StateChangeEvent
 from ..domain.services.state_machine import TwoStateMachine
 from ..infrastructure.storage.settings_manager import settings
 
+logger = logging.getLogger("ghostman.coordinator")
+
 # File management service imports
 try:
     from .services.file_validation_service import FileValidationService
@@ -29,8 +31,6 @@ except ImportError as e:
 # UI imports - will be available after implementation
 # from ..presentation.ui.main_window import MainWindow
 # from ..presentation.ui.system_tray import EnhancedSystemTray
-
-logger = logging.getLogger("ghostman.coordinator")
 
 
 class AppCoordinator(QObject):
@@ -253,10 +253,20 @@ class AppCoordinator(QObject):
                     validation_service=self._file_validation_service
                 )
                 
-                logger.debug("File services configured with REPL widget")
+                logger.info("File services configured with REPL widget")
+                
+            else:
+                logger.debug("REPL widget not available for file service configuration - will retry later")
+                # Schedule retry in 1 second to allow UI to fully initialize
+                if hasattr(self, '_app') and self._app:
+                    QTimer.singleShot(1000, self._configure_repl_file_services)
                 
         except Exception as e:
             logger.warning(f"Failed to configure REPL file services: {e}")
+    
+    def configure_file_services_for_repl(self):
+        """Public method to configure file services - can be called from UI initialization."""
+        self._configure_repl_file_services()
     
     def start_in_tray_mode(self):
         """Start the application in tray mode."""
