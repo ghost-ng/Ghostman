@@ -14,6 +14,18 @@ from PyQt6.QtWidgets import QApplication, QSystemTrayIcon
 from ..domain.models.app_state import AppState, StateChangeEvent
 from ..domain.services.state_machine import TwoStateMachine
 from ..infrastructure.storage.settings_manager import settings
+
+# File management service imports
+try:
+    from .services.file_validation_service import FileValidationService
+    from .services.file_upload_service import FileUploadService
+    from .services.fine_tuning_service import FineTuningService
+    from ..infrastructure.ai.file_service import FileService
+    from ..infrastructure.ai.api_client import OpenAICompatibleClient
+    FILE_SERVICES_AVAILABLE = True
+except ImportError as e:
+    FILE_SERVICES_AVAILABLE = False
+    logger.warning(f"File management services not available: {e}")
 # UI imports - will be available after implementation
 # from ..presentation.ui.main_window import MainWindow
 # from ..presentation.ui.system_tray import EnhancedSystemTray
@@ -45,6 +57,12 @@ class AppCoordinator(QObject):
         self._settings_dialog = None  # Keep reference to prevent garbage collection
         self._initialized = False
         
+        # File management services
+        self._file_service = None
+        self._file_validation_service = None
+        self._file_upload_service = None
+        self._fine_tuning_service = None
+        
         logger.info("AppCoordinator created")
     
     def initialize(self) -> bool:
@@ -69,6 +87,9 @@ class AppCoordinator(QObject):
             
             # Initialize UI components (will be implemented)
             self._initialize_ui_components()
+            
+            # Initialize file management services
+            self._initialize_file_services()
             
             # Apply interface settings (opacity, always on top) immediately
             try:
@@ -154,6 +175,88 @@ class AppCoordinator(QObject):
             # Create placeholder components for testing
             self._system_tray = None
             self._main_window = None
+    
+    def _initialize_file_services(self):
+        """Initialize file management services."""
+        if not FILE_SERVICES_AVAILABLE:
+            logger.debug("File management services not available - skipping initialization")
+            return
+        
+        try:
+            # Initialize API client (this would need to be configured with actual credentials)
+            # For now, we'll create a placeholder
+            api_client = None
+            try:
+                # Try to get API configuration from settings
+                api_base_url = settings.get('ai.api_base_url', 'https://api.openai.com/v1')
+                api_key = settings.get('ai.api_key', '')
+                
+                if api_key:
+                    api_client = OpenAICompatibleClient(
+                        api_key=api_key,
+                        base_url=api_base_url
+                    )
+                    logger.info("OpenAI API client initialized")
+                else:
+                    logger.warning("No API key configured - file services will be limited")
+            except Exception as e:
+                logger.warning(f"Failed to initialize API client: {e}")
+            
+            # Initialize core file service
+            if api_client:
+                self._file_service = FileService(api_client)
+                logger.debug("File service initialized")
+            
+            # Initialize validation service
+            self._file_validation_service = FileValidationService()
+            logger.debug("File validation service initialized")
+            
+            # Initialize upload service
+            if self._file_service:
+                self._file_upload_service = FileUploadService(self._file_service, self._file_validation_service)
+                logger.debug("File upload service initialized")
+            
+            # Initialize fine-tuning service
+            if self._file_service and self._file_upload_service:
+                self._fine_tuning_service = FineTuningService(
+                    self._file_service,
+                    self._file_upload_service,
+                    self._file_validation_service
+                )
+                logger.debug("Fine-tuning service initialized")
+            
+            # Configure services with REPL widget if available
+            self._configure_repl_file_services()
+            
+            logger.info("File management services initialized successfully")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize file services: {e}")
+            self._file_service = None
+            self._file_validation_service = None
+            self._file_upload_service = None
+            self._fine_tuning_service = None
+    
+    def _configure_repl_file_services(self):
+        """Configure file services with the REPL widget."""
+        try:
+            if (self._main_window and hasattr(self._main_window, 'floating_repl') and 
+                self._main_window.floating_repl and hasattr(self._main_window.floating_repl, 'repl_widget')):
+                
+                repl_widget = self._main_window.floating_repl.repl_widget
+                
+                # Set file services on the REPL widget
+                repl_widget.set_file_services(
+                    file_service=self._file_service,
+                    upload_service=self._file_upload_service,
+                    fine_tuning_service=self._fine_tuning_service,
+                    validation_service=self._file_validation_service
+                )
+                
+                logger.debug("File services configured with REPL widget")
+                
+        except Exception as e:
+            logger.warning(f"Failed to configure REPL file services: {e}")
     
     def start_in_tray_mode(self):
         """Start the application in tray mode."""

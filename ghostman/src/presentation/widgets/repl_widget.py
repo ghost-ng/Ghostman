@@ -28,8 +28,8 @@ from PyQt6.QtWidgets import (
     QToolButton, QMenu, QProgressBar, QListWidget,
     QListWidgetItem, QApplication, QMessageBox, QDialog, QCheckBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread, QObject, QSize, pyqtSlot
-from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QTextCharFormat, QColor, QPalette, QIcon, QPixmap, QAction
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread, QObject, QSize, pyqtSlot, QUrl
+from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QTextCharFormat, QColor, QPalette, QIcon, QPixmap, QAction, QDragEnterEvent, QDropEvent
 
 # Import startup service for preamble
 from ...application.startup_service import startup_service
@@ -62,6 +62,18 @@ except Exception:  # pragma: no cover
     Message = None
     ConversationStatus = None
     MessageRole = None
+
+# File management imports
+try:
+    from .file_toolbar import FineTuningToolbar
+    from ...application.services.file_validation_service import FileValidationService
+    from ...application.services.file_upload_service import FileUploadService
+    from ...application.services.fine_tuning_service import FineTuningService
+    from ...infrastructure.ai.file_service import FileService
+    FILE_MANAGEMENT_AVAILABLE = True
+except ImportError as e:
+    FILE_MANAGEMENT_AVAILABLE = False
+    logger.warning(f"File management system not available: {e}")
 
 logger = logging.getLogger("ghostman.repl_widget")
 
@@ -650,6 +662,11 @@ class REPLWidget(QWidget):
     attach_toggle_requested = pyqtSignal(bool)
     pin_toggle_requested = pyqtSignal(bool)
     
+    # File management signals
+    files_uploaded = pyqtSignal(list)  # List of file IDs
+    vector_store_created = pyqtSignal(str, str)  # store_id, name
+    file_management_error = pyqtSignal(str, str)  # operation, error_message
+    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.command_history = []
@@ -683,6 +700,13 @@ class REPLWidget(QWidget):
         self.last_autosave_time = None
         self.autosave_enabled = True
         
+        # File management services
+        self.file_validation_service: Optional[FileValidationService] = None
+        self.file_upload_service: Optional[FileUploadService] = None
+        self.fine_tuning_service: Optional[FineTuningService] = None
+        self.file_service: Optional[FileService] = None
+        self.file_toolbar: Optional[FineTuningToolbar] = None
+        
         # Load from settings if available
         self._load_opacity_from_settings()
         
@@ -697,6 +721,9 @@ class REPLWidget(QWidget):
         self._update_component_themes()  # Apply theme to all components after UI init
         self._init_conversation_manager()
         
+        # Enable drag and drop for file uploads
+        self._init_drag_drop()
+        
         # Load conversations after UI is fully initialized
         QTimer.singleShot(100, self._load_conversations_deferred)
         
@@ -704,6 +731,136 @@ class REPLWidget(QWidget):
         QTimer.singleShot(200, self._load_window_dimensions)
         
         logger.info("Enhanced REPLWidget initialized with conversation management")
+    
+    def _init_drag_drop(self):
+        """Initialize drag and drop functionality for file uploads."""
+        self.setAcceptDrops(True)
+        logger.debug("Drag and drop functionality enabled for REPL widget")
+    
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        """Handle drag enter events for file uploads."""
+        if not FILE_MANAGEMENT_AVAILABLE:
+            event.ignore()
+            return
+            
+        # Check if the drag contains file URLs
+        if event.mimeData().hasUrls():
+            # Check if any of the URLs are valid file paths
+            valid_files = []
+            for url in event.mimeData().urls():
+                if url.isLocalFile():
+                    file_path = url.toLocalFile()
+                    if self._is_supported_file(file_path):
+                        valid_files.append(file_path)
+            
+            if valid_files:
+                event.acceptProposedAction()
+                self._show_drag_indicator(True)
+                logger.debug(f"Drag enter accepted - {len(valid_files)} valid files")
+            else:
+                event.ignore()
+        else:
+            event.ignore()
+    
+    def dragMoveEvent(self, event):
+        """Handle drag move events."""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+    
+    def dragLeaveEvent(self, event):
+        """Handle drag leave events."""
+        self._show_drag_indicator(False)
+        event.accept()
+    
+    def dropEvent(self, event: QDropEvent):
+        """Handle drop events for file uploads."""
+        self._show_drag_indicator(False)
+        
+        if not FILE_MANAGEMENT_AVAILABLE:
+            event.ignore()
+            return
+            
+        if not event.mimeData().hasUrls():
+            event.ignore()
+            return
+        
+        # Extract file paths from the drop
+        file_paths = []
+        for url in event.mimeData().urls():
+            if url.isLocalFile():
+                file_path = url.toLocalFile()
+                if self._is_supported_file(file_path):
+                    file_paths.append(file_path)
+        
+        if file_paths:
+            event.acceptProposedAction()
+            self._handle_dropped_files(file_paths)
+            logger.info(f"Files dropped: {len(file_paths)} files")
+        else:
+            event.ignore()
+            self.append_output("⚠ No supported files found in drop", "warning")
+    
+    def _is_supported_file(self, file_path: str) -> bool:
+        """Check if a file is supported for upload."""
+        try:
+            # Check file extension
+            import os
+            _, ext = os.path.splitext(file_path.lower())
+            
+            # Supported file extensions for AI processing
+            supported_extensions = {
+                '.txt', '.md', '.pdf', '.doc', '.docx', '.csv', 
+                '.json', '.jsonl', '.xml', '.html', '.py', '.js', 
+                '.ts', '.java', '.cpp', '.c', '.h', '.sql', '.yaml', 
+                '.yml', '.toml', '.ini', '.cfg'
+            }
+            
+            return ext in supported_extensions and os.path.isfile(file_path)
+        except Exception as e:
+            logger.warning(f"Error checking file support for {file_path}: {e}")
+            return False
+    
+    def _show_drag_indicator(self, show: bool):
+        """Show or hide drag-and-drop indicator."""
+        try:
+            if show:
+                # Show a visual indicator that files can be dropped
+                self.setStyleSheet(f"""
+                    {self.styleSheet()}
+                    QWidget#repl-root {{
+                        border: 2px dashed #4CAF50;
+                        background-color: rgba(76, 175, 80, 0.1);
+                    }}
+                """)
+                self.append_output("📁 Drop files here to upload...", "info")
+            else:
+                # Remove the drag indicator
+                self._apply_styles()  # Restore original styles
+        except Exception as e:
+            logger.warning(f"Error updating drag indicator: {e}")
+    
+    def _handle_dropped_files(self, file_paths: List[str]):
+        """Handle files that were dropped onto the widget."""
+        try:
+            if not self.file_upload_service or not self.file_toolbar:
+                # If file services aren't available, show helpful message
+                self.append_output("📁 File management not configured. Please check settings.", "warning")
+                return
+            
+            # Delegate to file toolbar for actual upload processing
+            self.file_toolbar.handle_file_drop(file_paths)
+            
+            # Show feedback to user
+            import os
+            file_names = [os.path.basename(path) for path in file_paths]
+            if len(file_names) == 1:
+                self.append_output(f"📁 Uploading file: {file_names[0]}", "info")
+            else:
+                self.append_output(f"📁 Uploading {len(file_names)} files: {', '.join(file_names[:3])}{'...' if len(file_names) > 3 else ''}", "info")
+                
+        except Exception as e:
+            logger.error(f"Error handling dropped files: {e}")
+            self.append_output(f"❌ Error processing dropped files: {str(e)}", "error")
     
     def _init_theme_system(self):
         """Initialize theme system connection."""
@@ -952,6 +1109,10 @@ class REPLWidget(QWidget):
             # Update main output display styling
             if hasattr(self, 'output_display'):
                 self._style_output_display()
+            
+            # Update file toolbar theme
+            if hasattr(self, 'file_toolbar') and self.file_toolbar:
+                self.file_toolbar.update_theme()
             
             # Ensure all layout components get theme updates
             self._update_layout_component_themes()
@@ -1685,6 +1846,140 @@ class REPLWidget(QWidget):
         
         parent_layout.addWidget(self.search_frame)
     
+    def _init_file_toolbar(self, parent_layout):
+        """Initialize file management toolbar."""
+        if not FILE_MANAGEMENT_AVAILABLE:
+            logger.debug("File management system not available - skipping file toolbar initialization")
+            return
+        
+        # Initialize services if they haven't been set yet
+        if not self.file_service:
+            logger.debug("File services not initialized - file toolbar will be created but not functional")
+            return
+        
+        try:
+            # Create file toolbar
+            self.file_toolbar = FineTuningToolbar(
+                upload_service=self.file_upload_service,
+                fine_tuning_service=self.fine_tuning_service,
+                validation_service=self.file_validation_service,
+                parent=self
+            )
+            
+            # Connect file toolbar signals to REPL signals
+            self.file_toolbar.files_uploaded.connect(self.files_uploaded.emit)
+            self.file_toolbar.vector_store_created.connect(self.vector_store_created.emit)
+            self.file_toolbar.error_occurred.connect(self.file_management_error.emit)
+            self.file_toolbar.status_updated.connect(self._on_file_status_updated)
+            
+            # Add to layout
+            parent_layout.addWidget(self.file_toolbar)
+            
+            logger.info("File toolbar initialized successfully")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize file toolbar: {e}")
+            self.file_toolbar = None
+    
+    def _on_file_status_updated(self, status_message: str):
+        """Handle file operation status updates."""
+        # Display status in the output area or status bar
+        logger.info(f"File operation status: {status_message}")
+        # Could also update a status label or show in the output display
+        
+        # Optional: Display status in the REPL output
+        try:
+            if hasattr(self, 'output_display') and self.output_display:
+                # Add a subtle status message to the output
+                timestamp = datetime.now().strftime("%H:%M:%S")
+                status_html = f'<p style="color: #888; font-size: 10px; margin: 2px 0;">[{timestamp}] {status_message}</p>'
+                self.output_display.insertHtml(status_html)
+        except Exception as e:
+            logger.debug(f"Failed to display file status in output: {e}")
+    
+    def set_file_services(self, 
+                         file_service: Optional['FileService'] = None,
+                         upload_service: Optional['FileUploadService'] = None,
+                         fine_tuning_service: Optional['FineTuningService'] = None,
+                         validation_service: Optional['FileValidationService'] = None):
+        """
+        Set file management services for the REPL widget.
+        
+        Args:
+            file_service: Core file service for API operations
+            upload_service: Service for handling file uploads
+            fine_tuning_service: Service for vector store management
+            validation_service: Service for file validation
+        """
+        if not FILE_MANAGEMENT_AVAILABLE:
+            logger.warning("File management system not available - services cannot be set")
+            return
+        
+        self.file_service = file_service
+        self.file_upload_service = upload_service
+        self.fine_tuning_service = fine_tuning_service
+        self.file_validation_service = validation_service
+        
+        # Initialize file toolbar if services are now available
+        if (self.file_service and self.file_upload_service and 
+            self.fine_tuning_service and self.file_validation_service):
+            
+            # If the UI is already initialized, add the toolbar
+            if hasattr(self, 'output_display') and not self.file_toolbar:
+                # Find the main layout and reinitialize file toolbar
+                main_layout = self.layout()
+                if main_layout:
+                    # Remove the file toolbar placeholder and add the real one
+                    self._init_file_toolbar(main_layout)
+            
+            logger.info("File management services configured successfully")
+        else:
+            logger.debug("File management services partially configured - waiting for all services")
+    
+    def toggle_file_toolbar(self):
+        """Toggle the visibility of the file toolbar."""
+        if self.file_toolbar:
+            self.file_toolbar.toggle_toolbar()
+            logger.debug(f"File toolbar toggled: {'visible' if self.file_toolbar.isVisible() else 'hidden'}")
+        else:
+            logger.warning("File toolbar not available - cannot toggle")
+    
+    def show_file_toolbar(self):
+        """Show the file toolbar."""
+        if self.file_toolbar:
+            self.file_toolbar.show_toolbar()
+            logger.debug("File toolbar shown")
+        else:
+            logger.warning("File toolbar not available - cannot show")
+    
+    def hide_file_toolbar(self):
+        """Hide the file toolbar."""
+        if self.file_toolbar:
+            self.file_toolbar.hide_toolbar()
+            logger.debug("File toolbar hidden")
+        else:
+            logger.warning("File toolbar not available - cannot hide")
+    
+    def get_file_services_status(self) -> Dict[str, Any]:
+        """Get status of file management services."""
+        status = {
+            'file_management_available': FILE_MANAGEMENT_AVAILABLE,
+            'services_configured': False,
+            'toolbar_available': self.file_toolbar is not None,
+            'toolbar_visible': False
+        }
+        
+        if self.file_toolbar:
+            status['toolbar_visible'] = self.file_toolbar.isVisible()
+            status.update(self.file_toolbar.get_status())
+        
+        # Check if all services are configured
+        if (self.file_service and self.file_upload_service and 
+            self.fine_tuning_service and self.file_validation_service):
+            status['services_configured'] = True
+        
+        return status
+    
     def _on_attach_toggle_clicked(self):
         """Emit attach toggle request with current state and update tooltip/icon."""
         attached = self.attach_btn.isChecked()
@@ -2398,6 +2693,9 @@ class REPLWidget(QWidget):
         
         # In-conversation search bar (initially hidden)
         self._init_search_bar(layout)
+        
+        # File toolbar (initially hidden)
+        self._init_file_toolbar(layout)
         
         # Input area with background styling for prompt
         input_layout = QHBoxLayout()
