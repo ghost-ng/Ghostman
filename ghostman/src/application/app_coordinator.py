@@ -597,8 +597,10 @@ class AppCoordinator(QObject):
             logger.info(f"  🎛️  {key}: {value}")
         
         if not self._main_window:
-            logger.warning("⚠  No main window available - interface settings skipped")
-            return
+            logger.error("⚠  No main window available - interface settings cannot be applied")
+            logger.error("This indicates a critical initialization failure - shutting down")
+            self.shutdown()
+            return False
         
         settings_processed = 0
         

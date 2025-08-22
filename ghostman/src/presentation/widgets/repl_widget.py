@@ -1651,7 +1651,7 @@ class REPLWidget(QWidget):
         self.search_frame.setVisible(False)
         # Use theme-based styling or opaque fallback
         if self.theme_manager and THEME_SYSTEM_AVAILABLE:
-            from ..ui.themes.style_templates import StyleTemplates
+            from ...ui.themes.style_templates import StyleTemplates
             self.search_frame.setStyleSheet(StyleTemplates.get_search_frame_style(self.theme_manager.current_theme))
         else:
             self.search_frame.setStyleSheet(f"""
@@ -1957,10 +1957,10 @@ class REPLWidget(QWidget):
         # Apply theme-aware styling for better visibility (all themes)
         special_colors = {}
         if colors:
-            # Use a darker/more contrasted approach for all themes
+            # Use high-contrast background calculation to ensure button visibility
             special_colors = {
                 "text": colors.text_primary,  # Use primary text color
-                "background": colors.background_tertiary,  # Use tertiary background for better contrast
+                "background": self._get_high_contrast_button_background(colors),  # Use calculated high-contrast background
                 "hover": colors.interactive_hover,  # Use theme's hover color
                 "active": colors.interactive_active  # Use theme's active color
             }
@@ -2010,6 +2010,86 @@ class REPLWidget(QWidget):
             button, colors, "tool", "icon", "normal", special_colors, emoji_font_stack
         )
 
+    def _get_high_contrast_button_background(self, colors):
+        """
+        Calculate the best high-contrast background color for buttons against the titlebar.
+        
+        This ensures buttons are always visible regardless of theme or opacity settings.
+        Returns the best background color string (hex or rgba).
+        """
+        if not colors:
+            return "#555555"  # Fallback if no theme colors available
+        
+        def calculate_contrast_ratio(color1_hex: str, color2_hex: str) -> float:
+            """Calculate WCAG contrast ratio between two hex colors."""
+            try:
+                from PyQt6.QtGui import QColor
+                qcolor1 = QColor(color1_hex)
+                qcolor2 = QColor(color2_hex)
+                
+                def get_luminance(qcolor):
+                    r, g, b = qcolor.red() / 255.0, qcolor.green() / 255.0, qcolor.blue() / 255.0
+                    r = r / 12.92 if r <= 0.03928 else pow((r + 0.055) / 1.055, 2.4)
+                    g = g / 12.92 if g <= 0.03928 else pow((g + 0.055) / 1.055, 2.4)
+                    b = b / 12.92 if b <= 0.03928 else pow((b + 0.055) / 1.055, 2.4)
+                    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+                
+                lum1 = get_luminance(qcolor1)
+                lum2 = get_luminance(qcolor2)
+                
+                if lum1 < lum2:
+                    lum1, lum2 = lum2, lum1
+                
+                return (lum1 + 0.05) / (lum2 + 0.05)
+            except:
+                return 1.0
+        
+        # Test against actual titlebar background (background_tertiary)
+        titlebar_bg = colors.background_tertiary
+        candidates = [
+            colors.interactive_normal,    # Standard interactive background
+            colors.border_primary,        # Border color (often good contrast)
+            colors.background_primary,    # Primary background (darkest/lightest)
+            "rgba(255, 255, 255, 0.15)", # Light semi-transparent for dark themes
+            "rgba(0, 0, 0, 0.2)",        # Dark semi-transparent for light themes
+        ]
+        
+        best_bg = colors.interactive_normal
+        best_contrast = 0
+        
+        for candidate in candidates:
+            try:
+                # For RGBA colors, extract RGB values for contrast calculation
+                test_color = candidate
+                if "rgba" in candidate.lower():
+                    # Extract RGB values from rgba(r,g,b,a) format
+                    rgba_parts = candidate.lower().replace("rgba(", "").replace(")", "").split(",")
+                    if len(rgba_parts) >= 3:
+                        r, g, b = int(rgba_parts[0].strip()), int(rgba_parts[1].strip()), int(rgba_parts[2].strip())
+                        test_color = f"#{r:02x}{g:02x}{b:02x}"
+                contrast = calculate_contrast_ratio(test_color, titlebar_bg)
+                if contrast > best_contrast:
+                    best_contrast = contrast
+                    best_bg = candidate
+            except:
+                continue
+        
+        # If still poor contrast (< 3.0), force a high-contrast solution
+        if best_contrast < 3.0:
+            try:
+                from PyQt6.QtGui import QColor
+                bg_color = QColor(colors.background_tertiary)
+                luminance = (0.299 * bg_color.red() + 0.587 * bg_color.green() + 0.114 * bg_color.blue()) / 255
+                
+                if luminance < 0.5:  # Dark theme
+                    best_bg = "rgba(255, 255, 255, 0.2)"  # Light semi-transparent
+                else:  # Light theme
+                    best_bg = "rgba(0, 0, 0, 0.15)"       # Dark semi-transparent
+            except:
+                best_bg = colors.interactive_normal
+        
+        return best_bg
+
     def _style_title_button(self, button, add_right_padding: bool = False):
         """
         Apply unified styling to title bar buttons.
@@ -2028,19 +2108,189 @@ class REPLWidget(QWidget):
         
         # Handle special padding for plus button
         if add_right_padding:
-            # Use the dedicated plus button styling method
-            ButtonStyleManager.apply_plus_button_style(button, colors, emoji_font_stack)
+            # Apply the same improved contrast calculation for plus button
+            if isinstance(button, QToolButton) and colors:
+                # Calculate improved colors (same logic as above)
+                def calculate_contrast_ratio(color1_hex: str, color2_hex: str) -> float:
+                    """Calculate WCAG contrast ratio between two hex colors."""
+                    try:
+                        from PyQt6.QtGui import QColor
+                        qcolor1 = QColor(color1_hex)
+                        qcolor2 = QColor(color2_hex)
+                        
+                        def get_luminance(qcolor):
+                            r, g, b = qcolor.red() / 255.0, qcolor.green() / 255.0, qcolor.blue() / 255.0
+                            r = r / 12.92 if r <= 0.03928 else pow((r + 0.055) / 1.055, 2.4)
+                            g = g / 12.92 if g <= 0.03928 else pow((g + 0.055) / 1.055, 2.4)
+                            b = b / 12.92 if b <= 0.03928 else pow((b + 0.055) / 1.055, 2.4)
+                            return 0.2126 * r + 0.7152 * g + 0.0722 * b
+                        
+                        lum1 = get_luminance(qcolor1)
+                        lum2 = get_luminance(qcolor2)
+                        
+                        if lum1 < lum2:
+                            lum1, lum2 = lum2, lum1
+                        
+                        return (lum1 + 0.05) / (lum2 + 0.05)
+                    except:
+                        return 1.0  # Fallback for any errors
+                
+                # Apply improved contrast calculation for plus button
+                titlebar_bg = colors.background_tertiary
+                candidates = [
+                    colors.interactive_normal,
+                    colors.border_primary,
+                    colors.background_primary,
+                    "rgba(255, 255, 255, 0.15)",
+                    "rgba(0, 0, 0, 0.2)",
+                ]
+                
+                best_bg = colors.interactive_normal
+                best_contrast = 0
+                
+                for candidate in candidates:
+                    try:
+                        # For RGBA colors, extract RGB values for contrast calculation
+                        test_color = candidate
+                        if "rgba" in candidate.lower():
+                            # Extract RGB values from rgba(r,g,b,a) format
+                            rgba_parts = candidate.lower().replace("rgba(", "").replace(")", "").split(",")
+                            if len(rgba_parts) >= 3:
+                                r, g, b = int(rgba_parts[0].strip()), int(rgba_parts[1].strip()), int(rgba_parts[2].strip())
+                                test_color = f"#{r:02x}{g:02x}{b:02x}"
+                        contrast = calculate_contrast_ratio(test_color, titlebar_bg)
+                        if contrast > best_contrast:
+                            best_contrast = contrast
+                            best_bg = candidate
+                    except:
+                        continue
+                
+                # Force high-contrast if needed
+                if best_contrast < 3.0:
+                    try:
+                        from PyQt6.QtGui import QColor
+                        bg_color = QColor(colors.background_tertiary)
+                        luminance = (0.299 * bg_color.red() + 0.587 * bg_color.green() + 0.114 * bg_color.blue()) / 255
+                        
+                        if luminance < 0.5:  # Dark theme
+                            best_bg = "rgba(255, 255, 255, 0.2)"
+                        else:  # Light theme  
+                            best_bg = "rgba(0, 0, 0, 0.1)"
+                    except:
+                        best_bg = colors.interactive_normal
+                
+                # Create improved colors ColorSystem for plus button
+                from types import SimpleNamespace
+                improved_colors = SimpleNamespace()
+                for attr in dir(colors):
+                    if not attr.startswith('_'):
+                        setattr(improved_colors, attr, getattr(colors, attr))
+                
+                # Override with improved background
+                improved_colors.interactive_normal = best_bg
+                improved_colors.interactive_hover = "rgba(255, 255, 255, 0.3)" if best_bg.startswith("rgba(255") else colors.interactive_hover
+                improved_colors.interactive_active = "rgba(255, 255, 255, 0.4)" if best_bg.startswith("rgba(255") else colors.interactive_active
+                
+                ButtonStyleManager.apply_plus_button_style(button, improved_colors, emoji_font_stack)
+            else:
+                # Fallback to original method
+                ButtonStyleManager.apply_plus_button_style(button, colors, emoji_font_stack)
         else:
             # Apply theme-aware styling for better visibility
             # Only apply special colors to QToolButtons (icon buttons), NOT QPushButtons (minimize)
             special_colors = {}
             if isinstance(button, QToolButton) and colors:
-                # Use a darker/more contrasted approach for all themes
+                # IMPROVED: Calculate the best background color for maximum contrast
+                # against the titlebar background (background_secondary)
+                
+                def calculate_contrast_ratio(color1_hex: str, color2_hex: str) -> float:
+                    """Calculate WCAG contrast ratio between two hex colors."""
+                    try:
+                        from PyQt6.QtGui import QColor
+                        qcolor1 = QColor(color1_hex)
+                        qcolor2 = QColor(color2_hex)
+                        
+                        def get_luminance(qcolor):
+                            r, g, b = qcolor.red() / 255.0, qcolor.green() / 255.0, qcolor.blue() / 255.0
+                            r = r / 12.92 if r <= 0.03928 else pow((r + 0.055) / 1.055, 2.4)
+                            g = g / 12.92 if g <= 0.03928 else pow((g + 0.055) / 1.055, 2.4)
+                            b = b / 12.92 if b <= 0.03928 else pow((b + 0.055) / 1.055, 2.4)
+                            return 0.2126 * r + 0.7152 * g + 0.0722 * b
+                        
+                        lum1 = get_luminance(qcolor1)
+                        lum2 = get_luminance(qcolor2)
+                        
+                        if lum1 < lum2:
+                            lum1, lum2 = lum2, lum1
+                        
+                        return (lum1 + 0.05) / (lum2 + 0.05)
+                    except:
+                        return 1.0  # Fallback for any errors
+                
+                # Try different background options and pick the one with best contrast
+                titlebar_bg = colors.background_tertiary
+                candidates = [
+                    colors.interactive_normal,    # Standard interactive background
+                    colors.border_primary,        # Border color (often good contrast)
+                    colors.background_primary,    # Primary background (darkest/lightest)
+                    colors.primary + "40",        # Primary with 25% opacity
+                    colors.secondary + "40",      # Secondary with 25% opacity
+                    "rgba(255, 255, 255, 0.15)", # Light semi-transparent for dark themes
+                    "rgba(0, 0, 0, 0.2)",        # Dark semi-transparent for light themes
+                ]
+                
+                best_bg = colors.interactive_normal  # fallback
+                best_contrast = 0
+                
+                for candidate in candidates:
+                    try:
+                        # For RGBA colors, extract RGB values for contrast calculation
+                        test_color = candidate
+                        if "rgba" in candidate.lower():
+                            # Extract RGB values from rgba(r,g,b,a) format
+                            rgba_parts = candidate.lower().replace("rgba(", "").replace(")", "").split(",")
+                            if len(rgba_parts) >= 3:
+                                r, g, b = int(rgba_parts[0].strip()), int(rgba_parts[1].strip()), int(rgba_parts[2].strip())
+                                test_color = f"#{r:02x}{g:02x}{b:02x}"
+                        contrast = calculate_contrast_ratio(test_color, titlebar_bg)
+                        if contrast > best_contrast:
+                            best_contrast = contrast
+                            best_bg = candidate
+                    except:
+                        continue
+                
+                # If still poor contrast (< 3.0), force a high-contrast solution
+                if best_contrast < 3.0:
+                    # Determine if theme is dark or light based on background luminance
+                    try:
+                        from PyQt6.QtGui import QColor
+                        bg_color = QColor(colors.background_tertiary)
+                        luminance = (0.299 * bg_color.red() + 0.587 * bg_color.green() + 0.114 * bg_color.blue()) / 255
+                        
+                        if luminance < 0.5:  # Dark theme
+                            best_bg = "rgba(255, 255, 255, 0.2)"  # Light semi-transparent
+                            hover_bg = "rgba(255, 255, 255, 0.3)"
+                            active_bg = "rgba(255, 255, 255, 0.4)"
+                        else:  # Light theme
+                            best_bg = "rgba(0, 0, 0, 0.1)"       # Dark semi-transparent
+                            hover_bg = "rgba(0, 0, 0, 0.15)"
+                            active_bg = "rgba(0, 0, 0, 0.2)"
+                    except:
+                        # Ultimate fallback
+                        best_bg = colors.interactive_normal
+                        hover_bg = colors.interactive_hover
+                        active_bg = colors.interactive_active
+                else:
+                    # Good contrast found, create proportional hover/active colors
+                    hover_bg = colors.interactive_hover
+                    active_bg = colors.interactive_active
+                
                 special_colors = {
                     "text": colors.text_primary,  # Use primary text color
-                    "background": colors.background_tertiary,  # Use tertiary background for better contrast
-                    "hover": colors.interactive_hover,  # Use theme's hover color
-                    "active": colors.interactive_active  # Use theme's active color
+                    "background": best_bg,        # Use calculated high-contrast background
+                    "hover": hover_bg,           # Use theme's hover color or calculated
+                    "active": active_bg,         # Use theme's active color or calculated
+                    "border": colors.border_primary  # Add subtle border for extra definition
                 }
             
             # Use standard unified styling with special colors if needed
@@ -2111,10 +2361,10 @@ class REPLWidget(QWidget):
                 state = "normal"
                 special_colors = {}
                 if colors:
-                    # Use a darker/more contrasted approach for all themes
+                    # Use high-contrast background calculation to ensure button visibility
                     special_colors = {
                         "text": colors.text_primary,  # Use primary text color
-                        "background": colors.background_tertiary,  # Use tertiary background for better contrast
+                        "background": self._get_high_contrast_button_background(colors),  # Use calculated high-contrast background
                         "hover": colors.interactive_hover,  # Use theme's hover color
                         "active": colors.interactive_active  # Use theme's active color
                     }
@@ -2153,10 +2403,10 @@ class REPLWidget(QWidget):
                 state = "normal"
                 special_colors = {}
                 if colors:
-                    # Use a darker/more contrasted approach for all themes
+                    # Use high-contrast background calculation to ensure button visibility
                     special_colors = {
                         "text": colors.text_primary,  # Use primary text color
-                        "background": colors.background_tertiary,  # Use tertiary background for better contrast
+                        "background": self._get_high_contrast_button_background(colors),  # Use calculated high-contrast background
                         "hover": colors.interactive_hover,  # Use theme's hover color
                         "active": colors.interactive_active  # Use theme's active color
                     }
