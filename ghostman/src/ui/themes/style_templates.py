@@ -366,26 +366,26 @@ class StyleTemplates:
     
     @staticmethod
     def get_repl_panel_style(colors: ColorSystem, opacity: float = 0.9) -> str:
-        """Style for REPL panel with transparency support."""
-        # Use original hex color when fully opaque, rgba when transparent
-        bg_color = colors.background_secondary
-        if opacity >= 1.0:
-            # Fully opaque - use original hex color
-            panel_bg = bg_color
-        elif bg_color.startswith('#'):
-            # Transparent - convert to rgba
-            r = int(bg_color[1:3], 16)
-            g = int(bg_color[3:5], 16)
-            b = int(bg_color[5:7], 16)
-            panel_bg = f"rgba({r}, {g}, {b}, {opacity})"
+        """Style for REPL panel with TRUE transparency support."""
+        # For true transparency, don't set any background on root - let it stay transparent
+        if opacity >= 0.99:
+            # Fully opaque - use original hex color for root
+            panel_bg = colors.background_secondary
+            border_color = colors.border_primary
         else:
-            panel_bg = bg_color
+            # TRUE TRANSPARENCY - no background, no border
+            return f"""
+            #repl-root {{
+                background-color: transparent;
+                border: none;
+            }}
+            """
         
         return f"""
         #repl-root {{
             background-color: {panel_bg};
             border-radius: 10px 10px 0px 0px;
-            border: 1px solid {colors.border_primary};
+            border: 1px solid {border_color};
         }}
         """
     

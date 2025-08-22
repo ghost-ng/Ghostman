@@ -570,16 +570,25 @@ class AppCoordinator(QObject):
     
     def _on_opacity_preview(self, opacity: float):
         """Handle live opacity preview changes from settings dialog."""
-        logger.debug(f"Live opacity preview: {opacity:.2f}")
+        logger.info(f"🎨 Live opacity preview triggered: {opacity:.2f}")
         
-        # Apply immediate preview to floating REPL if available
+        # Apply immediate preview to floating REPL - make it visible if needed
         if (self._main_window and 
             hasattr(self._main_window, 'floating_repl') and 
-            self._main_window.floating_repl and
-            self._main_window.floating_repl.isVisible()):
+            self._main_window.floating_repl):
             
+            # Show the REPL if it's not visible so user can see the opacity change
+            if not self._main_window.floating_repl.isVisible():
+                logger.info("🎨 Making floating REPL visible for opacity preview")
+                self._main_window.floating_repl.show()
+                self._main_window.floating_repl.raise_()
+                self._main_window.floating_repl.activateWindow()
+            
+            # Apply the opacity
             self._main_window.floating_repl.set_panel_opacity(opacity)
-            logger.debug(f"Applied live opacity preview to REPL: {opacity:.2f}")
+            logger.info(f"✓ Applied live opacity preview to REPL: {opacity:.2f}")
+        else:
+            logger.warning("⚠  No floating REPL available for opacity preview")
     
     def _apply_interface_settings(self, interface_config: dict):
         """Apply interface settings to the running UI."""

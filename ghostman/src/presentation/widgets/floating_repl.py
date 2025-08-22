@@ -227,6 +227,9 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
         self.setWindowFlags(base_flags)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         
+        # Set transparent background for the main window to allow child transparency
+        self.setStyleSheet("FloatingREPLWindow { background-color: transparent; }")
+        
         # Enable mouse tracking for cursor changes without button press
         self.setMouseTracking(True)
         

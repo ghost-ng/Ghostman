@@ -691,6 +691,12 @@ class REPLWidget(QWidget):
         
         # Assign object name so selective stylesheet rules don't leak globally
         self.setObjectName("repl-root")
+        
+        # Enable transparency support for the widget
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        
+        # Set transparent background like in working minimal test
+        self.setStyleSheet("REPLWidget { background-color: transparent; }")
 
         self._init_ui()
         self._apply_styles()
@@ -828,15 +834,32 @@ class REPLWidget(QWidget):
             logger.warning(f"Failed to style command input: {e}")
     
     def _style_output_display(self):
-        """Apply theme-aware styling to the output display."""
+        """Apply theme-aware styling to the output display with TRUE transparency support."""
         if not (self.theme_manager and THEME_SYSTEM_AVAILABLE):
             return
         
         try:
             colors = self.theme_manager.current_theme
+            
+            # Apply TRUE transparency to background
+            alpha = max(0.0, min(1.0, self._panel_opacity))
+            if alpha >= 0.99:
+                # Nearly/fully opaque - use original hex color
+                bg_color = colors.background_primary
+            else:
+                # TRUE TRANSPARENCY - use rgba with actual transparency
+                if colors.background_primary.startswith('#'):
+                    r = int(colors.background_primary[1:3], 16)
+                    g = int(colors.background_primary[3:5], 16)
+                    b = int(colors.background_primary[5:7], 16)
+                    bg_color = f"rgba({r}, {g}, {b}, {alpha:.3f})"
+                else:
+                    # Fallback for non-hex colors
+                    bg_color = f"rgba(30, 30, 30, {alpha:.3f})"
+            
             self.output_display.setStyleSheet(f"""
                 QTextEdit {{
-                    background-color: {colors.background_primary};
+                    background-color: {bg_color};
                     color: {colors.text_primary};
                     border: none;
                     selection-background-color: {colors.primary};
@@ -923,8 +946,19 @@ class REPLWidget(QWidget):
             if hasattr(self, 'summary_notification'):
                 self.summary_notification.setStyleSheet(StyleTemplates.get_label_style(colors, "success"))
             
+            # Update main output display styling with current opacity
+            if hasattr(self, 'output_display'):
+                self._style_output_display()
+            
+            # Update main input field styling
+            if hasattr(self, 'command_input'):
+                self._style_command_input()
+            
             # Update all QToolButton widgets with new theme
             self._update_all_tool_buttons()
+            
+            # Re-apply search button size constraints after theme styling
+            self._reapply_search_button_sizing()
             
             # Update all icon buttons to match new theme variant (dark/lite)
             if hasattr(self, 'title_help_btn'):
@@ -1650,11 +1684,40 @@ class REPLWidget(QWidget):
         close_search_btn.clicked.connect(self._close_search)
         search_layout.addWidget(close_search_btn)
         
-        # Style search buttons with unified ButtonStyleManager
+        # Style search buttons using "icon" size for compactness
         colors = self.theme_manager.current_theme if self.theme_manager and THEME_SYSTEM_AVAILABLE else None
-        ButtonStyleManager.apply_unified_button_style(self.search_prev_btn, colors, "push", "small")
-        ButtonStyleManager.apply_unified_button_style(self.search_next_btn, colors, "push", "small")
-        ButtonStyleManager.apply_unified_button_style(close_search_btn, colors, "push", "small")
+        ButtonStyleManager.apply_unified_button_style(self.search_prev_btn, colors, "push", "icon")
+        ButtonStyleManager.apply_unified_button_style(self.search_next_btn, colors, "push", "icon")
+        ButtonStyleManager.apply_unified_button_style(close_search_btn, colors, "push", "icon")
+        
+        # Override with compact size constraints to ensure all buttons fit on one row  
+        compact_size = QSize(24, 24)
+        for btn in [self.search_prev_btn, self.search_next_btn, close_search_btn]:
+            btn.setMinimumSize(compact_size)
+            btn.setMaximumSize(compact_size)
+            btn.resize(compact_size)
+        
+        # Apply additional CSS size constraints to ensure truly compact appearance
+        compact_override = """
+            QPushButton {
+                min-width: 24px !important;
+                max-width: 24px !important;
+                min-height: 24px !important;
+                max-height: 24px !important;
+                width: 24px !important;
+                height: 24px !important;
+                margin: 0px;
+                padding: 2px;
+                font-size: 11px;
+            }
+        """
+        # Apply the override after the main styling
+        self.search_prev_btn.setStyleSheet(self.search_prev_btn.styleSheet() + compact_override)
+        self.search_next_btn.setStyleSheet(self.search_next_btn.styleSheet() + compact_override)
+        close_search_btn.setStyleSheet(close_search_btn.styleSheet() + compact_override)
+        
+        # Store close button reference for theme changes
+        self._search_close_btn = close_search_btn
         
         # Style regex checkbox
         self.regex_checkbox.setStyleSheet("""
@@ -1689,6 +1752,42 @@ class REPLWidget(QWidget):
         self.search_debounce_ms = 300  # Faster debounce for in-conversation search
         
         parent_layout.addWidget(self.search_frame)
+    
+    def _reapply_search_button_sizing(self):
+        """Re-apply compact size constraints to search buttons after theme changes."""
+        try:
+            if (hasattr(self, 'search_prev_btn') and hasattr(self, 'search_next_btn')):
+                
+                # Re-apply compact size constraints
+                compact_size = QSize(24, 24)
+                buttons_to_resize = [self.search_prev_btn, self.search_next_btn]
+                if hasattr(self, '_search_close_btn') and self._search_close_btn:
+                    buttons_to_resize.append(self._search_close_btn)
+                
+                for btn in buttons_to_resize:
+                    btn.setMinimumSize(compact_size)
+                    btn.setMaximumSize(compact_size)
+                    btn.resize(compact_size)
+                    
+                    # Re-apply CSS override
+                    compact_override = """
+                        QPushButton {
+                            min-width: 24px !important;
+                            max-width: 24px !important;
+                            min-height: 24px !important;
+                            max-height: 24px !important;
+                            width: 24px !important;
+                            height: 24px !important;
+                            margin: 0px;
+                            padding: 2px;
+                            font-size: 11px;
+                        }
+                    """
+                    btn.setStyleSheet(btn.styleSheet() + compact_override)
+                
+                logger.debug("✓ Re-applied search button size constraints after theme change")
+        except Exception as e:
+            logger.warning(f"Failed to re-apply search button sizing: {e}")
     
     def _on_attach_toggle_clicked(self):
         """Emit attach toggle request with current state and update tooltip/icon."""
@@ -2552,8 +2651,16 @@ class REPLWidget(QWidget):
         """Apply legacy hardcoded styles as fallback."""
         # Clamp opacity
         alpha = max(0.0, min(1.0, self._panel_opacity))
-        panel_bg = f"rgba(30, 30, 30, {alpha:.3f})"
-        # Use the same alpha for text areas - no additional reduction
+        
+        # For true transparency, make root transparent when opacity < 1
+        if alpha >= 0.99:
+            panel_bg = "rgba(30, 30, 30, 1.0)"
+            border_style = "border-radius: 10px 10px 0px 0px;"
+        else:
+            panel_bg = "transparent"
+            border_style = "border: none;"
+            
+        # Use rgba for child elements to control actual opacity
         textedit_bg = f"rgba(20, 20, 20, {alpha:.3f})"
         lineedit_bg = f"rgba(40, 40, 40, {alpha:.3f})"
         
@@ -2562,7 +2669,7 @@ class REPLWidget(QWidget):
         logger.debug(f"  📝 Text area background: {textedit_bg}")
         logger.debug(f"  ⌨️  Input background: {lineedit_bg}")
         # Use simple string formatting to avoid CSS syntax issues
-        root_style = f"#repl-root {{ background-color: {panel_bg}; border-radius: 10px 10px 0px 0px; }}"
+        root_style = f"#repl-root {{ background-color: {panel_bg}; {border_style} }}"
         textedit_fallback = f"#repl-root QTextEdit {{ background-color: {textedit_bg}; color: #f0f0f0; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 5px; padding: 5px; }}"
         lineedit_fallback = f"#repl-root QLineEdit {{ background-color: {lineedit_bg}; color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 3px; padding: 5px; }}"
         lineedit_focus_fallback = "#repl-root QLineEdit:focus { border: 1px solid #4CAF50; }"
@@ -2591,6 +2698,11 @@ class REPLWidget(QWidget):
         logger.info(f"🎨 Applying panel opacity: {old_val:.3f} -> {new_val:.3f}")
         self._panel_opacity = new_val
         self._apply_styles()
+        
+        # Also update the output display style with new opacity
+        if hasattr(self, 'output_display'):
+            self._style_output_display()
+            
         logger.info(f"✓ REPL panel opacity applied successfully: {new_val:.3f}")
     
     def refresh_fonts(self):
@@ -2656,10 +2768,21 @@ class REPLWidget(QWidget):
                 # Create comprehensive color updates for inline styled text
                 self._update_inline_text_colors(colors)
                 
-                # Force a complete refresh of the widget
+                # Force a complete refresh of the widget with opacity support
+                alpha = max(0.0, min(1.0, self._panel_opacity))
+                if alpha >= 1.0:
+                    bg_color = colors.background_primary
+                elif colors.background_primary.startswith('#'):
+                    r = int(colors.background_primary[1:3], 16)
+                    g = int(colors.background_primary[3:5], 16)
+                    b = int(colors.background_primary[5:7], 16)
+                    bg_color = f"rgba({r}, {g}, {b}, {alpha:.3f})"
+                else:
+                    bg_color = colors.background_primary
+                    
                 self.output_display.setStyleSheet(f"""
                     QTextEdit {{
-                        background-color: {colors.background_primary};
+                        background-color: {bg_color};
                         color: {colors.text_primary};
                         border: none;
                         selection-background-color: {colors.primary};
