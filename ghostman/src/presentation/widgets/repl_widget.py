@@ -1181,7 +1181,6 @@ class REPLWidget(QWidget):
                         border-style: none !important;
                         border-color: transparent !important;
                         outline: none !important;
-                        box-shadow: none !important;
                         padding: 0px;
                         font-size: 14px;
                     }}
@@ -1484,7 +1483,6 @@ class REPLWidget(QWidget):
                     border-style: none !important;
                     border-color: transparent !important;
                     outline: none !important;
-                    box-shadow: none !important;
                     padding: 4px 6px;
                     border-radius: 3px;
                     font-size: 11px;
@@ -1494,18 +1492,15 @@ class REPLWidget(QWidget):
                 QLineEdit:focus {{
                     border: none !important;
                     outline: none !important;
-                    box-shadow: none !important;
                     background-color: {colors.background_tertiary};
                 }}
                 QLineEdit:hover {{
                     border: none !important;
                     outline: none !important;
-                    box-shadow: none !important;
                 }}
                 QLineEdit:selected {{
                     border: none !important;
                     outline: none !important;
-                    box-shadow: none !important;
                 }}
             """
         else:
@@ -1519,7 +1514,6 @@ class REPLWidget(QWidget):
                     border-style: none !important;
                     border-color: transparent !important;
                     outline: none !important;
-                    box-shadow: none !important;
                     padding: 4px 6px;
                     border-radius: 3px;
                     font-size: 11px;
@@ -1529,18 +1523,15 @@ class REPLWidget(QWidget):
                 QLineEdit:focus {{
                     border: none !important;
                     outline: none !important;
-                    box-shadow: none !important;
                     background-color: rgba(40, 40, 40, 1.0);
                 }}
                 QLineEdit:hover {{
                     border: none !important;
                     outline: none !important;
-                    box-shadow: none !important;
                 }}
                 QLineEdit:selected {{
                     border: none !important;
                     outline: none !important;
-                    box-shadow: none !important;
                 }}
             """
     
@@ -1950,7 +1941,6 @@ class REPLWidget(QWidget):
                     border-style: none !important;
                     border-color: transparent !important;
                     outline: none !important;
-                    box-shadow: none !important;
                     border-radius: 4px;
                     margin: 2px;
                 }}
@@ -1977,7 +1967,6 @@ class REPLWidget(QWidget):
                     border-style: none !important;
                     border-color: transparent !important;
                     outline: none !important;
-                    box-shadow: none !important;
                     padding: 0px;
                     font-size: 14px;
                 }}
@@ -1993,7 +1982,6 @@ class REPLWidget(QWidget):
                     border-style: none !important;
                     border-color: transparent !important;
                     outline: none !important;
-                    box-shadow: none !important;
                     padding: 0px;
                     font-size: 14px;
                 }
