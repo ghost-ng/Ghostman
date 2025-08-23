@@ -93,7 +93,14 @@
       "WebFetch(domain:platform.openai.com)",
       "WebFetch(domain:cookbook.openai.com)",
       "Bash(del:*)",
-      "Bash(.venvScriptsactivate)"
+      "Bash(.venvScriptsactivate)",
+      "Bash(./venv/Scripts/pip.exe uninstall markdown -y)",
+      "Bash(pip install:*)",
+      "WebFetch(domain:forum.qt.io)",
+      "Read(/C:\\Users\\miguel\\Downloads/**)",
+      "Read(/C:\\Users\\miguel\\Downloads/**)",
+      "Read(/C:\\Users\\miguel\\Downloads/**)",
+      "Read(/C:\\Users\\miguel\\Downloads/**)"
     ],
     "deny": []
   }

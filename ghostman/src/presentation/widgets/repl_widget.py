@@ -13,10 +13,9 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 
 logger = logging.getLogger("ghostman.repl_widget")
-# Markdown rendering imports
+# Markdown rendering imports - migrated to mistune v3 for better performance
 try:
-    import markdown
-    from markdown.extensions import codehilite, fenced_code, tables, toc
+    import mistune
     MARKDOWN_AVAILABLE = True
 except ImportError:
     MARKDOWN_AVAILABLE = False
@@ -24,12 +23,12 @@ except ImportError:
     logger.warning("Markdown library not available - falling back to plain text rendering")
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
-    QLineEdit, QPushButton, QLabel, QFrame, QComboBox,
-    QToolButton, QMenu, QProgressBar, QListWidget,
+    QLineEdit, QPushButton, QLabel, QFrame, QComboBox, QPlainTextEdit,
+    QToolButton, QMenu, QProgressBar, QListWidget, QSizePolicy,
     QListWidgetItem, QApplication, QMessageBox, QDialog, QCheckBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread, QObject, QSize, pyqtSlot
-from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QTextCharFormat, QColor, QPalette, QIcon, QPixmap, QAction
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread, QObject, QSize, pyqtSlot, QPropertyAnimation, QEasingCurve
+from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QTextCharFormat, QColor, QPalette, QIcon, QPixmap, QAction, QTextOption, QFontMetrics
 
 # Import startup service for preamble
 from ...application.startup_service import startup_service
@@ -84,26 +83,22 @@ class MarkdownRenderer:
         self.theme_manager = theme_manager
         
         if self.markdown_available:
-            # Configure markdown processor with AI-friendly extensions
-            self.md_processor = markdown.Markdown(
-                extensions=[
-                    'fenced_code',  # ```code blocks```
-                    'tables',       # Table support
-                    'nl2br',        # Newline to <br>
-                    'toc',          # Table of contents
-                    'attr_list',    # Attribute lists {: .class}
+            # Configure mistune v3 renderer with AI-friendly plugins
+            # mistune v3 provides better performance and more robust parsing
+            self.md_processor = mistune.create_markdown(
+                renderer='html',
+                plugins=[
+                    'table',        # Table support (replaces 'tables')
+                    'strikethrough', # ~~strikethrough~~ support
+                    'mark',         # ==highlight== support
+                    'insert',       # ++insert++ support
                 ],
-                extension_configs={
-                    'fenced_code': {
-                        'lang_prefix': 'language-',
-                    },
-                    'toc': {
-                        'permalink': False,  # Don't add permalink anchors
-                    }
-                },
-                # Output format optimized for Qt HTML rendering
-                output_format='html5',
-                tab_length=4
+                # mistune v3 has built-in support for:
+                # - Fenced code blocks (```code```)
+                # - Newline to <br> conversion (via hard_wrap=True)
+                # - Basic markdown features (bold, italic, links, etc.)
+                hard_wrap=True,  # Convert single newlines to <br> (replaces nl2br)
+                escape=False,    # Allow HTML tags for Qt rendering
             )
         
         # Update color scheme based on theme or use defaults
@@ -307,8 +302,9 @@ class MarkdownRenderer:
             Styled HTML content
         """
         try:
-            # Process markdown to HTML
-            html_content = self.md_processor.convert(text)
+            # Process markdown to HTML using mistune v3
+            # mistune v3 uses direct function call instead of .convert()
+            html_content = self.md_processor(text)
             
             # Apply message-type styling to the HTML
             styled_html = self._apply_color_styling(html_content, base_color, style)
@@ -316,8 +312,7 @@ class MarkdownRenderer:
             # Clean up and optimize for Qt rendering
             styled_html = self._optimize_qt_html(styled_html)
             
-            # Reset markdown processor for next use
-            self.md_processor.reset()
+            # Note: mistune v3 doesn't require reset() - it's stateless
             
             return styled_html + '<br>'
             
@@ -668,6 +663,10 @@ class REPLWidget(QWidget):
         # Error handling and resend functionality
         self.last_failed_message = None
         
+        # AI processing thread management
+        self.current_ai_thread = None
+        self.current_ai_worker = None
+        
         # Idle detection for background summarization
         self.idle_detector = IdleDetector(idle_threshold_minutes=5)
         self.idle_detector.idle_detected.connect(self._on_idle_detected)
@@ -716,6 +715,205 @@ class REPLWidget(QWidget):
         
         logger.info("Enhanced REPLWidget initialized with conversation management")
     
+    def _init_dynamic_input_height(self):
+        """Initialize dynamic input height system."""
+        # Initialize variables for dynamic height management
+        self.max_input_lines = 5
+        self.min_input_lines = 1
+        self.line_height = 0  # Will be calculated based on font
+        self.current_line_count = 1
+        self.current_visual_lines = 1  # Includes wrapped lines
+        
+        # Create height animation
+        self.height_animation = QPropertyAnimation(self.command_input, b"maximumHeight")
+        self.height_animation.setDuration(150)  # 150ms smooth transition
+        self.height_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        
+        # Calculate initial line height
+        self._calculate_line_height()
+        
+        # Connect text changes to height updates
+        self.command_input.textChanged.connect(self._on_input_text_changed)
+        
+        # Override resize event to recalculate height when width changes (affects wrapping)
+        original_resize = self.command_input.resizeEvent
+        def on_input_resize(event):
+            original_resize(event)
+            QTimer.singleShot(50, self._update_input_height)  # Delay to let Qt finish resizing
+        self.command_input.resizeEvent = on_input_resize
+        
+        # Set initial height
+        self._update_input_height()
+    
+    def _calculate_line_height(self):
+        """Calculate the height of a single line based on font metrics."""
+        if hasattr(self, 'command_input') and self.command_input:
+            font_metrics = QFontMetrics(self.command_input.font())
+            # Use lineSpacing() instead of height() for more accurate line height calculation
+            # lineSpacing() includes the natural spacing between lines as intended by the font designer
+            self.line_height = font_metrics.lineSpacing()
+            
+            # Ensure minimum line height for readability - this prevents overly compressed text
+            # even with very small fonts
+            MIN_LINE_HEIGHT = 16  # Minimum reasonable line height for readability
+            self.line_height = max(self.line_height, MIN_LINE_HEIGHT)
+    
+    def _on_input_text_changed(self):
+        """Handle input text changes to update height dynamically."""
+        if not hasattr(self, 'command_input') or not self.command_input:
+            return
+        
+        # Always update height when text changes (handles both wrapping and manual breaks)
+        # Use a short delay to let Qt finish updating the document layout
+        QTimer.singleShot(10, self._check_visual_lines_change)
+        
+        # Also update block count for other purposes
+        document = self.command_input.document()
+        self.current_line_count = document.blockCount()
+    
+    def _check_visual_lines_change(self):
+        """Check if visual lines have changed and update height accordingly."""
+        if not hasattr(self, 'command_input') or not self.command_input:
+            return
+            
+        # Calculate visual lines (includes both manual breaks and wrapped text)
+        new_visual_lines = self._calculate_visual_lines()
+        
+        # Initialize if not set
+        if not hasattr(self, 'current_visual_lines'):
+            self.current_visual_lines = 1
+            
+        # Always update height (even if line count is same, text content may affect wrapping)
+        logger.debug(f"📏 Checking visual lines: current={getattr(self, 'current_visual_lines', 1)} -> new={new_visual_lines}")
+        if new_visual_lines != self.current_visual_lines:
+            logger.debug(f"📏 Visual lines changed: {self.current_visual_lines} -> {new_visual_lines}")
+            self.current_visual_lines = new_visual_lines
+            self._update_input_height()
+        else:
+            # Even if line count is same, force height recalculation in case wrapping changed
+            self._update_input_height()
+    
+    def _update_input_height(self):
+        """Update the input field height based on current line count including wrapped lines."""
+        if not self.line_height:
+            self._calculate_line_height()  # Ensure line height is calculated
+            if not self.line_height:
+                return
+        
+        # Use the current visual lines count (already calculated in text changed handler)
+        total_visual_lines = getattr(self, 'current_visual_lines', 1)
+        
+        # Constrain line count to min/max limits
+        effective_lines = max(self.min_input_lines, min(self.max_input_lines, total_visual_lines))
+        
+        # Calculate new height based on content, but account for QPlainTextEdit's internal margins
+        # QPlainTextEdit has internal document margins that need to be accounted for
+        content_height = effective_lines * self.line_height
+        
+        # Get the QPlainTextEdit's content margins and frame width
+        margins = self.command_input.contentsMargins()
+        frame_width = self.command_input.frameWidth() if hasattr(self.command_input, 'frameWidth') else 1
+        
+        # Calculate total internal padding (margins + frame + document margins)
+        vertical_padding = margins.top() + margins.bottom() + (frame_width * 2) + 4  # 4px for document margins
+        
+        # CRITICAL: For single line, force exactly 32px to match button height
+        # For multiple lines, calculate based on content
+        BUTTON_HEIGHT = 32  # This matches the button height from ButtonStyleManager "small" size
+        
+        if effective_lines == 1:
+            # Single line: force exact button height for perfect alignment
+            new_height = BUTTON_HEIGHT
+        else:
+            # Multiple lines: calculate based on content but ensure minimum
+            proposed_height = content_height + vertical_padding
+            new_height = max(proposed_height, BUTTON_HEIGHT)
+        
+        # Enable/disable scrollbar based on line count
+        if total_visual_lines > self.max_input_lines:
+            self.command_input.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        else:
+            self.command_input.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
+        # Update height (no animation needed, just set directly)
+        current_height = self.command_input.maximumHeight()
+        if current_height != new_height:
+            # Set both minimum and maximum height to the calculated value
+            self.command_input.setMinimumHeight(new_height)
+            self.command_input.setMaximumHeight(new_height)
+            
+            # Force a repaint to ensure the height change is visible
+            self.command_input.updateGeometry()
+    
+    def _calculate_visual_lines(self):
+        """Calculate the total number of visual lines including wrapped text."""
+        try:
+            document = self.command_input.document()
+            text = self.command_input.toPlainText()
+            
+            # Debug logging for troubleshooting
+            logger.debug(f"🔍 Visual lines calculation - text length: {len(text)}")
+            logger.debug(f"🔍 Visual lines calculation - document blocks: {document.blockCount()}")
+            logger.debug(f"🔍 Visual lines calculation - line_height: {self.line_height}")
+            
+            # Get viewport width for wrapping calculations
+            viewport_width = self.command_input.viewport().width()
+            logger.debug(f"🔍 Visual lines calculation - viewport width: {viewport_width}")
+            
+            if viewport_width <= 20:
+                logger.debug("🔍 Visual lines calculation - invalid viewport width, using block count")
+                return max(1, document.blockCount())
+                
+            # Set document width for proper wrapping calculation
+            old_width = document.textWidth()
+            document.setTextWidth(viewport_width - 10)  # Account for margins/padding
+            
+            # Force layout creation and ensure it's processed
+            layout_engine = document.documentLayout()
+            
+            # Force the widget to process all pending layout updates
+            self.command_input.updateGeometry()
+            self.command_input.update()
+            
+            # Give Qt a moment to process the layout changes
+            from PyQt6.QtWidgets import QApplication
+            QApplication.processEvents()
+            
+            # Use block-by-block line counting method (Qt recommended approach)
+            total_lines = 0
+            block = document.begin()
+            
+            while block.isValid():
+                # Force layout creation for this specific block
+                layout = block.layout()
+                if layout and layout.lineCount() > 0:
+                    line_count = layout.lineCount()
+                    logger.debug(f"🔍 Block line count: {line_count}")
+                    total_lines += line_count
+                else:
+                    # For blocks without layout or empty layout, count as 1 line minimum
+                    # This handles manual line breaks (Shift+Enter) which create new blocks
+                    total_lines += 1
+                    logger.debug("🔍 No valid layout for block, using 1 line")
+                block = block.next()
+            
+            # Restore original width
+            document.setTextWidth(old_width)
+            
+            visual_lines = max(1, total_lines)
+            logger.debug(f"🔍 Visual lines calculation - calculated visual lines: {visual_lines}")
+            return visual_lines
+            
+        except Exception as e:
+            logger.debug(f"🔍 Visual lines calculation exception: {e}")
+            # Ultimate fallback
+            return max(1, self.command_input.document().blockCount())
+    
+    def _on_input_font_changed(self):
+        """Handle font changes by recalculating line height and updating input height."""
+        self._calculate_line_height()
+        self._update_input_height()
+    
     def _init_theme_system(self):
         """Initialize theme system connection."""
         if THEME_SYSTEM_AVAILABLE:
@@ -745,6 +943,14 @@ class REPLWidget(QWidget):
             # Update send button styling
             if hasattr(self, 'send_button'):
                 self._style_send_button()
+            
+            # Update dynamic input height system for potential font changes
+            if hasattr(self, 'command_input') and hasattr(self, 'line_height'):
+                self._on_input_font_changed()
+            
+            # Update stop button styling
+            if hasattr(self, 'stop_button'):
+                self._style_stop_button()
             
             # Update search elements if they exist - use high-contrast styling
             if hasattr(self, 'search_status_label'):
@@ -946,6 +1152,9 @@ class REPLWidget(QWidget):
             if hasattr(self, 'send_button'):
                 self._style_send_button()
             
+            if hasattr(self, 'stop_button'):
+                self._style_stop_button()
+            
             # Update conversation selector if it exists
             if hasattr(self, 'conversation_selector'):
                 self.conversation_selector.setStyleSheet(StyleTemplates.get_combo_box_style(colors))
@@ -1087,6 +1296,11 @@ class REPLWidget(QWidget):
                 # Special handling for send button
                 if button == getattr(self, 'send_button', None):
                     self._style_send_button()
+                    continue
+                
+                # Special handling for stop button
+                if button == getattr(self, 'stop_button', None):
+                    self._style_stop_button()
                     continue
                     
                 # Determine if this is a title button or toolbar button based on size/properties
@@ -2475,6 +2689,36 @@ class REPLWidget(QWidget):
             self.send_button, colors, "push", "small", "toggle"
         )
     
+    def _style_stop_button(self):
+        """Style the Stop button with unified danger styling."""
+        colors = self.theme_manager.current_theme if self.theme_manager and THEME_SYSTEM_AVAILABLE else None
+        
+        # If no theme is available yet, apply a basic style to avoid unstyled button
+        if not colors:
+            # Apply a basic red stop button style as fallback
+            self.stop_button.setStyleSheet("""
+                QPushButton {
+                    background-color: #ef4444;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 6px 12px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #dc2626;
+                }
+                QPushButton:pressed {
+                    background-color: #b91c1c;
+                }
+            """)
+            return
+        
+        # Use danger state for stop button with theme colors
+        ButtonStyleManager.apply_unified_button_style(
+            self.stop_button, colors, "push", "small", "danger"
+        )
+    
     def _update_search_button_state(self):
         """Update search button visual state using unified styling system."""
         try:
@@ -2980,29 +3224,65 @@ class REPLWidget(QWidget):
         input_layout = QHBoxLayout()
         
         # Prompt label with background styling for better visual separation
+        # Align to center to match Send/Stop button baseline
         self.prompt_label = QLabel(">>>")
         self._style_prompt_label(normal=True)
-        input_layout.addWidget(self.prompt_label)
+        # Set internal text alignment to center both horizontally and vertically
+        self.prompt_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Set size policy to match buttons and allow vertical centering
+        self.prompt_label.setSizePolicy(
+            QSizePolicy.Policy.Fixed, 
+            QSizePolicy.Policy.Fixed
+        )
+        # Set fixed height to match typical button height for proper alignment
+        self.prompt_label.setFixedHeight(32)  # Standard button height
+        # Add to layout with center alignment to match button baseline
+        input_layout.addWidget(self.prompt_label, 0, Qt.AlignmentFlag.AlignVCenter)
         
-        # Command input
-        self.command_input = QLineEdit()
+        # Command input - using QPlainTextEdit for multiline support
+        self.command_input = QPlainTextEdit()
         # Use font service for user input font
         input_font = font_service.create_qfont('user_input')
         self.command_input.setFont(input_font)
-        self.command_input.returnPressed.connect(self._on_command_entered)
+        # Enable word wrapping for long text
+        self.command_input.setWordWrapMode(QTextOption.WrapMode.WordWrap)
+        self.command_input.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+        # Set initial height to match button height (32px) to prevent font squishing
+        # The dynamic height system will take over after initialization, but this ensures
+        # proper baseline alignment from the start
+        BUTTON_HEIGHT = 32  # Match the button height from ButtonStyleManager "small" size
+        self.command_input.setMinimumHeight(BUTTON_HEIGHT)
+        self.command_input.setMaximumHeight(BUTTON_HEIGHT)  # Start with fixed height, will be adjusted dynamically
+        self.command_input.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # Ensure field grows downward by setting size policy
+        self.command_input.setSizePolicy(
+            QSizePolicy.Policy.Expanding, 
+            QSizePolicy.Policy.Preferred
+        )
         self.command_input.installEventFilter(self)
-        input_layout.addWidget(self.command_input)
+        # Add with center alignment to match prompt and button baselines
+        input_layout.addWidget(self.command_input, 1, Qt.AlignmentFlag.AlignVCenter)
         
-        # Send button
+        # Send button - align to bottom baseline
         self.send_button = QPushButton("Send")
         self.send_button.clicked.connect(self._on_command_entered)
         self._style_send_button()
-        input_layout.addWidget(self.send_button)
+        input_layout.addWidget(self.send_button, 0, Qt.AlignmentFlag.AlignBottom)
+        
+        # Stop button (hidden by default) - align to bottom baseline
+        self.stop_button = QPushButton("Stop")
+        self.stop_button.clicked.connect(self._on_stop_query)
+        self.stop_button.setVisible(False)
+        self._style_stop_button()
+        input_layout.addWidget(self.stop_button, 0, Qt.AlignmentFlag.AlignBottom)
         
         layout.addLayout(input_layout)
         
         # Initial startup and preamble - will be set after startup tasks complete
         # This will be replaced by _display_startup_preamble() called from _load_conversations_deferred
+        
+        # Initialize dynamic input height system after UI is created
+        self._init_dynamic_input_height()
         
         # Focus on input
         self.command_input.setFocus()
@@ -3037,9 +3317,11 @@ class REPLWidget(QWidget):
             textedit_style = f"#repl-root QTextEdit {{ background-color: {child_bg}; color: {colors.text_primary}; border: 1px solid {colors.border_secondary}; border-radius: 5px; padding: 5px; selection-background-color: {colors.secondary}; selection-color: {colors.text_primary}; }}"
             lineedit_style = f"#repl-root QLineEdit {{ background-color: {child_bg}; color: {colors.text_primary}; border: 1px solid {colors.border_primary}; border-radius: 3px; padding: 5px; selection-background-color: {colors.secondary}; selection-color: {colors.text_primary}; }}"
             lineedit_focus_style = f"#repl-root QLineEdit:focus {{ border: 2px solid {colors.border_focus}; }}"
+            plaintext_style = f"#repl-root QPlainTextEdit {{ background-color: {child_bg}; color: {colors.text_primary}; border: 1px solid {colors.border_primary}; border-radius: 3px; padding: 5px; selection-background-color: {colors.secondary}; selection-color: {colors.text_primary}; }}"
+            plaintext_focus_style = f"#repl-root QPlainTextEdit:focus {{ border: 2px solid {colors.border_focus}; }}"
             
             # Properly combine all styles (root style includes border-radius)
-            combined_style = f"{style} {textedit_style} {lineedit_style} {lineedit_focus_style}"
+            combined_style = f"{style} {textedit_style} {lineedit_style} {lineedit_focus_style} {plaintext_style} {plaintext_focus_style}"
             
             
             self.setStyleSheet(combined_style)
@@ -3069,8 +3351,10 @@ class REPLWidget(QWidget):
         textedit_fallback = f"#repl-root QTextEdit {{ background-color: {textedit_bg}; color: #f0f0f0; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 5px; padding: 5px; }}"
         lineedit_fallback = f"#repl-root QLineEdit {{ background-color: {lineedit_bg}; color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 3px; padding: 5px; }}"
         lineedit_focus_fallback = "#repl-root QLineEdit:focus { border: 1px solid #4CAF50; }"
+        plaintext_fallback = f"#repl-root QPlainTextEdit {{ background-color: {lineedit_bg}; color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 3px; padding: 5px; }}"
+        plaintext_focus_fallback = "#repl-root QPlainTextEdit:focus { border: 1px solid #4CAF50; }"
         
-        self.setStyleSheet(f"{root_style} {textedit_fallback} {lineedit_fallback} {lineedit_focus_fallback}")
+        self.setStyleSheet(f"{root_style} {textedit_fallback} {lineedit_fallback} {lineedit_focus_fallback} {plaintext_fallback} {plaintext_focus_fallback}")
 
     def set_panel_opacity(self, opacity: float):
         """Set the frame (panel) background opacity only.
@@ -3391,6 +3675,12 @@ class REPLWidget(QWidget):
                     self._spinner_index = 0
                 
                 self._spinner_timer.start(100)  # Update every 100ms
+                
+                # Hide send button, show stop button
+                if hasattr(self, 'send_button'):
+                    self.send_button.setVisible(False)
+                if hasattr(self, 'stop_button'):
+                    self.stop_button.setVisible(True)
             else:
                 # Stop spinner animation and restore normal prompt
                 if hasattr(self, '_spinner_timer'):
@@ -3398,6 +3688,12 @@ class REPLWidget(QWidget):
                 
                 self.prompt_label.setText(">>>")
                 self._style_prompt_label(normal=True, processing=False)
+                
+                # Show send button, hide stop button
+                if hasattr(self, 'send_button'):
+                    self.send_button.setVisible(True)
+                if hasattr(self, 'stop_button'):
+                    self.stop_button.setVisible(False)
         except Exception as e:
             logger.error(f"Failed to set processing mode: {e}")
     
@@ -3417,15 +3713,51 @@ class REPLWidget(QWidget):
         if obj == self.command_input and event.type() == event.Type.KeyPress:
             key_event = event
             
-            # Up arrow - previous command
-            if key_event.key() == Qt.Key.Key_Up:
-                self._navigate_history(-1)
-                return True
+            # Handle Enter key - submit on Enter, newline on Shift+Enter
+            if key_event.key() == Qt.Key.Key_Return or key_event.key() == Qt.Key.Key_Enter:
+                if key_event.modifiers() == Qt.KeyboardModifier.ShiftModifier:
+                    # Shift+Enter: Insert newline and trigger height update
+                    logger.debug("🔥 Shift+Enter pressed - inserting newline")
+                    cursor = self.command_input.textCursor()
+                    cursor.insertText('\n')
+                    self.command_input.setTextCursor(cursor)
+                    # Trigger height update after newline is inserted
+                    QTimer.singleShot(10, self._on_input_text_changed)
+                    logger.debug("🔥 Shift+Enter processed - height update scheduled")
+                    return True
+                else:
+                    # Enter alone: Submit command
+                    self._on_command_entered()
+                    return True
             
-            # Down arrow - next command
+            # Handle history navigation (only when at boundaries AND no text selection)
+            elif key_event.key() == Qt.Key.Key_Up:
+                cursor = self.command_input.textCursor()
+                # Only navigate history if:
+                # 1. On first line (blockNumber == 0)
+                # 2. At beginning of line or cursor at start of document
+                if (cursor.blockNumber() == 0 and 
+                    (cursor.positionInBlock() == 0 or cursor.position() == 0)):
+                    self._navigate_history(-1)
+                    return True
+                # Otherwise allow normal up arrow navigation
+                return False
+            
+            # Down arrow - next command (only at end of last line)
             elif key_event.key() == Qt.Key.Key_Down:
-                self._navigate_history(1)
-                return True
+                cursor = self.command_input.textCursor()
+                document = self.command_input.document()
+                last_block = document.blockCount() - 1
+                # Only navigate history if:
+                # 1. On last line
+                # 2. At end of line or cursor at end of document
+                if (cursor.blockNumber() == last_block and
+                    (cursor.positionInBlock() == cursor.block().length() - 1 or 
+                     cursor.position() == document.characterCount() - 1)):
+                    self._navigate_history(1)
+                    return True
+                # Otherwise allow normal down arrow navigation
+                return False
         
         return super().eventFilter(obj, event)
     
@@ -3450,7 +3782,7 @@ class REPLWidget(QWidget):
         
         # Save current input if starting to navigate
         if self.history_index == -1:
-            self.current_input = self.command_input.text()
+            self.current_input = self.command_input.toPlainText()
         
         # Update index
         self.history_index += direction
@@ -3463,9 +3795,9 @@ class REPLWidget(QWidget):
         
         # Update input
         if self.history_index == -1:
-            self.command_input.setText(self.current_input)
+            self.command_input.setPlainText(self.current_input)
         else:
-            self.command_input.setText(self.command_history[self.history_index])
+            self.command_input.setPlainText(self.command_history[self.history_index])
     
     # Enhanced event handlers for conversation management
     @pyqtSlot(str)
@@ -3806,7 +4138,7 @@ class REPLWidget(QWidget):
     
     def _on_command_entered(self):
         """Handle command entry."""
-        command = self.command_input.text().strip()
+        command = self.command_input.toPlainText().strip()
         
         if not command:
             return
@@ -4370,12 +4702,16 @@ def test_theme():
         self.ai_worker = EnhancedAIWorker(message, self.conversation_manager, self.current_conversation)
         self.ai_worker.moveToThread(self.ai_thread)
         
+        # Store references for cancellation
+        self.current_ai_thread = self.ai_thread
+        self.current_ai_worker = self.ai_worker
+        
         # Connect signals
         self.ai_thread.started.connect(self.ai_worker.run)
         self.ai_worker.response_received.connect(self._on_ai_response)
         self.ai_worker.response_received.connect(self.ai_thread.quit)
         self.ai_worker.response_received.connect(self.ai_worker.deleteLater)
-        self.ai_thread.finished.connect(self.ai_thread.deleteLater)
+        self.ai_thread.finished.connect(self._cleanup_ai_thread)
         
         # Start processing
         self.ai_thread.start()
@@ -4395,6 +4731,10 @@ def test_theme():
         self.idle_detector.reset_activity(
             self.current_conversation.id if self.current_conversation else None
         )
+        
+        # Clear thread references
+        self.current_ai_thread = None
+        self.current_ai_worker = None
         
         # Display response with appropriate icon
         if success:
@@ -4490,6 +4830,45 @@ def test_theme():
             self.append_output(f"🔄 **Resending message...**", "system")
             self.append_output("", "system")  # Add spacing
             self._send_to_ai(self.last_failed_message)
+    
+    def _on_stop_query(self):
+        """Handle stop button click to cancel active AI query."""
+        logger.info("Stop button clicked - cancelling AI query")
+        
+        try:
+            # Stop the AI thread if it's running
+            if self.current_ai_thread and self.current_ai_thread.isRunning():
+                logger.info("Terminating AI worker thread...")
+                self.current_ai_thread.quit()
+                if not self.current_ai_thread.wait(3000):  # Wait up to 3 seconds
+                    logger.warning("AI thread did not quit gracefully, terminating forcefully")
+                    self.current_ai_thread.terminate()
+                    self.current_ai_thread.wait()
+                
+            # Clean up thread references
+            self.current_ai_thread = None
+            self.current_ai_worker = None
+            
+            # Restore UI to normal state
+            self._set_processing_mode(False)
+            self.command_input.setEnabled(True)
+            self.command_input.setFocus()
+            
+            # Show cancellation message
+            self.append_output("🛑 **Query cancelled by user**", "system")
+            
+        except Exception as e:
+            logger.error(f"Failed to stop AI query: {e}")
+            # Ensure UI is restored even if stop fails
+            self._set_processing_mode(False)
+            self.command_input.setEnabled(True)
+            self.command_input.setFocus()
+    
+    def _cleanup_ai_thread(self):
+        """Clean up AI thread references when thread finishes."""
+        logger.debug("Cleaning up AI thread")
+        self.current_ai_thread = None
+        self.current_ai_worker = None
     
     # Public methods for external integration
     
@@ -5110,7 +5489,7 @@ def test_theme():
         """Handle help command button click - send 'help' command to chat."""
         logger.info("Help command button clicked - sending 'help' command")
         # Set the command input to 'help' and send it
-        self.command_input.setText("help")
+        self.command_input.setPlainText("help")
         self._on_command_entered()
     
     def _handle_debug_command(self):

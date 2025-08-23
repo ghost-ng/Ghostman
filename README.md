@@ -4,6 +4,7 @@ A beautiful AI chat application featuring Spector, your friendly desktop AI assi
 
 ## Features
 
+- **Advanced REPL Interface** - Enhanced multiline input with Shift+Enter, dynamic field expansion, and stop button functionality
 - **Floating Chat Interface** - Moveable avatar window that opens into a full chat interface
 - **Multiple AI Providers** - Support for OpenAI, Anthropic, Google, and local models
 - **26 Built-in Themes** - From Matrix green to Arctic white, cyberpunk to steampunk
@@ -47,11 +48,19 @@ A beautiful AI chat application featuring Spector, your friendly desktop AI assi
 
 ## Usage Basics
 
-### Chat Interface
-- **Open Chat**: Click on Spector's avatar or use the system tray
-- **Send Messages**: Type your message and press Ctrl+Enter
-- **New Conversation**: Click the "+" button or press Ctrl+N
-- **Browse History**: Click the conversation browser icon
+### Enhanced Chat Interface
+
+#### Advanced Input Features
+- **Multiline Support**: Press `Shift+Enter` to create new lines without sending your message
+- **Dynamic Field Expansion**: Input field automatically grows as you type longer messages
+- **Smart Text Wrapping**: Long lines wrap automatically and expand the field height
+- **Stop Functionality**: Cancel AI queries in progress with the stop button
+- **Perfect Alignment**: Input field maintains consistent visual alignment
+
+#### Sending Messages
+- **Send**: Type your message and press `Ctrl+Enter` or click the send button
+- **Multiline Composition**: Use `Shift+Enter` for complex messages with multiple paragraphs
+- **Cancel Queries**: Click the red "Stop" button to cancel active AI responses
 
 ### Window Controls
 - **Move Around**: Drag Spector's avatar anywhere on your screen
@@ -69,9 +78,23 @@ Choose from 26 professionally designed themes:
 
 Each theme is carefully designed for different moods and environments - from professional work to creative projects.
 
+## Recent Enhancements
+
+### REPL Interface Improvements
+The latest update includes comprehensive enhancements to the chat interface:
+
+- **Multiline Input Support**: Full Shift+Enter functionality with dynamic field expansion
+- **Enhanced Markdown Rendering**: Migrated to mistune v3 for 2-3x better performance
+- **Stop Button Functionality**: Cancel active AI queries with proper thread management
+- **Perfect UI Alignment**: Fixed height and alignment issues for a polished experience
+- **Smart Input Behavior**: Field expands with both manual line breaks and text wrapping
+
+For detailed technical documentation, see [REPL Enhancements Guide](docs/guides/REPL_ENHANCEMENTS_GUIDE.md).
+
 ## Documentation
 
-- **Complete User Guide**: [docs/help.md](docs/help.md) - Comprehensive help covering all features
+- **Complete User Guide**: [docs/help.md](docs/help.md) - Comprehensive help covering all features including the new REPL enhancements
+- **Technical Implementation**: [docs/guides/REPL_ENHANCEMENTS_GUIDE.md](docs/guides/REPL_ENHANCEMENTS_GUIDE.md) - Detailed technical documentation for developers
 - **GitHub Repository**: [https://github.com/ghost-ng/Ghostman/](https://github.com/ghost-ng/Ghostman/)
 
 ## Settings Overview
@@ -85,13 +108,14 @@ Each theme is carefully designed for different moods and environments - from pro
 ## Keyboard Shortcuts
 
 - `Ctrl+Enter` - Send message
+- `Shift+Enter` - New line in message (multiline support)
 - `Ctrl+N` - New conversation
 - `Ctrl+,` - Open settings
 - `Alt+H` - Toggle always on top
 
 ## Support
 
-Having trouble? Check the [complete help guide](docs/help.md) for detailed instructions on every feature, troubleshooting tips, and advanced configuration options.
+Having trouble? Check the [complete help guide](docs/help.md) for detailed instructions on every feature, troubleshooting tips, and advanced configuration options including the new REPL interface capabilities.
 
 ---
 
