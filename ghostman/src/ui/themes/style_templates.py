@@ -783,13 +783,62 @@ class StyleTemplates:
     
     @staticmethod
     def get_search_frame_style(colors: ColorSystem) -> str:
-        """Style for search frames."""
+        """Style for search frames with comprehensive border removal."""
         return f"""
         QFrame {{
             background-color: {colors.background_tertiary};
-            border: 1px solid {colors.status_warning};
+            border: none !important;
+            border-width: 0px !important;
+            border-style: none !important;
+            border-color: transparent !important;
             border-radius: 4px;
             padding: 4px;
+            margin: 0px;
+            outline: none !important;
+            box-shadow: none !important;
+        }}
+        QFrame:focus {{
+            border: none !important;
+            outline: none !important;
+            box-shadow: none !important;
+        }}
+        QFrame:hover {{
+            border: none !important;
+            outline: none !important;
+            box-shadow: none !important;
+        }}
+        /* Ensure child widgets don't inherit unwanted borders */
+        QFrame QLineEdit {{
+            border: none !important;
+            outline: none !important;
+            box-shadow: none !important;
+        }}
+        """
+    
+    @staticmethod
+    def get_high_contrast_search_status_style(colors: ColorSystem) -> str:
+        """
+        Get high-contrast styling for search status labels.
+        
+        Automatically calculates the best text color for maximum visibility
+        against the search frame background (background_tertiary).
+        
+        Uses the same smart contrast algorithm as titlebar buttons.
+        """
+        from .color_system import ColorUtils
+        
+        # Get optimal text color for search frame background
+        optimal_text_color, contrast_ratio = ColorUtils.get_high_contrast_text_color_for_background(
+            colors.background_tertiary,
+            colors,
+            min_ratio=4.5
+        )
+        
+        return f"""
+        QLabel {{
+            color: {optimal_text_color};
+            font-size: 10px;
+            font-weight: bold;
         }}
         """
     

@@ -565,7 +565,13 @@ class ConversationAIService(AIService):
             
             # Shutdown conversation service
             if hasattr(self.conversation_service, 'shutdown'):
-                asyncio.get_event_loop().run_until_complete(self.conversation_service.shutdown())
+                import asyncio  # Import asyncio in proper scope
+                try:
+                    loop = asyncio.get_event_loop()
+                    if not loop.is_running():
+                        loop.run_until_complete(self.conversation_service.shutdown())
+                except Exception as e:
+                    logger.warning(f"Failed to shutdown conversation service: {e}")
                 
         except Exception as e:
             logger.error(f"Error during conversation service shutdown: {e}")

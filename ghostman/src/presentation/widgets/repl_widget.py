@@ -746,10 +746,10 @@ class REPLWidget(QWidget):
             if hasattr(self, 'send_button'):
                 self._style_send_button()
             
-            # Update search elements if they exist
+            # Update search elements if they exist - use high-contrast styling
             if hasattr(self, 'search_status_label'):
-                status_color = self.theme_manager.current_theme.text_tertiary
-                self.search_status_label.setStyleSheet(f"color: {status_color}; font-size: 10px;")
+                from ...ui.themes.style_templates import StyleTemplates
+                self.search_status_label.setStyleSheet(StyleTemplates.get_high_contrast_search_status_style(self.theme_manager.current_theme))
             
             # Update summary notification styling
             if hasattr(self, 'summary_notification'):
@@ -862,11 +862,11 @@ class REPLWidget(QWidget):
                     # Fallback for non-hex colors
                     bg_color = f"rgba(30, 30, 30, {alpha:.3f})"
             
-            # CRITICAL: Use !important to prevent style overrides
+            # CRITICAL: Use !important to prevent style overrides AND apply text color properly
             self.output_display.setStyleSheet(f"""
                 QTextEdit {{
                     background-color: {bg_color} !important;
-                    color: {colors.text_primary};
+                    color: {colors.text_primary} !important;
                     border: none;
                     selection-background-color: {colors.primary};
                     selection-color: {colors.background_primary};
@@ -953,13 +953,38 @@ class REPLWidget(QWidget):
             # Update search frame if it exists
             if hasattr(self, 'search_frame'):
                 self.search_frame.setStyleSheet(StyleTemplates.get_search_frame_style(colors))
+                
+            # Update search input if it exists
+            if hasattr(self, 'search_input'):
+                input_style = self._get_search_input_style()
+                self.search_input.setStyleSheet(input_style)
+                # Ensure frame is always disabled after theme changes
+                self.search_input.setFrame(False)
+                
+            # Update search icon label if it exists
+            if hasattr(self, 'search_icon_label'):
+                self.search_icon_label.setStyleSheet(f"""
+                    QLabel {{
+                        color: {colors.text_primary};
+                        background: transparent;
+                        border: none !important;
+                        border-width: 0px !important;
+                        border-style: none !important;
+                        border-color: transparent !important;
+                        outline: none !important;
+                        box-shadow: none !important;
+                        padding: 0px;
+                        font-size: 14px;
+                    }}
+                """)
             
             # Update status labels to use theme colors
             if hasattr(self, 'status_label'):
                 self.status_label.setStyleSheet(StyleTemplates.get_label_style(colors, "secondary"))
             
             if hasattr(self, 'search_status_label'):
-                self.search_status_label.setStyleSheet(StyleTemplates.get_label_style(colors, "tertiary"))
+                # Use high-contrast styling instead of generic tertiary text
+                self.search_status_label.setStyleSheet(StyleTemplates.get_high_contrast_search_status_style(colors))
             
             if hasattr(self, 'summary_notification'):
                 self.summary_notification.setStyleSheet(StyleTemplates.get_label_style(colors, "success"))
@@ -1222,37 +1247,86 @@ class REPLWidget(QWidget):
             """
     
     def _get_search_input_style(self):
-        """Get theme-aware styling for search input."""
+        """
+        Get theme-aware styling for search input with expert PyQt6 border removal.
+        
+        This method combines CSS styling with the native Qt border removal techniques
+        applied in the widget creation for maximum effectiveness.
+        
+        The CSS here works in conjunction with:
+        1. setFrame(False) - Primary Qt-native border removal
+        2. setAutoFillBackground(False) - Prevents styling conflicts  
+        3. Proper focus policy - Removes focus ring artifacts
+        4. Parent frame border removal - Prevents hierarchy inheritance
+        """
         if self.theme_manager and THEME_SYSTEM_AVAILABLE:
             colors = self.theme_manager.current_theme
             return f"""
                 QLineEdit {{
                     background-color: {colors.background_secondary};
                     color: {colors.text_primary};
-                    border: {{'1px'}} solid {colors.border_secondary};
-                    padding: {{'4px'}} {{'6px'}};
-                    border-radius: {{'3px'}};
-                    font-size: {{'11px'}};
+                    border: none !important;
+                    border-width: 0px !important;
+                    border-style: none !important;
+                    border-color: transparent !important;
+                    outline: none !important;
+                    box-shadow: none !important;
+                    padding: 4px 6px;
+                    border-radius: 3px;
+                    font-size: 11px;
+                    selection-background-color: {colors.primary};
+                    selection-color: {colors.background_primary};
                 }}
                 QLineEdit:focus {{
-                    border-color: {colors.border_focus};
+                    border: none !important;
+                    outline: none !important;
+                    box-shadow: none !important;
                     background-color: {colors.background_tertiary};
+                }}
+                QLineEdit:hover {{
+                    border: none !important;
+                    outline: none !important;
+                    box-shadow: none !important;
+                }}
+                QLineEdit:selected {{
+                    border: none !important;
+                    outline: none !important;
+                    box-shadow: none !important;
                 }}
             """
         else:
-            # Fallback styles - ALWAYS fully opaque
+            # Fallback styles - ALWAYS fully opaque with comprehensive border removal
             return f"""
                 QLineEdit {{
                     background-color: rgba(30, 30, 30, 1.0);
                     color: #ffffff;
-                    border: 1px solid rgba(255, 255, 255, 0.3);
+                    border: none !important;
+                    border-width: 0px !important;
+                    border-style: none !important;
+                    border-color: transparent !important;
+                    outline: none !important;
+                    box-shadow: none !important;
                     padding: 4px 6px;
                     border-radius: 3px;
                     font-size: 11px;
+                    selection-background-color: #4CAF50;
+                    selection-color: rgba(30, 30, 30, 1.0);
                 }}
                 QLineEdit:focus {{
-                    border-color: #FFA500;
+                    border: none !important;
+                    outline: none !important;
+                    box-shadow: none !important;
                     background-color: rgba(40, 40, 40, 1.0);
+                }}
+                QLineEdit:hover {{
+                    border: none !important;
+                    outline: none !important;
+                    box-shadow: none !important;
+                }}
+                QLineEdit:selected {{
+                    border: none !important;
+                    outline: none !important;
+                    box-shadow: none !important;
                 }}
             """
     
@@ -1655,27 +1729,86 @@ class REPLWidget(QWidget):
             self.search_frame.setStyleSheet(StyleTemplates.get_search_frame_style(self.theme_manager.current_theme))
         else:
             self.search_frame.setStyleSheet(f"""
-                QFrame {{{{
+                QFrame {{
                     background-color: rgba(40, 40, 40, 1.0);
-                    border: 1px solid rgba(255, 165, 0, 0.5);
+                    border: none !important;
+                    border-width: 0px !important;
+                    border-style: none !important;
+                    border-color: transparent !important;
+                    outline: none !important;
+                    box-shadow: none !important;
                     border-radius: 4px;
                     margin: 2px;
-                }}}}
+                }}
+                QFrame:focus {{
+                    border: none !important;
+                    outline: none !important;
+                }}
             """)
         
         search_layout = QHBoxLayout(self.search_frame)
         search_layout.setContentsMargins(8, 4, 8, 4)
         search_layout.setSpacing(6)
         
-        # Search icon/label
-        search_icon = QLabel("🔍")
-        search_layout.addWidget(search_icon)
+        # Search icon/label - apply theme colors and remove border comprehensively
+        self.search_icon_label = QLabel("🔍")
+        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+            colors = self.theme_manager.current_theme
+            self.search_icon_label.setStyleSheet(f"""
+                QLabel {{
+                    color: {colors.text_primary};
+                    background: transparent;
+                    border: none !important;
+                    border-width: 0px !important;
+                    border-style: none !important;
+                    border-color: transparent !important;
+                    outline: none !important;
+                    box-shadow: none !important;
+                    padding: 0px;
+                    font-size: 14px;
+                }}
+            """)
+        else:
+            # Fallback styling with comprehensive border removal
+            self.search_icon_label.setStyleSheet("""
+                QLabel {
+                    color: #ffffff;
+                    background: transparent;
+                    border: none !important;
+                    border-width: 0px !important;
+                    border-style: none !important;
+                    border-color: transparent !important;
+                    outline: none !important;
+                    box-shadow: none !important;
+                    padding: 0px;
+                    font-size: 14px;
+                }
+            """)
+        search_layout.addWidget(self.search_icon_label)
         
         # Search input
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search in conversation...")
         self.search_input.textChanged.connect(self._on_search_text_changed)
         self.search_input.returnPressed.connect(self._search_next)
+        
+        # COMPREHENSIVE BORDER REMOVAL - PyQt6 Expert Approach
+        from PyQt6.QtCore import Qt
+        
+        # 1. PRIMARY: Disable Qt's native frame (most important)
+        self.search_input.setFrame(False)
+        
+        # 2. Set focus policy to avoid focus ring artifacts
+        self.search_input.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        
+        # 3. Disable auto-fill background to prevent styling conflicts
+        self.search_input.setAutoFillBackground(False)
+        
+        # 4. Ensure parent frame doesn't contribute borders
+        if hasattr(self, 'search_frame'):
+            self.search_frame.setFrameStyle(QFrame.Shape.NoFrame)
+            self.search_frame.setLineWidth(0)
+        
         search_layout.addWidget(self.search_input)
         
         # Regex checkbox
@@ -1696,11 +1829,16 @@ class REPLWidget(QWidget):
         self.search_next_btn.clicked.connect(self._search_next)
         search_layout.addWidget(self.search_next_btn)
         
-        # Search results label
+        # Search results label with high-contrast styling
         self.search_status_label = QLabel("0/0")
         self.search_status_label.setMinimumWidth(40)
-        status_color = self.theme_manager.current_theme.text_tertiary if (self.theme_manager and THEME_SYSTEM_AVAILABLE) else "#888"
-        self.search_status_label.setStyleSheet(f"color: {status_color}; font-size: 10px;")
+        # Use high-contrast styling for better visibility
+        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+            from ...ui.themes.style_templates import StyleTemplates
+            self.search_status_label.setStyleSheet(StyleTemplates.get_high_contrast_search_status_style(self.theme_manager.current_theme))
+        else:
+            # Fallback styling
+            self.search_status_label.setStyleSheet("color: #ffffff; font-size: 10px; font-weight: bold;")
         search_layout.addWidget(self.search_status_label)
         
         # Close search button (uniform styling)
@@ -3107,6 +3245,9 @@ class REPLWidget(QWidget):
             if hasattr(self, '_markdown_renderer'):
                 self._markdown_renderer.clear_cache()
                 self._markdown_renderer.update_theme()
+            
+            # Re-apply output display styling to ensure font colors are correct
+            self._style_output_display()
             
             # Re-render existing content with new fonts
             self._refresh_existing_output()

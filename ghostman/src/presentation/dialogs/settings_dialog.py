@@ -146,9 +146,9 @@ class SettingsDialog(QDialog):
         # API key buttons row
         api_buttons_layout = QHBoxLayout()
         
-        show_key_btn = QPushButton("Show/Hide Key")
-        show_key_btn.clicked.connect(self._toggle_api_key_visibility)
-        api_buttons_layout.addWidget(show_key_btn)
+        self.show_key_btn = QPushButton("Show/Hide Key")
+        self.show_key_btn.clicked.connect(self._toggle_api_key_visibility)
+        api_buttons_layout.addWidget(self.show_key_btn)
         
         self.show_models_btn = QPushButton("Show Models")
         self.show_models_btn.clicked.connect(self._show_models)
@@ -744,14 +744,40 @@ class SettingsDialog(QDialog):
                 self.user_font_size_spin.setStyleSheet(spinbox_style)
                 self.log_retention_spin.setStyleSheet(spinbox_style)
                 
-                # Apply uniform button style to regular buttons using ButtonStyleManager
+                # Apply uniform button style to ALL buttons using ButtonStyleManager
                 regular_button_style = ButtonStyleManager.get_unified_button_style(colors, "push", "medium")
+                
+                # Dialog control buttons
                 self.apply_btn.setStyleSheet(regular_button_style)
                 self.cancel_btn.setStyleSheet(regular_button_style)
                 self.ok_btn.setStyleSheet(regular_button_style)
+                
+                # Config management buttons
                 self.save_config_btn.setStyleSheet(regular_button_style)
                 self.load_config_btn.setStyleSheet(regular_button_style)
+                
+                # API tab buttons
                 self.test_btn.setStyleSheet(regular_button_style)
+                self.show_models_btn.setStyleSheet(regular_button_style)
+                self.show_key_btn.setStyleSheet(regular_button_style)
+                
+                # Advanced tab buttons  
+                self.log_location_browse_btn.setStyleSheet(regular_button_style)
+                self.log_location_default_btn.setStyleSheet(regular_button_style)
+                self.open_log_folder_btn.setStyleSheet(regular_button_style)
+                self.open_config_btn.setStyleSheet(regular_button_style)
+                
+                # Themes tab buttons
+                if hasattr(self, 'refresh_themes_btn'):
+                    self.refresh_themes_btn.setStyleSheet(regular_button_style)
+                if hasattr(self, 'load_theme_btn'):
+                    self.load_theme_btn.setStyleSheet(regular_button_style)
+                if hasattr(self, 'open_themes_folder_btn'):
+                    self.open_themes_folder_btn.setStyleSheet(regular_button_style)
+                if hasattr(self, 'export_theme_btn'):
+                    self.export_theme_btn.setStyleSheet(regular_button_style)
+                if hasattr(self, 'open_theme_editor_btn'):
+                    self.open_theme_editor_btn.setStyleSheet(regular_button_style)
                 
                 logger.debug("Applied modern button styles to settings dialog")
             else:
@@ -877,9 +903,9 @@ class SettingsDialog(QDialog):
         self.config_path_label.setWordWrap(True)
         storage_layout.addRow("Config Location:", self.config_path_label)
         
-        open_config_btn = QPushButton("Open Config Folder")
-        open_config_btn.clicked.connect(self._open_config_folder)
-        storage_layout.addRow("", open_config_btn)
+        self.open_config_btn = QPushButton("Open Config Folder")
+        self.open_config_btn.clicked.connect(self._open_config_folder)
+        storage_layout.addRow("", self.open_config_btn)
         
         layout.addWidget(storage_group)
         
@@ -1055,9 +1081,9 @@ class SettingsDialog(QDialog):
         theme_layout.addRow("Custom Themes:", self.custom_theme_selector)
         
         # Refresh themes button
-        refresh_btn = QPushButton("Refresh Themes")
-        refresh_btn.clicked.connect(self._refresh_themes)
-        theme_layout.addRow("", refresh_btn)
+        self.refresh_themes_btn = QPushButton("Refresh Themes")
+        self.refresh_themes_btn.clicked.connect(self._refresh_themes)
+        theme_layout.addRow("", self.refresh_themes_btn)
         
         theme_group.setLayout(theme_layout)
         layout.addWidget(theme_group)

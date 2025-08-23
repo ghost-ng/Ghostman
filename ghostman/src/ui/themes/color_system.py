@@ -256,3 +256,107 @@ class ColorUtils:
         
         result = QColor(r, g, b)
         return result.name()
+    
+    @staticmethod
+    def get_high_contrast_text_color_for_background(background_color: str, 
+                                                  theme_colors: 'ColorSystem' = None,
+                                                  min_ratio: float = 4.5) -> Tuple[str, float]:
+        """
+        Find the best high-contrast text color for the given background.
+        
+        Uses the same smart algorithm as titlebar buttons to ensure maximum readability
+        for search result counts and other UI elements.
+        
+        Args:
+            background_color: Background color (hex string)
+            theme_colors: ColorSystem instance to provide theme-aware candidates
+            min_ratio: Minimum WCAG contrast ratio (default 4.5 for AA compliance)
+            
+        Returns:
+            Tuple of (best_color, contrast_ratio)
+        """
+        def calculate_contrast_ratio(color1_hex: str, color2_hex: str) -> float:
+            """Calculate WCAG contrast ratio between two hex colors."""
+            try:
+                qcolor1 = QColor(color1_hex)
+                qcolor2 = QColor(color2_hex)
+                
+                def get_luminance(qcolor):
+                    r, g, b = qcolor.red() / 255.0, qcolor.green() / 255.0, qcolor.blue() / 255.0
+                    r = r / 12.92 if r <= 0.03928 else pow((r + 0.055) / 1.055, 2.4)
+                    g = g / 12.92 if g <= 0.03928 else pow((g + 0.055) / 1.055, 2.4)
+                    b = b / 12.92 if b <= 0.03928 else pow((b + 0.055) / 1.055, 2.4)
+                    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+                
+                lum1 = get_luminance(qcolor1)
+                lum2 = get_luminance(qcolor2)
+                
+                if lum1 < lum2:
+                    lum1, lum2 = lum2, lum1
+                
+                return (lum1 + 0.05) / (lum2 + 0.05)
+            except:
+                return 0.0
+        
+        # Start with theme-aware candidates if available
+        text_candidates = []
+        
+        if theme_colors:
+            # Try theme colors first (may provide better visual integration)
+            text_candidates.extend([
+                theme_colors.text_primary,
+                theme_colors.text_secondary,
+                theme_colors.background_primary,  # Sometimes main bg works well as text
+                theme_colors.border_primary,      # Border colors often have good contrast
+                theme_colors.secondary,           # Accent colors can work
+            ])
+        
+        # Always add high-contrast fallbacks
+        text_candidates.extend([
+            "#ffffff",  # Pure white
+            "#000000",  # Pure black
+            "#f8f8f2",  # Near white (popular in dark themes)
+            "#2d2d2d",  # Dark gray
+            "#e6e6e6",  # Light gray
+            "#333333",  # Medium dark gray
+        ])
+        
+        # Find the best contrast
+        best_color = text_candidates[0]
+        best_ratio = 0.0
+        
+        for candidate in text_candidates:
+            try:
+                ratio = calculate_contrast_ratio(candidate, background_color)
+                if ratio > best_ratio:
+                    best_ratio = ratio
+                    best_color = candidate
+                    
+                # If we found excellent contrast, we can stop early
+                if ratio >= 7.0:  # WCAG AAA level
+                    break
+                    
+            except:
+                continue
+        
+        # If we still don't have adequate contrast, force high contrast
+        if best_ratio < min_ratio:
+            # Determine if background is dark or light
+            try:
+                bg_qcolor = QColor(background_color)
+                bg_luminance = (bg_qcolor.red() + bg_qcolor.green() + bg_qcolor.blue()) / (3 * 255.0)
+                
+                if bg_luminance > 0.5:
+                    # Light background - force black text
+                    best_color = "#000000"
+                    best_ratio = calculate_contrast_ratio("#000000", background_color)
+                else:
+                    # Dark background - force white text
+                    best_color = "#ffffff"
+                    best_ratio = calculate_contrast_ratio("#ffffff", background_color)
+            except:
+                # Fallback to white text
+                best_color = "#ffffff"
+                best_ratio = calculate_contrast_ratio("#ffffff", background_color)
+        
+        return best_color, best_ratio
