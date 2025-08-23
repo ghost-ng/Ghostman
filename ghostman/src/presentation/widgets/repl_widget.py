@@ -3703,7 +3703,7 @@ class REPLWidget(QWidget):
     def eventFilter(self, obj, event):
         """Event filter for command input navigation and link detection."""
         # Handle link clicks in output display
-        if obj == self.output_display and event.type() == event.Type.MouseButtonPress:
+        if hasattr(self, 'output_display') and obj == self.output_display and event.type() == event.Type.MouseButtonPress:
             if event.button() == Qt.MouseButton.LeftButton:
                 # Get cursor at click position
                 cursor = self.output_display.cursorForPosition(event.pos())
@@ -3718,7 +3718,7 @@ class REPLWidget(QWidget):
                         return True  # Event handled
         
         # Handle command input keyboard events
-        elif obj == self.command_input and event.type() == event.Type.KeyPress:
+        elif hasattr(self, 'command_input') and obj == self.command_input and event.type() == event.Type.KeyPress:
             key_event = event
             
             # Handle Enter key - submit on Enter, newline on Shift+Enter
