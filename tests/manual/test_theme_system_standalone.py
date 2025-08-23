@@ -78,17 +78,18 @@ def test_file_structure():
     return True
 
 def test_documentation_files():
-    """Test that documentation files were created."""
+    """Test that consolidated documentation files exist."""
     print("\n📚 Testing Documentation Files...")
     
     import os
     
+    # Updated documentation structure after consolidation
     doc_files = [
-        "THEME_SYSTEM_GUIDE.md",
-        "COLOR_VARIABLE_REFERENCE.md", 
-        "THEME_INTEGRATION_HOWTO.md",
-        "PRESET_THEMES_CATALOG.md",
-        "COMPREHENSIVE_THEME_ARCHITECTURE_ANALYSIS.md"
+        "docs/STYLING_SYSTEM_GUIDE.md",  # Consolidated main guide
+        "docs/THEME_USER_GUIDE.md",     # New user-focused guide
+        "docs/guides/PRESET_THEMES_CATALOG.md",  # Existing, kept as-is
+        "docs/analysis/COMPREHENSIVE_THEME_ARCHITECTURE_ANALYSIS.md",  # Analysis doc
+        "docs/README.md"  # Documentation index
     ]
     
     for file_path in doc_files:
@@ -127,14 +128,10 @@ def main():
     
     if passed == total:
         print("🎉 All theme system components are working correctly!")
-        print("\n✨ READY TO USE:")
-        print("• 24-variable color system")
-        print("• 10 preset themes")
-        print("• Complete theme editor")
-        print("• Comprehensive documentation")
-        print("• Live preview functionality")
+        return True
     else:
-        print("⚠️  Some components may need attention")
+        print("⚠️  Some theme system components may need attention")
+        return False
 
 if __name__ == "__main__":
     main()
