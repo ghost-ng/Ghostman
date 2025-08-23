@@ -56,16 +56,46 @@ There are several ways to open the chat interface:
 
 ### Sending Messages
 
-- **Type Your Message**: Click in the input area and type
+#### Basic Message Input
+- **Type Your Message**: Click in the input area and type your message
 - **Send**: Press `Ctrl+Enter` or click the send button
-- **Multi-line Messages**: Press `Shift+Enter` for new lines without sending
+- **Clear Input**: Clear the input field without sending
+
+#### Advanced Multiline Support
+The input field now supports sophisticated multiline message composition:
+
+- **Multiline Messages**: Press `Shift+Enter` to create new lines without sending
+- **Dynamic Expansion**: The input field automatically grows as you type longer messages or add line breaks
+- **Text Wrapping**: Long lines automatically wrap and expand the input field height
+- **Smart Height**: Field expands up to 5 lines, then becomes scrollable for very long messages
+- **Perfect Alignment**: Input field maintains proper visual alignment with buttons and labels
+
+#### Input Field Features
+- **Automatic Height**: Field starts at single-line height and expands based on content
+- **Visual Line Counting**: Accurately tracks both manual line breaks and wrapped text
+- **Smooth Transitions**: Height changes are animated for a polished experience
+- **Baseline Alignment**: Always maintains consistent alignment with the send button
 
 ### Message Features
 
-- **Real-time Streaming**: Watch AI responses appear in real-time
-- **Message History**: Scroll up to see previous messages
-- **Copy Messages**: Right-click any message to copy text
-- **Formatted Text**: AI responses support formatting and code blocks
+#### AI Response Display
+- **Real-time Streaming**: Watch AI responses appear in real-time as they're generated
+- **Enhanced Markdown**: AI responses support rich formatting including:
+  - Headers, emphasis (bold/italic), and code blocks
+  - Tables, lists, and links
+  - Strikethrough (~~text~~) and highlights (==text==)
+  - Improved parsing performance with mistune v3
+- **Message History**: Scroll up to see previous messages in the conversation
+- **Copy Messages**: Right-click any message to copy text to clipboard
+
+#### Query Control Features
+- **Stop Button**: Cancel active AI queries in progress
+  - Red "Stop" button appears during AI processing
+  - Click to immediately cancel the current query
+  - Clean state restoration after cancellation
+  - No memory leaks or zombie processes
+- **Processing Indicators**: Visual spinner and status changes during AI communication
+- **Error Recovery**: Automatic retry options for failed queries
 
 ### Chat Controls
 
@@ -73,6 +103,21 @@ There are several ways to open the chat interface:
 - **Conversation Browser**: Click the browse icon to see all conversations
 - **Settings**: Click the gear icon to open settings
 - **Clear**: Start fresh without creating a new conversation
+
+### Enhanced User Experience
+
+#### Input Interaction
+- **Smart Enter Handling**: 
+  - `Enter` alone sends the message
+  - `Shift+Enter` adds a new line
+  - Works intuitively whether you're typing single or multiline content
+- **History Navigation**: Use up/down arrow keys to navigate previous messages (when at start/end of input)
+- **Text Selection**: Full text selection and editing capabilities within the input field
+
+#### Visual Polish
+- **Consistent Styling**: All interface elements maintain visual consistency across themes
+- **Responsive Design**: Interface adapts smoothly to window resizing
+- **Performance Optimized**: Fast response times and smooth animations
 
 ---
 
@@ -462,6 +507,20 @@ PKI (Public Key Infrastructure) authentication provides enterprise-grade securit
 - Try different theme first
 - Reset to default theme
 
+**Problem**: "Input field not expanding properly"
+**Solutions**:
+- Try typing longer text to trigger expansion
+- Check if window is too small for expansion
+- Restart application to reset input state
+- Verify theme compatibility
+
+**Problem**: "Stop button not working"
+**Solutions**:
+- Wait a moment for thread cancellation
+- Check if query is actually running
+- Restart application if stop button remains visible
+- Check network connection for timeout issues
+
 ### Log Files
 
 #### Accessing Logs
@@ -526,6 +585,8 @@ PKI (Public Key Infrastructure) authentication provides enterprise-grade securit
 - **Multiple Conversations**: Use different conversations for different topics
 - **Theme Switching**: Change themes based on time of day or task
 - **System Tray**: Keep Ghostman accessible but unobtrusive
+- **Multiline Composition**: Use `Shift+Enter` to compose complex messages with multiple paragraphs
+- **Stop Queries**: Don't hesitate to stop AI queries that are taking too long
 
 ### Advanced Features
 
@@ -567,10 +628,12 @@ PKI (Public Key Infrastructure) authentication provides enterprise-grade securit
 - `Escape` - Close current dialog
 
 ### Chat Window
-- `Shift+Enter` - New line in message
+- `Shift+Enter` - New line in message (multiline support)
+- `Enter` - Send message (when not in multiline mode)
 - `Ctrl+A` - Select all text in input
 - `Ctrl+Z` - Undo in text input
 - `Ctrl+Y` - Redo in text input
+- `Up/Down Arrow` - Navigate message history (when cursor at start/end)
 
 ### Conversation Browser
 - `Ctrl+F` - Search conversations
