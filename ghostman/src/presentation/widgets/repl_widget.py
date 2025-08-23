@@ -22,12 +22,12 @@ except ImportError:
     
     logger.warning("Markdown library not available - falling back to plain text rendering")
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
+    QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QTextBrowser,
     QLineEdit, QPushButton, QLabel, QFrame, QComboBox, QPlainTextEdit,
     QToolButton, QMenu, QProgressBar, QListWidget, QSizePolicy,
     QListWidgetItem, QApplication, QMessageBox, QDialog, QCheckBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread, QObject, QSize, pyqtSlot, QPropertyAnimation, QEasingCurve
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread, QObject, QSize, pyqtSlot, QPropertyAnimation, QEasingCurve, QUrl
 from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QTextCharFormat, QColor, QPalette, QIcon, QPixmap, QAction, QTextOption, QFontMetrics
 
 # Import startup service for preamble
@@ -1492,7 +1492,7 @@ class REPLWidget(QWidget):
                 QLineEdit:focus {{
                     border: none !important;
                     outline: none !important;
-                    background-color: {colors.background_tertiary};
+                    background-color: {colors.background_secondary};
                 }}
                 QLineEdit:hover {{
                     border: none !important;
@@ -1523,7 +1523,7 @@ class REPLWidget(QWidget):
                 QLineEdit:focus {{
                     border: none !important;
                     outline: none !important;
-                    background-color: rgba(40, 40, 40, 1.0);
+                    background-color: rgba(30, 30, 30, 1.0);
                 }}
                 QLineEdit:hover {{
                     border: none !important;
@@ -3196,9 +3196,15 @@ class REPLWidget(QWidget):
         self._init_title_bar(layout)
         
         # Output display
-        self.output_display = QTextEdit()
+        self.output_display = QTextBrowser()
         self.output_display.setReadOnly(True)
-        # Note: QTextEdit doesn't have setOpenExternalLinks - anchorClicked signal works by default
+        # Disable automatic link opening to handle links ourselves
+        self.output_display.setOpenExternalLinks(False)
+        # Enable link interaction and connect to link handler
+        self.output_display.anchorClicked.connect(self._handle_link_click)
+        # Enable custom context menu for link operations
+        self.output_display.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.output_display.customContextMenuRequested.connect(self._show_output_context_menu)
         # Use font service for AI response font (default for output display)
         ai_font = font_service.create_qfont('ai_response')
         self.output_display.setFont(ai_font)
@@ -4811,13 +4817,74 @@ def test_theme():
             # Fallback to simple text
             self.append_output("Type 'resend' to try sending your message again", "system")
     
-    def _handle_resend_click(self, url):
-        """Handle clicks on resend links."""
-        if url.toString() == "resend_message" and self.last_failed_message:
+    def _handle_link_click(self, url):
+        """Handle clicks on all links including resend and external links."""
+        url_string = url.toString()
+        
+        # Handle resend links
+        if url_string == "resend_message" and self.last_failed_message:
             logger.info(f"Resending failed message: {self.last_failed_message[:50]}...")
             self.append_output(f"🔄 **Resending message...**", "system")
             self.append_output("", "system")  # Add spacing
             self._send_to_ai(self.last_failed_message)
+            return
+        
+        # Handle external links
+        if url_string.startswith(('http://', 'https://', 'ftp://', 'mailto:')):
+            import webbrowser
+            try:
+                webbrowser.open(url_string)
+                logger.debug(f"Opened external link: {url_string}")
+            except Exception as e:
+                logger.error(f"Failed to open link {url_string}: {e}")
+                self.append_output(f"Failed to open link: {url_string}", "error")
+    
+    def _handle_resend_click(self, url):
+        """Legacy method - redirects to new link handler."""
+        self._handle_link_click(url)
+        
+    def _show_output_context_menu(self, position):
+        """Show context menu for output display with link operations."""
+        # Get cursor at position
+        cursor = self.output_display.cursorForPosition(position)
+        
+        # Check if cursor is on a link
+        char_format = cursor.charFormat()
+        link_url = char_format.anchorHref()
+        
+        # Create context menu
+        context_menu = QMenu(self.output_display)
+        
+        if link_url:
+            # Add link-specific actions
+            open_action = context_menu.addAction("🌐 Open Link")
+            open_action.triggered.connect(lambda: self._handle_link_click(QUrl(link_url)))
+            
+            copy_action = context_menu.addAction("📋 Copy Link Address")
+            copy_action.triggered.connect(lambda: self._copy_link_to_clipboard(link_url))
+            
+            context_menu.addSeparator()
+        
+        # Add standard text operations
+        if self.output_display.textCursor().hasSelection():
+            copy_text_action = context_menu.addAction("📄 Copy Text")
+            copy_text_action.triggered.connect(self.output_display.copy)
+        
+        select_all_action = context_menu.addAction("🗂️ Select All")
+        select_all_action.triggered.connect(self.output_display.selectAll)
+        
+        # Show context menu
+        context_menu.exec(self.output_display.mapToGlobal(position))
+    
+    def _copy_link_to_clipboard(self, url):
+        """Copy link URL to clipboard."""
+        try:
+            from PyQt6.QtGui import QGuiApplication
+            clipboard = QGuiApplication.clipboard()
+            clipboard.setText(url)
+            logger.debug(f"Copied link to clipboard: {url}")
+        except Exception as e:
+            logger.error(f"Failed to copy link to clipboard: {e}")
     
     def _on_stop_query(self):
         """Handle stop button click to cancel active AI query."""
@@ -5875,6 +5942,10 @@ def test_theme():
             self.current_search_index = -1
             self.current_search_query = ""
             
+            # Clean up stored HTML content
+            if hasattr(self, '_original_html_content'):
+                delattr(self, '_original_html_content')
+            
             logger.debug("Search closed and highlights cleared")
             
             # Update search button visual state
@@ -5962,60 +6033,196 @@ def test_theme():
             logger.error(f"Failed to perform conversation search: {e}")
     
     def _find_matches_in_conversation(self, query: str):
-        """Find all matches of query in current conversation display."""
+        """Find all matches of query in current conversation display using plain text search with correct positioning."""
         try:
             self.current_search_matches = []
             
             if not hasattr(self, 'output_display') or not self.output_display:
                 return
             
-            # Get the conversation display text
-            cursor = self.output_display.textCursor()
-            cursor.movePosition(cursor.MoveOperation.Start)
-            
-            # Get full document text
-            document = self.output_display.document()
-            full_text = document.toPlainText()
-            
-            # Search for current conversation with optional regex support
-            import re
-            
-            try:
-                if hasattr(self, 'regex_checkbox') and self.regex_checkbox.isChecked():
-                    # Use regex pattern directly
-                    pattern = re.compile(query, re.IGNORECASE)
-                else:
-                    # Escape special characters for literal search
-                    pattern = re.compile(re.escape(query), re.IGNORECASE)
-            except re.error as e:
-                # Invalid regex pattern - show error in status
-                if hasattr(self, 'search_status_label'):
-                    self.search_status_label.setText(f"Invalid regex: {str(e)[:20]}...")
-                logger.warning(f"Invalid regex pattern '{query}': {e}")
+            if not query.strip():
                 return
             
-            # Find all matches
-            for match in pattern.finditer(full_text):
-                start_pos = match.start()
-                end_pos = match.end()
-                
-                # Convert to QTextCursor positions
-                cursor.setPosition(start_pos)
-                start_cursor = QTextCursor(cursor)
-                cursor.setPosition(end_pos, cursor.MoveMode.KeepAnchor)
-                end_cursor = QTextCursor(cursor)
-                
-                self.current_search_matches.append({
-                    'start': start_pos,
-                    'end': end_pos,
-                    'text': match.group(),
-                    'cursor': QTextCursor(cursor)
-                })
+            document = self.output_display.document()
             
-            logger.debug(f"Found {len(self.current_search_matches)} matches for '{query}'")
+            # Store original HTML content to restore later if needed
+            if not hasattr(self, '_original_html_content'):
+                self._original_html_content = document.toHtml()
+            
+            # Get plain text content for accurate search
+            plain_text = document.toPlainText()
+            
+            # Determine case sensitivity
+            case_sensitive = hasattr(self, 'case_sensitive_checkbox') and self.case_sensitive_checkbox.isChecked()
+            
+            # Handle regex vs literal search
+            if hasattr(self, 'regex_checkbox') and self.regex_checkbox.isChecked():
+                # Use regex search on plain text
+                import re
+                try:
+                    regex_flags = 0 if case_sensitive else re.IGNORECASE
+                    pattern = re.compile(query, regex_flags)
+                    
+                    # Find all matches in plain text
+                    for match in pattern.finditer(plain_text):
+                        plain_start = match.start()
+                        plain_end = match.end()
+                        matched_text = match.group()
+                        
+                        # Map plain text positions to document positions
+                        doc_cursor = self._map_plain_text_to_document_cursor(document, plain_start, plain_end, matched_text)
+                        if doc_cursor and not doc_cursor.isNull():
+                            self.current_search_matches.append({
+                                'start': doc_cursor.selectionStart(),
+                                'end': doc_cursor.selectionEnd(),
+                                'text': doc_cursor.selectedText(),
+                                'cursor': QTextCursor(doc_cursor)
+                            })
+                        
+                except re.error as e:
+                    if hasattr(self, 'search_status_label'):
+                        self.search_status_label.setText(f"Invalid regex")
+                    logger.warning(f"Invalid regex pattern '{query}': {e}")
+                    return
+                except Exception as e:
+                    if hasattr(self, 'search_status_label'):
+                        self.search_status_label.setText(f"Regex error")
+                    logger.warning(f"Regex search error for '{query}': {e}")
+                    return
+            else:
+                # Use literal string search on plain text
+                search_text = plain_text if case_sensitive else plain_text.lower()
+                search_query = query if case_sensitive else query.lower()
+                
+                start_pos = 0
+                while True:
+                    # Find next occurrence in plain text
+                    plain_start = search_text.find(search_query, start_pos)
+                    if plain_start == -1:
+                        break
+                    
+                    plain_end = plain_start + len(query)
+                    matched_text = plain_text[plain_start:plain_end]
+                    
+                    # Map plain text positions to document positions
+                    doc_cursor = self._map_plain_text_to_document_cursor(document, plain_start, plain_end, matched_text)
+                    if doc_cursor and not doc_cursor.isNull():
+                        self.current_search_matches.append({
+                            'start': doc_cursor.selectionStart(),
+                            'end': doc_cursor.selectionEnd(),
+                            'text': doc_cursor.selectedText(),
+                            'cursor': QTextCursor(doc_cursor)
+                        })
+                    
+                    # Move to next potential match
+                    start_pos = plain_start + 1
+            
+            logger.debug(f"Found {len(self.current_search_matches)} matches for '{query}' using plain text search with position mapping")
             
         except Exception as e:
             logger.error(f"Failed to find matches in conversation: {e}")
+    
+    def _map_plain_text_to_document_cursor(self, document, plain_start: int, plain_end: int, expected_text: str):
+        """Map plain text positions to document cursor positions.
+        
+        This method handles the discrepancy between plain text positions and
+        document positions caused by HTML formatting in QTextDocument.
+        
+        Args:
+            document: QTextDocument instance
+            plain_start: Start position in plain text
+            plain_end: End position in plain text  
+            expected_text: The text we expect to find at this position
+            
+        Returns:
+            QTextCursor with correct selection, or None if mapping failed
+        """
+        try:
+            # Create cursor and navigate to the plain text position
+            cursor = QTextCursor(document)
+            
+            # Method 1: Use movePosition with character count
+            # This accounts for the fact that HTML formatting affects internal positioning
+            cursor.setPosition(0)  # Start at beginning
+            
+            # Move forward by the plain text character count
+            # QTextCursor.movePosition handles HTML tags correctly
+            for i in range(plain_start):
+                if not cursor.movePosition(QTextCursor.MoveOperation.NextCharacter):
+                    break
+            
+            # Mark the start position
+            start_pos = cursor.position()
+            
+            # Select the expected text length
+            cursor.setPosition(start_pos)
+            for i in range(len(expected_text)):
+                if not cursor.movePosition(QTextCursor.MoveOperation.NextCharacter, QTextCursor.MoveMode.KeepAnchor):
+                    break
+            
+            # Verify the selection matches expected text (case-insensitive for verification)
+            selected_text = cursor.selectedText()
+            if selected_text.lower() == expected_text.lower():
+                return cursor
+            
+            # Method 2: Fallback - use character-by-character navigation with verification
+            # This is more robust but slower
+            cursor.setPosition(0)
+            plain_text = document.toPlainText()
+            
+            current_plain_pos = 0
+            while current_plain_pos < len(plain_text) and cursor.position() < document.characterCount():
+                if current_plain_pos == plain_start:
+                    # Found our start position, now select the text
+                    start_pos = cursor.position()
+                    
+                    # Select character by character to ensure we get the right text
+                    cursor.setPosition(start_pos)
+                    selected_chars = 0
+                    while selected_chars < len(expected_text) and cursor.position() < document.characterCount():
+                        cursor.movePosition(QTextCursor.MoveOperation.NextCharacter, QTextCursor.MoveMode.KeepAnchor)
+                        selected_chars += 1
+                    
+                    # Verify selection
+                    selected_text = cursor.selectedText()
+                    if selected_text.lower() == expected_text.lower():
+                        return cursor
+                    
+                    break
+                
+                # Move to next character in both plain text and document
+                if not cursor.movePosition(QTextCursor.MoveOperation.NextCharacter):
+                    break
+                current_plain_pos += 1
+            
+            # Method 3: Final fallback - search using QTextDocument.find() with exact text
+            # This should work as a last resort
+            cursor = QTextCursor(document)
+            case_sensitive = hasattr(self, 'case_sensitive_checkbox') and self.case_sensitive_checkbox.isChecked()
+            search_options = QTextDocument.FindFlag.FindCaseSensitively if case_sensitive else QTextDocument.FindFlag(0)
+            
+            # Try to find the exact expected text
+            found_cursor = document.find(expected_text, cursor, search_options)
+            if not found_cursor.isNull():
+                # Verify this is actually the match we want by checking context
+                found_start = found_cursor.selectionStart()
+                
+                # Check if this could be our target match by verifying surrounding context
+                context_cursor = QTextCursor(document)
+                context_cursor.setPosition(max(0, found_start - 10))
+                context_cursor.setPosition(min(document.characterCount(), found_cursor.selectionEnd() + 10), QTextCursor.MoveMode.KeepAnchor)
+                context = context_cursor.selectedText()
+                
+                # If the context seems reasonable, use this match
+                if expected_text.lower() in context.lower():
+                    return found_cursor
+            
+            logger.warning(f"Failed to map plain text position {plain_start}-{plain_end} for text '{expected_text}'")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error mapping plain text to document cursor: {e}")
+            return None
     
     def _highlight_current_match(self):
         """Highlight the current search match and scroll to it."""
@@ -6023,59 +6230,149 @@ def test_theme():
             if not self.current_search_matches or self.current_search_index < 0:
                 return
             
-            match = self.current_search_matches[self.current_search_index]
-            
-            # Clear previous highlights
+            # Clear previous highlights first
             self._clear_search_highlights()
             
-            # Create highlight format with theme colors
-            highlight_format = QTextCharFormat()
-            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
-                highlight_bg = self.theme_manager.current_theme.status_warning
-                highlight_fg = self.theme_manager.current_theme.background_primary
-            else:
-                highlight_bg = "#ffff00"  # Yellow background
-                highlight_fg = "#000000"  # Black text
-            highlight_format.setBackground(QColor(highlight_bg))
-            highlight_format.setForeground(QColor(highlight_fg))
+            # Highlight all matches with subtle background
+            self._highlight_all_matches()
             
-            # Apply highlight to current match
+            # Highlight current match with prominent colors
+            match = self.current_search_matches[self.current_search_index]
+            
+            # Create prominent highlight format for current match
+            current_highlight_format = QTextCharFormat()
+            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+                current_bg = self.theme_manager.current_theme.status_warning
+                current_fg = self.theme_manager.current_theme.background_primary
+            else:
+                current_bg = "#ffff00"  # Yellow background
+                current_fg = "#000000"  # Black text
+            current_highlight_format.setBackground(QColor(current_bg))
+            current_highlight_format.setForeground(QColor(current_fg))
+            
+            # Apply current match highlight
             cursor = self.output_display.textCursor()
             cursor.setPosition(match['start'])
             cursor.setPosition(match['end'], cursor.MoveMode.KeepAnchor)
-            cursor.setCharFormat(highlight_format)
+            
+            # Store original format to restore later
+            original_format = cursor.charFormat()
+            
+            # Merge with original format to preserve original styling where possible
+            merged_format = QTextCharFormat(original_format)
+            merged_format.setBackground(current_highlight_format.background())
+            merged_format.setForeground(current_highlight_format.foreground())
+            
+            cursor.setCharFormat(merged_format)
+            
+            # Store highlight info for cleanup
+            if not hasattr(self, '_current_highlight_positions'):
+                self._current_highlight_positions = []
+            self._current_highlight_positions.append({
+                'start': match['start'],
+                'end': match['end'],
+                'original_format': original_format
+            })
             
             # Scroll to the match
             self.output_display.setTextCursor(cursor)
             self.output_display.ensureCursorVisible()
             
-            logger.debug(f"Highlighted match at position {match['start']}-{match['end']}")
+            logger.debug(f"Highlighted current match at position {match['start']}-{match['end']}")
             
         except Exception as e:
             logger.error(f"Failed to highlight current match: {e}")
     
+    def _highlight_all_matches(self):
+        """Highlight all search matches with subtle background color."""
+        try:
+            if not self.current_search_matches:
+                return
+            
+            # Create subtle highlight format for all matches
+            all_matches_format = QTextCharFormat()
+            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+                # Use a more subtle color for all matches
+                all_bg = self.theme_manager.current_theme.status_info if hasattr(self.theme_manager.current_theme, 'status_info') else "#e6f3ff"
+            else:
+                all_bg = "#e6f3ff"  # Very light blue background
+            
+            all_matches_format.setBackground(QColor(all_bg))
+            
+            # Initialize storage for all match positions
+            if not hasattr(self, '_all_match_positions'):
+                self._all_match_positions = []
+            self._all_match_positions = []
+            
+            cursor = self.output_display.textCursor()
+            
+            # Apply subtle highlight to all matches except current one
+            for i, match in enumerate(self.current_search_matches):
+                if i == self.current_search_index:
+                    continue  # Skip current match, it gets special highlighting
+                
+                cursor.setPosition(match['start'])
+                cursor.setPosition(match['end'], cursor.MoveMode.KeepAnchor)
+                
+                # Store original format
+                original_format = cursor.charFormat()
+                
+                # Merge with original format to preserve styling
+                merged_format = QTextCharFormat(original_format)
+                merged_format.setBackground(all_matches_format.background())
+                
+                cursor.setCharFormat(merged_format)
+                
+                # Store for cleanup
+                self._all_match_positions.append({
+                    'start': match['start'],
+                    'end': match['end'],
+                    'original_format': original_format
+                })
+            
+            logger.debug(f"Applied subtle highlighting to {len(self._all_match_positions)} matches")
+            
+        except Exception as e:
+            logger.error(f"Failed to highlight all matches: {e}")
+    
     def _clear_search_highlights(self):
-        """Clear all search highlights from conversation display."""
+        """Clear all search highlights from conversation display without destroying original formatting."""
         try:
             if not hasattr(self, 'output_display') or not self.output_display:
                 return
             
-            # Reset all text formatting to default
-            cursor = self.output_display.textCursor()
-            cursor.select(cursor.SelectionType.Document)
+            # Clear stored highlight positions
+            if hasattr(self, '_current_highlight_positions'):
+                cursor = self.output_display.textCursor()
+                for highlight_info in self._current_highlight_positions:
+                    # Restore original format for each highlighted position
+                    cursor.setPosition(highlight_info['start'])
+                    cursor.setPosition(highlight_info['end'], cursor.MoveMode.KeepAnchor)
+                    cursor.setCharFormat(highlight_info['original_format'])
+                
+                self._current_highlight_positions = []
             
-            # Apply default format
-            default_format = QTextCharFormat()
-            cursor.setCharFormat(default_format)
+            # Clear all match highlights
+            if hasattr(self, '_all_match_positions'):
+                cursor = self.output_display.textCursor()
+                for highlight_info in self._all_match_positions:
+                    cursor.setPosition(highlight_info['start'])
+                    cursor.setPosition(highlight_info['end'], cursor.MoveMode.KeepAnchor)
+                    cursor.setCharFormat(highlight_info['original_format'])
+                
+                self._all_match_positions = []
             
-            # Move cursor to start
-            cursor.movePosition(cursor.MoveOperation.Start)
-            self.output_display.setTextCursor(cursor)
-            
-            logger.debug("Search highlights cleared")
+            logger.debug("Search highlights cleared without destroying original formatting")
             
         except Exception as e:
             logger.error(f"Failed to clear search highlights: {e}")
+            # Fallback: restore from original HTML if available
+            try:
+                if hasattr(self, '_original_html_content'):
+                    logger.warning("Fallback: restoring original HTML content")
+                    self.output_display.setHtml(self._original_html_content)
+            except Exception as fallback_error:
+                logger.error(f"Failed to restore original content: {fallback_error}")
     
     def _on_search_text_changed(self, text: str):
         """Handle search input text changes with debouncing."""
