@@ -3195,13 +3195,11 @@ class REPLWidget(QWidget):
         # Title bar with new conversation and help buttons
         self._init_title_bar(layout)
         
-        # Output display
-        self.output_display = QTextBrowser()
+        # Output display - using QTextEdit instead of QTextBrowser to prevent navigation
+        self.output_display = QTextEdit()
         self.output_display.setReadOnly(True)
-        # Disable automatic link opening to handle links ourselves
-        self.output_display.setOpenExternalLinks(False)
-        # Enable link interaction and connect to link handler
-        self.output_display.anchorClicked.connect(self._handle_link_click)
+        # Enable manual link detection and handling
+        self._setup_link_handling()
         # Enable custom context menu for link operations
         self.output_display.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.output_display.customContextMenuRequested.connect(self._show_output_context_menu)
@@ -3703,8 +3701,24 @@ class REPLWidget(QWidget):
             logger.error(f"Failed to update spinner: {e}")
     
     def eventFilter(self, obj, event):
-        """Event filter for command input navigation."""
-        if obj == self.command_input and event.type() == event.Type.KeyPress:
+        """Event filter for command input navigation and link detection."""
+        # Handle link clicks in output display
+        if obj == self.output_display and event.type() == event.Type.MouseButtonPress:
+            if event.button() == Qt.MouseButton.LeftButton:
+                # Get cursor at click position
+                cursor = self.output_display.cursorForPosition(event.pos())
+                
+                # Check if cursor is on a link
+                char_format = cursor.charFormat()
+                if char_format.isAnchor():
+                    link_url = char_format.anchorHref()
+                    if link_url:
+                        # Handle the link click
+                        self._handle_link_click(QUrl(link_url))
+                        return True  # Event handled
+        
+        # Handle command input keyboard events
+        elif obj == self.command_input and event.type() == event.Type.KeyPress:
             key_event = event
             
             # Handle Enter key - submit on Enter, newline on Shift+Enter
@@ -4885,6 +4899,12 @@ def test_theme():
             logger.debug(f"Copied link to clipboard: {url}")
         except Exception as e:
             logger.error(f"Failed to copy link to clipboard: {e}")
+    
+    def _setup_link_handling(self):
+        """Setup manual link detection and handling for QTextEdit."""
+        # Install event filter to detect mouse clicks on links
+        self.output_display.installEventFilter(self)
+    
     
     def _on_stop_query(self):
         """Handle stop button click to cancel active AI query."""
