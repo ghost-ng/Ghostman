@@ -437,8 +437,10 @@ class AvatarWidget(SimpleAvatarArrowMixin, AvatarResizableMixin, QWidget):
         try:
             logger.info("📖 Help documentation menu item clicked by user")
             # Get the help file path
-            help_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 
-                                   'assets', 'help', 'index.html')
+            current_dir = os.path.dirname(__file__)
+            # Go up from widgets to presentation, then to src, then stay in ghostman, then to assets
+            ghostman_src_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
+            help_file = os.path.join(ghostman_src_root, 'assets', 'help', 'index.html')
             help_url = f'file:///{help_file.replace(os.sep, "/")}'
             webbrowser.open(help_url)
             logger.info(f"📖 Opened help documentation: {help_url}")
