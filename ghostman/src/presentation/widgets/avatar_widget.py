@@ -399,6 +399,11 @@ class AvatarWidget(SimpleAvatarArrowMixin, AvatarResizableMixin, QWidget):
         settings_action.triggered.connect(self.settings_requested.emit)
         context_menu.addAction(settings_action)
         
+        # Help documentation action
+        help_action = QAction("Help Documentation", self)
+        help_action.triggered.connect(self._on_help_clicked)
+        context_menu.addAction(help_action)
+        
         context_menu.addSeparator()
         
         # Add actions
@@ -424,6 +429,21 @@ class AvatarWidget(SimpleAvatarArrowMixin, AvatarResizableMixin, QWidget):
         logger.debug("Emitting conversations_requested signal...")
         self.conversations_requested.emit()
         logger.debug("conversations_requested signal emitted")
+    
+    def _on_help_clicked(self):
+        """Handle help documentation menu item clicked."""
+        import os
+        import webbrowser
+        try:
+            logger.info("📖 Help documentation menu item clicked by user")
+            # Get the help file path
+            help_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 
+                                   'assets', 'help', 'index.html')
+            help_url = f'file:///{help_file.replace(os.sep, "/")}'
+            webbrowser.open(help_url)
+            logger.info(f"📖 Opened help documentation: {help_url}")
+        except Exception as e:
+            logger.error(f"Failed to open help documentation: {e}")
     
     def _on_quit_clicked(self):
         """Handle quit menu item clicked."""

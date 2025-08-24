@@ -480,27 +480,21 @@ class AppCoordinator(QObject):
                 )
     
     def _show_help(self):
-        """Show the help dialog."""
-        logger.info("=== HELP REQUESTED - OPENING HELP DIALOG ===")
+        """Show the help documentation."""
+        logger.info("=== HELP REQUESTED - OPENING HELP DOCUMENTATION ===")
+        import os
+        import webbrowser
         try:
-            logger.debug("Importing help dialog components...")
-            from ..presentation.dialogs.help_dialog import HelpDialog
-            
-            # Create or reuse existing help dialog (prevent multiple instances)
-            if not hasattr(self, '_help_dialog') or self._help_dialog is None or not self._help_dialog.isVisible():
-                logger.debug("Creating new help dialog...")
-                self._help_dialog = HelpDialog(parent=self._main_window)
-            else:
-                logger.debug("Bringing existing help dialog to front...")
-            
-            logger.debug("Showing help dialog...")
-            self._help_dialog.show()
-            self._help_dialog.raise_()
-            self._help_dialog.activateWindow()
-            logger.info("Help dialog opened")
+            logger.info("📖 Opening help documentation in browser")
+            # Get the help file path
+            current_dir = os.path.dirname(__file__)
+            help_file = os.path.join(os.path.dirname(current_dir), 'assets', 'help', 'index.html')
+            help_url = f'file:///{help_file.replace(os.sep, "/")}'
+            webbrowser.open(help_url)
+            logger.info(f"📖 Opened help documentation: {help_url}")
             
         except Exception as e:
-            logger.error(f"Failed to show help dialog: {e}")
+            logger.error(f"Failed to open help documentation: {e}")
             import traceback
             traceback.print_exc()
             # Show error message if possible
@@ -509,7 +503,7 @@ class AppCoordinator(QObject):
                 QMessageBox.critical(
                     self._main_window, 
                     "Error", 
-                    f"Failed to open help dialog:\n{str(e)}"
+                    f"Failed to open help documentation:\n{str(e)}"
                 )
     
     def _on_settings_applied(self, config: dict):

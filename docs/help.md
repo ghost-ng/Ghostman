@@ -106,6 +106,8 @@ The input field now supports sophisticated multiline message composition:
 - **Visual Feedback**: Links are properly styled with underlines and hover effects
 - **Safe Navigation**: Links open externally without affecting your chat session
 
+> **💡 Tip**: If links don't appear clickable or the cursor doesn't change when hovering, try right-clicking on the link text to access the context menu with "Open Link" and "Copy Link Address" options. This provides an alternative way to interact with links in all situations.
+
 #### Markdown Examples
 Here are examples of markdown formatting that work in Ghostman:
 
