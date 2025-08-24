@@ -372,10 +372,10 @@ class MarkdownRenderer:
         for old, new in replacements.items():
             styled_html = styled_html.replace(old, new)
         
-        # Handle links with special care
+        # Handle links with special care - ensure proper anchor formatting for Qt
         styled_html = re.sub(
-            r'<a href="([^"]+)">',
-            f'<a href="\\1" style="color: {style_colors["a"]}; text-decoration: underline;">',
+            r'<a href="([^"]+)"([^>]*)>',
+            f'<a href="\\1" style="color: {style_colors["a"]}; text-decoration: underline;"\\2>',
             styled_html
         )
         
@@ -3198,6 +3198,8 @@ class REPLWidget(QWidget):
         # Output display - using QTextEdit instead of QTextBrowser to prevent navigation
         self.output_display = QTextEdit()
         self.output_display.setReadOnly(True)
+        # Enable rich text features for proper link support
+        self.output_display.setAcceptRichText(True)
         # Enable manual link detection and handling
         self._setup_link_handling()
         # Enable custom context menu for link operations
@@ -3702,20 +3704,55 @@ class REPLWidget(QWidget):
     
     def eventFilter(self, obj, event):
         """Event filter for command input navigation and link detection."""
-        # Handle link clicks in output display
-        if hasattr(self, 'output_display') and obj == self.output_display and event.type() == event.Type.MouseButtonPress:
-            if event.button() == Qt.MouseButton.LeftButton:
-                # Get cursor at click position
-                cursor = self.output_display.cursorForPosition(event.pos())
-                
-                # Check if cursor is on a link
-                char_format = cursor.charFormat()
-                if char_format.isAnchor():
-                    link_url = char_format.anchorHref()
+        # Handle link clicks and hover in output display
+        if hasattr(self, 'output_display') and obj == self.output_display:
+            if event.type() == event.Type.MouseButtonPress:
+                if event.button() == Qt.MouseButton.LeftButton:
+                    # Check if click is on a link using multiple methods for reliability
+                    cursor = self.output_display.cursorForPosition(event.pos())
+                    
+                    # Method 1: Try anchorAt first
+                    anchor = self.output_display.anchorAt(event.pos())
+                    
+                    # Method 2: Check character format at cursor position
+                    char_format = cursor.charFormat()
+                    anchor_href = char_format.anchorHref()
+                    
+                    # Use the best available link URL
+                    link_url = anchor or anchor_href
+                    
                     if link_url:
                         # Handle the link click
                         self._handle_link_click(QUrl(link_url))
                         return True  # Event handled
+            
+            elif event.type() == event.Type.MouseMove:
+                # Change cursor when hovering over links using more reliable detection
+                cursor = self.output_display.cursorForPosition(event.pos())
+                
+                # Method 1: Try anchorAt first (sometimes works)
+                anchor = self.output_display.anchorAt(event.pos())
+                
+                # Method 2: Check character format at cursor position (more reliable)
+                char_format = cursor.charFormat()
+                anchor_href = char_format.anchorHref()
+                is_anchor = char_format.isAnchor()
+                
+                # Link detected if any method finds a link
+                if anchor or anchor_href or is_anchor:
+                    # Set pointer cursor for links
+                    self.output_display.setCursor(Qt.CursorShape.PointingHandCursor)
+                    # Optional debug logging (can be commented out in production)
+                    if hasattr(self, '_last_hover_debug') and self._last_hover_debug != "link":
+                        logger.debug(f"Link detected - anchor: '{anchor}', href: '{anchor_href}', isAnchor: {is_anchor}")
+                        self._last_hover_debug = "link"
+                else:
+                    # Set default cursor for regular text
+                    self.output_display.setCursor(Qt.CursorShape.IBeamCursor)
+                    if hasattr(self, '_last_hover_debug') and self._last_hover_debug != "text":
+                        self._last_hover_debug = "text"
+                    
+                return False  # Allow normal processing
         
         # Handle command input keyboard events
         elif hasattr(self, 'command_input') and obj == self.command_input and event.type() == event.Type.KeyPress:
@@ -4269,8 +4306,8 @@ class REPLWidget(QWidget):
         try:
             html_content = self._markdown_renderer.render(text, style, force_plain)
             
-            # Insert the rendered HTML content
-            cursor.insertHtml(html_content)
+            # Insert the rendered HTML content with proper anchor handling
+            self._insert_html_with_anchors(cursor, html_content)
             
             # Performance optimization: limit document size for very long conversations
             self._manage_document_size()
@@ -4904,6 +4941,65 @@ def test_theme():
         """Setup manual link detection and handling for QTextEdit."""
         # Install event filter to detect mouse clicks on links
         self.output_display.installEventFilter(self)
+        # Enable mouse tracking to capture mouse move events for cursor changes
+        self.output_display.setMouseTracking(True)
+    
+    def _insert_html_with_anchors(self, cursor, html_content):
+        """
+        Insert HTML content with proper anchor formatting for reliable link detection.
+        
+        This method parses HTML content and ensures that links are properly formatted
+        with Qt's rich text anchor system for reliable cursor hover and click detection.
+        """
+        try:
+            # Parse HTML content to extract and properly format links
+            import re
+            
+            # Find all links in the HTML content
+            link_pattern = r'<a\s+href="([^"]+)"[^>]*>(.*?)</a>'
+            links = re.findall(link_pattern, html_content, re.IGNORECASE | re.DOTALL)
+            
+            if links:
+                # Split content by links and insert each part separately
+                parts = re.split(link_pattern, html_content, flags=re.IGNORECASE | re.DOTALL)
+                
+                i = 0
+                while i < len(parts):
+                    if i + 2 < len(parts) and parts[i + 1] and parts[i + 2]:
+                        # Insert text before link
+                        if parts[i]:
+                            cursor.insertHtml(parts[i])
+                        
+                        # Insert link with proper anchor formatting
+                        link_url = parts[i + 1]
+                        link_text = parts[i + 2]
+                        
+                        # Create proper character format for the link
+                        char_format = QTextCharFormat()
+                        char_format.setAnchor(True)
+                        char_format.setAnchorHref(link_url)
+                        char_format.setForeground(QColor("#2196F3"))  # Link color
+                        char_format.setFontUnderline(True)
+                        
+                        cursor.insertText(link_text, char_format)
+                        i += 3
+                    else:
+                        # Regular content
+                        if parts[i]:
+                            cursor.insertHtml(parts[i])
+                        i += 1
+            else:
+                # No links found, insert as regular HTML
+                cursor.insertHtml(html_content)
+            
+        except Exception as e:
+            logger.error(f"Error inserting HTML content with anchors: {e}")
+            # Fallback to standard HTML insertion
+            try:
+                cursor.insertHtml(html_content)
+            except:
+                # Final fallback to plain text
+                cursor.insertText(html_content)
     
     
     def _on_stop_query(self):
