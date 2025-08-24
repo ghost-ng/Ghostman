@@ -408,12 +408,6 @@ class AvatarWidget(SimpleAvatarArrowMixin, AvatarResizableMixin, QWidget):
         
         context_menu.addSeparator()
         
-        about_action = QAction("About Ghostman", self)
-        about_action.triggered.connect(lambda: logger.info("About Ghostman clicked"))
-        context_menu.addAction(about_action)
-        
-        context_menu.addSeparator()
-        
         # Quit action
         quit_action = QAction("Quit Ghostman", self)
         quit_action.triggered.connect(self._on_quit_clicked)
