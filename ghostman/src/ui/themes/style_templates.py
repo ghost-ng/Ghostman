@@ -1523,23 +1523,19 @@ class StyleTemplates:
             padding: 4px;
             margin: 0px;
             outline: none !important;
-            box-shadow: none !important;
         }}
         QFrame:focus {{
             border: none !important;
             outline: none !important;
-            box-shadow: none !important;
         }}
         QFrame:hover {{
             border: none !important;
             outline: none !important;
-            box-shadow: none !important;
         }}
         /* Ensure child widgets don't inherit unwanted borders */
         QFrame QLineEdit {{
             border: none !important;
             outline: none !important;
-            box-shadow: none !important;
         }}
         """
     

@@ -80,13 +80,79 @@ The input field now supports sophisticated multiline message composition:
 
 #### AI Response Display
 - **Real-time Streaming**: Watch AI responses appear in real-time as they're generated
-- **Enhanced Markdown**: AI responses support rich formatting including:
-  - Headers, emphasis (bold/italic), and code blocks
-  - Tables, lists, and links
-  - Strikethrough (~~text~~) and highlights (==text==)
-  - Improved parsing performance with mistune v3
+- **Enhanced Markdown Support**: AI responses are fully markdown-aware with rich formatting including:
+  - **Headers**: `# H1`, `## H2`, `### H3` for document structure
+  - **Text Emphasis**: `**bold**`, `*italic*`, `***bold italic***`
+  - **Code**: Inline `code` and multi-line code blocks with syntax highlighting
+  - **Lists**: Ordered (`1. item`) and unordered (`- item`) lists with proper nesting
+  - **Links**: Clickable `[link text](https://example.com)` with full URL support
+  - **Tables**: Full markdown table support with proper alignment
+  - **Strikethrough**: `~~deleted text~~` for corrections
+  - **Highlights**: `==highlighted text==` for emphasis
+  - **Blockquotes**: `> quoted text` for citations and callouts
+  - **Horizontal Rules**: `---` for section breaks
+- **Improved Performance**: Uses mistune v3 parser for 37% faster rendering
 - **Message History**: Scroll up to see previous messages in the conversation
 - **Copy Messages**: Right-click any message to copy text to clipboard
+
+#### Interactive Link Features
+- **Clickable Links**: All markdown links `[text](URL)` are automatically clickable
+- **External URLs**: Links open in your default web browser
+- **Right-click Menu**: Right-click on any link for additional options:
+  - **🌐 Open Link**: Open the URL in your browser
+  - **📋 Copy Link Address**: Copy the URL to your clipboard
+  - **📄 Copy Text**: Copy selected text from the conversation
+  - **🗂️ Select All**: Select all text in the chat area
+- **Visual Feedback**: Links are properly styled with underlines and hover effects
+- **Safe Navigation**: Links open externally without affecting your chat session
+
+> **💡 Tip**: If links don't appear clickable or the cursor doesn't change when hovering, try right-clicking on the link text to access the context menu with "Open Link" and "Copy Link Address" options. This provides an alternative way to interact with links in all situations.
+
+#### Markdown Examples
+Here are examples of markdown formatting that work in Ghostman:
+
+**Basic Formatting:**
+```markdown
+**This is bold text**
+*This is italic text*
+`This is inline code`
+~~This is strikethrough~~
+==This is highlighted==
+```
+
+**Links and References:**
+```markdown
+[Google Search](https://www.google.com)
+[GitHub Repository](https://github.com/example/repo)
+[Documentation](https://docs.example.com)
+```
+
+**Code Blocks:**
+```markdown
+```python
+def hello_world():
+    print("Hello, World!")
+```
+```
+
+**Lists and Structure:**
+```markdown
+# Main Topic
+## Subtopic
+
+1. First item
+2. Second item
+   - Nested item
+   - Another nested item
+3. Third item
+
+> This is a blockquote
+> with multiple lines
+
+| Column 1 | Column 2 | Column 3 |
+|----------|----------|----------|
+| Data 1   | Data 2   | Data 3   |
+```
 
 #### Query Control Features
 - **Stop Button**: Cancel active AI queries in progress

@@ -22,16 +22,275 @@ except ImportError:
     
     logger.warning("Markdown library not available - falling back to plain text rendering")
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
+    QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QTextBrowser,
     QLineEdit, QPushButton, QLabel, QFrame, QComboBox, QPlainTextEdit,
     QToolButton, QMenu, QProgressBar, QListWidget, QSizePolicy,
     QListWidgetItem, QApplication, QMessageBox, QDialog, QCheckBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread, QObject, QSize, pyqtSlot, QPropertyAnimation, QEasingCurve
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread, QObject, QSize, pyqtSlot, QPropertyAnimation, QEasingCurve, QUrl, QPoint
+import weakref
 from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QTextCharFormat, QColor, QPalette, QIcon, QPixmap, QAction, QTextOption, QFontMetrics
 
 # Import startup service for preamble
 from ...application.startup_service import startup_service
+
+class ReplLinkHandler:
+    """Robust link detection and handling system for REPL widgets."""
+    
+    def __init__(self, text_edit, parent_repl=None):
+        self.text_edit = weakref.ref(text_edit)
+        self.parent_repl = weakref.ref(parent_repl) if parent_repl else None
+        
+        # Link registry for reliable detection
+        self.link_registry = {}  # block_num: [(start, end, href), ...]
+        
+        # Performance optimization
+        self.last_position = QPoint(-1, -1)
+        self.last_cursor_state = None
+        self.position_cache = {}
+        
+        # Debounced updates for better performance
+        self._update_timer = QTimer()
+        self._update_timer.setSingleShot(True)
+        self._update_timer.timeout.connect(self._perform_cursor_update)
+        self._pending_position = None
+        
+        # Initialize
+        self._rebuild_link_registry()
+        
+        # Connect to document changes
+        if text_edit.document():
+            text_edit.document().contentsChanged.connect(self._on_document_changed)
+    
+    def handle_mouse_move(self, event_pos):
+        """Handle mouse move events for cursor changes."""
+        if event_pos == self.last_position:
+            return False
+        
+        self.last_position = event_pos
+        
+        # Check cache first
+        cache_key = (event_pos.x(), event_pos.y())
+        if cache_key in self.position_cache:
+            is_link, href = self.position_cache[cache_key]
+            self._update_cursor_state(is_link, href)
+            return True
+        
+        # Queue update for performance
+        self._pending_position = event_pos
+        if not self._update_timer.isActive():
+            self._update_timer.start(10)  # 10ms debounce
+        
+        return True
+    
+    def handle_mouse_click(self, event_pos):
+        """Handle mouse click events for link activation."""
+        text_edit = self.text_edit()
+        if not text_edit:
+            return False
+        
+        try:
+            is_link, href = self._detect_link_at_position(event_pos)
+            if is_link and href:
+                self._handle_link_activation(href)
+                return True
+        except Exception as e:
+            logger.error(f"Error handling mouse click: {e}")
+        
+        return False
+    
+    def _perform_cursor_update(self):
+        """Perform the actual cursor update with caching."""
+        if not self._pending_position:
+            return
+        
+        position = self._pending_position
+        self._pending_position = None
+        
+        # Detect link at position
+        is_link, href = self._detect_link_at_position(position)
+        
+        # Cache result
+        cache_key = (position.x(), position.y())
+        self.position_cache[cache_key] = (is_link, href)
+        
+        # Limit cache size for memory management
+        if len(self.position_cache) > 1000:
+            keys_to_remove = list(self.position_cache.keys())[:500]
+            for key in keys_to_remove:
+                del self.position_cache[key]
+        
+        # Update cursor
+        self._update_cursor_state(is_link, href)
+    
+    def _detect_link_at_position(self, position):
+        """Detect if there's a link at the given position using multiple methods."""
+        text_edit = self.text_edit()
+        if not text_edit:
+            return False, None
+        
+        # Method 1: Registry-based detection (most reliable)
+        registry_result = self._detect_via_registry(position)
+        if registry_result[0]:
+            return registry_result
+        
+        # Method 2: Character format detection
+        format_result = self._detect_via_char_format(position)
+        if format_result[0]:
+            return format_result
+        
+        # Method 3: anchorAt method (fallback)
+        anchor_result = self._detect_via_anchor_at(position)
+        if anchor_result[0]:
+            return anchor_result
+        
+        return False, None
+    
+    def _detect_via_registry(self, position):
+        """Detect links using the internal registry."""
+        text_edit = self.text_edit()
+        if not text_edit:
+            return False, None
+        
+        try:
+            cursor = text_edit.cursorForPosition(position)
+            block = cursor.block()
+            
+            if not block.isValid():
+                return False, None
+            
+            block_num = block.blockNumber()
+            position_in_block = cursor.position() - block.position()
+            
+            # Check registry for this block
+            if block_num in self.link_registry:
+                for start_pos, end_pos, href in self.link_registry[block_num]:
+                    if start_pos <= position_in_block < end_pos:
+                        return True, href
+        
+        except Exception as e:
+            logger.debug(f"Registry detection failed: {e}")
+        
+        return False, None
+    
+    def _detect_via_char_format(self, position):
+        """Detect links using character format analysis."""
+        text_edit = self.text_edit()
+        if not text_edit:
+            return False, None
+        
+        try:
+            cursor = text_edit.cursorForPosition(position)
+            char_format = cursor.charFormat()
+            
+            if char_format.isAnchor():
+                href = char_format.anchorHref()
+                if href:
+                    return True, href
+        
+        except Exception as e:
+            logger.debug(f"Character format detection failed: {e}")
+        
+        return False, None
+    
+    def _detect_via_anchor_at(self, position):
+        """Detect links using the anchorAt method."""
+        text_edit = self.text_edit()
+        if not text_edit:
+            return False, None
+        
+        try:
+            anchor = text_edit.anchorAt(position)
+            if anchor and anchor.strip():
+                return True, anchor
+        
+        except Exception as e:
+            logger.debug(f"AnchorAt detection failed: {e}")
+        
+        return False, None
+    
+    def _update_cursor_state(self, is_link, href):
+        """Update the cursor state."""
+        text_edit = self.text_edit()
+        if not text_edit:
+            return
+        
+        new_state = "link" if is_link else "text"
+        
+        # Only update if state changed
+        if self.last_cursor_state != new_state:
+            if is_link:
+                text_edit.setCursor(Qt.CursorShape.PointingHandCursor)
+            else:
+                text_edit.setCursor(Qt.CursorShape.IBeamCursor)
+            
+            self.last_cursor_state = new_state
+    
+    def _handle_link_activation(self, href):
+        """Handle link activation (clicks)."""
+        try:
+            # Handle internal resend message links
+            if href.startswith('resend_message'):
+                parent_repl = self.parent_repl() if self.parent_repl else None
+                if parent_repl and hasattr(parent_repl, '_handle_resend_click'):
+                    parent_repl._handle_resend_click(QUrl(href))
+            
+            # Handle external URLs
+            elif href.startswith(('http://', 'https://', 'ftp://', 'mailto:')):
+                import webbrowser
+                webbrowser.open(href)
+            
+        except Exception as e:
+            logger.error(f"Error handling link activation '{href}': {e}")
+    
+    def _rebuild_link_registry(self):
+        """Rebuild the link registry by scanning the document."""
+        text_edit = self.text_edit()
+        if not text_edit:
+            return
+        
+        self.link_registry.clear()
+        self.position_cache.clear()
+        
+        document = text_edit.document()
+        
+        try:
+            for block_num in range(document.blockCount()):
+                block = document.findBlockByNumber(block_num)
+                if not block.isValid():
+                    continue
+                
+                self._scan_block_for_links(block_num, block)
+        
+        except Exception as e:
+            logger.error(f"Error rebuilding link registry: {e}")
+    
+    def _scan_block_for_links(self, block_num, block):
+        """Scan a single block for links and add them to the registry."""
+        block_it = block.begin()
+        block_position = block.position()
+        
+        while not block_it.atEnd():
+            fragment = block_it.fragment()
+            if fragment.isValid():
+                char_format = fragment.charFormat()
+                
+                if char_format.isAnchor():
+                    href = char_format.anchorHref()
+                    if href:
+                        start_pos = fragment.position() - block_position
+                        end_pos = start_pos + fragment.length()
+                        
+                        if block_num not in self.link_registry:
+                            self.link_registry[block_num] = []
+                        
+                        self.link_registry[block_num].append((start_pos, end_pos, href))
+            
+            block_it += 1
+    
+    def _on_document_changed(self):
+        """Handle document content changes."""
+        self._rebuild_link_registry()
 # Import font service for font configuration
 from ...application.font_service import font_service
 
@@ -372,10 +631,10 @@ class MarkdownRenderer:
         for old, new in replacements.items():
             styled_html = styled_html.replace(old, new)
         
-        # Handle links with special care
+        # Handle links with special care - ensure proper anchor formatting for Qt
         styled_html = re.sub(
-            r'<a href="([^"]+)">',
-            f'<a href="\\1" style="color: {style_colors["a"]}; text-decoration: underline;">',
+            r'<a href="([^"]+)"([^>]*)>',
+            f'<a href="\\1" style="color: {style_colors["a"]}; text-decoration: underline;"\\2>',
             styled_html
         )
         
@@ -1181,7 +1440,6 @@ class REPLWidget(QWidget):
                         border-style: none !important;
                         border-color: transparent !important;
                         outline: none !important;
-                        box-shadow: none !important;
                         padding: 0px;
                         font-size: 14px;
                     }}
@@ -1484,7 +1742,6 @@ class REPLWidget(QWidget):
                     border-style: none !important;
                     border-color: transparent !important;
                     outline: none !important;
-                    box-shadow: none !important;
                     padding: 4px 6px;
                     border-radius: 3px;
                     font-size: 11px;
@@ -1494,18 +1751,15 @@ class REPLWidget(QWidget):
                 QLineEdit:focus {{
                     border: none !important;
                     outline: none !important;
-                    box-shadow: none !important;
-                    background-color: {colors.background_tertiary};
+                    background-color: {colors.background_secondary};
                 }}
                 QLineEdit:hover {{
                     border: none !important;
                     outline: none !important;
-                    box-shadow: none !important;
                 }}
                 QLineEdit:selected {{
                     border: none !important;
                     outline: none !important;
-                    box-shadow: none !important;
                 }}
             """
         else:
@@ -1519,7 +1773,6 @@ class REPLWidget(QWidget):
                     border-style: none !important;
                     border-color: transparent !important;
                     outline: none !important;
-                    box-shadow: none !important;
                     padding: 4px 6px;
                     border-radius: 3px;
                     font-size: 11px;
@@ -1529,18 +1782,15 @@ class REPLWidget(QWidget):
                 QLineEdit:focus {{
                     border: none !important;
                     outline: none !important;
-                    box-shadow: none !important;
-                    background-color: rgba(40, 40, 40, 1.0);
+                    background-color: rgba(30, 30, 30, 1.0);
                 }}
                 QLineEdit:hover {{
                     border: none !important;
                     outline: none !important;
-                    box-shadow: none !important;
                 }}
                 QLineEdit:selected {{
                     border: none !important;
                     outline: none !important;
-                    box-shadow: none !important;
                 }}
             """
     
@@ -1950,7 +2200,6 @@ class REPLWidget(QWidget):
                     border-style: none !important;
                     border-color: transparent !important;
                     outline: none !important;
-                    box-shadow: none !important;
                     border-radius: 4px;
                     margin: 2px;
                 }}
@@ -1977,7 +2226,6 @@ class REPLWidget(QWidget):
                     border-style: none !important;
                     border-color: transparent !important;
                     outline: none !important;
-                    box-shadow: none !important;
                     padding: 0px;
                     font-size: 14px;
                 }}
@@ -1993,7 +2241,6 @@ class REPLWidget(QWidget):
                     border-style: none !important;
                     border-color: transparent !important;
                     outline: none !important;
-                    box-shadow: none !important;
                     padding: 0px;
                     font-size: 14px;
                 }
@@ -3207,10 +3454,16 @@ class REPLWidget(QWidget):
         # Title bar with new conversation and help buttons
         self._init_title_bar(layout)
         
-        # Output display
+        # Output display - using QTextEdit instead of QTextBrowser to prevent navigation
         self.output_display = QTextEdit()
         self.output_display.setReadOnly(True)
-        # Note: QTextEdit doesn't have setOpenExternalLinks - anchorClicked signal works by default
+        # Enable rich text features for proper link support
+        self.output_display.setAcceptRichText(True)
+        # Enable manual link detection and handling
+        self._setup_link_handling()
+        # Enable custom context menu for link operations
+        self.output_display.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.output_display.customContextMenuRequested.connect(self._show_output_context_menu)
         # Use font service for AI response font (default for output display)
         ai_font = font_service.create_qfont('ai_response')
         self.output_display.setFont(ai_font)
@@ -3709,8 +3962,25 @@ class REPLWidget(QWidget):
             logger.error(f"Failed to update spinner: {e}")
     
     def eventFilter(self, obj, event):
-        """Event filter for command input navigation."""
-        if obj == self.command_input and event.type() == event.Type.KeyPress:
+        """Event filter for command input navigation and link detection."""
+        # Handle link clicks and hover in output display
+        if hasattr(self, 'output_display') and obj == self.output_display:
+            if event.type() == event.Type.MouseButtonPress:
+                if event.button() == Qt.MouseButton.LeftButton:
+                    # Use the robust link handler for click detection
+                    if hasattr(self, 'link_handler'):
+                        if self.link_handler.handle_mouse_click(event.pos()):
+                            return True  # Event handled
+            
+            elif event.type() == event.Type.MouseMove:
+                # Use the robust link handler for cursor changes
+                if hasattr(self, 'link_handler'):
+                    self.link_handler.handle_mouse_move(event.pos())
+                    
+                return False  # Allow normal processing
+        
+        # Handle command input keyboard events
+        elif hasattr(self, 'command_input') and obj == self.command_input and event.type() == event.Type.KeyPress:
             key_event = event
             
             # Handle Enter key - submit on Enter, newline on Shift+Enter
@@ -4261,8 +4531,8 @@ class REPLWidget(QWidget):
         try:
             html_content = self._markdown_renderer.render(text, style, force_plain)
             
-            # Insert the rendered HTML content
-            cursor.insertHtml(html_content)
+            # Insert the rendered HTML content with proper anchor handling
+            self._insert_html_with_anchors(cursor, html_content)
             
             # Performance optimization: limit document size for very long conversations
             self._manage_document_size()
@@ -4823,13 +5093,141 @@ def test_theme():
             # Fallback to simple text
             self.append_output("Type 'resend' to try sending your message again", "system")
     
-    def _handle_resend_click(self, url):
-        """Handle clicks on resend links."""
-        if url.toString() == "resend_message" and self.last_failed_message:
+    def _handle_link_click(self, url):
+        """Handle clicks on all links including resend and external links."""
+        url_string = url.toString()
+        
+        # Handle resend links
+        if url_string == "resend_message" and self.last_failed_message:
             logger.info(f"Resending failed message: {self.last_failed_message[:50]}...")
             self.append_output(f"🔄 **Resending message...**", "system")
             self.append_output("", "system")  # Add spacing
             self._send_to_ai(self.last_failed_message)
+            return
+        
+        # Handle external links
+        if url_string.startswith(('http://', 'https://', 'ftp://', 'mailto:')):
+            import webbrowser
+            try:
+                webbrowser.open(url_string)
+                logger.debug(f"Opened external link: {url_string}")
+            except Exception as e:
+                logger.error(f"Failed to open link {url_string}: {e}")
+                self.append_output(f"Failed to open link: {url_string}", "error")
+    
+    def _handle_resend_click(self, url):
+        """Legacy method - redirects to new link handler."""
+        self._handle_link_click(url)
+        
+    def _show_output_context_menu(self, position):
+        """Show context menu for output display with link operations."""
+        # Get cursor at position
+        cursor = self.output_display.cursorForPosition(position)
+        
+        # Check if cursor is on a link
+        char_format = cursor.charFormat()
+        link_url = char_format.anchorHref()
+        
+        # Create context menu
+        context_menu = QMenu(self.output_display)
+        
+        if link_url:
+            # Add link-specific actions
+            open_action = context_menu.addAction("🌐 Open Link")
+            open_action.triggered.connect(lambda: self._handle_link_click(QUrl(link_url)))
+            
+            copy_action = context_menu.addAction("📋 Copy Link Address")
+            copy_action.triggered.connect(lambda: self._copy_link_to_clipboard(link_url))
+            
+            context_menu.addSeparator()
+        
+        # Add standard text operations
+        if self.output_display.textCursor().hasSelection():
+            copy_text_action = context_menu.addAction("📄 Copy Text")
+            copy_text_action.triggered.connect(self.output_display.copy)
+        
+        select_all_action = context_menu.addAction("🗂️ Select All")
+        select_all_action.triggered.connect(self.output_display.selectAll)
+        
+        # Show context menu
+        context_menu.exec(self.output_display.mapToGlobal(position))
+    
+    def _copy_link_to_clipboard(self, url):
+        """Copy link URL to clipboard."""
+        try:
+            from PyQt6.QtGui import QGuiApplication
+            clipboard = QGuiApplication.clipboard()
+            clipboard.setText(url)
+            logger.debug(f"Copied link to clipboard: {url}")
+        except Exception as e:
+            logger.error(f"Failed to copy link to clipboard: {e}")
+    
+    def _setup_link_handling(self):
+        """Setup robust link detection and handling for QTextEdit."""
+        # Initialize the production-ready link handler
+        self.link_handler = ReplLinkHandler(self.output_display, self)
+        
+        # Install event filter and enable mouse tracking
+        self.output_display.installEventFilter(self)
+        self.output_display.setMouseTracking(True)
+    
+    def _insert_html_with_anchors(self, cursor, html_content):
+        """
+        Insert HTML content with proper anchor formatting for reliable link detection.
+        
+        This method parses HTML content and ensures that links are properly formatted
+        with Qt's rich text anchor system for reliable cursor hover and click detection.
+        """
+        try:
+            # Parse HTML content to extract and properly format links
+            import re
+            
+            # Find all links in the HTML content
+            link_pattern = r'<a\s+href="([^"]+)"[^>]*>(.*?)</a>'
+            links = re.findall(link_pattern, html_content, re.IGNORECASE | re.DOTALL)
+            
+            if links:
+                # Split content by links and insert each part separately
+                parts = re.split(link_pattern, html_content, flags=re.IGNORECASE | re.DOTALL)
+                
+                i = 0
+                while i < len(parts):
+                    if i + 2 < len(parts) and parts[i + 1] and parts[i + 2]:
+                        # Insert text before link
+                        if parts[i]:
+                            cursor.insertHtml(parts[i])
+                        
+                        # Insert link with proper anchor formatting
+                        link_url = parts[i + 1]
+                        link_text = parts[i + 2]
+                        
+                        # Create proper character format for the link
+                        char_format = QTextCharFormat()
+                        char_format.setAnchor(True)
+                        char_format.setAnchorHref(link_url)
+                        char_format.setForeground(QColor("#2196F3"))  # Link color
+                        char_format.setFontUnderline(True)
+                        
+                        cursor.insertText(link_text, char_format)
+                        i += 3
+                    else:
+                        # Regular content
+                        if parts[i]:
+                            cursor.insertHtml(parts[i])
+                        i += 1
+            else:
+                # No links found, insert as regular HTML
+                cursor.insertHtml(html_content)
+            
+        except Exception as e:
+            logger.error(f"Error inserting HTML content with anchors: {e}")
+            # Fallback to standard HTML insertion
+            try:
+                cursor.insertHtml(html_content)
+            except:
+                # Final fallback to plain text
+                cursor.insertText(html_content)
+    
     
     def _on_stop_query(self):
         """Handle stop button click to cancel active AI query."""
@@ -5887,6 +6285,10 @@ def test_theme():
             self.current_search_index = -1
             self.current_search_query = ""
             
+            # Clean up stored HTML content
+            if hasattr(self, '_original_html_content'):
+                delattr(self, '_original_html_content')
+            
             logger.debug("Search closed and highlights cleared")
             
             # Update search button visual state
@@ -5974,60 +6376,196 @@ def test_theme():
             logger.error(f"Failed to perform conversation search: {e}")
     
     def _find_matches_in_conversation(self, query: str):
-        """Find all matches of query in current conversation display."""
+        """Find all matches of query in current conversation display using plain text search with correct positioning."""
         try:
             self.current_search_matches = []
             
             if not hasattr(self, 'output_display') or not self.output_display:
                 return
             
-            # Get the conversation display text
-            cursor = self.output_display.textCursor()
-            cursor.movePosition(cursor.MoveOperation.Start)
-            
-            # Get full document text
-            document = self.output_display.document()
-            full_text = document.toPlainText()
-            
-            # Search for current conversation with optional regex support
-            import re
-            
-            try:
-                if hasattr(self, 'regex_checkbox') and self.regex_checkbox.isChecked():
-                    # Use regex pattern directly
-                    pattern = re.compile(query, re.IGNORECASE)
-                else:
-                    # Escape special characters for literal search
-                    pattern = re.compile(re.escape(query), re.IGNORECASE)
-            except re.error as e:
-                # Invalid regex pattern - show error in status
-                if hasattr(self, 'search_status_label'):
-                    self.search_status_label.setText(f"Invalid regex: {str(e)[:20]}...")
-                logger.warning(f"Invalid regex pattern '{query}': {e}")
+            if not query.strip():
                 return
             
-            # Find all matches
-            for match in pattern.finditer(full_text):
-                start_pos = match.start()
-                end_pos = match.end()
-                
-                # Convert to QTextCursor positions
-                cursor.setPosition(start_pos)
-                start_cursor = QTextCursor(cursor)
-                cursor.setPosition(end_pos, cursor.MoveMode.KeepAnchor)
-                end_cursor = QTextCursor(cursor)
-                
-                self.current_search_matches.append({
-                    'start': start_pos,
-                    'end': end_pos,
-                    'text': match.group(),
-                    'cursor': QTextCursor(cursor)
-                })
+            document = self.output_display.document()
             
-            logger.debug(f"Found {len(self.current_search_matches)} matches for '{query}'")
+            # Store original HTML content to restore later if needed
+            if not hasattr(self, '_original_html_content'):
+                self._original_html_content = document.toHtml()
+            
+            # Get plain text content for accurate search
+            plain_text = document.toPlainText()
+            
+            # Determine case sensitivity
+            case_sensitive = hasattr(self, 'case_sensitive_checkbox') and self.case_sensitive_checkbox.isChecked()
+            
+            # Handle regex vs literal search
+            if hasattr(self, 'regex_checkbox') and self.regex_checkbox.isChecked():
+                # Use regex search on plain text
+                import re
+                try:
+                    regex_flags = 0 if case_sensitive else re.IGNORECASE
+                    pattern = re.compile(query, regex_flags)
+                    
+                    # Find all matches in plain text
+                    for match in pattern.finditer(plain_text):
+                        plain_start = match.start()
+                        plain_end = match.end()
+                        matched_text = match.group()
+                        
+                        # Map plain text positions to document positions
+                        doc_cursor = self._map_plain_text_to_document_cursor(document, plain_start, plain_end, matched_text)
+                        if doc_cursor and not doc_cursor.isNull():
+                            self.current_search_matches.append({
+                                'start': doc_cursor.selectionStart(),
+                                'end': doc_cursor.selectionEnd(),
+                                'text': doc_cursor.selectedText(),
+                                'cursor': QTextCursor(doc_cursor)
+                            })
+                        
+                except re.error as e:
+                    if hasattr(self, 'search_status_label'):
+                        self.search_status_label.setText(f"Invalid regex")
+                    logger.warning(f"Invalid regex pattern '{query}': {e}")
+                    return
+                except Exception as e:
+                    if hasattr(self, 'search_status_label'):
+                        self.search_status_label.setText(f"Regex error")
+                    logger.warning(f"Regex search error for '{query}': {e}")
+                    return
+            else:
+                # Use literal string search on plain text
+                search_text = plain_text if case_sensitive else plain_text.lower()
+                search_query = query if case_sensitive else query.lower()
+                
+                start_pos = 0
+                while True:
+                    # Find next occurrence in plain text
+                    plain_start = search_text.find(search_query, start_pos)
+                    if plain_start == -1:
+                        break
+                    
+                    plain_end = plain_start + len(query)
+                    matched_text = plain_text[plain_start:plain_end]
+                    
+                    # Map plain text positions to document positions
+                    doc_cursor = self._map_plain_text_to_document_cursor(document, plain_start, plain_end, matched_text)
+                    if doc_cursor and not doc_cursor.isNull():
+                        self.current_search_matches.append({
+                            'start': doc_cursor.selectionStart(),
+                            'end': doc_cursor.selectionEnd(),
+                            'text': doc_cursor.selectedText(),
+                            'cursor': QTextCursor(doc_cursor)
+                        })
+                    
+                    # Move to next potential match
+                    start_pos = plain_start + 1
+            
+            logger.debug(f"Found {len(self.current_search_matches)} matches for '{query}' using plain text search with position mapping")
             
         except Exception as e:
             logger.error(f"Failed to find matches in conversation: {e}")
+    
+    def _map_plain_text_to_document_cursor(self, document, plain_start: int, plain_end: int, expected_text: str):
+        """Map plain text positions to document cursor positions.
+        
+        This method handles the discrepancy between plain text positions and
+        document positions caused by HTML formatting in QTextDocument.
+        
+        Args:
+            document: QTextDocument instance
+            plain_start: Start position in plain text
+            plain_end: End position in plain text  
+            expected_text: The text we expect to find at this position
+            
+        Returns:
+            QTextCursor with correct selection, or None if mapping failed
+        """
+        try:
+            # Create cursor and navigate to the plain text position
+            cursor = QTextCursor(document)
+            
+            # Method 1: Use movePosition with character count
+            # This accounts for the fact that HTML formatting affects internal positioning
+            cursor.setPosition(0)  # Start at beginning
+            
+            # Move forward by the plain text character count
+            # QTextCursor.movePosition handles HTML tags correctly
+            for i in range(plain_start):
+                if not cursor.movePosition(QTextCursor.MoveOperation.NextCharacter):
+                    break
+            
+            # Mark the start position
+            start_pos = cursor.position()
+            
+            # Select the expected text length
+            cursor.setPosition(start_pos)
+            for i in range(len(expected_text)):
+                if not cursor.movePosition(QTextCursor.MoveOperation.NextCharacter, QTextCursor.MoveMode.KeepAnchor):
+                    break
+            
+            # Verify the selection matches expected text (case-insensitive for verification)
+            selected_text = cursor.selectedText()
+            if selected_text.lower() == expected_text.lower():
+                return cursor
+            
+            # Method 2: Fallback - use character-by-character navigation with verification
+            # This is more robust but slower
+            cursor.setPosition(0)
+            plain_text = document.toPlainText()
+            
+            current_plain_pos = 0
+            while current_plain_pos < len(plain_text) and cursor.position() < document.characterCount():
+                if current_plain_pos == plain_start:
+                    # Found our start position, now select the text
+                    start_pos = cursor.position()
+                    
+                    # Select character by character to ensure we get the right text
+                    cursor.setPosition(start_pos)
+                    selected_chars = 0
+                    while selected_chars < len(expected_text) and cursor.position() < document.characterCount():
+                        cursor.movePosition(QTextCursor.MoveOperation.NextCharacter, QTextCursor.MoveMode.KeepAnchor)
+                        selected_chars += 1
+                    
+                    # Verify selection
+                    selected_text = cursor.selectedText()
+                    if selected_text.lower() == expected_text.lower():
+                        return cursor
+                    
+                    break
+                
+                # Move to next character in both plain text and document
+                if not cursor.movePosition(QTextCursor.MoveOperation.NextCharacter):
+                    break
+                current_plain_pos += 1
+            
+            # Method 3: Final fallback - search using QTextDocument.find() with exact text
+            # This should work as a last resort
+            cursor = QTextCursor(document)
+            case_sensitive = hasattr(self, 'case_sensitive_checkbox') and self.case_sensitive_checkbox.isChecked()
+            search_options = QTextDocument.FindFlag.FindCaseSensitively if case_sensitive else QTextDocument.FindFlag(0)
+            
+            # Try to find the exact expected text
+            found_cursor = document.find(expected_text, cursor, search_options)
+            if not found_cursor.isNull():
+                # Verify this is actually the match we want by checking context
+                found_start = found_cursor.selectionStart()
+                
+                # Check if this could be our target match by verifying surrounding context
+                context_cursor = QTextCursor(document)
+                context_cursor.setPosition(max(0, found_start - 10))
+                context_cursor.setPosition(min(document.characterCount(), found_cursor.selectionEnd() + 10), QTextCursor.MoveMode.KeepAnchor)
+                context = context_cursor.selectedText()
+                
+                # If the context seems reasonable, use this match
+                if expected_text.lower() in context.lower():
+                    return found_cursor
+            
+            logger.warning(f"Failed to map plain text position {plain_start}-{plain_end} for text '{expected_text}'")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error mapping plain text to document cursor: {e}")
+            return None
     
     def _highlight_current_match(self):
         """Highlight the current search match and scroll to it."""
@@ -6035,59 +6573,149 @@ def test_theme():
             if not self.current_search_matches or self.current_search_index < 0:
                 return
             
-            match = self.current_search_matches[self.current_search_index]
-            
-            # Clear previous highlights
+            # Clear previous highlights first
             self._clear_search_highlights()
             
-            # Create highlight format with theme colors
-            highlight_format = QTextCharFormat()
-            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
-                highlight_bg = self.theme_manager.current_theme.status_warning
-                highlight_fg = self.theme_manager.current_theme.background_primary
-            else:
-                highlight_bg = "#ffff00"  # Yellow background
-                highlight_fg = "#000000"  # Black text
-            highlight_format.setBackground(QColor(highlight_bg))
-            highlight_format.setForeground(QColor(highlight_fg))
+            # Highlight all matches with subtle background
+            self._highlight_all_matches()
             
-            # Apply highlight to current match
+            # Highlight current match with prominent colors
+            match = self.current_search_matches[self.current_search_index]
+            
+            # Create prominent highlight format for current match
+            current_highlight_format = QTextCharFormat()
+            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+                current_bg = self.theme_manager.current_theme.status_warning
+                current_fg = self.theme_manager.current_theme.background_primary
+            else:
+                current_bg = "#ffff00"  # Yellow background
+                current_fg = "#000000"  # Black text
+            current_highlight_format.setBackground(QColor(current_bg))
+            current_highlight_format.setForeground(QColor(current_fg))
+            
+            # Apply current match highlight
             cursor = self.output_display.textCursor()
             cursor.setPosition(match['start'])
             cursor.setPosition(match['end'], cursor.MoveMode.KeepAnchor)
-            cursor.setCharFormat(highlight_format)
+            
+            # Store original format to restore later
+            original_format = cursor.charFormat()
+            
+            # Merge with original format to preserve original styling where possible
+            merged_format = QTextCharFormat(original_format)
+            merged_format.setBackground(current_highlight_format.background())
+            merged_format.setForeground(current_highlight_format.foreground())
+            
+            cursor.setCharFormat(merged_format)
+            
+            # Store highlight info for cleanup
+            if not hasattr(self, '_current_highlight_positions'):
+                self._current_highlight_positions = []
+            self._current_highlight_positions.append({
+                'start': match['start'],
+                'end': match['end'],
+                'original_format': original_format
+            })
             
             # Scroll to the match
             self.output_display.setTextCursor(cursor)
             self.output_display.ensureCursorVisible()
             
-            logger.debug(f"Highlighted match at position {match['start']}-{match['end']}")
+            logger.debug(f"Highlighted current match at position {match['start']}-{match['end']}")
             
         except Exception as e:
             logger.error(f"Failed to highlight current match: {e}")
     
+    def _highlight_all_matches(self):
+        """Highlight all search matches with subtle background color."""
+        try:
+            if not self.current_search_matches:
+                return
+            
+            # Create subtle highlight format for all matches
+            all_matches_format = QTextCharFormat()
+            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+                # Use a more subtle color for all matches
+                all_bg = self.theme_manager.current_theme.status_info if hasattr(self.theme_manager.current_theme, 'status_info') else "#e6f3ff"
+            else:
+                all_bg = "#e6f3ff"  # Very light blue background
+            
+            all_matches_format.setBackground(QColor(all_bg))
+            
+            # Initialize storage for all match positions
+            if not hasattr(self, '_all_match_positions'):
+                self._all_match_positions = []
+            self._all_match_positions = []
+            
+            cursor = self.output_display.textCursor()
+            
+            # Apply subtle highlight to all matches except current one
+            for i, match in enumerate(self.current_search_matches):
+                if i == self.current_search_index:
+                    continue  # Skip current match, it gets special highlighting
+                
+                cursor.setPosition(match['start'])
+                cursor.setPosition(match['end'], cursor.MoveMode.KeepAnchor)
+                
+                # Store original format
+                original_format = cursor.charFormat()
+                
+                # Merge with original format to preserve styling
+                merged_format = QTextCharFormat(original_format)
+                merged_format.setBackground(all_matches_format.background())
+                
+                cursor.setCharFormat(merged_format)
+                
+                # Store for cleanup
+                self._all_match_positions.append({
+                    'start': match['start'],
+                    'end': match['end'],
+                    'original_format': original_format
+                })
+            
+            logger.debug(f"Applied subtle highlighting to {len(self._all_match_positions)} matches")
+            
+        except Exception as e:
+            logger.error(f"Failed to highlight all matches: {e}")
+    
     def _clear_search_highlights(self):
-        """Clear all search highlights from conversation display."""
+        """Clear all search highlights from conversation display without destroying original formatting."""
         try:
             if not hasattr(self, 'output_display') or not self.output_display:
                 return
             
-            # Reset all text formatting to default
-            cursor = self.output_display.textCursor()
-            cursor.select(cursor.SelectionType.Document)
+            # Clear stored highlight positions
+            if hasattr(self, '_current_highlight_positions'):
+                cursor = self.output_display.textCursor()
+                for highlight_info in self._current_highlight_positions:
+                    # Restore original format for each highlighted position
+                    cursor.setPosition(highlight_info['start'])
+                    cursor.setPosition(highlight_info['end'], cursor.MoveMode.KeepAnchor)
+                    cursor.setCharFormat(highlight_info['original_format'])
+                
+                self._current_highlight_positions = []
             
-            # Apply default format
-            default_format = QTextCharFormat()
-            cursor.setCharFormat(default_format)
+            # Clear all match highlights
+            if hasattr(self, '_all_match_positions'):
+                cursor = self.output_display.textCursor()
+                for highlight_info in self._all_match_positions:
+                    cursor.setPosition(highlight_info['start'])
+                    cursor.setPosition(highlight_info['end'], cursor.MoveMode.KeepAnchor)
+                    cursor.setCharFormat(highlight_info['original_format'])
+                
+                self._all_match_positions = []
             
-            # Move cursor to start
-            cursor.movePosition(cursor.MoveOperation.Start)
-            self.output_display.setTextCursor(cursor)
-            
-            logger.debug("Search highlights cleared")
+            logger.debug("Search highlights cleared without destroying original formatting")
             
         except Exception as e:
             logger.error(f"Failed to clear search highlights: {e}")
+            # Fallback: restore from original HTML if available
+            try:
+                if hasattr(self, '_original_html_content'):
+                    logger.warning("Fallback: restoring original HTML content")
+                    self.output_display.setHtml(self._original_html_content)
+            except Exception as fallback_error:
+                logger.error(f"Failed to restore original content: {fallback_error}")
     
     def _on_search_text_changed(self, text: str):
         """Handle search input text changes with debouncing."""

@@ -100,7 +100,9 @@
       "Read(/C:\\Users\\miguel\\Downloads/**)",
       "Read(/C:\\Users\\miguel\\Downloads/**)",
       "Read(/C:\\Users\\miguel\\Downloads/**)",
-      "Read(/C:\\Users\\miguel\\Downloads/**)"
+      "Read(/C:\\Users\\miguel\\Downloads/**)",
+      "Read(/C:\\Users\\miguel\\Downloads/**)",
+      "Bash(./venv/Scripts/Activate.ps1)"
     ],
     "deny": []
   }
