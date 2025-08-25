@@ -27,103 +27,207 @@ from PyQt6.QtWidgets import (
     QToolButton, QMenu, QProgressBar, QListWidget,
     QListWidgetItem, QApplication, QMessageBox, QDialog, QCheckBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread, QObject, QSize, pyqtSlot, QUrl
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread, QObject, QSize, pyqtSlot, QUrl, QPoint
 from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QTextCharFormat, QColor, QPalette, QIcon, QPixmap, QAction
+import weakref
 
 
-class SafeTextBrowser(QTextBrowser):
-    """A QTextBrowser subclass that prevents unwanted navigation which could clear content."""
+class ReplLinkHandler:
+    """Robust link detection and handling system for REPL widgets."""
     
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._original_html = ""
-        self._is_setting_html = False
+    def __init__(self, text_edit, parent_repl=None):
+        self.text_edit = weakref.ref(text_edit)
+        self.parent_repl = weakref.ref(parent_repl) if parent_repl else None
+        
+        # Link registry for reliable detection
+        self.link_registry = {}  # block_num: [(start, end, href), ...]
+        
+        # Performance optimization
+        self.last_position = QPoint(-1, -1)
+        self.last_cursor_state = None
+        self.position_cache = {}
+        
+        # Debounced updates for better performance
+        self._update_timer = QTimer()
+        self._update_timer.setSingleShot(True)
+        self._update_timer.timeout.connect(self._perform_cursor_update)
+        self._pending_position = None
+        
+        # Initialize
+        self._rebuild_link_registry()
+        
+        # Connect to document changes
+        if text_edit.document():
+            text_edit.document().contentsChanged.connect(self._on_document_changed)
     
-    def setHtml(self, text):
-        """Override setHtml to store the original content for restoration."""
-        self._is_setting_html = True
-        self._original_html = text
-        super().setHtml(text)
-        self._is_setting_html = False
+    def handle_mouse_move(self, event_pos):
+        """Handle mouse move events for cursor changes."""
+        if event_pos == self.last_position:
+            return False
+        
+        self.last_position = event_pos
+        
+        # Check cache first
+        cache_key = (event_pos.x(), event_pos.y())
+        if cache_key in self.position_cache:
+            is_link, href = self.position_cache[cache_key]
+            self._update_cursor_state(is_link, href)
+            return True
+        
+        # Queue update for performance
+        self._pending_position = event_pos
+        if not self._update_timer.isActive():
+            self._update_timer.start(10)  # 10ms debounce
+        
+        return True
     
-    def setSource(self, url):
-        """Override setSource to completely prevent navigation that could clear the display."""
-        if self._is_setting_html:
-            # Allow normal HTML setting operations
-            super().setSource(url)
+    def handle_mouse_click(self, event_pos):
+        """Handle mouse click events for link activation."""
+        text_edit = self.text_edit()
+        if not text_edit:
+            return False
+        
+        try:
+            is_link, href = self._detect_link_at_position(event_pos)
+            if is_link and href:
+                self._handle_link_activation(href)
+                return True
+        except Exception as e:
+            logger.error(f"Error handling mouse click: {e}")
+        
+        return False
+    
+    def _perform_cursor_update(self):
+        """Perform the actual cursor update with caching."""
+        if not self._pending_position:
             return
+        
+        position = self._pending_position
+        self._pending_position = None
+        
+        # Detect link at position
+        is_link, href = self._detect_link_at_position(position)
+        
+        # Cache result
+        cache_key = (position.x(), position.y())
+        self.position_cache[cache_key] = (is_link, href)
+        
+        # Limit cache size for memory management
+        if len(self.position_cache) > 1000:
+            keys_to_remove = list(self.position_cache.keys())[:500]
+            for key in keys_to_remove:
+                del self.position_cache[key]
+        
+        # Update cursor
+        self._update_cursor_state(is_link, href)
+    
+    def _detect_link_at_position(self, position):
+        """Detect if there's a link at the given position using multiple methods."""
+        text_edit = self.text_edit()
+        if not text_edit:
+            return False, None
+        
+        # Method 1: Registry-based detection (most reliable)
+        registry_result = self._detect_via_registry(position)
+        if registry_result[0]:
+            return registry_result
+        
+        # Method 2: Qt format-based detection
+        cursor = text_edit.cursorForPosition(position)
+        char_format = cursor.charFormat()
+        if char_format.isAnchor():
+            return True, char_format.anchorHref()
+        
+        return False, None
+    
+    def _detect_via_registry(self, position):
+        """Detect links using the internal registry."""
+        text_edit = self.text_edit()
+        if not text_edit:
+            return False, None
+        
+        cursor = text_edit.cursorForPosition(position)
+        block_num = cursor.blockNumber()
+        position_in_block = cursor.positionInBlock()
+        
+        if block_num in self.link_registry:
+            for start, end, href in self.link_registry[block_num]:
+                if start <= position_in_block <= end:
+                    return True, href
+        
+        return False, None
+    
+    def _rebuild_link_registry(self):
+        """Rebuild the link registry from the current document."""
+        text_edit = self.text_edit()
+        if not text_edit:
+            return
+        
+        self.link_registry.clear()
+        document = text_edit.document()
+        
+        for block_num in range(document.blockCount()):
+            block = document.findBlockByNumber(block_num)
+            text = block.text()
             
-        # Block ALL navigation attempts except fragment links within the same document
-        url_string = url.toString()
-        if url_string and not url_string.startswith('#'):
-            logger.debug(f"SafeTextBrowser: Blocked navigation to {url_string}")
-            # Restore original content if it was cleared
-            if not self.toPlainText().strip() and self._original_html:
-                logger.debug("SafeTextBrowser: Restoring cleared content after blocked navigation")
-                self.setHtml(self._original_html)
+            # Find all URLs in this block
+            import re
+            url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+|www\.[^\s<>"{}|\\^`\[\]]+'
+            
+            for match in re.finditer(url_pattern, text):
+                start, end = match.span()
+                href = match.group()
+                if not href.startswith('http'):
+                    href = 'http://' + href
+                
+                if block_num not in self.link_registry:
+                    self.link_registry[block_num] = []
+                self.link_registry[block_num].append((start, end, href))
+    
+    def _on_document_changed(self):
+        """Handle document content changes."""
+        # Debounce registry rebuilds
+        if not hasattr(self, '_registry_timer'):
+            self._registry_timer = QTimer()
+            self._registry_timer.setSingleShot(True)
+            self._registry_timer.timeout.connect(self._rebuild_link_registry)
+        
+        if not self._registry_timer.isActive():
+            self._registry_timer.start(100)  # 100ms debounce
+    
+    def _update_cursor_state(self, is_link, href):
+        """Update the cursor state based on link detection."""
+        text_edit = self.text_edit()
+        if not text_edit:
             return
         
-        # Allow fragment links (internal document navigation)
-        super().setSource(url)
-    
-    def loadResource(self, type, name):
-        """Override loadResource to prevent loading external resources that might clear content."""
-        # Block external resource loading that might interfere with display
-        logger.debug(f"SafeTextBrowser: Blocked resource loading: {name.toString() if hasattr(name, 'toString') else name}")
-        return None
-    
-    def backward(self):
-        """Override backward navigation to prevent content clearing."""
-        logger.debug("SafeTextBrowser: Blocked backward navigation")
-        return
-    
-    def forward(self):
-        """Override forward navigation to prevent content clearing."""
-        logger.debug("SafeTextBrowser: Blocked forward navigation")
-        return
-    
-    def home(self):
-        """Override home navigation to prevent content clearing."""
-        logger.debug("SafeTextBrowser: Blocked home navigation")
-        return
-    
-    def reload(self):
-        """Override reload to prevent unwanted content changes."""
-        logger.debug("SafeTextBrowser: Blocked reload")
-        return
-    
-    def anchorClickEvent(self, url):
-        """Override anchor click handling to prevent any internal processing."""
-        # Don't call super() - this prevents QTextBrowser from doing any internal
-        # navigation processing that might clear content
-        logger.debug(f"SafeTextBrowser: Intercepted anchor click for {url.toString()}")
-        # The anchorClicked signal will still be emitted for our manual handling
-    
-    def contextMenuEvent(self, event):
-        """Override context menu to prevent navigation actions that could clear content."""
-        # Create a custom context menu without navigation actions
-        menu = self.createStandardContextMenu()
+        new_state = (is_link, href)
+        if new_state == self.last_cursor_state:
+            return
         
-        # Remove dangerous actions that could cause navigation/clearing
-        actions_to_remove = []
-        for action in menu.actions():
-            action_text = action.text().lower()
-            # Remove actions that could cause navigation or content changes
-            if any(keyword in action_text for keyword in ['back', 'forward', 'reload', 'open', 'follow']):
-                actions_to_remove.append(action)
+        self.last_cursor_state = new_state
         
-        for action in actions_to_remove:
-            menu.removeAction(action)
-        
-        # Show the filtered menu
-        menu.exec(event.globalPos())
+        if is_link:
+            text_edit.setCursor(Qt.CursorShape.PointingHandCursor)
+        else:
+            text_edit.setCursor(Qt.CursorShape.IBeamCursor)
     
-    def mousePressEvent(self, event):
-        """Override mouse press to ensure content integrity."""
-        # Store current state before any mouse interaction
-        if not self._is_setting_html and self.toPlainText().strip():
-            self._original_html = self.toHtml()
-        super().mousePressEvent(event)
+    def _handle_link_activation(self, href):
+        """Handle link activation (clicks)."""
+        try:
+            # Handle internal resend message links
+            if href.startswith('resend_message'):
+                parent_repl = self.parent_repl() if self.parent_repl else None
+                if parent_repl and hasattr(parent_repl, '_handle_resend_click'):
+                    parent_repl._handle_resend_click(QUrl(href))
+            
+            # Handle external URLs
+            elif href.startswith(('http://', 'https://', 'ftp://', 'mailto:')):
+                import webbrowser
+                webbrowser.open(href)
+            
+        except Exception as e:
+            logger.error(f"Error handling link activation '{href}': {e}")
     
     def wheelEvent(self, event):
         """Override wheel event to prevent accidental navigation."""
@@ -3272,13 +3376,16 @@ class REPLWidget(QWidget):
         # Title bar with new conversation and help buttons
         self._init_title_bar(layout)
         
-        # Output display - use custom QTextBrowser for hyperlink support
-        self.output_display = self._create_safe_text_browser()
+        # Output display - using QTextEdit instead of QTextBrowser to prevent navigation
+        self.output_display = QTextEdit()
         self.output_display.setReadOnly(True)
-        # Connect link handler for both internal actions and external URLs
-        self.output_display.anchorClicked.connect(self._handle_link_click)
-        # Prevent QTextBrowser from automatically opening links (we handle them manually)
-        self.output_display.setOpenExternalLinks(False)
+        # Enable rich text features for proper link support
+        self.output_display.setAcceptRichText(True)
+        # Enable manual link detection and handling
+        self._setup_link_handling()
+        # Enable custom context menu for link operations
+        self.output_display.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.output_display.customContextMenuRequested.connect(self._show_output_context_menu)
         # Use font service for AI response font (default for output display)
         ai_font = font_service.create_qfont('ai_response')
         self.output_display.setFont(ai_font)
@@ -3734,7 +3841,16 @@ class REPLWidget(QWidget):
             logger.error(f"Failed to update spinner: {e}")
     
     def eventFilter(self, obj, event):
-        """Event filter for command input navigation."""
+        """Event filter for command input navigation and link detection."""
+        # Handle link clicks and hover in output display
+        if hasattr(self, 'output_display') and obj == self.output_display:
+            if event.type() == event.Type.MouseButtonPress:
+                if event.button() == Qt.MouseButton.LeftButton:
+                    # Use the robust link handler for click detection
+                    if hasattr(self, 'link_handler'):
+                        if self.link_handler.handle_mouse_click(event.pos()):
+                            return True  # Event handled
+        
         if obj == self.command_input and event.type() == event.Type.KeyPress:
             key_event = event
             
@@ -4813,9 +4929,54 @@ def test_theme():
             # Fallback to simple text
             self.append_output("Type 'resend' to try sending your message again", "system")
     
-    def _create_safe_text_browser(self):
-        """Create a QTextBrowser that prevents unwanted navigation."""
-        return SafeTextBrowser()
+    def _setup_link_handling(self):
+        """Setup robust link detection and handling for QTextEdit."""
+        # Initialize the production-ready link handler
+        self.link_handler = ReplLinkHandler(self.output_display, self)
+        
+        # Install event filter and enable mouse tracking
+        self.output_display.installEventFilter(self)
+    
+    def _show_output_context_menu(self, position):
+        """Show context menu for output display with link operations."""
+        # Get cursor at position
+        cursor = self.output_display.cursorForPosition(position)
+        
+        # Check if cursor is on a link
+        char_format = cursor.charFormat()
+        link_url = char_format.anchorHref()
+        
+        # Create context menu
+        context_menu = QMenu(self.output_display)
+        
+        if link_url:
+            # Add link-specific actions
+            open_action = context_menu.addAction("🌐 Open Link")
+            open_action.triggered.connect(lambda: self._handle_link_click(QUrl(link_url)))
+            
+            copy_action = context_menu.addAction("📋 Copy Link Address")
+            copy_action.triggered.connect(lambda: self._copy_link_to_clipboard(link_url))
+            
+            context_menu.addSeparator()
+        
+        # Add standard text operations
+        if self.output_display.textCursor().hasSelection():
+            copy_text_action = context_menu.addAction("📄 Copy Text")
+            copy_text_action.triggered.connect(self.output_display.copy)
+        
+        select_all_action = context_menu.addAction("🗂️ Select All")
+        select_all_action.triggered.connect(self.output_display.selectAll)
+        
+        # Show context menu
+        context_menu.exec(self.output_display.mapToGlobal(position))
+    
+    def _copy_link_to_clipboard(self, link_url):
+        """Copy link URL to clipboard."""
+        try:
+            QApplication.clipboard().setText(link_url)
+            logger.info(f"Copied link to clipboard: {link_url}")
+        except Exception as e:
+            logger.error(f"Error copying link to clipboard: {e}")
     
     def _handle_link_click(self, url):
         """Handle clicks on links (both internal actions and external URLs)."""
