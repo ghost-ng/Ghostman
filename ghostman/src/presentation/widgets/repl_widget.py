@@ -6452,8 +6452,11 @@ def test_theme():
             logger.info("Creating first tabs - preserving current content")
             
             # Create Tab 1 with current content/conversation  
-            if self.current_conversation and self.current_conversation.title.strip():
-                # Use conversation title if available and not empty
+            if (self.current_conversation and 
+                self.current_conversation.title.strip() and 
+                not self.current_conversation.title.startswith("[No response content") and
+                not self.current_conversation.title.startswith("No response content")):
+                # Use conversation title if available, not empty, and meaningful
                 current_tab_title = self.current_conversation.title[:23] + "..." if len(self.current_conversation.title) > 25 else self.current_conversation.title
             else:
                 # Use "Default" for first tab when no meaningful conversation title exists
