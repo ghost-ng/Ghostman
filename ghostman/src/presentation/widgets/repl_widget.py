@@ -311,9 +311,6 @@ class MarkdownRenderer:
             # Clean up and optimize for Qt rendering
             styled_html = self._optimize_qt_html(styled_html)
             
-            # Reset markdown processor for next use
-            self.md_processor.reset()
-            
             return styled_html + '<br>'
             
         except Exception as e:
