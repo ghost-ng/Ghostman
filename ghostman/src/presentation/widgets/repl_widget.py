@@ -15,13 +15,11 @@ from datetime import datetime, timedelta
 logger = logging.getLogger("ghostman.repl_widget")
 # Markdown rendering imports
 try:
-    import markdown
-    from markdown.extensions import codehilite, fenced_code, tables, toc
+    import mistune
     MARKDOWN_AVAILABLE = True
 except ImportError:
     MARKDOWN_AVAILABLE = False
-    
-    logger.warning("Markdown library not available - falling back to plain text rendering")
+    logger.warning("Mistune library not available - falling back to plain text rendering")
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
     QLineEdit, QPushButton, QLabel, QFrame, QComboBox,
@@ -36,7 +34,10 @@ from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QTextCharFormat, QColor, 
 from ...application.startup_service import startup_service
 
 # Tab system not available in simple mode
-TAB_SYSTEM_AVAILABLE = False
+TAB_SYSTEM_AVAILABLE = True
+if TAB_SYSTEM_AVAILABLE:
+    from .tab_conversation_manager import TabConversationManager
+
 # Import font service for font configuration
 from ...application.font_service import font_service
 
@@ -88,26 +89,16 @@ class MarkdownRenderer:
         self.theme_manager = theme_manager
         
         if self.markdown_available:
-            # Configure markdown processor with AI-friendly extensions
-            self.md_processor = markdown.Markdown(
-                extensions=[
-                    'fenced_code',  # ```code blocks```
-                    'tables',       # Table support
-                    'nl2br',        # Newline to <br>
-                    'toc',          # Table of contents
-                    'attr_list',    # Attribute lists {: .class}
-                ],
-                extension_configs={
-                    'fenced_code': {
-                        'lang_prefix': 'language-',
-                    },
-                    'toc': {
-                        'permalink': False,  # Don't add permalink anchors
-                    }
-                },
-                # Output format optimized for Qt HTML rendering
-                output_format='html5',
-                tab_length=4
+            # Configure mistune markdown processor
+            self.md_processor = mistune.create_markdown(
+                escape=False,
+                plugins=[
+                    'strikethrough',  # ~~text~~
+                    'mark',          # ==text==
+                    'table',         # Table support
+                    'footnotes',     # [^1]
+                    'task_lists',    # - [ ] task
+                ]
             )
         
         # Update color scheme based on theme or use defaults
@@ -311,8 +302,8 @@ class MarkdownRenderer:
             Styled HTML content
         """
         try:
-            # Process markdown to HTML
-            html_content = self.md_processor.convert(text)
+            # Process markdown to HTML using mistune
+            html_content = self.md_processor(text)
             
             # Apply message-type styling to the HTML
             styled_html = self._apply_color_styling(html_content, base_color, style)
@@ -1547,11 +1538,25 @@ class REPLWidget(QWidget):
         self.tab_layout.setContentsMargins(8, 4, 8, 4)
         self.tab_layout.setSpacing(4)
         
-        # Create placeholder tabs only
-        self._create_placeholder_tabs()
-        
-        # Add stretch to push tabs to the left
-        self.tab_layout.addStretch()
+        # Initialize tab manager if available
+        self.tab_manager = None
+        if TAB_SYSTEM_AVAILABLE:
+            # Add stretch to push tabs to the left
+            self.tab_layout.addStretch()
+            
+            # Initialize tab manager but don't create initial tab yet
+            # We'll create tabs on demand when user clicks "New Tab"
+            self.tab_manager = TabConversationManager(self, self.tab_frame, self.tab_layout, create_initial_tab=False)
+            
+            # Connect tab manager signals
+            self.tab_manager.tab_switched.connect(self._on_tab_switched)
+            self.tab_manager.tab_created.connect(self._on_tab_created)
+            self.tab_manager.tab_closed.connect(self._on_tab_closed)
+        else:
+            # Create placeholder tabs only for non-tab systems
+            self._create_placeholder_tabs()
+            # Add stretch to push tabs to the left
+            self.tab_layout.addStretch()
         
         # Add the tab frame to parent layout
         parent_layout.addWidget(self.tab_frame)
@@ -4433,6 +4438,15 @@ def test_theme():
             logger.info("🆕 Auto-creating conversation for AI interaction")
             self._create_new_conversation_for_message(message)
             
+            # If using tabs and current tab has no conversation, associate it
+            if TAB_SYSTEM_AVAILABLE and hasattr(self, 'tab_manager') and self.tab_manager:
+                active_tab = self.tab_manager.get_active_tab()
+                if active_tab and not active_tab.conversation_id and self.current_conversation:
+                    active_tab.conversation_id = self.current_conversation.id
+                    # Update tab title to match conversation
+                    self.tab_manager.update_tab_title(active_tab.tab_id, self.current_conversation.title or "Conversation")
+                    logger.debug(f"Associated conversation {self.current_conversation.id} with tab {active_tab.tab_id}")
+            
         # Ensure AI service has the correct conversation context
         if self.current_conversation and self.conversation_manager and self.conversation_manager.has_ai_service():
             ai_service = self.conversation_manager.get_ai_service()
@@ -6101,6 +6115,90 @@ def test_theme():
             logger.debug(f"Created new tab from plus button: {new_tab_id}")
         else:
             logger.warning("Tab manager not available for new tab request")
+    
+    def _create_new_tab(self):
+        """Create a new tab with conversation."""
+        if hasattr(self, 'tab_manager') and self.tab_manager:
+            new_tab_id = self.tab_manager.create_tab(title="Conversation")
+            logger.debug(f"Created new tab: {new_tab_id}")
+        else:
+            logger.warning("Tab manager not available for new tab creation")
+    
+    # --- Tab Event Handlers ---
+    
+    def _on_tab_switched(self, tab_id: str):
+        """Handle tab switching to switch conversation context."""
+        if not self.tab_manager:
+            logger.warning("Tab manager not available for tab switching")
+            return
+            
+        tab = self.tab_manager.tabs.get(tab_id)
+        if not tab:
+            logger.warning(f"Tab not found for switching: {tab_id}")
+            return
+            
+        logger.info(f"Switching to tab: {tab_id} (conversation: {tab.conversation_id})")
+        
+        # If tab has a conversation associated, load it
+        if tab.conversation_id and self.conversation_manager:
+            # Use QTimer to handle async operation properly from UI thread
+            QTimer.singleShot(0, lambda: self._load_tab_conversation(tab_id, tab.conversation_id))
+        else:
+            # Clear current conversation and output for empty tab
+            self.current_conversation = None
+            self.clear_output()
+            self.append_output("💬 Start typing to begin a new conversation", "info")
+            # Reset focus to input
+            self.command_input.setFocus()
+    
+    def _on_tab_created(self, tab_id: str):
+        """Handle new tab creation."""
+        logger.info(f"Tab created: {tab_id}")
+        
+        # Don't create conversation immediately - wait for first message
+        # Just mark the tab as ready for a new conversation
+        if self.tab_manager:
+            tab = self.tab_manager.tabs.get(tab_id)
+            if tab:
+                tab.conversation_id = None  # No conversation yet
+                logger.debug(f"Tab {tab_id} created without conversation - waiting for first message")
+    
+    def _on_tab_closed(self, tab_id: str):
+        """Handle tab closure."""
+        logger.info(f"Tab closed: {tab_id}")
+        # Note: Conversation cleanup could be added here if needed
+    
+    def _load_tab_conversation(self, tab_id: str, conversation_id: str):
+        """Load conversation for a specific tab asynchronously."""
+        try:
+            conversation = asyncio.run(
+                self.conversation_manager.get_conversation(conversation_id)
+            )
+            if conversation:
+                self.current_conversation = conversation
+                self._load_conversation_messages(conversation)
+                logger.debug(f"Loaded conversation {conversation_id} for tab {tab_id}")
+            else:
+                logger.warning(f"Could not load conversation {conversation_id} for tab {tab_id}")
+                self.clear_output()
+                self.append_output("⚠ Could not load conversation", "warning")
+        except Exception as e:
+            logger.error(f"Error loading conversation for tab {tab_id}: {e}")
+            self.clear_output()
+            self.append_output(f"❌ Error loading conversation: {str(e)}", "error")
+    
+    
+    def update_tab_title_for_conversation(self, conversation_id: str, new_title: str):
+        """Update tab title when conversation title changes."""
+        if not self.tab_manager:
+            return
+            
+        # Find tab with this conversation ID
+        for tab_id, tab in self.tab_manager.tabs.items():
+            if tab.conversation_id == conversation_id:
+                self.tab_manager.update_tab_title(tab_id, new_title)
+                logger.debug(f"Updated tab {tab_id} title to '{new_title}' for conversation {conversation_id}")
+                break
     
     def shutdown(self):
         """Shutdown the enhanced REPL widget."""
