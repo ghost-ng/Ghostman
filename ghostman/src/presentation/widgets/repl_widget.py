@@ -20,14 +20,136 @@ try:
 except ImportError:
     MARKDOWN_AVAILABLE = False
     logger.warning("Mistune library not available - falling back to plain text rendering")
+
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
+    QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QTextBrowser,
     QLineEdit, QPushButton, QLabel, QFrame, QComboBox,
     QToolButton, QMenu, QProgressBar, QListWidget,
     QListWidgetItem, QApplication, QMessageBox, QDialog, QCheckBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread, QObject, QSize, pyqtSlot
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread, QObject, QSize, pyqtSlot, QUrl
 from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QTextCharFormat, QColor, QPalette, QIcon, QPixmap, QAction
+
+
+class SafeTextBrowser(QTextBrowser):
+    """A QTextBrowser subclass that prevents unwanted navigation which could clear content."""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._original_html = ""
+        self._is_setting_html = False
+    
+    def setHtml(self, text):
+        """Override setHtml to store the original content for restoration."""
+        self._is_setting_html = True
+        self._original_html = text
+        super().setHtml(text)
+        self._is_setting_html = False
+    
+    def setSource(self, url):
+        """Override setSource to completely prevent navigation that could clear the display."""
+        if self._is_setting_html:
+            # Allow normal HTML setting operations
+            super().setSource(url)
+            return
+            
+        # Block ALL navigation attempts except fragment links within the same document
+        url_string = url.toString()
+        if url_string and not url_string.startswith('#'):
+            logger.debug(f"SafeTextBrowser: Blocked navigation to {url_string}")
+            # Restore original content if it was cleared
+            if not self.toPlainText().strip() and self._original_html:
+                logger.debug("SafeTextBrowser: Restoring cleared content after blocked navigation")
+                self.setHtml(self._original_html)
+            return
+        
+        # Allow fragment links (internal document navigation)
+        super().setSource(url)
+    
+    def loadResource(self, type, name):
+        """Override loadResource to prevent loading external resources that might clear content."""
+        # Block external resource loading that might interfere with display
+        logger.debug(f"SafeTextBrowser: Blocked resource loading: {name.toString() if hasattr(name, 'toString') else name}")
+        return None
+    
+    def backward(self):
+        """Override backward navigation to prevent content clearing."""
+        logger.debug("SafeTextBrowser: Blocked backward navigation")
+        return
+    
+    def forward(self):
+        """Override forward navigation to prevent content clearing."""
+        logger.debug("SafeTextBrowser: Blocked forward navigation")
+        return
+    
+    def home(self):
+        """Override home navigation to prevent content clearing."""
+        logger.debug("SafeTextBrowser: Blocked home navigation")
+        return
+    
+    def reload(self):
+        """Override reload to prevent unwanted content changes."""
+        logger.debug("SafeTextBrowser: Blocked reload")
+        return
+    
+    def anchorClickEvent(self, url):
+        """Override anchor click handling to prevent any internal processing."""
+        # Don't call super() - this prevents QTextBrowser from doing any internal
+        # navigation processing that might clear content
+        logger.debug(f"SafeTextBrowser: Intercepted anchor click for {url.toString()}")
+        # The anchorClicked signal will still be emitted for our manual handling
+    
+    def contextMenuEvent(self, event):
+        """Override context menu to prevent navigation actions that could clear content."""
+        # Create a custom context menu without navigation actions
+        menu = self.createStandardContextMenu()
+        
+        # Remove dangerous actions that could cause navigation/clearing
+        actions_to_remove = []
+        for action in menu.actions():
+            action_text = action.text().lower()
+            # Remove actions that could cause navigation or content changes
+            if any(keyword in action_text for keyword in ['back', 'forward', 'reload', 'open', 'follow']):
+                actions_to_remove.append(action)
+        
+        for action in actions_to_remove:
+            menu.removeAction(action)
+        
+        # Show the filtered menu
+        menu.exec(event.globalPos())
+    
+    def mousePressEvent(self, event):
+        """Override mouse press to ensure content integrity."""
+        # Store current state before any mouse interaction
+        if not self._is_setting_html and self.toPlainText().strip():
+            self._original_html = self.toHtml()
+        super().mousePressEvent(event)
+    
+    def wheelEvent(self, event):
+        """Override wheel event to prevent accidental navigation."""
+        # Only allow scrolling, prevent any navigation shortcuts
+        if event.modifiers() == Qt.KeyboardModifier.NoModifier:
+            super().wheelEvent(event)
+        # Block Ctrl+wheel or other modifier combinations that might cause navigation
+    
+    def keyPressEvent(self, event):
+        """Override key press to prevent navigation shortcuts."""
+        # Block keyboard shortcuts that could cause navigation
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            # Block Ctrl+R (refresh), Ctrl+H (history), etc.
+            blocked_keys = [Qt.Key.Key_R, Qt.Key.Key_H, Qt.Key.Key_L, Qt.Key.Key_Left, Qt.Key.Key_Right]
+            if event.key() in blocked_keys:
+                logger.debug(f"SafeTextBrowser: Blocked keyboard shortcut: Ctrl+{event.text()}")
+                return
+        
+        # Block Alt+Left/Right (navigation)
+        if event.modifiers() & Qt.KeyboardModifier.AltModifier:
+            if event.key() in [Qt.Key.Key_Left, Qt.Key.Key_Right]:
+                logger.debug("SafeTextBrowser: Blocked Alt+Left/Right navigation")
+                return
+        
+        # Allow normal text operations (copy, select all, etc.)
+        super().keyPressEvent(event)
 
 
 # Import startup service for preamble
@@ -3150,10 +3272,13 @@ class REPLWidget(QWidget):
         # Title bar with new conversation and help buttons
         self._init_title_bar(layout)
         
-        # Output display
-        self.output_display = QTextEdit()
+        # Output display - use custom QTextBrowser for hyperlink support
+        self.output_display = self._create_safe_text_browser()
         self.output_display.setReadOnly(True)
-        # Note: QTextEdit doesn't have setOpenExternalLinks - anchorClicked signal works by default
+        # Connect link handler for both internal actions and external URLs
+        self.output_display.anchorClicked.connect(self._handle_link_click)
+        # Prevent QTextBrowser from automatically opening links (we handle them manually)
+        self.output_display.setOpenExternalLinks(False)
         # Use font service for AI response font (default for output display)
         ai_font = font_service.create_qfont('ai_response')
         self.output_display.setFont(ai_font)
@@ -4681,23 +4806,60 @@ def test_theme():
             cursor.movePosition(QTextCursor.MoveOperation.End)
             cursor.insertHtml(resend_html)
             
-            # Connect to click handler if not already connected
-            if not hasattr(self, '_resend_connected'):
-                self.output_display.anchorClicked.connect(self._handle_resend_click)
-                self._resend_connected = True
+            # Link handler already connected during initialization
                 
         except Exception as e:
             logger.error(f"Failed to add resend option: {e}")
             # Fallback to simple text
             self.append_output("Type 'resend' to try sending your message again", "system")
     
-    def _handle_resend_click(self, url):
-        """Handle clicks on resend links."""
-        if url.toString() == "resend_message" and self.last_failed_message:
+    def _create_safe_text_browser(self):
+        """Create a QTextBrowser that prevents unwanted navigation."""
+        return SafeTextBrowser()
+    
+    def _handle_link_click(self, url):
+        """Handle clicks on links (both internal actions and external URLs)."""
+        url_string = url.toString()
+        
+        logger.debug(f"Handling link click: {url_string}")
+        
+        # Verify content integrity before processing link
+        if not self.output_display.toPlainText().strip() and hasattr(self.output_display, '_original_html') and self.output_display._original_html:
+            logger.warning("REPL content was cleared, restoring from backup")
+            self.output_display.setHtml(self.output_display._original_html)
+        
+        # Handle internal action links
+        if url_string == "resend_message" and self.last_failed_message:
             logger.info(f"Resending failed message: {self.last_failed_message[:50]}...")
             self.append_output(f"🔄 **Resending message...**", "system")
             self.append_output("", "system")  # Add spacing
             self._send_to_ai(self.last_failed_message)
+        # Handle external URLs
+        elif url_string.startswith(("http://", "https://", "ftp://", "mailto:")):
+            try:
+                # Store current content before opening URL (as extra safety measure)
+                current_html = self.output_display.toHtml()
+                if current_html and hasattr(self.output_display, '_original_html'):
+                    self.output_display._original_html = current_html
+                
+                # Use Qt's desktop services to open external URLs
+                from PyQt6.QtGui import QDesktopServices
+                success = QDesktopServices.openUrl(url)
+                if success:
+                    logger.info(f"Opened external URL: {url_string}")
+                    
+                    # Verify content wasn't cleared after opening URL
+                    if not self.output_display.toPlainText().strip() and self.output_display._original_html:
+                        logger.warning("Content was cleared after opening URL, restoring")
+                        self.output_display.setHtml(self.output_display._original_html)
+                else:
+                    logger.warning(f"Failed to open URL: {url_string}")
+                    self.append_output(f"⚠ Could not open URL: {url_string}", "warning")
+            except Exception as e:
+                logger.error(f"Error opening URL {url_string}: {e}")
+                self.append_output(f"❌ Error opening URL: {e}", "error")
+        else:
+            logger.debug(f"Unhandled link type: {url_string}")
     
     # Public methods for external integration
     
