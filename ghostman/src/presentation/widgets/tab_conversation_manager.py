@@ -19,18 +19,28 @@ class ConversationTab:
     
     def __init__(self, tab_id: str, title: str = "New Conversation"):
         self.tab_id = tab_id
-        self.title = title
         self.conversation_id: Optional[str] = None
         self.is_active = False
         self.is_modified = False
         self.button: Optional[QPushButton] = None
         
+        # Initialize title using the setter to ensure proper truncation
+        self.set_title(title)
+        
     def set_title(self, title: str):
-        """Update tab title and button text."""
-        self.title = title[:15] + "..." if len(title) > 15 else title
+        """Update tab title and button text with 25 character limit."""
+        # Store full title
+        self.full_title = title
+        
+        # Apply 25 character limit or truncate to 23 + "..."
+        if len(title) > 25:
+            self.title = title[:23] + "..."
+        else:
+            self.title = title
+            
         if self.button:
             self.button.setText(self.title)
-            self.button.setToolTip(title)  # Full title in tooltip
+            self.button.setToolTip(self.full_title)  # Full title in tooltip
     
     def set_modified(self, modified: bool):
         """Mark tab as modified (unsaved changes)."""
@@ -47,7 +57,7 @@ class TabConversationManager(QObject):
     tab_closed = pyqtSignal(str)    # tab_id
     new_tab_requested = pyqtSignal()
     
-    def __init__(self, parent_repl_widget, tab_frame: QFrame, tab_layout: QHBoxLayout):
+    def __init__(self, parent_repl_widget, tab_frame: QFrame, tab_layout: QHBoxLayout, create_initial_tab: bool = True):
         super().__init__()
         self.parent_repl = parent_repl_widget
         self.tab_frame = tab_frame
@@ -58,10 +68,11 @@ class TabConversationManager(QObject):
         self.active_tab_id: Optional[str] = None
         self.tab_order: List[str] = []
         
-        # Initialize with first tab
-        self._create_initial_tab()
+        # Initialize with first tab if requested
+        if create_initial_tab:
+            self._create_initial_tab()
         
-        logger.info("TabConversationManager initialized")
+        logger.info(f"TabConversationManager initialized (initial_tab={create_initial_tab})")
     
     def _create_initial_tab(self):
         """Create the initial default tab."""
@@ -255,12 +266,25 @@ class TabConversationManager(QObject):
         menu.exec(position)
     
     def _rename_tab(self, tab_id: str):
-        """Rename a tab (placeholder - could add input dialog later)."""
-        # For now, just generate a simple rename
-        if tab_id in self.tabs:
-            import time
-            new_title = f"Chat {int(time.time()) % 1000}"
-            self.update_tab_title(tab_id, new_title)
+        """Rename a tab with user input dialog."""
+        if tab_id not in self.tabs:
+            return
+            
+        tab = self.tabs[tab_id]
+        current_title = getattr(tab, 'full_title', tab.title)
+        
+        # Show input dialog for new title
+        from PyQt6.QtWidgets import QInputDialog
+        new_title, ok = QInputDialog.getText(
+            self.parent_repl,
+            "Rename Tab",
+            "Enter new tab name:",
+            text=current_title
+        )
+        
+        if ok and new_title.strip():
+            self.update_tab_title(tab_id, new_title.strip())
+            logger.info(f"Tab {tab_id} renamed to: {new_title.strip()}")
     
     def _close_other_tabs(self, keep_tab_id: str):
         """Close all tabs except the specified one."""

@@ -3851,7 +3851,7 @@ class REPLWidget(QWidget):
                         if self.link_handler.handle_mouse_click(event.pos()):
                             return True  # Event handled
         
-        if obj == self.command_input and event.type() == event.Type.KeyPress:
+        if hasattr(self, 'command_input') and obj == self.command_input and event.type() == event.Type.KeyPress:
             key_event = event
             
             # Up arrow - previous command
@@ -6438,11 +6438,45 @@ def test_theme():
     
     def _create_new_tab(self):
         """Create a new tab with conversation."""
-        if hasattr(self, 'tab_manager') and self.tab_manager:
+        if not hasattr(self, 'tab_manager') or not self.tab_manager:
+            logger.warning("Tab manager not available for new tab creation")
+            return
+            
+        # If this is the first tab being created, we need to:
+        # 1. Create a tab for the current content (Tab 1)  
+        # 2. Create a new empty tab (Tab 2)
+        # 3. Switch to the new empty tab
+        
+        if len(self.tab_manager.tabs) == 0:
+            # First tab creation - preserve current content in Tab 1
+            logger.info("Creating first tabs - preserving current content")
+            
+            # Create Tab 1 with current content/conversation  
+            if self.current_conversation and self.current_conversation.title.strip():
+                # Use conversation title if available and not empty
+                current_tab_title = self.current_conversation.title[:23] + "..." if len(self.current_conversation.title) > 25 else self.current_conversation.title
+            else:
+                # Use "Default" for first tab when no meaningful conversation title exists
+                current_tab_title = "Default"
+            
+            first_tab_id = self.tab_manager.create_tab(title=current_tab_title, activate=False)
+            first_tab = self.tab_manager.tabs.get(first_tab_id)
+            if first_tab:
+                if self.current_conversation:
+                    first_tab.conversation_id = self.current_conversation.id
+                    logger.info(f"Associated Tab 1 with current conversation: {self.current_conversation.id}")
+                else:
+                    first_tab.conversation_id = None
+                    logger.info("Tab 1 created without conversation (empty start)")
+            
+            # Create Tab 2 as new empty tab
+            new_tab_id = self.tab_manager.create_tab(title="Conversation", activate=True)
+            logger.info(f"Created new empty tab: {new_tab_id}")
+            
+        else:
+            # Normal tab creation - just create new tab
             new_tab_id = self.tab_manager.create_tab(title="Conversation")
             logger.debug(f"Created new tab: {new_tab_id}")
-        else:
-            logger.warning("Tab manager not available for new tab creation")
     
     # --- Tab Event Handlers ---
     
