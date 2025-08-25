@@ -1,49 +1,39 @@
 # Ghostman
 
-A beautiful AI chat application featuring Spector, your friendly desktop AI assistant. Chat with multiple AI providers through an elegant floating interface with extensive customization options.
+A beautiful AI chat application featuring Spector, your friendly desktop AI assistant. Chat with multiple AI providers through an elegant floating interface with extensive customization options and professional tabbed conversation management.
 
-## Features
+## Key Features
 
 - **Advanced REPL Interface** - Enhanced multiline input with Shift+Enter, dynamic field expansion, and stop button functionality
 - **Floating Chat Interface** - Moveable avatar window that opens into a full chat interface
 - **Multiple AI Providers** - Support for OpenAI, Anthropic, Google, and local models
 - **26 Built-in Themes** - From Matrix green to Arctic white, cyberpunk to steampunk
-- **Conversation Management** - Save, load, and browse all your conversations
+- **Enhanced Save Functionality** - Dedicated title bar save button for quick access
+- **Conversation Management** - Save, load, and browse all conversations with organization features
+- **Smart Icon System** - Automatic theme-aware icon selection for consistent visibility
 - **Enterprise Security** - PKI authentication for secure environments
-- **Full Customization** - Fonts, opacity, window behavior, and more
 - **System Tray Integration** - Always accessible, minimize to tray
 - **Professional Features** - Settings profiles, advanced logging, SSL support
 
-## Quick Start
+## Quick Installation
 
-### Installation
+**Requirements**: Python 3.12+ and Windows 10/11, macOS, or Linux
 
-1. **Requirements**: Python 3.12+ and Windows 10/11, macOS, or Linux
+```bash
+git clone https://github.com/ghost-ng/Ghostman.git
+cd Ghostman
+python -m venv venv
+venv\Scripts\activate  # Windows (use source venv/bin/activate on macOS/Linux)
+pip install -r requirements.txt
+python -m ghostman
+```
 
-2. **Download and Setup**:
-   ```bash
-   git clone https://github.com/ghost-ng/Ghostman.git
-   cd Ghostman
-   python -m venv venv
-   venv\Scripts\activate  # Windows
-   # source venv/bin/activate  # macOS/Linux
-   pip install -r requirements.txt
-   ```
+**Get Your API Key**: Visit [OpenAI Platform](https://platform.openai.com/), [Anthropic Console](https://console.anthropic.com/), or [Google AI Studio](https://makersuite.google.com/) to obtain your API key.
 
-3. **Get Your API Key**:
-   - OpenAI: Get your key from [OpenAI Platform](https://platform.openai.com/)
-   - Anthropic: Visit [Anthropic Console](https://console.anthropic.com/)
-   - Google: Access [Google AI Studio](https://makersuite.google.com/)
+## Getting Started
 
-4. **Run Ghostman**:
-   ```bash
-   python -m ghostman
-   ```
-
-### First Time Setup
-
-1. **Configure Your AI Model**: Click the gear icon and enter your API key in the AI Model tab
-2. **Choose a Theme**: Pick from 26 beautiful themes in the Interface tab
+1. **Configure AI Model**: Click the gear icon, enter your API key in the AI Model tab
+2. **Choose Theme**: Pick from 26 beautiful themes in the Interface tab  
 3. **Start Chatting**: Click on Spector (the avatar) to open the chat window
 
 ## Usage Basics
@@ -97,15 +87,13 @@ For detailed technical documentation, see [REPL Enhancements Guide](docs/guides/
 - **Technical Implementation**: [docs/guides/REPL_ENHANCEMENTS_GUIDE.md](docs/guides/REPL_ENHANCEMENTS_GUIDE.md) - Detailed technical documentation for developers
 - **GitHub Repository**: [https://github.com/ghost-ng/Ghostman/](https://github.com/ghost-ng/Ghostman/)
 
-## Settings Overview
+📖 **[Complete User Guide](USER_GUIDE.md)** - Comprehensive documentation covering all features, shortcuts, themes, troubleshooting, and best practices
 
-- **Interface**: Themes, opacity, window behavior
-- **AI Model**: Provider selection, API keys, response settings
-- **Fonts**: Customize text appearance for AI responses and user input
-- **Advanced**: Logging levels, SSL settings, debugging options
-- **PKI Auth**: Enterprise certificate authentication
+### Developer Documentation
 
-## Keyboard Shortcuts
+- **[Styling System Guide](docs/guides/STYLING_SYSTEM_GUIDE.md)** - Theme integration and customization
+- **[Tabbed Conversation Guide](docs/guides/TABBED_CONVERSATION_GUIDE.md)** - Technical implementation details
+- **Built-in Help**: [ghostman/assets/help/index.html](ghostman/assets/help/index.html)
 
 - `Ctrl+Enter` - Send message
 - `Shift+Enter` - New line in message (multiline support)
@@ -113,10 +101,10 @@ For detailed technical documentation, see [REPL Enhancements Guide](docs/guides/
 - `Ctrl+,` - Open settings
 - `Alt+H` - Toggle always on top
 
-## Support
+We welcome contributions! Please see our contributing guidelines and development setup instructions in the [GitHub repository](https://github.com/ghost-ng/Ghostman/).
 
 Having trouble? Check the [complete help guide](docs/help.md) for detailed instructions on every feature, troubleshooting tips, and advanced configuration options including the new REPL interface capabilities.
 
 ---
 
-**Meet Spector, your AI companion for desktop productivity and creativity.**
+**Meet Spector, your AI companion for desktop productivity and creativity with professional tabbed conversation management.**

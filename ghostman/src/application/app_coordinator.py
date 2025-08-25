@@ -133,7 +133,7 @@ class AppCoordinator(QObject):
             self._system_tray = EnhancedSystemTray(self)
             self._system_tray.show_avatar_requested.connect(self._show_avatar_mode)
             self._system_tray.settings_requested.connect(self._show_settings)
-            self._system_tray.help_requested.connect(self._show_help)
+            self._system_tray.help_requested.connect(self._show_browser_help)
             self._system_tray.quit_requested.connect(self._quit_application)
             # Show the system tray icon
             self._system_tray.show()
@@ -143,7 +143,7 @@ class AppCoordinator(QObject):
             self._main_window.minimize_requested.connect(self._show_tray_mode)
             self._main_window.close_requested.connect(self._show_tray_mode)
             self._main_window.settings_requested.connect(self._show_settings)
-            self._main_window.help_requested.connect(self._show_help)
+            self._main_window.help_requested.connect(self._show_browser_help)
             self._main_window.quit_requested.connect(self._quit_application)
             # Note: conversations signal is handled directly in MainWindow
             
@@ -507,6 +507,27 @@ class AppCoordinator(QObject):
                     "Error", 
                     f"Failed to open help documentation:\n{str(e)}"
                 )
+    
+    def _show_browser_help(self):
+        """Open help documentation directly in the browser."""
+        logger.info("=== BROWSER HELP REQUESTED - OPENING HELP IN BROWSER ===")
+        try:
+            import webbrowser
+            from ..utils.resource_resolver import resolve_help_file
+            
+            help_path = resolve_help_file()
+            
+            if help_path:
+                webbrowser.open(f"file://{help_path.absolute()}")
+                logger.info("Opened help documentation in browser")
+            else:
+                logger.warning("Help documentation not found locally, opening online docs")
+                webbrowser.open("https://github.com/ghost-ng/ghost-ng/tree/main/docs")
+                
+        except Exception as e:
+            logger.error(f"Failed to open help in browser: {e}")
+            # Fallback to regular help dialog
+            self._show_help()
     
     def _on_settings_applied(self, config: dict):
         """Handle settings being applied."""

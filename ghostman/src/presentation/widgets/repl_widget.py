@@ -19,8 +19,8 @@ try:
     MARKDOWN_AVAILABLE = True
 except ImportError:
     MARKDOWN_AVAILABLE = False
-    
-    logger.warning("Markdown library not available - falling back to plain text rendering")
+    logger.warning("Mistune library not available - falling back to plain text rendering")
+
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QTextBrowser,
     QLineEdit, QPushButton, QLabel, QFrame, QComboBox, QPlainTextEdit,
@@ -1233,6 +1233,15 @@ class REPLWidget(QWidget):
             # CRITICAL: Force style refresh for all components to ensure immediate theme updates
             self._force_comprehensive_style_refresh()
             
+            # CRITICAL: Ensure tab frame transparency after theme changes
+            # Schedule this to run after theme styles have been fully applied
+            self._schedule_tab_transparency_enforcement()
+            
+            # Update tab button styles with new theme
+            if hasattr(self, 'tab_manager') and self.tab_manager:
+                self.tab_manager.refresh_tab_styles()
+                logger.debug("Tab button styles refreshed with new theme")
+            
             logger.debug("REPL widget styles updated for new theme")
         except Exception as e:
             logger.error(f"Failed to update REPL widget theme: {e}")
@@ -1240,6 +1249,9 @@ class REPLWidget(QWidget):
     def _force_comprehensive_style_refresh(self):
         """Force a comprehensive style refresh for all UI elements."""
         try:
+            # Re-style all menus with new theme
+            self._refresh_menu_styling()
+            
             # Force Qt to re-evaluate all stylesheets and polish all widgets
             QApplication.processEvents()
             
@@ -1976,6 +1988,179 @@ class REPLWidget(QWidget):
         
         self.status_label.setToolTip(tooltip)
     
+    def _init_tab_bar(self, parent_layout):
+        """Initialize simple tab bar above the title bar with clear background."""
+        # Create a frame for the tab bar - give it a unique class to avoid inheritance
+        self.tab_frame = QFrame()
+        self.tab_frame.setObjectName("tab_frame")
+        
+        # Set the frame to have no parent background inheritance
+        self.tab_frame.setAutoFillBackground(False)
+        
+        # Apply initial transparent styling (will be reinforced by _ensure_tab_frame_transparency)
+        self.tab_frame.setStyleSheet("""
+            QFrame[objectName="tab_frame"] {
+                background-color: rgba(0,0,0,0) !important;
+                background: none !important;
+                border: none !important;
+                margin: 0px;
+                padding: 0px;
+                min-height: 30px;
+                max-height: 30px;
+            }
+        """)
+        
+        # Create horizontal layout for tabs
+        self.tab_layout = QHBoxLayout(self.tab_frame)
+        self.tab_layout.setContentsMargins(8, 4, 8, 4)
+        self.tab_layout.setSpacing(4)
+        
+        # Initialize tab manager if available
+        self.tab_manager = None
+        if TAB_SYSTEM_AVAILABLE:
+            # Add stretch to push tabs to the left
+            self.tab_layout.addStretch()
+            
+            # Initialize tab manager but don't create initial tab yet
+            # We'll create tabs on demand when user clicks "New Tab"
+            self.tab_manager = TabConversationManager(self, self.tab_frame, self.tab_layout, create_initial_tab=False)
+            
+            # Connect tab manager signals
+            self.tab_manager.tab_switched.connect(self._on_tab_switched)
+            self.tab_manager.tab_created.connect(self._on_tab_created)
+            self.tab_manager.tab_closed.connect(self._on_tab_closed)
+        else:
+            # Create placeholder tabs only for non-tab systems
+            self._create_placeholder_tabs()
+            # Add stretch to push tabs to the left
+            self.tab_layout.addStretch()
+        
+        # Add the tab frame to parent layout
+        parent_layout.addWidget(self.tab_frame)
+        
+        # Schedule tab frame transparency enforcement after theme styles are applied
+        self._schedule_tab_transparency_enforcement()
+    
+    def _ensure_tab_frame_transparency(self):
+        """Force tab frame transparency using maximum CSS specificity."""
+        if not hasattr(self, 'tab_frame'):
+            return
+            
+        # Maximum specificity override with comprehensive background property coverage
+        transparency_css = """
+            QFrame[objectName="tab_frame"],
+            #repl-root QFrame#tab_frame,
+            #repl-root QFrame[objectName="tab_frame"] {
+                background: transparent !important;
+                background-color: transparent !important;
+                background-image: none !important;
+            }
+        """
+        
+        try:
+            self.tab_frame.setStyleSheet(transparency_css)
+            # Force immediate style update
+            self.tab_frame.style().polish(self.tab_frame)
+        except Exception as e:
+            logger.warning(f"Failed to enforce tab transparency: {e}")
+    
+    def _schedule_tab_transparency_enforcement(self):
+        """Schedule tab transparency enforcement with multiple timing intervals."""
+        try:
+            # Immediate application
+            self._ensure_tab_frame_transparency()
+            
+            # Schedule at multiple intervals to handle theme system timing
+            QTimer.singleShot(10, self._ensure_tab_frame_transparency)
+            QTimer.singleShot(50, self._ensure_tab_frame_transparency)
+            QTimer.singleShot(100, self._ensure_tab_frame_transparency)
+            
+        except Exception as e:
+            logger.warning(f"Failed to schedule tab transparency: {e}")
+            
+            # Also ensure autoFillBackground is disabled
+            self.tab_frame.setAutoFillBackground(False)
+            
+            # Force immediate style update
+            self.tab_frame.style().polish(self.tab_frame)
+            
+        except Exception as e:
+            from ...utils.logger import logger
+            logger.warning(f"Failed to enforce tab frame transparency: {e}")
+    
+    def _schedule_tab_transparency_enforcement(self):
+        """Schedule tab frame transparency enforcement using QTimer for proper timing.
+        
+        This ensures the transparency override is applied after the theme system
+        has finished applying its styles, preventing inheritance conflicts.
+        """
+        try:
+            from PyQt6.QtCore import QTimer
+            
+            # Schedule multiple enforcement attempts to handle different timing scenarios
+            # Immediate attempt (0ms) - for cases where theme hasn't been applied yet
+            QTimer.singleShot(0, self._ensure_tab_frame_transparency)
+            
+            # Short delay (10ms) - for most theme application scenarios
+            QTimer.singleShot(10, self._ensure_tab_frame_transparency)
+            
+            # Medium delay (50ms) - for complex theme loading scenarios
+            QTimer.singleShot(50, self._ensure_tab_frame_transparency)
+            
+            # Longer delay (100ms) - safety net for slow systems
+            QTimer.singleShot(100, self._ensure_tab_frame_transparency)
+            
+        except Exception as e:
+            from ...utils.logger import logger
+            logger.warning(f"Failed to schedule tab frame transparency enforcement: {e}")
+            # Fallback to immediate application if QTimer fails
+            self._ensure_tab_frame_transparency()
+        
+    def _create_placeholder_tabs(self):
+        """Create placeholder tabs for UI consistency."""
+        # Placeholder tab buttons (for UI consistency)
+        self.tab_buttons = []
+        
+        # Add first placeholder tab (active)
+        tab1 = QPushButton("Tab 1")
+        tab1.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(147, 112, 219, 0.9);
+                color: white;
+                border: 1px solid rgba(147, 112, 219, 1.0);
+                border-radius: 3px;
+                padding: 4px 12px;
+                min-width: 60px;
+                max-height: 22px;
+            }
+            QPushButton:hover {
+                background-color: rgba(147, 112, 219, 1.0);
+            }
+        """)
+        self.tab_buttons.append(tab1)
+        self.tab_layout.addWidget(tab1)
+        
+        # Add second placeholder tab (inactive)
+        tab2 = QPushButton("Tab 2")
+        tab2.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(60, 60, 60, 0.8);
+                color: rgba(255, 255, 255, 0.9);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 3px;
+                padding: 4px 12px;
+                min-width: 60px;
+                max-height: 22px;
+            }
+            QPushButton:hover {
+                background-color: rgba(80, 80, 80, 0.9);
+            }
+        """)
+        self.tab_buttons.append(tab2)
+        self.tab_layout.addWidget(tab2)
+        
+        logger.debug("Created placeholder tabs for UI consistency")
+    
     def _init_title_bar(self, parent_layout):
         """Initialize title bar with new conversation and help buttons."""
         # Create a frame for the title bar to make it more visible and draggable
@@ -2021,23 +2206,38 @@ class REPLWidget(QWidget):
         # Create menu for new conversation options
         new_conv_menu = QMenu(self.title_new_conv_btn)
         
-        # Start new conversation action
-        new_action = QAction("Start New Conversation", self.title_new_conv_btn)
+        # Add New Tab option if tab system is available
+        if TAB_SYSTEM_AVAILABLE and hasattr(self, 'tab_manager') and self.tab_manager:
+            new_tab_action = QAction("New Tab", self.title_new_conv_btn)
+            new_tab_action.setIcon(self._load_themed_icon("new_tab"))
+            new_tab_action.triggered.connect(self._create_new_tab)
+            new_conv_menu.addAction(new_tab_action)
+        
+        # New conversation action
+        new_action = QAction("New Conversation", self.title_new_conv_btn)
+        new_action.setIcon(self._load_themed_icon("new"))
         new_action.triggered.connect(lambda: self._start_new_conversation(save_current=False))
         new_conv_menu.addAction(new_action)
         
-        # Start new conversation and save current action
-        save_and_new_action = QAction("Save Current & Start New", self.title_new_conv_btn)
-        save_and_new_action.triggered.connect(lambda: self._start_new_conversation(save_current=True))
-        new_conv_menu.addAction(save_and_new_action)
-        
         # Store menu reference but don't set it on the button (avoids arrow)
         self.title_new_conv_menu = new_conv_menu
+        
+        # Apply menu styling
+        self._style_menu(new_conv_menu)
         
         # Apply styling without menu attached
         self._style_title_button(self.title_new_conv_btn, add_right_padding=True)
         
         title_layout.addWidget(self.title_new_conv_btn)
+        
+        # Save conversation button
+        self.title_save_btn = QToolButton()
+        # Load save icon (theme-specific)
+        self._load_save_icon(self.title_save_btn)
+        self.title_save_btn.setToolTip("Save current conversation")
+        self.title_save_btn.clicked.connect(self._save_current_conversation)
+        self._style_title_button(self.title_save_btn)
+        title_layout.addWidget(self.title_save_btn)
         
         # Help documentation button (with help-docs icon)
         self.title_help_btn = QToolButton()
@@ -2464,18 +2664,24 @@ class REPLWidget(QWidget):
         # Create menu for new conversation options FIRST
         new_conv_menu = QMenu(self.toolbar_new_conv_btn)
         
-        # Start new conversation action
-        new_action = QAction("Start New Conversation", self.toolbar_new_conv_btn)
+        # Add New Tab option if tab system is available
+        if TAB_SYSTEM_AVAILABLE and hasattr(self, 'tab_manager') and self.tab_manager:
+            new_tab_action = QAction("New Tab", self.toolbar_new_conv_btn)
+            new_tab_action.setIcon(self._load_themed_icon("new_tab"))
+            new_tab_action.triggered.connect(self._create_new_tab)
+            new_conv_menu.addAction(new_tab_action)
+        
+        # New conversation action
+        new_action = QAction("New Conversation", self.toolbar_new_conv_btn)
+        new_action.setIcon(self._load_themed_icon("new"))
         new_action.triggered.connect(lambda: self._start_new_conversation(save_current=False))
         new_conv_menu.addAction(new_action)
         
-        # Start new conversation and save current action
-        save_and_new_action = QAction("Save Current & Start New", self.toolbar_new_conv_btn)
-        save_and_new_action.triggered.connect(lambda: self._start_new_conversation(save_current=True))
-        new_conv_menu.addAction(save_and_new_action)
-        
         # Store menu reference but don't set it on the button (avoids arrow)
         self.toolbar_new_conv_menu = new_conv_menu
+        
+        # Apply menu styling
+        self._style_menu(new_conv_menu)
         
         # Apply styling without menu attached
         self._style_tool_button(self.toolbar_new_conv_btn)
@@ -3239,6 +3445,28 @@ class REPLWidget(QWidget):
             logger.error(f"Failed to load plus icon: {e}")
             button.setText("➕")  # Fallback
     
+    def _load_themed_icon(self, icon_name):
+        """Load theme-appropriate icon and return QIcon object for menus."""
+        try:
+            # Determine icon variant based on menu background color
+            icon_variant = self._get_menu_icon_variant()
+            
+            icon_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", 
+                "assets", "icons", f"{icon_name}_{icon_variant}.png"
+            )
+            
+            if os.path.exists(icon_path):
+                logger.debug(f"Loaded themed icon: {icon_name}_{icon_variant}.png")
+                return QIcon(icon_path)
+            else:
+                logger.warning(f"Themed icon not found: {icon_path}")
+                return QIcon()  # Return empty icon
+                
+        except Exception as e:
+            logger.error(f"Failed to load themed icon '{icon_name}': {e}")
+            return QIcon()  # Return empty icon
+    
     def _load_help_icon(self, button):
         """Load theme-appropriate help-docs icon for a given button."""
         try:
@@ -3298,6 +3526,30 @@ class REPLWidget(QWidget):
             logger.error(f"Failed to load move icon: {e}")
             button.setText("✥")  # Fallback
     
+    def _load_save_icon(self, button):
+        """Load theme-appropriate save icon for a given button."""
+        try:
+            # Determine if theme is dark or light  
+            icon_variant = self._get_icon_variant()
+            
+            save_icon_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", 
+                "assets", "icons", f"save_{icon_variant}.png"
+            )
+            
+            if os.path.exists(save_icon_path):
+                save_icon = QIcon(save_icon_path)
+                button.setIcon(save_icon)
+                logger.debug(f"Loaded save icon: save_{icon_variant}.png")
+            else:
+                # Fallback to Unicode symbol
+                button.setText("💾")
+                logger.warning(f"Save icon not found: {save_icon_path}")
+                
+        except Exception as e:
+            logger.error(f"Failed to load save icon: {e}")
+            button.setText("💾")  # Fallback
+    
     def _get_icon_variant(self) -> str:
         """Determine which icon variant to use based on theme."""
         try:
@@ -3316,6 +3568,85 @@ class REPLWidget(QWidget):
         except Exception as e:
             logger.error(f"Failed to determine icon variant: {e}")
             return "lite"
+    
+    def _load_theme_icon(self, icon_name: str, use_theme_variant: bool = True) -> QIcon:
+        """Load icon using centralized resource resolver."""
+        try:
+            from ...utils.resource_resolver import resolve_icon
+            
+            # Determine theme suffix
+            theme_suffix = ""
+            if use_theme_variant:
+                variant = self._get_icon_variant()
+                theme_suffix = f"_{variant}"
+            
+            icon_path = resolve_icon(icon_name, theme_suffix)
+            if icon_path:
+                return QIcon(str(icon_path))
+        except Exception as e:
+            logger.debug(f"Failed to load theme icon {icon_name}: {e}")
+        
+        return QIcon()  # Empty icon as fallback
+    
+    def _get_menu_icon_variant(self) -> str:
+        """Determine which icon variant to use for menu items based on menu background color.
+        
+        Menus use background_secondary, and if it's light, we need dark icons.
+        If it's dark, we need light icons.
+        """
+        try:
+            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+                colors = self.theme_manager.current_theme
+                # Check menu background color (background_secondary)
+                menu_bg_color = colors.background_secondary
+                
+                # Calculate luminance to determine if background is light or dark
+                if menu_bg_color.startswith('#'):
+                    # Remove # and get RGB values
+                    hex_color = menu_bg_color.lstrip('#')
+                    if len(hex_color) == 6:
+                        r = int(hex_color[0:2], 16)
+                        g = int(hex_color[2:4], 16)
+                        b = int(hex_color[4:6], 16)
+                        
+                        # Calculate relative luminance using W3C formula
+                        luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+                        
+                        # If luminance > 0.5, background is light, use dark icons
+                        # If luminance <= 0.5, background is dark, use light icons
+                        if luminance > 0.5:
+                            logger.debug(f"Menu background is light (luminance: {luminance:.2f}), using dark icons")
+                            return "dark"
+                        else:
+                            logger.debug(f"Menu background is dark (luminance: {luminance:.2f}), using lite icons")
+                            return "lite"
+                    elif len(hex_color) == 3:
+                        # Handle shorthand hex colors like #fff
+                        r = int(hex_color[0] * 2, 16)
+                        g = int(hex_color[1] * 2, 16)
+                        b = int(hex_color[2] * 2, 16)
+                        
+                        luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+                        
+                        if luminance > 0.5:
+                            logger.debug(f"Menu background is light (luminance: {luminance:.2f}), using dark icons")
+                            return "dark"
+                        else:
+                            logger.debug(f"Menu background is dark (luminance: {luminance:.2f}), using lite icons")
+                            return "lite"
+                
+                # Fallback: check using simple heuristic
+                if menu_bg_color.startswith('#') and len(menu_bg_color) >= 2:
+                    first_hex_digit = int(menu_bg_color[1], 16)
+                    # If first digit is 8-F, it's likely light, use dark icons
+                    return "dark" if first_hex_digit >= 8 else "lite"
+            
+            # Default fallback for dark menus
+            return "lite"
+            
+        except Exception as e:
+            logger.error(f"Failed to determine menu icon variant: {e}")
+            return "lite"  # Default to lite icons for dark backgrounds
     
     def _get_emoji_font_stack(self) -> str:
         """Get a font stack that supports emoji rendering on Windows."""
@@ -3447,9 +3778,13 @@ class REPLWidget(QWidget):
         """Initialize the enhanced user interface."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(3)  # Reduce default spacing by ~50% (from ~6 to 3)
         
         # Initialize resize functionality
         self._init_resize_functionality()
+        
+        # Tab bar above title bar
+        self._init_tab_bar(layout)
         
         # Title bar with new conversation and help buttons
         self._init_title_bar(layout)
@@ -3573,6 +3908,9 @@ class REPLWidget(QWidget):
             plaintext_style = f"#repl-root QPlainTextEdit {{ background-color: {child_bg}; color: {colors.text_primary}; border: 1px solid {colors.border_primary}; border-radius: 3px; padding: 5px; selection-background-color: {colors.secondary}; selection-color: {colors.text_primary}; }}"
             plaintext_focus_style = f"#repl-root QPlainTextEdit:focus {{ border: 2px solid {colors.border_focus}; }}"
             
+            # Add explicit tab frame transparency to override theme inheritance
+            tab_frame_style = "#repl-root QFrame#tab_frame { background-color: rgba(0,0,0,0) !important; background: none !important; }"
+            
             # Properly combine all styles (root style includes border-radius)
             combined_style = f"{style} {textedit_style} {lineedit_style} {lineedit_focus_style} {plaintext_style} {plaintext_focus_style}"
             
@@ -3635,6 +3973,9 @@ class REPLWidget(QWidget):
         # Also update the output display style with new opacity
         if hasattr(self, 'output_display'):
             self._style_output_display()
+            
+        # Ensure tab frame transparency after opacity changes (which may trigger style reapplication)
+        self._schedule_tab_transparency_enforcement()
             
         logger.info(f"✓ REPL panel opacity applied successfully: {new_val:.3f}")
         
@@ -4141,6 +4482,9 @@ class REPLWidget(QWidget):
         # Reset idle detector for new conversation
         self.idle_detector.reset_activity(conversation.id)
         
+        # Sync tab title with conversation
+        self._sync_tab_with_conversation()
+        
         # Emit signal for external components
         self.conversation_changed.emit(conversation.id)
         
@@ -4220,7 +4564,7 @@ class REPLWidget(QWidget):
             role_name = "You" if message.role == MessageRole.USER else "AI"
             style = "input" if message.role == MessageRole.USER else "response"
             
-            timestamp = message.timestamp.strftime("%H:%M")
+            timestamp = message.timestamp.strftime("%m/%d %H:%M")
             self.append_output(f"[{timestamp}] {role_icon} {role_name}: {message.content}", style)
         
         if not conversation.messages:
@@ -4838,6 +5182,15 @@ def test_theme():
             logger.info("🆕 Auto-creating conversation for AI interaction")
             self._create_new_conversation_for_message(message)
             
+            # If using tabs and current tab has no conversation, associate it
+            if TAB_SYSTEM_AVAILABLE and hasattr(self, 'tab_manager') and self.tab_manager:
+                active_tab = self.tab_manager.get_active_tab()
+                if active_tab and not active_tab.conversation_id and self.current_conversation:
+                    active_tab.conversation_id = self.current_conversation.id
+                    # Update tab title to match conversation
+                    self.tab_manager.update_tab_title(active_tab.tab_id, self.current_conversation.title or "Conversation")
+                    logger.debug(f"Associated conversation {self.current_conversation.id} with tab {active_tab.tab_id}")
+            
         # Ensure AI service has the correct conversation context
         if self.current_conversation and self.conversation_manager and self.conversation_manager.has_ai_service():
             ai_service = self.conversation_manager.get_ai_service()
@@ -5083,10 +5436,7 @@ def test_theme():
             cursor.movePosition(QTextCursor.MoveOperation.End)
             cursor.insertHtml(resend_html)
             
-            # Connect to click handler if not already connected
-            if not hasattr(self, '_resend_connected'):
-                self.output_display.anchorClicked.connect(self._handle_resend_click)
-                self._resend_connected = True
+            # Link handler already connected during initialization
                 
         except Exception as e:
             logger.error(f"Failed to add resend option: {e}")
@@ -5842,27 +6192,12 @@ def test_theme():
         """Handle help button click - open help docs directly in browser."""
         logger.info("Help button clicked - opening help docs in browser")
         import webbrowser
-        import sys
-        from pathlib import Path
         
         try:
-            # Try to find local help documentation
-            possible_paths = [
-                # Development mode
-                Path(__file__).parent.parent.parent.parent / "assets" / "help" / "index.html",
-                # Installed package mode
-                Path(sys.prefix) / "share" / "ghostman" / "help" / "index.html",
-                # Bundled executable mode
-                Path(getattr(sys, '_MEIPASS', Path.cwd())) / "ghostman" / "assets" / "help" / "index.html",
-                # Relative to current working directory
-                Path.cwd() / "ghostman" / "assets" / "help" / "index.html",
-            ]
+            # Try to find local help documentation using centralized resolver
+            from ...utils.resource_resolver import resolve_help_file
             
-            help_path = None
-            for path in possible_paths:
-                if path.exists():
-                    help_path = path
-                    break
+            help_path = resolve_help_file()
             
             if help_path:
                 # Open local help file
@@ -5999,15 +6334,25 @@ def test_theme():
     def _show_new_conv_menu(self):
         """Show the new conversation menu for title button."""
         if hasattr(self, 'title_new_conv_menu'):
+            # Re-apply styling before showing menu
+            logger.debug("Re-styling title menu before show")
+            self._style_menu(self.title_new_conv_menu)
+            
             # Position menu below the button
             button_pos = self.title_new_conv_btn.mapToGlobal(self.title_new_conv_btn.rect().bottomLeft())
+            logger.debug(f"Showing title menu at position: {button_pos}")
             self.title_new_conv_menu.exec(button_pos)
     
     def _show_toolbar_new_conv_menu(self):
         """Show the new conversation menu for toolbar button."""
         if hasattr(self, 'toolbar_new_conv_menu'):
+            # Re-apply styling before showing menu
+            logger.debug("Re-styling toolbar menu before show")
+            self._style_menu(self.toolbar_new_conv_menu)
+            
             # Position menu below the button
             button_pos = self.toolbar_new_conv_btn.mapToGlobal(self.toolbar_new_conv_btn.rect().bottomLeft())
+            logger.debug(f"Showing toolbar menu at position: {button_pos}")
             self.toolbar_new_conv_menu.exec(button_pos)
     
     def _on_settings_clicked(self):
@@ -6038,6 +6383,140 @@ def test_theme():
                 # Reset to normal styling
                 self._style_title_button(self.move_btn)
                 print("🔘 Move mode OFF - grips hidden, normal control")
+    
+    def _save_current_conversation(self):
+        """Save the current conversation without starting a new one."""
+        try:
+            if not self.conversation_manager:
+                self.append_output("⚠ Conversation management not available", "error")
+                return
+            
+            # Get AI service for conversation integration
+            ai_service = None
+            if self.conversation_manager:
+                ai_service = self.conversation_manager.get_ai_service()
+            
+            if not ai_service or not hasattr(ai_service, 'conversation_service'):
+                self.append_output("⚠ AI service doesn't support conversation management", "error")
+                return
+            
+            async def save_conversation():
+                try:
+                    # Force sync between REPL and AI service first
+                    if self.current_conversation and self.conversation_manager and self.conversation_manager.has_ai_service():
+                        ai_service_current = ai_service.get_current_conversation_id()
+                        if ai_service_current != self.current_conversation.id:
+                            logger.debug(f"Syncing conversations before save: AI={ai_service_current}, REPL={self.current_conversation.id}")
+                            ai_service.set_current_conversation(self.current_conversation.id)
+                    
+                    current_id = ai_service.get_current_conversation_id()
+                    logger.debug(f"Save attempt - AI service current ID: {current_id}")
+                    logger.debug(f"Save attempt - REPL current conversation: {self.current_conversation.id if self.current_conversation else None}")
+                    
+                    # Determine which conversation to save
+                    conversation = None
+                    
+                    # First try: Use AI service current conversation
+                    if current_id:
+                        conversation = await ai_service.conversation_service.get_conversation(current_id, include_messages=True)
+                        if conversation and conversation.messages:
+                            logger.debug(f"Found conversation via AI service with {len(conversation.messages)} messages")
+                        else:
+                            logger.debug(f"AI service conversation has no messages: {conversation.messages if conversation else 'No conversation'}")
+                    
+                    # Second try: Use REPL's current conversation if AI service doesn't have a good one
+                    if (not conversation or not conversation.messages) and self.current_conversation:
+                        logger.debug(f"Trying REPL current conversation: {self.current_conversation.id}")
+                        current_id = self.current_conversation.id
+                        
+                        # Try to get it from the database
+                        try:
+                            conversation = await ai_service.conversation_service.get_conversation(current_id, include_messages=True)
+                            if conversation and conversation.messages:
+                                logger.debug(f"Found REPL conversation in database with {len(conversation.messages)} messages")
+                            else:
+                                # Use the in-memory conversation object directly
+                                conversation = self.current_conversation
+                                logger.debug(f"Using in-memory REPL conversation with {len(conversation.messages) if hasattr(conversation, 'messages') else 'unknown'} messages")
+                        except Exception as e:
+                            logger.debug(f"Failed to get REPL conversation from database, using in-memory: {e}")
+                            conversation = self.current_conversation
+                    
+                    if not current_id:
+                        self.append_output("⚠ No active conversation to save", "system")
+                        return
+                    
+                    if not conversation:
+                        self.append_output("⚠ No conversation found to save", "system")
+                        return
+                        
+                    # Check for messages in various ways
+                    has_messages = False
+                    message_count = 0
+                    
+                    if hasattr(conversation, 'messages') and conversation.messages:
+                        has_messages = True
+                        message_count = len(conversation.messages)
+                    elif hasattr(conversation, 'message_count') and conversation.message_count > 0:
+                        has_messages = True
+                        message_count = conversation.message_count
+                    
+                    if not has_messages:
+                        # Final check: see if there are unsent messages in the UI
+                        ui_has_messages = self._has_unsaved_messages()
+                        if ui_has_messages:
+                            self.append_output("⚠ Conversation has content but messages may need to be sent first", "system") 
+                            logger.debug("UI has messages but conversation object is empty - possible unsaved state")
+                        else:
+                            self.append_output("⚠ No conversation content to save", "system")
+                            logger.debug(f"No messages found in conversation {current_id}")
+                        return
+                    
+                    logger.debug(f"Proceeding with save for conversation {current_id} with {message_count} messages")
+                    
+                    # Generate title if needed
+                    if len(conversation.messages) >= 2:
+                        if conversation.title in ["New Conversation", "Untitled Conversation"] or not conversation.title.strip():
+                            generated_title = await ai_service.conversation_service.generate_conversation_title(current_id)
+                            if generated_title:
+                                await ai_service.conversation_service.update_conversation_title(current_id, generated_title)
+                                logger.info(f"Generated title for saved conversation: {generated_title}")
+                                self.append_output(f"💾 Conversation saved with title: {generated_title}", "system")
+                            else:
+                                self.append_output("💾 Conversation saved", "system")
+                        else:
+                            self.append_output(f"💾 Conversation '{conversation.title}' saved", "system")
+                    else:
+                        self.append_output("💾 Conversation saved", "system")
+                    
+                    # Refresh conversation list to reflect any title changes
+                    await self._load_conversations()
+                    
+                except Exception as e:
+                    logger.error(f"Failed to save conversation: {e}")
+                    self.append_output(f"✗ Error saving conversation: {e}", "error")
+            
+            # Use Qt timer to safely handle async operations
+            from PyQt6.QtCore import QTimer
+            
+            def run_async():
+                try:
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        loop.run_until_complete(save_conversation())
+                    finally:
+                        loop.close()
+                except Exception as e:
+                    logger.error(f"Failed to execute save conversation async: {e}")
+                    self.append_output(f"✗ Error: {e}", "error")
+            
+            QTimer.singleShot(100, run_async)
+            
+        except Exception as e:
+            logger.error(f"Save conversation failed: {e}")
+            self.append_output(f"✗ Error: {e}", "error")
     
     def _start_new_conversation(self, save_current: bool = False):
         """Start a new conversation with optional saving of current."""
@@ -6757,6 +7236,282 @@ def test_theme():
         except Exception as e:
             logger.error(f"Failed to handle regex toggle: {e}")
     
+    
+    
+    @pyqtSlot(str, str)
+    def _on_tab_switched(self, old_tab_id: str, new_tab_id: str):
+        """Handle tab switching event."""
+        try:
+            logger.debug(f"Tab switched from {old_tab_id} to {new_tab_id}")
+            
+            # The context switch will be handled by _on_conversation_context_switched
+            # This is just for UI updates if needed
+            
+        except Exception as e:
+            logger.error(f"Error handling tab switch: {e}")
+    
+    @pyqtSlot(str)
+    def _on_conversation_context_switched(self, conversation_id: str):
+        """Handle conversation context switching from tab manager."""
+        try:
+            if not conversation_id:
+                # Clear current conversation for new conversation
+                self._clear_current_conversation()
+                return
+                
+            # Find the conversation
+            if not self.conversation_manager:
+                logger.warning("Cannot switch conversation context - no conversation manager")
+                return
+                
+            # Load the conversation asynchronously
+            async def load_conversation():
+                try:
+                    conversation = await self.conversation_manager.get_conversation(conversation_id)
+                    if conversation:
+                        # Switch to the conversation (this will update UI)
+                        self._switch_to_conversation(conversation)
+                        logger.info(f"Switched to conversation context: {conversation.title}")
+                    else:
+                        logger.warning(f"Conversation {conversation_id} not found")
+                        
+                except Exception as e:
+                    logger.error(f"Failed to load conversation {conversation_id}: {e}")
+            
+            # Run the async operation
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # Schedule for later execution
+                    asyncio.create_task(load_conversation())
+                else:
+                    loop.run_until_complete(load_conversation())
+            except Exception as e:
+                logger.error(f"Error running async conversation load: {e}")
+                
+        except Exception as e:
+            logger.error(f"Error switching conversation context: {e}")
+    
+    @pyqtSlot(str, str) 
+    def _on_tab_created(self, tab_id: str, title: str):
+        """Handle tab creation event."""
+        try:
+            logger.debug(f"Tab created: {tab_id} - {title}")
+            
+            # Update active tab title if this is the current conversation
+            if hasattr(self, 'tab_manager') and self.tab_manager:
+                active_tab = self.tab_manager.get_active_tab()
+                if active_tab and self.current_conversation:
+                    # Sync tab title with conversation title
+                    if self.current_conversation.title and self.current_conversation.title != title:
+                        self.tab_manager.update_tab_title(tab_id, self.current_conversation.title)
+                        
+        except Exception as e:
+            logger.error(f"Error handling tab creation: {e}")
+    
+    @pyqtSlot(str)
+    def _on_tab_closed(self, tab_id: str):
+        """Handle tab closure event."""
+        try:
+            logger.debug(f"Tab closed: {tab_id}")
+            
+            # UI cleanup is handled by tab manager
+            # Just log the event for now
+            
+        except Exception as e:
+            logger.error(f"Error handling tab closure: {e}")
+    
+    def _clear_current_conversation(self):
+        """Clear current conversation for new tab/conversation."""
+        try:
+            self.current_conversation = None
+            
+            # Clear output display
+            self.output_display.clear()
+            
+            # Show welcome message
+            self.append_output("🎆 Start a new conversation!", "info")
+            
+            # Reset status label
+            if hasattr(self, 'status_label'):
+                self.status_label.setText("Ready")
+                self.status_label.setStyleSheet("color: #4CAF50; font-weight: bold; font-size: 10px;")
+            
+            # Reset idle detector
+            if hasattr(self, 'idle_detector'):
+                self.idle_detector.reset_activity(None)
+                
+            logger.debug("Cleared current conversation for new context")
+            
+        except Exception as e:
+            logger.error(f"Error clearing current conversation: {e}")
+    
+    def _sync_tab_with_conversation(self):
+        """Sync active tab title with current conversation title."""
+        try:
+            if not (hasattr(self, 'tab_manager') and self.tab_manager and self.current_conversation):
+                return
+                
+            active_tab = self.tab_manager.get_active_tab()
+            if active_tab:
+                conversation_title = self.current_conversation.title or "New Chat"
+                if active_tab.title != conversation_title:
+                    self.tab_manager.update_tab_title(active_tab.tab_id, conversation_title)
+                    logger.debug(f"Synced tab title: {conversation_title}")
+                    
+        except Exception as e:
+            logger.error(f"Error syncing tab with conversation: {e}")
+    
+    # Tab event handlers
+    def _on_tab_switched(self, tab_id: str):
+        """Handle tab switching - change conversation context."""
+        if hasattr(self, 'tab_manager') and self.tab_manager:
+            active_tab = self.tab_manager.get_active_tab()
+            if active_tab and active_tab.conversation_id:
+                # Switch to the conversation associated with this tab
+                logger.debug(f"Switching to conversation for tab: {tab_id}")
+                # TODO: Implement conversation context switching
+    
+    def _on_tab_created(self, tab_id: str):
+        """Handle new tab creation."""
+        logger.debug(f"New tab created: {tab_id}")
+        # Tab is automatically switched to by the manager
+    
+    def _on_tab_closed(self, tab_id: str):
+        """Handle tab closing."""
+        logger.debug(f"Tab closed: {tab_id}")
+        # Tab manager handles cleanup and switching to another tab
+    
+    def _on_new_tab_requested(self):
+        """Handle new tab request from plus button."""
+        if hasattr(self, 'tab_manager') and self.tab_manager:
+            new_tab_id = self.tab_manager.create_tab()
+            logger.debug(f"Created new tab from plus button: {new_tab_id}")
+        else:
+            logger.warning("Tab manager not available for new tab request")
+    
+    def _create_new_tab(self):
+        """Create a new tab with conversation."""
+        if not hasattr(self, 'tab_manager') or not self.tab_manager:
+            logger.warning("Tab manager not available for new tab creation")
+            return
+            
+        # If this is the first tab being created, we need to:
+        # 1. Create a tab for the current content (Tab 1)  
+        # 2. Create a new empty tab (Tab 2)
+        # 3. Switch to the new empty tab
+        
+        if len(self.tab_manager.tabs) == 0:
+            # First tab creation - preserve current content in Tab 1
+            logger.info("Creating first tabs - preserving current content")
+            
+            # Create Tab 1 with current content/conversation  
+            if (self.current_conversation and 
+                self.current_conversation.title.strip() and 
+                not self.current_conversation.title.startswith("[No response content") and
+                not self.current_conversation.title.startswith("No response content")):
+                # Use conversation title if available, not empty, and meaningful
+                current_tab_title = self.current_conversation.title[:23] + "..." if len(self.current_conversation.title) > 25 else self.current_conversation.title
+            else:
+                # Use "Default" for first tab when no meaningful conversation title exists
+                current_tab_title = "Default"
+            
+            first_tab_id = self.tab_manager.create_tab(title=current_tab_title, activate=False)
+            first_tab = self.tab_manager.tabs.get(first_tab_id)
+            if first_tab:
+                if self.current_conversation:
+                    first_tab.conversation_id = self.current_conversation.id
+                    logger.info(f"Associated Tab 1 with current conversation: {self.current_conversation.id}")
+                else:
+                    first_tab.conversation_id = None
+                    logger.info("Tab 1 created without conversation (empty start)")
+            
+            # Create Tab 2 as new empty tab
+            new_tab_id = self.tab_manager.create_tab(title="Conversation", activate=True)
+            logger.info(f"Created new empty tab: {new_tab_id}")
+            
+        else:
+            # Normal tab creation - just create new tab
+            new_tab_id = self.tab_manager.create_tab(title="Conversation")
+            logger.debug(f"Created new tab: {new_tab_id}")
+    
+    # --- Tab Event Handlers ---
+    
+    def _on_tab_switched(self, tab_id: str):
+        """Handle tab switching to switch conversation context."""
+        if not self.tab_manager:
+            logger.warning("Tab manager not available for tab switching")
+            return
+            
+        tab = self.tab_manager.tabs.get(tab_id)
+        if not tab:
+            logger.warning(f"Tab not found for switching: {tab_id}")
+            return
+            
+        logger.info(f"Switching to tab: {tab_id} (conversation: {tab.conversation_id})")
+        
+        # If tab has a conversation associated, load it
+        if tab.conversation_id and self.conversation_manager:
+            # Use QTimer to handle async operation properly from UI thread
+            QTimer.singleShot(0, lambda: self._load_tab_conversation(tab_id, tab.conversation_id))
+        else:
+            # Clear current conversation and output for empty tab
+            self.current_conversation = None
+            self.clear_output()
+            self.append_output("💬 Start typing to begin a new conversation", "info")
+            # Reset focus to input
+            self.command_input.setFocus()
+    
+    def _on_tab_created(self, tab_id: str):
+        """Handle new tab creation."""
+        logger.info(f"Tab created: {tab_id}")
+        
+        # Don't create conversation immediately - wait for first message
+        # Just mark the tab as ready for a new conversation
+        if self.tab_manager:
+            tab = self.tab_manager.tabs.get(tab_id)
+            if tab:
+                tab.conversation_id = None  # No conversation yet
+                logger.debug(f"Tab {tab_id} created without conversation - waiting for first message")
+    
+    def _on_tab_closed(self, tab_id: str):
+        """Handle tab closure."""
+        logger.info(f"Tab closed: {tab_id}")
+        # Note: Conversation cleanup could be added here if needed
+    
+    def _load_tab_conversation(self, tab_id: str, conversation_id: str):
+        """Load conversation for a specific tab asynchronously."""
+        try:
+            conversation = asyncio.run(
+                self.conversation_manager.get_conversation(conversation_id)
+            )
+            if conversation:
+                self.current_conversation = conversation
+                self._load_conversation_messages(conversation)
+                logger.debug(f"Loaded conversation {conversation_id} for tab {tab_id}")
+            else:
+                logger.warning(f"Could not load conversation {conversation_id} for tab {tab_id}")
+                self.clear_output()
+                self.append_output("⚠ Could not load conversation", "warning")
+        except Exception as e:
+            logger.error(f"Error loading conversation for tab {tab_id}: {e}")
+            self.clear_output()
+            self.append_output(f"❌ Error loading conversation: {str(e)}", "error")
+    
+    
+    def update_tab_title_for_conversation(self, conversation_id: str, new_title: str):
+        """Update tab title when conversation title changes."""
+        if not self.tab_manager:
+            return
+            
+        # Find tab with this conversation ID
+        for tab_id, tab in self.tab_manager.tabs.items():
+            if tab.conversation_id == conversation_id:
+                self.tab_manager.update_tab_title(tab_id, new_title)
+                logger.debug(f"Updated tab {tab_id} title to '{new_title}' for conversation {conversation_id}")
+                break
+    
     def shutdown(self):
         """Shutdown the enhanced REPL widget."""
         logger.info("Shutting down Enhanced REPL Widget...")
@@ -6779,6 +7534,11 @@ def test_theme():
             # Clear summarization queue
             self.summarization_queue.clear()
             self.is_summarizing = False
+            
+            # Clean up tab manager
+            if hasattr(self, 'tab_manager') and self.tab_manager:
+                self.tab_manager.cleanup()
+                logger.debug("Tab manager cleaned up")
             
             # Clear conversation references
             self.current_conversation = None

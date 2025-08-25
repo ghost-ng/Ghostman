@@ -1302,18 +1302,27 @@ class StyleTemplates:
         QMenu::item {{
             padding: 6px 12px;
             border-radius: 3px;
+            margin: 1px;
         }}
         QMenu::item:selected {{
-            background-color: {colors.secondary};
+            background-color: {colors.interactive_hover};
+            color: {colors.text_primary};
+        }}
+        QMenu::item:hover {{
+            background-color: {colors.interactive_hover};
             color: {colors.text_primary};
         }}
         QMenu::item:disabled {{
             color: {colors.text_disabled};
+            background-color: transparent;
         }}
         QMenu::separator {{
             height: 1px;
             background-color: {colors.separator};
-            margin: 2px;
+            margin: 4px 2px;
+        }}
+        QMenu::icon {{
+            padding-left: 4px;
         }}
         """
     
@@ -1347,16 +1356,18 @@ class StyleTemplates:
         }}
         QTabBar::tab {{
             background-color: {colors.background_tertiary};
-            color: {colors.text_secondary};
+            color: {inactive_text_color};
             border: 1px solid {colors.border_secondary};
             padding: 8px 16px;
             margin-right: 3px;
             border-radius: 8px;
-            min-width: 80px;
+            min-width: 100px;
+            max-width: 200px;
+            font-size: 11px;
         }}
         QTabBar::tab:selected {{
             background-color: {colors.primary};
-            color: {colors.background_primary};
+            color: {selected_text_color};
             border-color: {colors.primary};
             font-weight: bold;
         }}
@@ -1364,6 +1375,11 @@ class StyleTemplates:
             background-color: {colors.interactive_hover};
             color: {colors.text_primary};
             border-color: {colors.border_focus};
+            font-weight: 500;
+        }}
+        QTabBar::tab:focus {{
+            outline: 2px solid {colors.border_focus};
+            outline-offset: 1px;
         }}
         QTabBar::tab:first {{
             margin-left: 3px;
@@ -1373,6 +1389,94 @@ class StyleTemplates:
         }}
         """
     
+    @staticmethod
+    def get_conversation_tab_button_style(colors: ColorSystem, active: bool = False) -> str:
+        """Enhanced style for custom conversation tab buttons with accessibility and consistent sizing."""
+        
+        # Import color utilities for accessibility
+        from .color_system import ColorUtils
+        
+        if active:
+            # For active tabs, ensure high contrast
+            text_color, contrast_ratio = ColorUtils.get_high_contrast_text_color_for_background(
+                colors.primary, colors, min_ratio=4.5
+            )
+            
+            # Use primary_hover for pressed state since primary_active doesn't exist in ColorSystem
+            pressed_color = colors.primary_hover
+            
+            return f"""
+            QPushButton {{
+                background-color: {colors.primary} !important;
+                color: {text_color} !important;
+                border: 1px solid {colors.primary} !important;
+                border-radius: 4px;
+                padding: 6px 12px;
+                width: 140px;
+                min-width: 120px;
+                max-width: 280px;
+                height: 28px;
+                font-weight: bold;
+                font-size: 11px;
+                text-align: center;
+                margin: 0px 1px;
+            }}
+            QPushButton:hover {{
+                background-color: {colors.primary_hover} !important;
+                border-color: {colors.primary_hover} !important;
+                color: {text_color} !important;
+            }}
+            QPushButton:pressed {{
+                background-color: {pressed_color} !important;
+                border: none !important;
+                outline: none !important;
+                transform: scale(0.98);
+            }}
+            QPushButton:focus {{
+                outline: 2px solid {colors.border_focus};
+                outline-offset: 1px;
+            }}
+            """
+        else:
+            # For inactive tabs, ensure readable contrast
+            inactive_text_color, contrast_ratio = ColorUtils.get_high_contrast_text_color_for_background(
+                colors.background_tertiary, colors, min_ratio=4.5
+            )
+            
+            return f"""
+            QPushButton {{
+                background-color: {colors.background_tertiary} !important;
+                color: {inactive_text_color} !important;
+                border: 1px solid {colors.border_secondary} !important;
+                border-radius: 4px;
+                padding: 6px 12px;
+                width: 140px;
+                min-width: 120px;
+                max-width: 280px;
+                height: 28px;
+                font-size: 11px;
+                text-align: center;
+                margin: 0px 1px;
+                font-weight: 500;
+            }}
+            QPushButton:hover {{
+                background-color: {colors.interactive_hover} !important;
+                color: {colors.text_primary} !important;
+                border-color: {colors.border_focus} !important;
+                font-weight: bold;
+            }}
+            QPushButton:pressed {{
+                background-color: {colors.interactive_active} !important;
+                border: none !important;
+                outline: none !important;
+                transform: scale(0.98);
+            }}
+            QPushButton:focus {{
+                outline: 2px solid {colors.border_focus};
+                outline-offset: 1px;
+            }}
+            """
+
     @staticmethod
     def get_dialog_style(colors: ColorSystem) -> str:
         """
