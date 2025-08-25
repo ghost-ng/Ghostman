@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ghostman Help Documentation</title>
+    <title>Ghostman Help - Complete User Guide</title>
     <link rel="stylesheet" href="css/help.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,14 +15,16 @@
         <header class="header">
             <div class="header-content">
                 <div class="logo">
-                    <h1>👻 Ghostman</h1>
-                    <span class="version">Meet Spector, your AI companion</span>
+                    <h1><img src="../avatar.png" alt="Spector Avatar" style="width: 32px; height: 32px; vertical-align: middle; margin-right: 8px; border-radius: 50%;"> Ghostman</h1>
+                    <span class="version">Complete User Guide - Meet Spector, your AI companion</span>
                 </div>
                 <nav class="nav">
-                    <a href="#getting-started" class="nav-link">Getting Started</a>
+                    <a href="#installation" class="nav-link">Installation</a>
+                    <a href="#interface" class="nav-link">Interface</a>
                     <a href="#features" class="nav-link">Features</a>
                     <a href="#settings" class="nav-link">Settings</a>
-                    <a href="#troubleshooting" class="nav-link">Troubleshooting</a>
+                    <a href="#shortcuts" class="nav-link">Shortcuts</a>
+                    <a href="#troubleshooting" class="nav-link">Help</a>
                 </nav>
             </div>
         </header>
@@ -39,8 +41,19 @@
                         <h3>Getting Started</h3>
                         <ul>
                             <li><a href="#installation">Installation</a></li>
-                            <li><a href="#first-run">First Run</a></li>
-                            <li><a href="#api-setup">API Setup</a></li>
+                            <li><a href="#first-setup">First Time Setup</a></li>
+                            <li><a href="#api-keys">API Keys</a></li>
+                        </ul>
+                    </div>
+                    
+                    <div class="nav-section">
+                        <h3>Interface Overview</h3>
+                        <ul>
+                            <li><a href="#main-window">Main Window</a></li>
+                            <li><a href="#spector-avatar">Spector Avatar</a></li>
+                            <li><a href="#tab-management">Tab Management</a></li>
+                            <li><a href="#search-interface">Search Interface</a></li>
+                            <li><a href="#window-controls">Window Controls</a></li>
                         </ul>
                     </div>
                     
@@ -48,27 +61,28 @@
                         <h3>Core Features</h3>
                         <ul>
                             <li><a href="#chat-interface">Chat Interface</a></li>
-                            <li><a href="#avatar-widget">Spector (Avatar)</a></li>
-                            <li><a href="#conversation-management">Conversations</a></li>
-                            <li><a href="#themes">Themes & Styling</a></li>
+                            <li><a href="#conversation-system">Tabbed Conversations</a></li>
+                            <li><a href="#conversation-management">Conversation Management</a></li>
+                            <li><a href="#window-management">Window Management</a></li>
+                        </ul>
+                    </div>
+
+                    <div class="nav-section">
+                        <h3>Customization</h3>
+                        <ul>
+                            <li><a href="#themes">26 Themes</a></li>
+                            <li><a href="#ai-models">AI Models</a></li>
+                            <li><a href="#advanced-settings">Advanced Settings</a></li>
                         </ul>
                     </div>
                     
                     <div class="nav-section">
-                        <h3>Advanced</h3>
+                        <h3>Reference</h3>
                         <ul>
+                            <li><a href="#settings">Settings Configuration</a></li>
                             <li><a href="#keyboard-shortcuts">Keyboard Shortcuts</a></li>
-                            <li><a href="#customization">Customization</a></li>
-                            <li><a href="#data-management">Data Management</a></li>
-                        </ul>
-                    </div>
-                    
-                    <div class="nav-section">
-                        <h3>Support</h3>
-                        <ul>
                             <li><a href="#troubleshooting">Troubleshooting</a></li>
-                            <li><a href="#faq">FAQ</a></li>
-                            <li><a href="#contact">Contact & Support</a></li>
+                            <li><a href="#getting-help">Getting Help</a></li>
                         </ul>
                     </div>
                 </nav>
@@ -80,250 +94,683 @@
             <!-- Welcome Section -->
             <section id="welcome" class="content-section">
                 <div class="hero">
-                    <h1>Welcome to Ghostman</h1>
-                    <p class="hero-subtitle">Meet Spector, your friendly AI desktop companion with beautiful themes and conversation management</p>
+                    <h1>Ghostman Complete Guide</h1>
+                    <p class="hero-subtitle">Your comprehensive guide to mastering Spector, your intelligent AI desktop companion with professional tabbed conversations and beautiful theming.</p>
+                    
                     <div class="hero-features">
                         <div class="feature-item">
                             <span class="feature-icon">🤖</span>
-                            <span>AI-Powered Chat</span>
+                            <span>Multi-AI Support</span>
                         </div>
                         <div class="feature-item">
                             <span class="feature-icon">👻</span>
                             <span>Floating Avatar</span>
                         </div>
                         <div class="feature-item">
-                            <span class="feature-icon">💬</span>
-                            <span>Conversation History</span>
+                            <span class="feature-icon">📑</span>
+                            <span>Tabbed Conversations</span>
                         </div>
                         <div class="feature-item">
                             <span class="feature-icon">🎨</span>
-                            <span>Rich Theming</span>
+                            <span>26 Beautiful Themes</span>
+                        </div>
+                        <div class="feature-item">
+                            <span class="feature-icon">🔍</span>
+                            <span>Advanced Search</span>
+                        </div>
+                        <div class="feature-item">
+                            <span class="feature-icon">📁</span>
+                            <span>Export & Archive</span>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <!-- Getting Started -->
-            <section id="getting-started" class="content-section">
-                <h2>Getting Started</h2>
+            <!-- Installation -->
+            <section id="installation" class="content-section">
+                <h2>Installation</h2>
                 
-                <div id="installation" class="subsection">
-                    <h3>Installation</h3>
-                    <div class="info-box">
-                        <p><strong>Requirements:</strong> An OpenAI API key or compatible AI service</p>
+                <div class="info-box">
+                    <p><strong>Requirements:</strong> Python 3.12+ and Windows 10/11, macOS, or Linux</p>
+                </div>
+                
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h4>🚀 Download & Setup</h4>
+                        <div class="code-block">
+                            <pre><code>git clone https://github.com/ghost-ng/Ghostman.git
+cd Ghostman
+python -m venv venv
+venv\Scripts\activate  # Windows
+# source venv/bin/activate  # macOS/Linux
+pip install -r requirements.txt</code></pre>
+                        </div>
                     </div>
                     
-                    <ol class="step-list">
-                        <li>Download from <a href="https://github.com/ghost-ng/Ghostman/releases" target="_blank">GitHub Releases</a></li>
-                        <li>Install Python 3.12+ and dependencies</li>
-                        <li>Run: python -m ghostman</li>
-                        <li>Configure your API key in Settings (see API Setup below)</li>
-                    </ol>
-                </div>
-
-                <div id="first-run" class="subsection">
-                    <h3>First Run</h3>
-                    <ol class="step-list">
-                        <li>Launch Ghostman from your desktop or command line</li>
-                        <li>The application will start in system tray mode</li>
-                        <li>Right-click the tray icon and select "Show Avatar" to open the main interface</li>
-                        <li>Click the gear icon to open settings and configure your API key</li>
-                    </ol>
-                </div>
-
-                <div id="api-setup" class="subsection">
-                    <h3>API Setup</h3>
-                    <div class="warning-box">
-                        <p><strong>⚠️ Important:</strong> You need an AI service API key to use Ghostman's features.</p>
-                    </div>
-                    
-                    <h4>OpenAI Setup (Recommended)</h4>
-                    <ol class="step-list">
-                        <li>Visit <a href="https://platform.openai.com/" target="_blank">OpenAI Platform</a></li>
-                        <li>Create an account or sign in</li>
-                        <li>Go to API Keys section and create a new key</li>
-                        <li>Copy the API key</li>
-                        <li>In Ghostman, click the gear icon → AI Model</li>
-                        <li>Paste your API key in the API Key field</li>
-                        <li>Click "Test Connection" to verify</li>
-                    </ol>
-                    
-                    <h4>Other AI Providers</h4>
-                    <ul>
-                        <li><strong>Anthropic Claude:</strong> Direct API support with native integration</li>
-                        <li><strong>Google Gemini:</strong> Native support for Gemini 2.5 Pro/Flash models</li>
-                        <li><strong>Local AI:</strong> Ollama, LM Studio with OpenAI-compatible APIs</li>
-                        <li><strong>OpenRouter:</strong> Access to multiple models through one API</li>
-                    </ul>
-                    
-                    <div class="info-box">
-                        <p><strong>💡 Pro Tip:</strong> Use the model profile dropdown to quickly switch between preset configurations. Each profile automatically sets the correct temperature, max tokens, and endpoints for optimal performance.</p>
+                    <div class="feature-card">
+                        <h4>▶️ Run Ghostman</h4>
+                        <div class="code-block">
+                            <pre><code>python -m ghostman</code></pre>
+                        </div>
+                        <p>For debug mode:</p>
+                        <div class="code-block">
+                            <pre><code>python -m ghostman --debug</code></pre>
+                        </div>
                     </div>
                 </div>
-            </section>
 
-            <!-- Features -->
-            <section id="features" class="content-section">
-                <h2>Core Features</h2>
-
-                <div id="chat-interface" class="subsection">
-                    <h3>Chat Interface (REPL)</h3>
-                    <p>The main chat interface where you interact with Spector, your AI assistant.</p>
-                    
+                <div id="api-keys" class="subsection">
+                    <h3>Get Your API Key</h3>
                     <div class="feature-grid">
                         <div class="feature-card">
-                            <h4>💬 Chat Commands</h4>
+                            <h4>🔑 API Providers</h4>
                             <ul>
-                                <li><kbd>Enter</kbd> - Send message</li>
-                                <li>Use the + button for new conversation options</li>
-                                <li><kbd>Up/Down</kbd> - Navigate message history</li>
-                                <li><kbd>Ctrl+F</kbd> - Search conversations</li>
+                                <li><strong>OpenAI:</strong> <a href="https://platform.openai.com/" target="_blank">platform.openai.com</a></li>
+                                <li><strong>Anthropic:</strong> <a href="https://console.anthropic.com/" target="_blank">console.anthropic.com</a></li>
+                                <li><strong>Google:</strong> <a href="https://makersuite.google.com/" target="_blank">makersuite.google.com</a></li>
+                                <li><strong>Local:</strong> Ollama and OpenAI-compatible APIs</li>
                             </ul>
                         </div>
                         
                         <div class="feature-card">
-                            <h4>🔄 Streaming Responses</h4>
+                            <h4>⚠️ Important Notes</h4>
                             <ul>
-                                <li>Real-time AI response streaming</li>
-                                <li>Markdown formatting support</li>
-                                <li>Code syntax highlighting</li>
-                                <li>Copy individual messages</li>
+                                <li>API key required for AI features</li>
+                                <li>Credits/usage limits apply per provider</li>
+                                <li>Keys stored securely and encrypted</li>
+                                <li>No data sent to Ghostman servers</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- First Time Setup -->
+            <section id="first-setup" class="content-section">
+                <h2>First Time Setup</h2>
+                
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h4>1️⃣ Configure AI Model</h4>
+                        <ol class="step-list">
+                            <li>Click the gear icon to open Settings</li>
+                            <li>Go to "AI Model" tab</li>
+                            <li>Enter your API key</li>
+                            <li>Choose your provider (OpenAI, Anthropic, Google, Local)</li>
+                            <li>Select your preferred model</li>
+                            <li>Adjust temperature and settings if needed</li>
+                        </ol>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <h4>2️⃣ Choose Theme</h4>
+                        <ol class="step-list">
+                            <li>Click Settings → Interface tab</li>
+                            <li>Browse 26 available themes</li>
+                            <li>Preview themes before applying</li>
+                            <li>Popular choices: cyber, arctic_white, lilac</li>
+                            <li>Apply and enjoy instant visual update</li>
+                        </ol>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <h4>3️⃣ Start Chatting</h4>
+                        <ol class="step-list">
+                            <li>Click Spector (floating avatar) to open chat</li>
+                            <li>Type your first message</li>
+                            <li>Press Enter to send</li>
+                            <li>Watch real-time AI response streaming</li>
+                            <li>Use "+" button for new conversations</li>
+                        </ol>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Interface Overview -->
+            <section id="interface" class="content-section">
+                <h2>Interface Overview</h2>
+                <p>Ghostman features an intuitive interface with multiple components working together seamlessly. Here's a detailed tour of each interface element:</p>
+
+                <div id="main-window" class="subsection">
+                    <h3>Main Application Window</h3>
+                    <div class="screenshot">
+                        <img src="images/appwindow.png" alt="Main Ghostman application window showing the complete interface">
+                        <p class="caption">Complete Ghostman interface with chat area, tabs, and controls</p>
+                    </div>
+                    <div class="info-box">
+                        <p><strong>Main Window Components:</strong></p>
+                        <ul>
+                            <li><strong>Chat Area:</strong> Central conversation display with markdown formatting</li>
+                            <li><strong>Input Field:</strong> Message composition area at the bottom</li>
+                            <li><strong>Tab Bar:</strong> Multiple conversation tabs for organization</li>
+                            <li><strong>Title Bar:</strong> Window controls and application branding</li>
+                            <li><strong>Status Indicators:</strong> Visual feedback for AI processing states</li>
+                            <li><strong>Toolbar:</strong> Quick access buttons for common actions</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div id="window-controls" class="subsection">
+                    <h3>Title Bar & Window Controls</h3>
+                    <div class="screenshot">
+                        <img src="images/titlebar.png" alt="Application title bar with window controls">
+                        <p class="caption">Title bar showing window controls and application title</p>
+                    </div>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>🎯 Title Bar Features</h4>
+                            <ul>
+                                <li><strong>Application Title:</strong> Shows "Ghostman" branding</li>
+                                <li><strong>Minimize Button:</strong> Hide to system tray</li>
+                                <li><strong>Close Button:</strong> Exit application or hide window</li>
+                                <li><strong>Drag Area:</strong> Click and drag to move window</li>
+                                <li><strong>Context Menu:</strong> Right-click for additional options</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>🎛️ Window Behavior</h4>
+                            <ul>
+                                <li><strong>Always on Top:</strong> Keep above other windows (Alt+H)</li>
+                                <li><strong>Opacity Control:</strong> Adjust transparency 20-100%</li>
+                                <li><strong>Minimize to Tray:</strong> Hide while keeping Ghostman running</li>
+                                <li><strong>Smart Positioning:</strong> Remembers last window position</li>
                             </ul>
                         </div>
                     </div>
                 </div>
 
-                <div id="avatar-widget" class="subsection">
-                    <h3>Spector (Avatar Widget)</h3>
-                    <p>A floating, draggable avatar (Spector) that provides quick access to Ghostman features.</p>
-                    
+                <div id="resize-handles" class="subsection">
+                    <h3>Window Resizing</h3>
+                    <div class="screenshot">
+                        <img src="images/move_handles.png" alt="Window resize handles for adjusting window size">
+                        <p class="caption">Resize handles allowing flexible window sizing</p>
+                    </div>
                     <div class="info-box">
-                        <p><strong>Avatar Modes:</strong></p>
+                        <p><strong>Flexible Resizing:</strong></p>
                         <ul>
-                            <li><strong>Idle:</strong> Gentle floating animation</li>
-                            <li><strong>Thinking:</strong> Processing user input</li>
-                            <li><strong>Speaking:</strong> Displaying AI response</li>
+                            <li><strong>Edge Handles:</strong> Drag any edge to resize horizontally or vertically</li>
+                            <li><strong>Corner Handles:</strong> Drag corners for proportional resizing</li>
+                            <li><strong>Minimum Size:</strong> Prevents window from becoming too small</li>
+                            <li><strong>Smart Snapping:</strong> Automatically adjusts to screen boundaries</li>
+                            <li><strong>Content Adaptation:</strong> Interface elements resize fluidly</li>
                         </ul>
+                    </div>
+                </div>
+
+                <div id="tab-management" class="subsection">
+                    <h3>Tab Management Interface</h3>
+                    <div class="screenshot">
+                        <img src="images/titlebar_tabs.png" alt="Tab management interface showing multiple conversation tabs">
+                        <p class="caption">Tab interface for managing multiple conversations</p>
+                    </div>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>📑 Tab Features</h4>
+                            <ul>
+                                <li><strong>New Tab Button (+):</strong> Create fresh conversations</li>
+                                <li><strong>Tab Titles:</strong> Auto-update with conversation content</li>
+                                <li><strong>Save Button:</strong> Dedicated save with theme-aware icons</li>
+                                <li><strong>Close Buttons:</strong> Individual tab closure</li>
+                                <li><strong>Context Isolation:</strong> Separate conversation states</li>
+                                <li><strong>Visual Indicators:</strong> Active tab highlighting</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>⚡ Tab Operations</h4>
+                            <ul>
+                                <li><strong>Click to Switch:</strong> Instant tab navigation</li>
+                                <li><strong>Right-click Menu:</strong> Rename, close, duplicate options</li>
+                                <li><strong>Drag to Reorder:</strong> Organize tabs by priority</li>
+                                <li><strong>Auto-save:</strong> Conversations saved automatically</li>
+                                <li><strong>Session Restore:</strong> Tabs restored on restart</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="search-interface" class="subsection">
+                    <h3>Search Interface</h3>
+                    <div class="screenshot">
+                        <img src="images/searchbar.png" alt="Search interface for finding conversations">
+                        <p class="caption">Advanced search interface for conversation discovery</p>
+                    </div>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>🔍 Search Features</h4>
+                            <ul>
+                                <li><strong>Full-Text Search:</strong> Search across all conversation content</li>
+                                <li><strong>Real-time Results:</strong> Instant search as you type</li>
+                                <li><strong>Smart Filtering:</strong> Advanced search operators</li>
+                                <li><strong>Date Filters:</strong> Find conversations from specific periods</li>
+                                <li><strong>Status Filters:</strong> Show active, pinned, or archived</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>⌨️ Search Shortcuts</h4>
+                            <ul>
+                                <li><strong>Ctrl+F:</strong> Open search interface</li>
+                                <li><strong>Escape:</strong> Close search and return to chat</li>
+                                <li><strong>Enter:</strong> Open selected conversation</li>
+                                <li><strong>Up/Down:</strong> Navigate search results</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="spector-avatar" class="subsection">
+                    <h3>Spector (Floating Avatar)</h3>
+                    <div class="info-box">
+                        <p><strong>Spector</strong> is your floating AI companion that provides instant access to conversations:</p>
+                    </div>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>👻 Avatar Behavior</h4>
+                            <ul>
+                                <li><strong>Click to Open:</strong> Single-click shows/hides chat window</li>
+                                <li><strong>Drag and Drop:</strong> Move anywhere on your screen</li>
+                                <li><strong>Always on Top:</strong> Stays above other windows</li>
+                                <li><strong>Smart Positioning:</strong> Avoids screen edges automatically</li>
+                                <li><strong>Visual Feedback:</strong> Hover effects and click responses</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>🎭 Visual States</h4>
+                            <ul>
+                                <li><strong>Idle:</strong> Gentle floating animation when waiting</li>
+                                <li><strong>Thinking:</strong> Processing animation during AI requests</li>
+                                <li><strong>Speaking:</strong> Active state while displaying responses</li>
+                                <li><strong>Error:</strong> Visual indication of connection issues</li>
+                                <li><strong>Minimized:</strong> Reduced opacity when not in focus</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Core Features -->
+            <section id="features" class="content-section">
+                <h2>Core Features</h2>
+
+                <div id="chat-interface" class="subsection">
+                    <h3>Chat Interface</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>💬 Chat Features</h4>
+                            <ul>
+                                <li><strong>Real-time Streaming:</strong> Watch AI responses appear live</li>
+                                <li><strong>Markdown Support:</strong> Rich text formatting and code highlighting</li>
+                                <li><strong>Message History:</strong> Scroll to see previous conversations</li>
+                                <li><strong>Copy Messages:</strong> Right-click any message to copy</li>
+                                <li><strong>Multi-line Input:</strong> Shift+Enter for new lines without sending</li>
+                                <li><strong>Message Actions:</strong> Edit, delete, regenerate responses</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>⌨️ Input Controls</h4>
+                            <ul>
+                                <li><strong>Enter:</strong> Send message</li>
+                                <li><strong>Shift+Enter:</strong> New line without sending</li>
+                                <li><strong>Up/Down:</strong> Navigate message history</li>
+                                <li><strong>Ctrl+A:</strong> Select all text in input</li>
+                                <li><strong>Ctrl+Z/Y:</strong> Undo/Redo in text input</li>
+                                <li><strong>Auto-complete:</strong> Smart suggestions as you type</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="conversation-system" class="subsection">
+                    <h3>Tabbed Conversation System</h3>
+                    <div class="info-box">
+                        <p><strong>Professional multi-conversation management</strong> with isolated contexts and smart organization.</p>
+                    </div>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>📑 Tab Management</h4>
+                            <ul>
+                                <li><strong>New Tab:</strong> Click "+" for fresh conversations</li>
+                                <li><strong>Switch Tabs:</strong> Click any tab to switch contexts</li>
+                                <li><strong>Tab Titles:</strong> Auto-update with conversation content</li>
+                                <li><strong>Context Isolation:</strong> Each tab maintains separate AI context</li>
+                                <li><strong>Auto-save:</strong> All conversations saved automatically</li>
+                                <li><strong>Session Restore:</strong> Tabs restored when restarting</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>💾 Enhanced Save Functionality</h4>
+                            <ul>
+                                <li><strong>Title Bar Save Button:</strong> Instant access to save</li>
+                                <li><strong>Theme-Aware Icons:</strong> Automatic dark/light adaptation</li>
+                                <li><strong>Quick Save:</strong> No menu navigation required</li>
+                                <li><strong>Background Saves:</strong> Automatic periodic saving</li>
+                                <li><strong>Export Options:</strong> Multiple format support</li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
 
                 <div id="conversation-management" class="subsection">
                     <h3>Conversation Management</h3>
-                    <p>Persistent chat history with advanced organization features.</p>
-                    
                     <div class="feature-grid">
                         <div class="feature-card">
-                            <h4>📊 Status Types</h4>
+                            <h4>📊 Status System</h4>
                             <ul>
-                                <li><span class="status-badge active">🔥 Active</span> - Currently selected conversation</li>
-                                <li><span class="status-badge pinned">⭐ Pinned</span> - Important conversations</li>
-                                <li><span class="status-badge archived">📦 Archived</span> - Old conversations</li>
-                                <li><span class="status-badge deleted">🗑️ Deleted</span> - Removed conversations</li>
+                                <li><strong>Active (🔥):</strong> Currently selected conversation</li>
+                                <li><strong>Pinned (⭐):</strong> Important conversations for easy access</li>
+                                <li><strong>Archived (📦):</strong> Older conversations moved to archive</li>
+                                <li><strong>Deleted (🗑️):</strong> Removed conversations</li>
                             </ul>
                         </div>
                         
                         <div class="feature-card">
-                            <h4>🔍 Search & Export</h4>
+                            <h4>🗂️ Organization Features</h4>
                             <ul>
-                                <li>Full-text search across all conversations</li>
-                                <li>Export to JSON, TXT, Markdown, HTML</li>
-                                <li>Filter by status or date range</li>
-                                <li>Bulk operations available</li>
+                                <li><strong>Full-Text Search:</strong> Search across all content</li>
+                                <li><strong>Date Filters:</strong> Find conversations from specific times</li>
+                                <li><strong>Status Filters:</strong> Show only specific conversation types</li>
+                                <li><strong>Bulk Operations:</strong> Manage multiple conversations</li>
+                                <li><strong>Smart Sorting:</strong> Recent, alphabetical, or custom order</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>📤 Export Options</h4>
+                            <ul>
+                                <li><strong>JSON:</strong> Technical format with all metadata</li>
+                                <li><strong>TXT:</strong> Plain text for simple sharing</li>
+                                <li><strong>Markdown:</strong> Formatted text with structure</li>
+                                <li><strong>HTML:</strong> Web-ready format with styling</li>
+                                <li><strong>PDF:</strong> Professional document format</li>
                             </ul>
                         </div>
                     </div>
                 </div>
 
-                <div id="themes" class="subsection">
-                    <h3>Themes & Styling</h3>
-                    <p>Choose from 26 built-in themes perfectly designed for different moods and environments.</p>
-                    
-                    <div class="info-box">
-                        <h4>🎨 Theme Categories</h4>
-                        <p><strong>Dark Themes (21):</strong> dark_matrix, midnight_blue, forest_green, sunset_orange, royal_purple, cyberpunk, earth_tones, ocean_deep, lilac, forest, firefly, mintly, ocean, pulse, solarized_dark, dracula, openwebui_like, moonlight, fireswamp, cyber, steampunk</p>
-                        <p><strong>Light Themes (5):</strong> arctic_white, sunburst, solarized_light, openai_like, openui_like</p>
-                    </div>
-                    
-                    
+                <div id="window-management" class="subsection">
+                    <h3>Window Management</h3>
                     <div class="feature-grid">
                         <div class="feature-card">
-                            <h4>🌟 Popular Themes</h4>
+                            <h4>🖥️ Window Controls</h4>
                             <ul>
-                                <li><strong>lilac:</strong> Soft purple with much lighter text</li>
-                                <li><strong>cyber:</strong> Full cyberpunk neon aesthetic</li>
-                                <li><strong>steampunk:</strong> Victorian copper and brass</li>
-                                <li><strong>moonlight:</strong> Silver and blue night theme</li>
+                                <li><strong>Always on Top:</strong> Keep chat above other apps (Alt+H)</li>
+                                <li><strong>Opacity Control:</strong> Adjust transparency 20-100%</li>
+                                <li><strong>Flexible Resizing:</strong> Drag corners/edges to resize</li>
+                                <li><strong>Smart Positioning:</strong> Remembers window placement</li>
+                                <li><strong>Multi-Monitor:</strong> Works across multiple screens</li>
                             </ul>
                         </div>
                         
                         <div class="feature-card">
-                            <h4>💼 Work-Friendly</h4>
+                            <h4>🔧 System Integration</h4>
                             <ul>
-                                <li><strong>arctic_white:</strong> Clean professional look</li>
-                                <li><strong>openai_like:</strong> OpenAI-inspired design</li>
-                                <li><strong>midnight_blue:</strong> Deep blue professional</li>
-                                <li><strong>solarized_light/dark:</strong> Popular developer themes</li>
+                                <li><strong>System Tray:</strong> Right-click tray icon for full menu</li>
+                                <li><strong>Minimize to Tray:</strong> Hide avatar while keeping running</li>
+                                <li><strong>Startup Options:</strong> Auto-start with Windows/macOS</li>
+                                <li><strong>Notifications:</strong> System notifications for important updates</li>
+                                <li><strong>Global Hotkeys:</strong> System-wide keyboard shortcuts</li>
                             </ul>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <!-- Settings -->
-            <section id="settings" class="content-section">
-                <h2>Settings & Configuration</h2>
-                
-                <div class="settings-grid">
-                    <div class="settings-card">
-                        <h4>🎨 Interface</h4>
-                        <ul>
-                            <li>26 built-in themes</li>
-                            <li>Window opacity control</li>
-                            <li>Always on top toggle</li>
-                            <li>Start minimized option</li>
-                            <li>Close to tray behavior</li>
-                        </ul>
+            <!-- Themes -->
+            <section id="themes" class="content-section">
+                <h2>Themes (26 Total)</h2>
+                <p>Choose from 26 professionally designed themes with smart icon adaptation and optimal contrast ratios.</p>
+
+                <div class="subsection">
+                    <h3>Dark Themes (21)</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>💻 Tech & Programming</h4>
+                            <ul>
+                                <li><strong>dark_matrix:</strong> Matrix-inspired green on black</li>
+                                <li><strong>cyberpunk:</strong> Neon green and blue tech aesthetic</li>
+                                <li><strong>cyber:</strong> Full cyberpunk neon aesthetic</li>
+                                <li><strong>ocean_deep:</strong> Deep sea blues</li>
+                                <li><strong>midnight_blue:</strong> Deep blue professional theme</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>🎨 Creative & Artistic</h4>
+                            <ul>
+                                <li><strong>sunset_orange:</strong> Warm orange and red tones</li>
+                                <li><strong>royal_purple:</strong> Elegant purple theme</li>
+                                    <li><strong>fireswamp:</strong> Warm reds and oranges</li>
+                                <li><strong>steampunk:</strong> Victorian copper and brass</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>🌿 Nature & Environment</h4>
+                            <ul>
+                                <li><strong>forest_green:</strong> Natural green tones</li>
+                                <li><strong>forest:</strong> Rich forest greens</li>
+                                <li><strong>earth_tones:</strong> Brown and warm natural colors</li>
+                                <li><strong>ocean:</strong> Ocean blue theme</li>
+                                <li><strong>mintly:</strong> Fresh mint colors</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>⭐ Popular & Standardized</h4>
+                            <ul>
+                                <li><strong>solarized_dark:</strong> Popular developer theme</li>
+                                <li><strong>dracula:</strong> Purple vampire theme</li>
+                                <li><strong>moonlight:</strong> Silver and blue night theme</li>
+                                <li><strong>openwebui_like:</strong> Web UI inspired design</li>
+                                <li><strong>firefly:</strong> Warm yellow-green glow</li>
+                                <li><strong>pulse:</strong> Dynamic blue theme</li>
+                            </ul>
+                        </div>
                     </div>
-                    
-                    <div class="settings-card">
-                        <h4>🤖 AI Model</h4>
-                        <ul>
-                            <li>Multiple providers (OpenAI, Anthropic, Google)</li>
-                            <li>Preset model profiles</li>
-                            <li>API key configuration</li>
-                            <li>Temperature settings (auto-adjusted per model)</li>
-                            <li>Custom system prompts</li>
-                        </ul>
+                </div>
+
+                <div class="subsection">
+                    <h3>Light Themes (6)</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>💼 Professional</h4>
+                            <ul>
+                                <li><strong>arctic_white:</strong> Clean professional look</li>
+                                <li><strong>openai_like:</strong> OpenAI-inspired design</li>
+                                <li><strong>openui_like:</strong> Modern UI theme</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>🎨 Creative & Soft</h4>
+                            <ul>
+                                <li><strong>lilac:</strong> Soft purple light theme</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>☀️ Warm & Energetic</h4>
+                            <ul>
+                                <li><strong>sunburst:</strong> Golden orange theme</li>
+                                <li><strong>solarized_light:</strong> Popular light developer theme</li>
+                            </ul>
+                        </div>
                     </div>
-                    
-                    <div class="settings-card">
-                        <h4>📝 Fonts</h4>
-                        <ul>
-                            <li>AI response font customization</li>
-                            <li>User input font settings</li>
-                            <li>Font size adjustments</li>
-                            <li>System font integration</li>
-                        </ul>
+                </div>
+
+                <div class="subsection">
+                    <h3>Theme Selection Guide</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>💼 By Use Case</h4>
+                            <ul>
+                                <li><strong>Programming:</strong> dark_matrix, ocean_deep, solarized_dark, cyber</li>
+                                <li><strong>Professional:</strong> midnight_blue, arctic_white, openai_like</li>
+                                <li><strong>Creative:</strong> sunset_orange, cyberpunk, royal_purple, steampunk</li>
+                                <li><strong>Long Sessions:</strong> forest_green, earth_tones, moonlight</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>🌍 By Environment</h4>
+                            <ul>
+                                <li><strong>Bright Office:</strong> arctic_white, openai_like, sunburst</li>
+                                <li><strong>Evening/Night:</strong> midnight_blue, forest_green, moonlight</li>
+                                <li><strong>Dark Room:</strong> dark_matrix, ocean_deep, cyber</li>
+                                <li><strong>Mixed Lighting:</strong> earth_tones, solarized variants</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>🎭 By Personal Style</h4>
+                            <ul>
+                                <li><strong>Minimalist:</strong> arctic_white, openai_like, solarized_light</li>
+                                <li><strong>Tech Enthusiast:</strong> dark_matrix, cyberpunk, cyber</li>
+                                <li><strong>Nature Lover:</strong> forest_green, earth_tones, forest</li>
+                                <li><strong>Artistic:</strong> royal_purple, sunset_orange, fireswamp</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>🎨 Applying Themes</h4>
+                            <ol class="step-list">
+                                <li>Open Settings (click gear icon)</li>
+                                <li>Click "Interface" tab</li>
+                                <li>Browse themes in dropdown</li>
+                                <li>Preview with live update</li>
+                                <li>Apply instantly</li>
+                            </ol>
+                        </div>
                     </div>
-                    
-                    <div class="settings-card">
-                        <h4>🔧 Advanced</h4>
-                        <ul>
-                            <li>Logging levels (Standard/Debug)</li>
-                            <li>Log retention settings</li>
-                            <li>SSL verification options</li>
-                            <li>Configuration export/import</li>
-                        </ul>
+                </div>
+            </section>
+
+            <!-- Advanced Features -->
+            <section id="advanced-features" class="content-section">
+                <h2>Advanced Features</h2>
+
+                <div id="ai-models" class="subsection">
+                    <h3>AI Model Configuration</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>🤖 OpenAI</h4>
+                            <ul>
+                                <li><strong>GPT-4:</strong> Latest flagship model with advanced reasoning</li>
+                                <li><strong>GPT-3.5-turbo:</strong> Fast and efficient for most tasks</li>
+                                <li><strong>Custom models:</strong> If available in your account</li>
+                                <li><strong>Temperature:</strong> 0-2 range for creativity control</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>🧠 Anthropic (Claude)</h4>
+                            <ul>
+                                <li><strong>Claude-3:</strong> Latest model with enhanced capabilities</li>
+                                <li><strong>Claude-2:</strong> Reliable general-purpose model</li>
+                                <li><strong>Claude Instant:</strong> Faster responses for simple tasks</li>
+                                <li><strong>Temperature:</strong> 0.0-1.0 range (different from OpenAI)</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>🔬 Google AI</h4>
+                            <ul>
+                                <li><strong>Gemini Pro:</strong> Advanced multimodal capabilities</li>
+                                <li><strong>Gemini Ultra:</strong> Most capable model</li>
+                                <li><strong>Gemini Nano:</strong> Lightweight option</li>
+                                <li><strong>Multimodal:</strong> Image and text understanding</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>💻 Local Models</h4>
+                            <ul>
+                                <li><strong>Ollama:</strong> Local LLM serving platform</li>
+                                <li><strong>OpenAI-compatible:</strong> Local servers and APIs</li>
+                                <li><strong>Custom endpoints:</strong> Any OpenAI-format API</li>
+                                <li><strong>Privacy:</strong> Complete local processing</li>
+                            </ul>
+                        </div>
                     </div>
-                    
-                    <div class="settings-card">
-                        <h4>🔐 PKI Auth</h4>
-                        <ul>
-                            <li>Enterprise certificate authentication</li>
-                            <li>PKI setup wizard</li>
-                            <li>Certificate status monitoring</li>
-                            <li>Connection testing</li>
-                        </ul>
+                </div>
+
+                <div id="advanced-settings" class="subsection">
+                    <h3>Customization Options</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>🎛️ Model Settings</h4>
+                            <ul>
+                                <li><strong>Temperature:</strong> Adjust creativity (0.0-2.0)</li>
+                                <li><strong>Max Tokens:</strong> Control response length</li>
+                                <li><strong>Streaming:</strong> Real-time response display</li>
+                                <li><strong>System Prompts:</strong> Custom AI behavior instructions</li>
+                                <li><strong>Context Window:</strong> Conversation memory length</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>🖥️ Interface Settings</h4>
+                            <ul>
+                                <li><strong>Opacity:</strong> Window transparency (20-100%)</li>
+                                <li><strong>Window Behavior:</strong> Always on top, start minimized</li>
+                                <li><strong>Animation Speed:</strong> Control transition effects</li>
+                                <li><strong>Status Indicators:</strong> Show/hide conversation icons</li>
+                                <li><strong>Auto-hide Avatar:</strong> Minimize when inactive</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>🔤 Font Customization</h4>
+                            <ul>
+                                <li><strong>AI Response Font:</strong> Choose family, size, and style</li>
+                                <li><strong>User Input Font:</strong> Customize message appearance</li>
+                                <li><strong>Line Spacing:</strong> Adjust readability</li>
+                                <li><strong>Monospace Option:</strong> Perfect for technical discussions</li>
+                                <li><strong>Font Scaling:</strong> DPI and zoom support</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>🛠️ Advanced Settings</h4>
+                            <ul>
+                                <li><strong>Logging Levels:</strong> DEBUG, INFO, WARNING, ERROR</li>
+                                <li><strong>Performance:</strong> Memory limits, cache settings</li>
+                                <li><strong>Network:</strong> Timeout, retry logic, proxy support</li>
+                                <li><strong>Development:</strong> Debug features and metrics</li>
+                                <li><strong>Security:</strong> PKI authentication for enterprise</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <h3>Security Features</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>🔐 PKI Authentication</h4>
+                            <p>Enterprise-grade security for organizational use:</p>
+                            <ul>
+                                <li><strong>Certificate Management:</strong> Import and manage certificates</li>
+                                <li><strong>Auto-Renewal:</strong> Automatic certificate updates</li>
+                                <li><strong>Secure Storage:</strong> Encrypted certificate storage</li>
+                                <li><strong>Audit Trails:</strong> Track access and usage</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>🛡️ Data Security</h4>
+                            <ul>
+                                <li><strong>Local Storage:</strong> Conversation data encrypted at rest</li>
+                                <li><strong>Secure API Keys:</strong> Protected credential storage</li>
+                                <li><strong>No Data Transmission:</strong> No data sent to Ghostman servers</li>
+                                <li><strong>TLS/SSL:</strong> All API communication encrypted</li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -336,16 +783,24 @@
                     <div class="shortcuts-category">
                         <h4>Chat Interface</h4>
                         <div class="shortcut-item">
-                            <kbd>Ctrl</kbd> + <kbd>Enter</kbd>
+                            <kbd>Enter</kbd>
                             <span>Send message</span>
                         </div>
                         <div class="shortcut-item">
                             <kbd>Shift</kbd> + <kbd>Enter</kbd>
-                            <span>New line (without sending)</span>
+                            <span>New line without sending</span>
                         </div>
                         <div class="shortcut-item">
                             <kbd>Ctrl</kbd> + <kbd>N</kbd>
                             <span>New conversation</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>T</kbd>
+                            <span>New tab</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>S</kbd>
+                            <span>Save conversation</span>
                         </div>
                         <div class="shortcut-item">
                             <kbd>Ctrl</kbd> + <kbd>F</kbd>
@@ -364,11 +819,59 @@
                             <span>Toggle always on top</span>
                         </div>
                         <div class="shortcut-item">
-                            Click Spector
+                            <kbd>Ctrl</kbd> + <kbd>H</kbd>
+                            <span>Hide chat window</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>M</kbd>
+                            <span>Minimize application</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Escape</kbd>
+                            <span>Close current dialog</span>
+                        </div>
+                    </div>
+                    
+                    <div class="shortcuts-category">
+                        <h4>Text Editing</h4>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>A</kbd>
+                            <span>Select all text in input</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>Z</kbd>
+                            <span>Undo in text input</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>Y</kbd>
+                            <span>Redo in text input</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Up</kbd> / <kbd>Down</kbd>
+                            <span>Navigate message history</span>
+                        </div>
+                    </div>
+                    
+                    <div class="shortcuts-category">
+                        <h4>Conversation Browser</h4>
+                        <div class="shortcut-item">
+                            <kbd>Enter</kbd>
+                            <span>Open selected conversation</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Delete</kbd>
+                            <span>Delete selected conversation</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>E</kbd>
+                            <span>Export conversation</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <span>Click Spector</span>
                             <span>Show/hide chat</span>
                         </div>
                         <div class="shortcut-item">
-                            Right-click tray
+                            <span>Right-click tray</span>
                             <span>Access menu</span>
                         </div>
                     </div>
@@ -378,60 +881,82 @@
             <!-- Troubleshooting -->
             <section id="troubleshooting" class="content-section">
                 <h2>Troubleshooting</h2>
-                
-                <div id="faq" class="subsection">
-                    <h3>Frequently Asked Questions</h3>
-                    
-                    <div class="faq-item">
-                        <h4>❓ Ghostman won't start or crashes immediately</h4>
-                        <div class="faq-answer">
-                            <p>Try these solutions:</p>
+
+                <div class="subsection">
+                    <h3>Common Issues</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>🔌 Connection Problems</h4>
+                            <p><strong>"API connection failed"</strong></p>
                             <ul>
-                                <li>Ensure Python 3.12+ is installed</li>
-                                <li>Run: python -m pip install -r requirements.txt</li>
-                                <li>Check logs in: <code>%APPDATA%/Ghostman/logs/</code> (Windows)</li>
-                                <li>Try: python -m ghostman --debug for verbose output</li>
+                                <li>Check internet connection</li>
+                                <li>Verify API key is correct and has credits</li>
+                                <li>Confirm AI service is available</li>
+                                <li>Check firewall/proxy settings</li>
+                                <li>Try different AI provider</li>
+                            </ul>
+                            <p><strong>"Authentication failed"</strong></p>
+                            <ul>
+                                <li>Regenerate API key from provider</li>
+                                <li>Check API key permissions</li>
+                                <li>Verify account has credits/access</li>
+                                <li>Test with different model</li>
                             </ul>
                         </div>
-                    </div>
-                    
-                    <div class="faq-item">
-                        <h4>❓ API connection fails</h4>
-                        <div class="faq-answer">
-                            <p>Common API issues:</p>
+                        
+                        <div class="feature-card">
+                            <h4>⚡ Performance Issues</h4>
+                            <p><strong>Slow responses</strong></p>
                             <ul>
-                                <li>Verify your API key is valid and has credits</li>
-                                <li>Check internet connectivity</li>
-                                <li>Try different model profiles (preset configurations)</li>
-                                <li>For Anthropic: Get key from <a href="https://console.anthropic.com/" target="_blank">Anthropic Console</a></li>
-                                <li>For Google: Get key from <a href="https://makersuite.google.com/" target="_blank">Google AI Studio</a></li>
+                                <li>Check network speed</li>
+                                <li>Try different AI model (GPT-3.5 vs GPT-4)</li>
+                                <li>Reduce conversation length</li>
+                                <li>Clear application cache</li>
+                                <li>Restart application</li>
+                            </ul>
+                            <p><strong>High memory usage</strong></p>
+                            <ul>
+                                <li>Restart Ghostman periodically</li>
+                                <li>Reduce conversation history in settings</li>
+                                <li>Adjust memory limits in Advanced settings</li>
+                                <li>Close other resource-intensive applications</li>
                             </ul>
                         </div>
-                    </div>
-                    
-                    <div class="faq-item">
-                        <h4>❓ Temperature not supported error</h4>
-                        <div class="faq-answer">
-                            <p>If you see "Temperature not supported by this model":</p>
+                        
+                        <div class="feature-card">
+                            <h4>🖥️ Interface Problems</h4>
+                            <p><strong>Avatar not visible</strong></p>
                             <ul>
-                                <li>This is normal for some models (GPT-5/o1 reasoning models)</li>
-                                <li>Switch to a preset model profile for automatic temperature</li>
-                                <li>For Claude models: Use temperature 0.0-1.0 range</li>
-                                <li>For OpenAI models: Use temperature 0-2 range</li>
-                                <li>For reasoning models: Temperature is fixed at 1.0</li>
+                                <li>Check if minimized to system tray</li>
+                                <li>Verify avatar didn't move off-screen</li>
+                                <li>Reset window positions in settings</li>
+                                <li>Restart application</li>
+                            </ul>
+                            <p><strong>Theme not applying</strong></p>
+                            <ul>
+                                <li>Restart Ghostman after theme change</li>
+                                <li>Try different theme first</li>
+                                <li>Reset to default theme</li>
+                                <li>Check theme file integrity</li>
+                            </ul>
+                            <p><strong>Conversations not saving</strong></p>
+                            <ul>
+                                <li>Check write permissions to app data folder</li>
+                                <li>Restart to reinitialize database</li>
+                                <li>Try "Reset Database" in Advanced settings</li>
+                                <li>Verify sufficient disk space</li>
                             </ul>
                         </div>
-                    </div>
-                    
-                    <div class="faq-item">
-                        <h4>❓ Conversations not saving</h4>
-                        <div class="faq-answer">
-                            <p>Database troubleshooting:</p>
+                        
+                        <div class="feature-card">
+                            <h4>🤖 Model-Specific Issues</h4>
+                            <p><strong>"Temperature not supported by this model"</strong></p>
                             <ul>
-                                <li>Check if you have write permissions to the app data folder</li>
-                                <li>Restart the application to reinitialize the database</li>
-                                <li>In Settings → Advanced, try "Reset Database"</li>
-                                <li>Check available disk space</li>
+                                <li>Normal for some models (GPT-o1 reasoning models)</li>
+                                <li>Use preset model profiles for automatic settings</li>
+                                <li>Claude models: Use temperature 0.0-1.0</li>
+                                <li>OpenAI models: Use temperature 0-2</li>
+                                <li>Reasoning models: Fixed temperature at 1.0</li>
                             </ul>
                         </div>
                     </div>
@@ -439,24 +964,248 @@
 
                 <div class="subsection">
                     <h3>Log Files</h3>
-                    <p>Log files can help diagnose issues:</p>
-                    <div class="code-block">
-                        <h4>Log Locations</h4>
-                        <pre><code>Windows: %APPDATA%\Ghostman\logs\
-macOS: ~/Library/Application Support/Ghostman/logs/
-Linux: ~/.config/Ghostman/logs/</code></pre>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>📁 Log Locations</h4>
+                            <ul>
+                                <li><strong>Windows:</strong> <code>%APPDATA%\Ghostman\logs\</code></li>
+                                <li><strong>macOS:</strong> <code>~/Library/Application Support/Ghostman/logs/</code></li>
+                                <li><strong>Linux:</strong> <code>~/.config/Ghostman/logs/</code></li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>🔍 Using Logs for Troubleshooting</h4>
+                            <ol class="step-list">
+                                <li><strong>Reproduce Issue:</strong> Trigger the problem</li>
+                                <li><strong>Find Recent Logs:</strong> Check latest log entries</li>
+                                <li><strong>Look for Errors:</strong> Search for ERROR or WARNING</li>
+                                <li><strong>Note Timestamps:</strong> Match with when issue occurred</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <h3>Best Practices</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>📈 Optimal Usage</h4>
+                            <ul>
+                                <li><strong>Descriptive Titles:</strong> Rename conversations for easy finding</li>
+                                <li><strong>Pin Important Chats:</strong> Mark frequently accessed conversations</li>
+                                <li><strong>Regular Archives:</strong> Move old conversations to keep interface clean</li>
+                                <li><strong>Export Backups:</strong> Save important conversations externally</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>⚡ Performance Optimization</h4>
+                            <ul>
+                                <li><strong>Choose Right Model:</strong> Match capability to task complexity</li>
+                                <li><strong>Manage Context:</strong> Clear long conversations when context irrelevant</li>
+                                <li><strong>Monitor Resources:</strong> Watch memory and CPU usage</li>
+                                <li><strong>Regular Restarts:</strong> Restart periodically for optimal performance</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <h4>🔒 Security Best Practices</h4>
+                            <ul>
+                                <li><strong>Secure API Keys:</strong> Never share API keys</li>
+                                <li><strong>Regular Key Rotation:</strong> Change keys periodically</li>
+                                <li><strong>Monitor Usage:</strong> Track API consumption</li>
+                                <li><strong>Review Conversations:</strong> Understand data sent to AI providers</li>
+                                <li><strong>Follow Policies:</strong> Adhere to organization AI guidelines</li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
             </section>
 
-            <!-- Contact -->
-            <section id="contact" class="content-section">
-                <h2>Contact & Support</h2>
+            <!-- Settings Configuration -->
+            <section id="settings" class="content-section">
+                <h2>⚙️ Settings Configuration</h2>
+                <p>Ghostman provides comprehensive customization options through its settings interface. Access settings by clicking the gear icon or right-clicking the avatar → Settings.</p>
+
+                <div class="subsection">
+                    <h3>AI Model Settings</h3>
+                    <div class="screenshot">
+                        <img src="images/ai-settings.png" alt="AI Settings Configuration" class="screenshot">
+                        <p class="caption">AI model configuration with custom parameters and instructions</p>
+                    </div>
+                    <div class="info-box">
+                        <p><strong>Configuration Options:</strong></p>
+                        <ul>
+                            <li><strong>Model Selection:</strong> Choose from OpenAI, Anthropic, Google models</li>
+                            <li><strong>API Configuration:</strong> Set base URLs and authentication keys</li>
+                            <li><strong>Temperature Control:</strong> Adjust creativity (0.0-2.0)</li>
+                            <li><strong>Token Limits:</strong> Control response length (max tokens)</li>
+                            <li><strong>Custom Instructions:</strong> Define AI personality and behavior</li>
+                            <li><strong>Response Formatting:</strong> Built-in markdown formatting rules</li>
+                            <li><strong>Connection Testing:</strong> Validate API connectivity</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <h3>Interface Settings</h3>
+                    <div class="screenshot">
+                        <img src="images/interface-settings.png" alt="Interface Settings" class="screenshot">
+                        <p class="caption">Interface customization options including opacity and behavior</p>
+                    </div>
+                    <div class="info-box">
+                        <p><strong>Appearance & Behavior:</strong></p>
+                        <ul>
+                            <li><strong>Panel Opacity:</strong> Adjust window transparency (20-100%)</li>
+                            <li><strong>Startup Behavior:</strong> Start minimized to system tray</li>
+                            <li><strong>Close Behavior:</strong> Close to tray instead of exit</li>
+                            <li><strong>Window Management:</strong> Always on top option</li>
+                            <li><strong>System Integration:</strong> Professional desktop integration</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <h3>Font Settings</h3>
+                    <div class="screenshot">
+                        <img src="images/font-settings.png" alt="Font Configuration" class="screenshot">
+                        <p class="caption">Font customization for AI responses and user input</p>
+                    </div>
+                    <div class="info-box">
+                        <p><strong>Typography Customization:</strong></p>
+                        <ul>
+                            <li><strong>AI Response Font:</strong> Choose family, size, and style</li>
+                            <li><strong>User Input Font:</strong> Customize your message appearance</li>
+                            <li><strong>Line Spacing:</strong> Adjust for optimal readability</li>
+                            <li><strong>Monospace Option:</strong> Perfect for code discussions</li>
+                            <li><strong>System Font Integration:</strong> Uses OS font rendering</li>
+                            <li><strong>Live Preview:</strong> See changes instantly</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <h3>Advanced Settings</h3>
+                    <div class="screenshot">
+                        <img src="images/advanced-settings.png" alt="Advanced Settings" class="screenshot">
+                        <p class="caption">Advanced configuration for logging, security, and data storage</p>
+                    </div>
+                    <div class="info-box">
+                        <p><strong>System Configuration:</strong></p>
+                        <ul>
+                            <li><strong>Logging:</strong> Standard/Debug modes with retention controls</li>
+                            <li><strong>Security:</strong> SSL certificate verification settings</li>
+                            <li><strong>Data Storage:</strong> Configuration file location management</li>
+                            <li><strong>Performance:</strong> Memory limits and cache settings</li>
+                            <li><strong>Diagnostics:</strong> System health and troubleshooting tools</li>
+                            <li><strong>Config Management:</strong> Save/Load configuration profiles</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <h3>Theme Settings</h3>
+                    <div class="screenshot">
+                        <img src="images/theme-settings.png" alt="Theme Selection" class="screenshot">
+                        <p class="caption">Theme selection interface with 26 available options</p>
+                    </div>
+                    <div class="info-box">
+                        <p><strong>Visual Customization:</strong></p>
+                        <ul>
+                            <li><strong>26 Themes Available:</strong> 20 dark themes, 6 light themes</li>
+                            <li><strong>Live Preview:</strong> See themes before applying</li>
+                            <li><strong>Smart Icons:</strong> Automatic dark/light icon adaptation</li>
+                            <li><strong>Accessibility:</strong> High contrast ratios for readability</li>
+                            <li><strong>Professional Designs:</strong> From cyberpunk to corporate clean</li>
+                            <li><strong>Instant Apply:</strong> Real-time theme switching</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <h3>PKI Authentication</h3>
+                    <div class="screenshot">
+                        <img src="images/pki-settings.png" alt="PKI Authentication" class="screenshot">
+                        <p class="caption">Enterprise PKI certificate authentication configuration</p>
+                    </div>
+                    <div class="info-box">
+                        <p><strong>Enterprise Security:</strong></p>
+                        <ul>
+                            <li><strong>Certificate Import:</strong> P12 certificate file support</li>
+                            <li><strong>Auto-Renewal:</strong> Automatic certificate updates</li>
+                            <li><strong>Secure Storage:</strong> Encrypted credential management</li>
+                            <li><strong>Enterprise Mode:</strong> Organization-wide deployments</li>
+                            <li><strong>Connection Testing:</strong> Validate PKI authentication</li>
+                            <li><strong>Audit Trails:</strong> Track access and usage patterns</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Getting Help -->
+            <section id="getting-help" class="content-section">
+                <h2>Getting Help</h2>
                 
-                <div class="contact-item">
-                    <h4>🐛 Bug Reports</h4>
-                    <p>Found a bug? Report it on our GitHub issues page.</p>
-                    <a href="https://github.com/ghost-ng/Ghostman/issues" target="_blank" class="btn btn-primary">Report Bug</a>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h4>📖 Self-Help Resources</h4>
+                        <ul>
+                            <li>This comprehensive user guide</li>
+                            <li>Built-in settings tooltips</li>
+                            <li>GitHub repository documentation</li>
+                            <li>Community discussions and tips</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <h4>🐛 Reporting Issues</h4>
+                        <p><strong>Collect Information:</strong></p>
+                        <ul>
+                            <li>Ghostman version</li>
+                            <li>Operating system</li>
+                            <li>AI provider used</li>
+                            <li>Error messages</li>
+                            <li>Log files</li>
+                        </ul>
+                        <p><strong>Create Issue:</strong></p>
+                        <ul>
+                            <li>Visit <a href="https://github.com/ghost-ng/Ghostman/issues" target="_blank">GitHub Issues</a></li>
+                            <li>Search for existing reports</li>
+                            <li>Create new issue with complete details</li>
+                            <li>Include screenshots if helpful</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <h4>💬 Support Resources</h4>
+                        <ul>
+                            <li><a href="https://github.com/ghost-ng/Ghostman" target="_blank" class="btn btn-primary">GitHub Repository</a></li>
+                            <li><a href="https://github.com/ghost-ng/Ghostman/issues" target="_blank" class="btn btn-secondary">Report Bug</a></li>
+                            <li><strong>Debug Mode:</strong> <code>python -m ghostman --debug</code></li>
+                        </ul>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <h4>📁 Configuration Files</h4>
+                        <p><strong>Settings Location:</strong></p>
+                        <ul>
+                            <li><strong>Windows:</strong> <code>%APPDATA%\Ghostman\configs\</code></li>
+                            <li><strong>macOS:</strong> <code>~/Library/Application Support/Ghostman/configs/</code></li>
+                            <li><strong>Linux:</strong> <code>~/.config/Ghostman/configs/</code></li>
+                        </ul>
+                        <p><strong>Key Files:</strong></p>
+                        <ul>
+                            <li><code>settings.json</code> - Main application settings</li>
+                            <li><code>themes.json</code> - Custom theme definitions</li>
+                            <li><code>conversations.db</code> - Conversation database</li>
+                            <li><code>certificates/</code> - PKI certificates directory</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="info-box">
+                    <p><strong>🎉 Ready to Start!</strong> Meet Spector, your AI companion for desktop productivity and creativity with professional tabbed conversation management and beautiful theming. For the latest updates and technical documentation, visit the <a href="https://github.com/ghost-ng/Ghostman/" target="_blank">GitHub repository</a>.</p>
                 </div>
             </section>
         </main>

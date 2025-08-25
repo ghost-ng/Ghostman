@@ -62,33 +62,48 @@ class EnhancedSystemTray(QObject):
         
         logger.debug("System tray icon initialized")
     
+    def _get_theme_icon(self, icon_name: str) -> QIcon:
+        """Get dark icon for system tray menu (menus are always lite background)."""
+        try:
+            from ...utils.resource_resolver import resolve_icon
+            icon_path = resolve_icon(icon_name, "_dark")
+            if icon_path:
+                return QIcon(str(icon_path))
+        except Exception as e:
+            logger.debug(f"Failed to load icon {icon_name}_dark.png: {e}")
+        
+        return QIcon()  # Empty icon as fallback
+    
     def _init_context_menu(self):
         """Initialize the context menu."""
         self.context_menu = QMenu()
         
         # Show Avatar action
-        show_avatar_action = QAction("Show Avatar", self.context_menu)
+        show_avatar_action = QAction(self._get_theme_icon("chat"), "Show Avatar", self.context_menu)
         show_avatar_action.triggered.connect(self.show_avatar_requested.emit)
         self.context_menu.addAction(show_avatar_action)
         
         self.context_menu.addSeparator()
         
         # Settings action
-        settings_action = QAction("Settings...", self.context_menu)
+        settings_action = QAction(self._get_theme_icon("gear"), "Settings...", self.context_menu)
         settings_action.triggered.connect(self.settings_requested.emit)
         self.context_menu.addAction(settings_action)
         
         # Help action
-        help_action = QAction("Help...", self.context_menu)
+        help_action = QAction(self._get_theme_icon("help"), "Help...", self.context_menu)
         help_action.triggered.connect(self.help_requested.emit)
         self.context_menu.addAction(help_action)
         
         self.context_menu.addSeparator()
         
         # Quit action
-        quit_action = QAction("Quit", self.context_menu)
+        quit_action = QAction(self._get_theme_icon("exit"), "Quit", self.context_menu)
         quit_action.triggered.connect(self.quit_requested.emit)
         self.context_menu.addAction(quit_action)
+        
+        # Apply theme-aware menu styling
+        self._style_menu(self.context_menu)
         
         # Set context menu
         if self.tray_icon:
@@ -96,19 +111,51 @@ class EnhancedSystemTray(QObject):
         
         logger.debug("Context menu initialized")
     
+    def _style_menu(self, menu):
+        """Apply theme-aware styling to QMenu widgets."""
+        try:
+            # Try to get the global theme manager
+            theme_manager = None
+            try:
+                from ghostman.src.ui.themes.theme_manager import get_theme_manager
+                theme_manager = get_theme_manager()
+            except (ImportError, AttributeError):
+                return
+            
+            if not theme_manager:
+                return
+                
+            try:
+                from ghostman.src.ui.themes.theme_manager import THEME_SYSTEM_AVAILABLE
+                if not THEME_SYSTEM_AVAILABLE:
+                    return
+            except ImportError:
+                return
+            
+            colors = theme_manager.current_theme
+            if colors:
+                from ghostman.src.ui.themes.style_templates import StyleTemplates
+                menu_style = StyleTemplates.get_menu_style(colors)
+                menu.setStyleSheet(menu_style)
+                
+        except Exception as e:
+            # Silently handle errors to avoid breaking functionality
+            pass
+    
     def _create_default_icon(self) -> QIcon:
         """Create a default icon if no icon file is available."""
-        # Try to load icon from assets - prioritize avatar.png
-        icon_paths = [
-            os.path.join(os.path.dirname(__file__), "..", "..", "..", "assets", "avatar.png"),
-            os.path.join(os.path.dirname(__file__), "..", "..", "..", "assets", "icon.png"),
-            os.path.join(os.path.dirname(__file__), "..", "..", "..", "assets", "ghost.png")
-        ]
-        
-        for icon_path in icon_paths:
-            if os.path.exists(icon_path):
+        try:
+            from ...utils.resource_resolver import resolve_multiple_icons
+            
+            # Try to load icon from assets - prioritize avatar.png
+            icon_names = ["avatar", "icon", "ghost"]
+            icon_path = resolve_multiple_icons(icon_names)
+            
+            if icon_path:
                 logger.debug(f"Loading icon from: {icon_path}")
-                return QIcon(icon_path)
+                return QIcon(str(icon_path))
+        except Exception as e:
+            logger.debug(f"Failed to resolve icon: {e}")
         
         # Create a simple default icon
         logger.debug("Creating default programmatic icon")

@@ -28,13 +28,13 @@ class ConversationTab:
         self.set_title(title)
         
     def set_title(self, title: str):
-        """Update tab title and button text with 25 character limit."""
+        """Update tab title and button text with 40 character limit."""
         # Store full title
         self.full_title = title
         
-        # Apply 25 character limit or truncate to 23 + "..."
-        if len(title) > 25:
-            self.title = title[:23] + "..."
+        # Apply 40 character limit or truncate to 37 + "..."
+        if len(title) > 40:
+            self.title = title[:37] + "..."
         else:
             self.title = title
             
@@ -97,8 +97,14 @@ class TabConversationManager(QObject):
         tab_button = QPushButton(title)
         tab_button.setObjectName(f"tab_button_{tab_id}")
         
-        # Style the button
+        # Style the button and set size constraints
         self._style_tab_button(tab_button, active=False)
+        
+        # Ensure consistent sizing from creation
+        tab_button.setSizePolicy(
+            tab_button.sizePolicy().horizontalPolicy(),
+            tab_button.sizePolicy().Policy.Fixed
+        )
         
         # Connect button click
         tab_button.clicked.connect(lambda: self.switch_to_tab(tab_id))
@@ -209,39 +215,35 @@ class TabConversationManager(QObject):
             logger.debug(f"Updated tab {tab_id} title to: {new_title}")
     
     def _style_tab_button(self, button: QPushButton, active: bool):
-        """Apply styling to a tab button."""
-        if active:
-            # Active tab style (purple)
-            button.setStyleSheet("""
-                QPushButton {
-                    background-color: rgba(147, 112, 219, 0.9);
-                    color: white;
-                    border: 1px solid rgba(147, 112, 219, 1.0);
-                    border-radius: 3px;
-                    padding: 4px 12px;
-                    min-width: 60px;
-                    max-height: 22px;
-                }
-                QPushButton:hover {
-                    background-color: rgba(147, 112, 219, 1.0);
-                }
-            """)
-        else:
-            # Inactive tab style (gray)
-            button.setStyleSheet("""
-                QPushButton {
-                    background-color: rgba(60, 60, 60, 0.8);
-                    color: rgba(255, 255, 255, 0.9);
-                    border: 1px solid rgba(255, 255, 255, 0.1);
-                    border-radius: 3px;
-                    padding: 4px 12px;
-                    min-width: 60px;
-                    max-height: 22px;
-                }
-                QPushButton:hover {
-                    background-color: rgba(80, 80, 80, 0.9);
-                }
-            """)
+        """Apply theme-aware styling to a tab button with consistent sizing."""
+        try:
+            # Try to get theme manager from parent REPL widget
+            theme_manager = getattr(self.parent_repl, 'theme_manager', None)
+            if theme_manager:
+                colors = theme_manager.current_theme
+                if colors:
+                    from ghostman.src.ui.themes.style_templates import StyleTemplates
+                    tab_style = StyleTemplates.get_conversation_tab_button_style(colors, active)
+                    
+                    # Apply enhanced styling with consistent sizing
+                    enhanced_style = self._enhance_tab_style_with_sizing(tab_style)
+                    button.setStyleSheet(enhanced_style)
+                    
+                    # Set consistent size constraints
+                    button.setMinimumSize(120, 22)
+                    button.setMaximumSize(240, 22)  # Prevent excessive growth
+                    
+                    logger.debug(f"Applied theme-aware tab styling: active={active}, primary={colors.primary}")
+                    return
+                else:
+                    logger.debug("Theme manager has no current_theme")
+            else:
+                logger.debug("No theme manager found on parent REPL widget")
+        except Exception as e:
+            logger.debug(f"Failed to apply theme-aware tab styling: {e}")
+        
+        # Enhanced fallback with theme-neutral colors
+        self._apply_fallback_tab_style(button, active)
     
     def _show_tab_context_menu(self, tab_id: str, position):
         """Show context menu for tab operations."""
@@ -263,7 +265,35 @@ class TabConversationManager(QObject):
             close_others_action.triggered.connect(lambda: self._close_other_tabs(tab_id))
             menu.addAction(close_others_action)
         
+        # Apply theme-aware menu styling
+        self._style_menu(menu)
+        
         menu.exec(position)
+    
+    def _style_menu(self, menu):
+        """Apply theme-aware styling to QMenu widgets."""
+        try:
+            # Try to get theme manager from parent REPL widget
+            theme_manager = getattr(self.parent_repl, 'theme_manager', None)
+            if not theme_manager:
+                return
+                
+            try:
+                from ghostman.src.ui.themes.theme_manager import THEME_SYSTEM_AVAILABLE
+                if not THEME_SYSTEM_AVAILABLE:
+                    return
+            except ImportError:
+                return
+            
+            colors = theme_manager.current_theme
+            if colors:
+                from ghostman.src.ui.themes.style_templates import StyleTemplates
+                menu_style = StyleTemplates.get_menu_style(colors)
+                menu.setStyleSheet(menu_style)
+                
+        except Exception as e:
+            # Silently handle errors to avoid breaking functionality
+            pass
     
     def _rename_tab(self, tab_id: str):
         """Rename a tab with user input dialog."""
@@ -291,6 +321,75 @@ class TabConversationManager(QObject):
         tabs_to_close = [tid for tid in self.tabs.keys() if tid != keep_tab_id]
         for tab_id in tabs_to_close:
             self.close_tab(tab_id)
+    
+    def refresh_tab_styles(self):
+        """Refresh all tab button styles with current theme."""
+        for tab_id, tab in self.tabs.items():
+            if tab.button:
+                is_active = (tab_id == self.active_tab_id)
+                self._style_tab_button(tab.button, is_active)
+        logger.debug(f"Refreshed all {len(self.tabs)} tab styles with current theme")
+    
+    def _enhance_tab_style_with_sizing(self, base_style: str) -> str:
+        """Enhance tab style with consistent sizing - avoid overriding theme colors."""
+        # Only add sizing that doesn't conflict with theme-aware styles
+        # The theme-aware styles already include all necessary properties
+        return base_style
+    
+    def _apply_fallback_tab_style(self, button: QPushButton, active: bool):
+        """Apply enhanced fallback styling with theme-neutral colors."""
+        if active:
+            # Active tab with theme-neutral accent - using system accent color instead of hardcoded blue
+            button.setStyleSheet("""
+                QPushButton {
+                    background-color: rgba(120, 120, 120, 0.9) !important;
+                    color: white !important;
+                    border: 1px solid rgba(150, 150, 150, 1.0) !important;
+                    border-radius: 4px;
+                    padding: 4px 12px;
+                    width: 140px;
+                    min-width: 120px;
+                    max-width: 240px;
+                    height: 22px;
+                    font-weight: bold;
+                    font-size: 11px;
+                }
+                QPushButton:hover {
+                    background-color: rgba(140, 140, 140, 1.0) !important;
+                    border-color: rgba(170, 170, 170, 1.0) !important;
+                }
+                QPushButton:pressed {
+                    transform: scale(0.98);
+                }
+            """)
+        else:
+            # Inactive tab with better contrast
+            button.setStyleSheet("""
+                QPushButton {
+                    background-color: rgba(70, 70, 70, 0.9) !important;
+                    color: rgba(240, 240, 240, 0.9) !important;
+                    border: 1px solid rgba(120, 120, 120, 0.3) !important;
+                    border-radius: 4px;
+                    padding: 4px 12px;
+                    width: 140px;
+                    min-width: 120px;
+                    max-width: 240px;
+                    height: 22px;
+                    font-size: 11px;
+                }
+                QPushButton:hover {
+                    background-color: rgba(90, 90, 90, 0.9) !important;
+                    color: white !important;
+                    border-color: rgba(140, 140, 140, 0.5) !important;
+                }
+                QPushButton:pressed {
+                    transform: scale(0.98);
+                }
+            """)
+        
+        # Set consistent size constraints for fallback as well
+        button.setMinimumSize(120, 22)
+        button.setMaximumSize(240, 22)
     
     def cleanup(self):
         """Clean up resources."""

@@ -9,7 +9,7 @@ import os
 from typing import Optional
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QMenu
 from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QRect, QEasingCurve, pyqtSignal, QPoint
-from PyQt6.QtGui import QPixmap, QPainter, QPaintEvent, QMouseEvent, QAction
+from PyQt6.QtGui import QPixmap, QPainter, QPaintEvent, QMouseEvent, QAction, QIcon
 
 try:
     from ..ui.resize import AvatarResizableMixin, HitZone
@@ -54,6 +54,7 @@ class AvatarWidget(SimpleAvatarArrowMixin, AvatarResizableMixin, QWidget):
     minimize_requested = pyqtSignal()
     settings_requested = pyqtSignal()
     conversations_requested = pyqtSignal()
+    help_requested = pyqtSignal()
     quit_requested = pyqtSignal()
     
     # Resize signals (from mixin)
@@ -381,13 +382,25 @@ class AvatarWidget(SimpleAvatarArrowMixin, AvatarResizableMixin, QWidget):
             self.avatar_clicked.emit()
             logger.debug("Avatar double-clicked")
     
+    def _get_theme_icon(self, icon_name: str) -> QIcon:
+        """Get dark icon for avatar menu (menus are always lite background)."""
+        try:
+            from ...utils.resource_resolver import resolve_icon
+            icon_path = resolve_icon(icon_name, "_dark")
+            if icon_path:
+                return QIcon(str(icon_path))
+        except Exception as e:
+            logger.debug(f"Failed to load icon {icon_name}_dark.png: {e}")
+        
+        return QIcon()  # Empty icon as fallback
+    
     def _show_context_menu(self, pos: QPoint):
         """Show context menu on right-click."""
         logger.debug(f"Avatar right-click detected at position: {pos}")
         context_menu = QMenu(self)
         
         # Conversations action - primary feature
-        conversations_action = QAction("Conversations", self)
+        conversations_action = QAction(self._get_theme_icon("chat"), "Conversations", self)
         conversations_action.triggered.connect(self._on_conversations_clicked)
         context_menu.addAction(conversations_action)
         logger.debug("Added 'Conversations' option to context menu")
@@ -395,34 +408,76 @@ class AvatarWidget(SimpleAvatarArrowMixin, AvatarResizableMixin, QWidget):
         context_menu.addSeparator()
         
         # Settings action
-        settings_action = QAction("Settings...", self)
+        settings_action = QAction(self._get_theme_icon("gear"), "Settings...", self)
         settings_action.triggered.connect(self.settings_requested.emit)
         context_menu.addAction(settings_action)
         
         context_menu.addSeparator()
         
         # Add actions
-        minimize_action = QAction("Minimize to Tray", self)
+        minimize_action = QAction(self._get_theme_icon("minimize"), "Minimize to Tray", self)
         minimize_action.triggered.connect(self.minimize_requested.emit)
         context_menu.addAction(minimize_action)
         
-        context_menu.addSeparator()
-        
-        about_action = QAction("About Ghostman", self)
-        about_action.triggered.connect(lambda: logger.info("About Ghostman clicked"))
-        context_menu.addAction(about_action)
+        # Help action
+        help_action = QAction(self._get_theme_icon("help"), "Help", self)
+        help_action.triggered.connect(self.help_requested.emit)
+        context_menu.addAction(help_action)
         
         context_menu.addSeparator()
         
         # Quit action
-        quit_action = QAction("Quit Ghostman", self)
+        quit_action = QAction(self._get_theme_icon("exit"), "Quit Ghostman", self)
         quit_action.triggered.connect(self._on_quit_clicked)
         context_menu.addAction(quit_action)
+        
+        # Apply theme-aware menu styling
+        self._style_menu(context_menu)
         
         # Show the menu
         logger.debug("Showing avatar context menu...")
         context_menu.exec(pos)
         logger.debug("Context menu closed")
+    
+    def _style_menu(self, menu):
+        """Apply theme-aware styling to QMenu widgets."""
+        try:
+            # Try to get theme manager from parent or globally
+            theme_manager = None
+            
+            # Try to get from parent first
+            parent = self.parent()
+            while parent and not theme_manager:
+                theme_manager = getattr(parent, 'theme_manager', None)
+                parent = parent.parent()
+            
+            # Try to get from the global theme manager
+            if not theme_manager:
+                try:
+                    from ghostman.src.ui.themes.theme_manager import get_theme_manager
+                    theme_manager = get_theme_manager()
+                except (ImportError, AttributeError):
+                    return
+            
+            if not theme_manager:
+                return
+                
+            try:
+                from ghostman.src.ui.themes.theme_manager import THEME_SYSTEM_AVAILABLE
+                if not THEME_SYSTEM_AVAILABLE:
+                    return
+            except ImportError:
+                return
+            
+            colors = theme_manager.current_theme
+            if colors:
+                from ghostman.src.ui.themes.style_templates import StyleTemplates
+                menu_style = StyleTemplates.get_menu_style(colors)
+                menu.setStyleSheet(menu_style)
+                
+        except Exception as e:
+            # Silently handle errors to avoid breaking functionality
+            pass
     
     def _on_conversations_clicked(self):
         """Handle conversations menu item clicked."""

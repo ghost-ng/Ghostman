@@ -715,3 +715,40 @@ a:hover {
         page-break-inside: avoid;
     }
 }
+
+/* Screenshot Styling */
+.screenshot {
+    margin: 1rem 0;
+    text-align: center;
+}
+
+.screenshot img {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--border-color);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.screenshot img:hover {
+    transform: scale(1.02);
+    box-shadow: var(--shadow-lg);
+}
+
+.screenshot .caption {
+    font-style: italic;
+    color: var(--text-tertiary);
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
+    margin-bottom: 0;
+}
+
+.feature-card .screenshot {
+    margin-top: 1rem;
+}
+
+.feature-card .screenshot img {
+    max-height: 250px;
+    object-fit: contain;
+}

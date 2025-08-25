@@ -43,25 +43,15 @@ class HelpDialog(QDialog):
     
     def _get_help_path(self) -> Path:
         """Get the path to the help documentation."""
-        # Try different locations based on how the app is running
-        possible_paths = [
-            # Development mode
-            Path(__file__).parent.parent.parent.parent / "assets" / "help" / "index.html",
-            # Installed package mode
-            Path(sys.prefix) / "share" / "ghostman" / "help" / "index.html",
-            # Bundled executable mode
-            Path(getattr(sys, '_MEIPASS', Path.cwd())) / "ghostman" / "assets" / "help" / "index.html",
-            # Relative to current working directory
-            Path.cwd() / "ghostman" / "assets" / "help" / "index.html",
-        ]
+        from ...utils.resource_resolver import resolve_help_file
         
-        for path in possible_paths:
-            if path.exists():
-                logger.info(f"Found help documentation at: {path}")
-                return path
+        help_path = resolve_help_file()
+        if help_path:
+            logger.info(f"Found help documentation at: {help_path}")
+        else:
+            logger.warning("Help documentation not found in any expected location")
         
-        logger.warning("Help documentation not found in any expected location")
-        return None
+        return help_path
     
     def _setup_ui(self):
         """Set up the user interface."""
@@ -89,7 +79,7 @@ class HelpDialog(QDialog):
         header_layout = QHBoxLayout()
         
         # Title and icon
-        title_label = QLabel("👻 ghost-ng Help Documentation")
+        title_label = QLabel("👻 Ghostman Help Documentation")
         title_font = QFont()
         title_font.setPointSize(16)
         title_font.setBold(True)

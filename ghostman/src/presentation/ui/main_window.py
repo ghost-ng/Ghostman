@@ -63,6 +63,7 @@ class MainWindow(QMainWindow):
         self.avatar_widget.avatar_clicked.connect(self._toggle_repl)
         self.avatar_widget.settings_requested.connect(self.settings_requested.emit)
         self.avatar_widget.conversations_requested.connect(self._show_conversations)
+        self.avatar_widget.help_requested.connect(self.help_requested.emit)
         self.avatar_widget.quit_requested.connect(self.quit_requested.emit)
         self.setCentralWidget(self.avatar_widget)
         
@@ -877,6 +878,7 @@ class MainWindow(QMainWindow):
                 }
             """)
             msg_box.exec()
+    
     
     def _restore_conversation_to_repl(self, conversation_id: str):
         """Restore a conversation to the REPL."""

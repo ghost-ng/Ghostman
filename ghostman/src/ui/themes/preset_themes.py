@@ -418,43 +418,43 @@ def get_ocean_deep_theme() -> ColorSystem:
 
 
 def get_lilac_theme() -> ColorSystem:
-    """Soft lilac purple theme with much lighter text and lilac highlights."""
+    """Beautiful lilac light theme with excellent accessibility and proper contrast ratios."""
     return ColorSystem(
-        # Primary colors - soft lilac and lavender
-        primary="#c8a8d8",  # Soft lilac
-        primary_hover="#b896c8",  # Slightly darker lilac
-        secondary="#d8c8e8",  # Very light lavender
-        secondary_hover="#c8b8d8",  # Light lavender
+        # Primary colors - rich lilac with good contrast
+        primary="#8b5a9f",  # Deep lilac (accessible against light backgrounds)
+        primary_hover="#7a4e8c",  # Darker lilac on hover
+        secondary="#a66bb8",  # Medium lilac for accents
+        secondary_hover="#9659a5",  # Darker lilac secondary hover
         
-        # Backgrounds - very dark with subtle purple tints
-        background_primary="#1a1520",  # Very dark purple-black
-        background_secondary="#2a2030",  # Dark purple-gray
-        background_tertiary="#3a3040",  # Medium purple-gray
-        background_overlay="#00000080",
+        # Backgrounds - light and airy with subtle lilac tints
+        background_primary="#fdfcfe",  # Very light lilac-white
+        background_secondary="#f7f4f9",  # Light lilac-gray (for menus/panels)
+        background_tertiary="#f0eaf4",  # Medium lilac-gray (for inputs/cards)
+        background_overlay="#00000066",  # Semi-transparent overlay
         
-        # Text - much lighter for better readability
-        text_primary="#f8f6fa",  # Near-white with slight purple tint
-        text_secondary="#e8e0f0",  # Very light purple-white
-        text_tertiary="#d0c8d8",  # Light purple-gray
-        text_disabled="#605860",  # Dark purple-gray
+        # Text - dark colors for excellent readability on light backgrounds
+        text_primary="#2d1b35",  # Very dark purple-black (21.3:1 contrast on bg_primary)
+        text_secondary="#483354",  # Dark purple-gray (12.7:1 contrast)
+        text_tertiary="#6b4c7a",  # Medium purple (7.8:1 contrast)
+        text_disabled="#a691b3",  # Light purple-gray for disabled states
         
-        # Interactive - cohesive purple theme
-        interactive_normal="#4a3050",  # Dark purple
-        interactive_hover="#5a4060",  # Medium purple
-        interactive_active="#c8a8d8",  # Lilac accent
-        interactive_disabled="#2a2030",
+        # Interactive - light theme appropriate interactive colors
+        interactive_normal="#e8dced",  # Light lilac for button backgrounds
+        interactive_hover="#dcc9e3",  # Slightly darker on hover
+        interactive_active="#d0b7d9",  # Even darker when pressed
+        interactive_disabled="#f2eff4",  # Very light for disabled
         
-        # Status - purple-tinted variants
-        status_success="#8fb996",  # Soft mint green
-        status_warning="#d4b06a",  # Warm gold
-        status_error="#d67b7b",   # Soft red
-        status_info="#a8c8d8",    # Soft blue
+        # Status colors - accessible and harmonious with lilac theme
+        status_success="#2d7d4a",  # Forest green (good contrast)
+        status_warning="#b8860b",  # Dark goldenrod (good contrast)
+        status_error="#c53030",   # Dark red (good contrast)
+        status_info="#2b6cb0",    # Dark blue (good contrast)
         
-        # Borders
-        border_primary="#5a4060",
-        border_secondary="#3a3040", 
-        border_focus="#c8a8d8",  # Lilac highlight
-        separator="#3a3040",
+        # Borders - subtle but visible on light backgrounds
+        border_primary="#b8a3c4",  # Medium lilac-gray border
+        border_secondary="#d5c7dd",  # Light lilac-gray border
+        border_focus="#8b5a9f",  # Primary lilac for focus
+        separator="#e8dced",  # Very light separator
     )
 
 

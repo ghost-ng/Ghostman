@@ -1,98 +1,62 @@
 # Ghostman
 
-A beautiful AI chat application featuring Spector, your friendly desktop AI assistant. Chat with multiple AI providers through an elegant floating interface with extensive customization options.
+A beautiful AI chat application featuring Spector, your friendly desktop AI assistant. Chat with multiple AI providers through an elegant floating interface with extensive customization options and professional tabbed conversation management.
 
-## Features
+## Key Features
 
-- **Floating Chat Interface** - Moveable avatar window that opens into a full chat interface
-- **Multiple AI Providers** - Support for OpenAI, Anthropic, Google, and local models
+- **Tabbed Conversation System** - Manage multiple AI conversations simultaneously
+- **Floating Chat Interface** - Moveable avatar window with full chat capabilities
+- **Multiple AI Providers** - OpenAI, Anthropic, Google, and local model support
 - **26 Built-in Themes** - From Matrix green to Arctic white, cyberpunk to steampunk
-- **Conversation Management** - Save, load, and browse all your conversations
+- **Enhanced Save Functionality** - Dedicated title bar save button for quick access
+- **Conversation Management** - Save, load, and browse all conversations with organization features
+- **Smart Icon System** - Automatic theme-aware icon selection for consistent visibility
 - **Enterprise Security** - PKI authentication for secure environments
-- **Full Customization** - Fonts, opacity, window behavior, and more
 - **System Tray Integration** - Always accessible, minimize to tray
 - **Professional Features** - Settings profiles, advanced logging, SSL support
 
-## Quick Start
+## Quick Installation
 
-### Installation
+**Requirements**: Python 3.12+ and Windows 10/11, macOS, or Linux
 
-1. **Requirements**: Python 3.12+ and Windows 10/11, macOS, or Linux
+```bash
+git clone https://github.com/ghost-ng/Ghostman.git
+cd Ghostman
+python -m venv venv
+venv\Scripts\activate  # Windows (use source venv/bin/activate on macOS/Linux)
+pip install -r requirements.txt
+python -m ghostman
+```
 
-2. **Download and Setup**:
-   ```bash
-   git clone https://github.com/ghost-ng/Ghostman.git
-   cd Ghostman
-   python -m venv venv
-   venv\Scripts\activate  # Windows
-   # source venv/bin/activate  # macOS/Linux
-   pip install -r requirements.txt
-   ```
+**Get Your API Key**: Visit [OpenAI Platform](https://platform.openai.com/), [Anthropic Console](https://console.anthropic.com/), or [Google AI Studio](https://makersuite.google.com/) to obtain your API key.
 
-3. **Get Your API Key**:
-   - OpenAI: Get your key from [OpenAI Platform](https://platform.openai.com/)
-   - Anthropic: Visit [Anthropic Console](https://console.anthropic.com/)
-   - Google: Access [Google AI Studio](https://makersuite.google.com/)
+## Getting Started
 
-4. **Run Ghostman**:
-   ```bash
-   python -m ghostman
-   ```
-
-### First Time Setup
-
-1. **Configure Your AI Model**: Click the gear icon and enter your API key in the AI Model tab
-2. **Choose a Theme**: Pick from 26 beautiful themes in the Interface tab
+1. **Configure AI Model**: Click the gear icon, enter your API key in the AI Model tab
+2. **Choose Theme**: Pick from 26 beautiful themes in the Interface tab  
 3. **Start Chatting**: Click on Spector (the avatar) to open the chat window
-
-## Usage Basics
-
-### Chat Interface
-- **Open Chat**: Click on Spector's avatar or use the system tray
-- **Send Messages**: Type your message and press Ctrl+Enter
-- **New Conversation**: Click the "+" button or press Ctrl+N
-- **Browse History**: Click the conversation browser icon
-
-### Window Controls
-- **Move Around**: Drag Spector's avatar anywhere on your screen
-- **Always on Top**: Keep the chat window above other applications
-- **Adjust Opacity**: Make windows semi-transparent
-- **Minimize to Tray**: Hide completely but keep running in the background
-
-### Themes
-
-Choose from 26 professionally designed themes:
-
-**Dark Themes**: Dark Matrix, Midnight Blue, Forest Green, Sunset Orange, Royal Purple, Cyberpunk, Earth Tones, Ocean Deep, Lilac, Forest, Firefly, Mintly, Ocean, Pulse, Solarized Dark, Dracula, OpenWebUI-like, Moonlight, Fireswamp, Cyber, Steampunk
-
-**Light Themes**: Arctic White, Sunburst, Solarized Light, OpenAI-like, OpenUI-like
-
-Each theme is carefully designed for different moods and environments - from professional work to creative projects.
+4. **Create New Conversations**: Use the "+" button for new tabs
 
 ## Documentation
 
-- **Complete User Guide**: [docs/help.md](docs/help.md) - Comprehensive help covering all features
-- **GitHub Repository**: [https://github.com/ghost-ng/Ghostman/](https://github.com/ghost-ng/Ghostman/)
+For complete usage instructions, features guide, troubleshooting, and advanced configuration:
 
-## Settings Overview
+📖 **[Complete User Guide](USER_GUIDE.md)** - Comprehensive documentation covering all features, shortcuts, themes, troubleshooting, and best practices
 
-- **Interface**: Themes, opacity, window behavior
-- **AI Model**: Provider selection, API keys, response settings
-- **Fonts**: Customize text appearance for AI responses and user input
-- **Advanced**: Logging levels, SSL settings, debugging options
-- **PKI Auth**: Enterprise certificate authentication
+### Developer Documentation
 
-## Keyboard Shortcuts
+- **[Styling System Guide](docs/guides/STYLING_SYSTEM_GUIDE.md)** - Theme integration and customization
+- **[Tabbed Conversation Guide](docs/guides/TABBED_CONVERSATION_GUIDE.md)** - Technical implementation details
+- **Built-in Help**: [ghostman/assets/help/index.html](ghostman/assets/help/index.html)
 
-- `Ctrl+Enter` - Send message
-- `Ctrl+N` - New conversation
-- `Ctrl+,` - Open settings
-- `Alt+H` - Toggle always on top
+## Contributing
 
-## Support
+We welcome contributions! Please see our contributing guidelines and development setup instructions in the [GitHub repository](https://github.com/ghost-ng/Ghostman/).
 
-Having trouble? Check the [complete help guide](docs/help.md) for detailed instructions on every feature, troubleshooting tips, and advanced configuration options.
+## License
+
+This project is open source. Please see the LICENSE file for details.
 
 ---
 
-**Meet Spector, your AI companion for desktop productivity and creativity.**
+**Meet Spector, your AI companion for desktop productivity and creativity with professional tabbed conversation management.**

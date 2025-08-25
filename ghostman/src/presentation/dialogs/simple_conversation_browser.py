@@ -531,9 +531,10 @@ class SimpleConversationBrowser(QDialog):
             return str(status)
         
         status_map = {
-            ConversationStatus.ACTIVE: "Active",
-            ConversationStatus.PINNED: "Pinned", 
-            ConversationStatus.ARCHIVED: "Archived"
+            ConversationStatus.ACTIVE: "🔥 Active",
+            ConversationStatus.PINNED: "⭐ Pinned", 
+            ConversationStatus.ARCHIVED: "📦 Archived",
+            ConversationStatus.DELETED: "🗑️ Deleted"
         }
         return status_map.get(status, str(status))
     
@@ -1103,8 +1104,42 @@ class SimpleConversationBrowser(QDialog):
         set_title_action.triggered.connect(lambda: self._set_custom_title(conversation_id, current_row))
         context_menu.addAction(set_title_action)
         
+        # Apply theme-aware menu styling
+        self._style_menu(context_menu)
+        
         # Show menu at cursor position
         context_menu.exec(self.conversations_table.mapToGlobal(position))
+    
+    def _style_menu(self, menu):
+        """Apply theme-aware styling to QMenu widgets."""
+        try:
+            # Try to get the global theme manager
+            theme_manager = None
+            try:
+                from ghostman.src.ui.themes.theme_manager import get_theme_manager
+                theme_manager = get_theme_manager()
+            except (ImportError, AttributeError):
+                return
+            
+            if not theme_manager:
+                return
+                
+            try:
+                from ghostman.src.ui.themes.theme_manager import THEME_SYSTEM_AVAILABLE
+                if not THEME_SYSTEM_AVAILABLE:
+                    return
+            except ImportError:
+                return
+            
+            colors = theme_manager.current_theme
+            if colors:
+                from ghostman.src.ui.themes.style_templates import StyleTemplates
+                menu_style = StyleTemplates.get_menu_style(colors)
+                menu.setStyleSheet(menu_style)
+                
+        except Exception as e:
+            # Silently handle errors to avoid breaking functionality
+            pass
     
     def _refresh_conversation_title(self, conversation_id: str, row: int):
         """Refresh the conversation title by regenerating it."""

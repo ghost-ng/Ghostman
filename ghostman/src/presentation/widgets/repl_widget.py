@@ -990,6 +990,11 @@ class REPLWidget(QWidget):
             # Schedule this to run after theme styles have been fully applied
             self._schedule_tab_transparency_enforcement()
             
+            # Update tab button styles with new theme
+            if hasattr(self, 'tab_manager') and self.tab_manager:
+                self.tab_manager.refresh_tab_styles()
+                logger.debug("Tab button styles refreshed with new theme")
+            
             logger.debug("REPL widget styles updated for new theme")
         except Exception as e:
             logger.error(f"Failed to update REPL widget theme: {e}")
@@ -997,6 +1002,9 @@ class REPLWidget(QWidget):
     def _force_comprehensive_style_refresh(self):
         """Force a comprehensive style refresh for all UI elements."""
         try:
+            # Re-style all menus with new theme
+            self._refresh_menu_styling()
+            
             # Force Qt to re-evaluate all stylesheets and polish all widgets
             QApplication.processEvents()
             
@@ -1955,27 +1963,35 @@ class REPLWidget(QWidget):
         # Add New Tab option if tab system is available
         if TAB_SYSTEM_AVAILABLE and hasattr(self, 'tab_manager') and self.tab_manager:
             new_tab_action = QAction("New Tab", self.title_new_conv_btn)
+            new_tab_action.setIcon(self._load_themed_icon("new_tab"))
             new_tab_action.triggered.connect(self._create_new_tab)
             new_conv_menu.addAction(new_tab_action)
-            new_conv_menu.addSeparator()
         
-        # Start new conversation action
-        new_action = QAction("Start New Conversation", self.title_new_conv_btn)
+        # New conversation action
+        new_action = QAction("New Conversation", self.title_new_conv_btn)
+        new_action.setIcon(self._load_themed_icon("new"))
         new_action.triggered.connect(lambda: self._start_new_conversation(save_current=False))
         new_conv_menu.addAction(new_action)
         
-        # Start new conversation and save current action
-        save_and_new_action = QAction("Save Current & Start New", self.title_new_conv_btn)
-        save_and_new_action.triggered.connect(lambda: self._start_new_conversation(save_current=True))
-        new_conv_menu.addAction(save_and_new_action)
-        
         # Store menu reference but don't set it on the button (avoids arrow)
         self.title_new_conv_menu = new_conv_menu
+        
+        # Apply menu styling
+        self._style_menu(new_conv_menu)
         
         # Apply styling without menu attached
         self._style_title_button(self.title_new_conv_btn, add_right_padding=True)
         
         title_layout.addWidget(self.title_new_conv_btn)
+        
+        # Save conversation button
+        self.title_save_btn = QToolButton()
+        # Load save icon (theme-specific)
+        self._load_save_icon(self.title_save_btn)
+        self.title_save_btn.setToolTip("Save current conversation")
+        self.title_save_btn.clicked.connect(self._save_current_conversation)
+        self._style_title_button(self.title_save_btn)
+        title_layout.addWidget(self.title_save_btn)
         
         # Help documentation button (with help-docs icon)
         self.title_help_btn = QToolButton()
@@ -2408,22 +2424,21 @@ class REPLWidget(QWidget):
         # Add New Tab option if tab system is available
         if TAB_SYSTEM_AVAILABLE and hasattr(self, 'tab_manager') and self.tab_manager:
             new_tab_action = QAction("New Tab", self.toolbar_new_conv_btn)
+            new_tab_action.setIcon(self._load_themed_icon("new_tab"))
             new_tab_action.triggered.connect(self._create_new_tab)
             new_conv_menu.addAction(new_tab_action)
-            new_conv_menu.addSeparator()
         
-        # Start new conversation action
-        new_action = QAction("Start New Conversation", self.toolbar_new_conv_btn)
+        # New conversation action
+        new_action = QAction("New Conversation", self.toolbar_new_conv_btn)
+        new_action.setIcon(self._load_themed_icon("new"))
         new_action.triggered.connect(lambda: self._start_new_conversation(save_current=False))
         new_conv_menu.addAction(new_action)
         
-        # Start new conversation and save current action
-        save_and_new_action = QAction("Save Current & Start New", self.toolbar_new_conv_btn)
-        save_and_new_action.triggered.connect(lambda: self._start_new_conversation(save_current=True))
-        new_conv_menu.addAction(save_and_new_action)
-        
         # Store menu reference but don't set it on the button (avoids arrow)
         self.toolbar_new_conv_menu = new_conv_menu
+        
+        # Apply menu styling
+        self._style_menu(new_conv_menu)
         
         # Apply styling without menu attached
         self._style_tool_button(self.toolbar_new_conv_btn)
@@ -2884,6 +2899,50 @@ class REPLWidget(QWidget):
             self.send_button, colors, "push", "small", "toggle"
         )
     
+    def _style_menu(self, menu):
+        """Apply theme-aware styling to QMenu widgets."""
+        try:
+            if not menu:
+                logger.debug("_style_menu: menu is None")
+                return
+                
+            if not self.theme_manager:
+                logger.debug("_style_menu: theme_manager is None")
+                return
+                
+            if not THEME_SYSTEM_AVAILABLE:
+                logger.debug("_style_menu: THEME_SYSTEM_AVAILABLE is False")
+                return
+            
+            colors = self.theme_manager.current_theme
+            if colors:
+                # Apply menu styling using StyleTemplates
+                from ghostman.src.ui.themes.style_templates import StyleTemplates
+                menu_style = StyleTemplates.get_menu_style(colors)
+                menu.setStyleSheet(menu_style)
+                logger.debug(f"Applied theme-aware styling to menu - background: {colors.background_secondary}")
+            else:
+                logger.debug("_style_menu: colors is None")
+            
+        except Exception as e:
+            logger.error(f"Failed to apply menu styling: {e}")
+    
+    def _refresh_menu_styling(self):
+        """Refresh styling for all existing menus when theme changes."""
+        try:
+            # Re-style title menu if it exists
+            if hasattr(self, 'title_new_conv_menu') and self.title_new_conv_menu:
+                self._style_menu(self.title_new_conv_menu)
+            
+            # Re-style toolbar menu if it exists
+            if hasattr(self, 'toolbar_new_conv_menu') and self.toolbar_new_conv_menu:
+                self._style_menu(self.toolbar_new_conv_menu)
+                
+            logger.debug("Menu styling refreshed for theme change")
+            
+        except Exception as e:
+            logger.error(f"Failed to refresh menu styling: {e}")
+    
     def _update_search_button_state(self):
         """Update search button visual state using unified styling system."""
         try:
@@ -3157,6 +3216,28 @@ class REPLWidget(QWidget):
             logger.error(f"Failed to load plus icon: {e}")
             button.setText("➕")  # Fallback
     
+    def _load_themed_icon(self, icon_name):
+        """Load theme-appropriate icon and return QIcon object for menus."""
+        try:
+            # Determine icon variant based on menu background color
+            icon_variant = self._get_menu_icon_variant()
+            
+            icon_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", 
+                "assets", "icons", f"{icon_name}_{icon_variant}.png"
+            )
+            
+            if os.path.exists(icon_path):
+                logger.debug(f"Loaded themed icon: {icon_name}_{icon_variant}.png")
+                return QIcon(icon_path)
+            else:
+                logger.warning(f"Themed icon not found: {icon_path}")
+                return QIcon()  # Return empty icon
+                
+        except Exception as e:
+            logger.error(f"Failed to load themed icon '{icon_name}': {e}")
+            return QIcon()  # Return empty icon
+    
     def _load_help_icon(self, button):
         """Load theme-appropriate help-docs icon for a given button."""
         try:
@@ -3216,6 +3297,30 @@ class REPLWidget(QWidget):
             logger.error(f"Failed to load move icon: {e}")
             button.setText("✥")  # Fallback
     
+    def _load_save_icon(self, button):
+        """Load theme-appropriate save icon for a given button."""
+        try:
+            # Determine if theme is dark or light  
+            icon_variant = self._get_icon_variant()
+            
+            save_icon_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", 
+                "assets", "icons", f"save_{icon_variant}.png"
+            )
+            
+            if os.path.exists(save_icon_path):
+                save_icon = QIcon(save_icon_path)
+                button.setIcon(save_icon)
+                logger.debug(f"Loaded save icon: save_{icon_variant}.png")
+            else:
+                # Fallback to Unicode symbol
+                button.setText("💾")
+                logger.warning(f"Save icon not found: {save_icon_path}")
+                
+        except Exception as e:
+            logger.error(f"Failed to load save icon: {e}")
+            button.setText("💾")  # Fallback
+    
     def _get_icon_variant(self) -> str:
         """Determine which icon variant to use based on theme."""
         try:
@@ -3234,6 +3339,85 @@ class REPLWidget(QWidget):
         except Exception as e:
             logger.error(f"Failed to determine icon variant: {e}")
             return "lite"
+    
+    def _load_theme_icon(self, icon_name: str, use_theme_variant: bool = True) -> QIcon:
+        """Load icon using centralized resource resolver."""
+        try:
+            from ...utils.resource_resolver import resolve_icon
+            
+            # Determine theme suffix
+            theme_suffix = ""
+            if use_theme_variant:
+                variant = self._get_icon_variant()
+                theme_suffix = f"_{variant}"
+            
+            icon_path = resolve_icon(icon_name, theme_suffix)
+            if icon_path:
+                return QIcon(str(icon_path))
+        except Exception as e:
+            logger.debug(f"Failed to load theme icon {icon_name}: {e}")
+        
+        return QIcon()  # Empty icon as fallback
+    
+    def _get_menu_icon_variant(self) -> str:
+        """Determine which icon variant to use for menu items based on menu background color.
+        
+        Menus use background_secondary, and if it's light, we need dark icons.
+        If it's dark, we need light icons.
+        """
+        try:
+            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+                colors = self.theme_manager.current_theme
+                # Check menu background color (background_secondary)
+                menu_bg_color = colors.background_secondary
+                
+                # Calculate luminance to determine if background is light or dark
+                if menu_bg_color.startswith('#'):
+                    # Remove # and get RGB values
+                    hex_color = menu_bg_color.lstrip('#')
+                    if len(hex_color) == 6:
+                        r = int(hex_color[0:2], 16)
+                        g = int(hex_color[2:4], 16)
+                        b = int(hex_color[4:6], 16)
+                        
+                        # Calculate relative luminance using W3C formula
+                        luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+                        
+                        # If luminance > 0.5, background is light, use dark icons
+                        # If luminance <= 0.5, background is dark, use light icons
+                        if luminance > 0.5:
+                            logger.debug(f"Menu background is light (luminance: {luminance:.2f}), using dark icons")
+                            return "dark"
+                        else:
+                            logger.debug(f"Menu background is dark (luminance: {luminance:.2f}), using lite icons")
+                            return "lite"
+                    elif len(hex_color) == 3:
+                        # Handle shorthand hex colors like #fff
+                        r = int(hex_color[0] * 2, 16)
+                        g = int(hex_color[1] * 2, 16)
+                        b = int(hex_color[2] * 2, 16)
+                        
+                        luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+                        
+                        if luminance > 0.5:
+                            logger.debug(f"Menu background is light (luminance: {luminance:.2f}), using dark icons")
+                            return "dark"
+                        else:
+                            logger.debug(f"Menu background is dark (luminance: {luminance:.2f}), using lite icons")
+                            return "lite"
+                
+                # Fallback: check using simple heuristic
+                if menu_bg_color.startswith('#') and len(menu_bg_color) >= 2:
+                    first_hex_digit = int(menu_bg_color[1], 16)
+                    # If first digit is 8-F, it's likely light, use dark icons
+                    return "dark" if first_hex_digit >= 8 else "lite"
+            
+            # Default fallback for dark menus
+            return "lite"
+            
+        except Exception as e:
+            logger.error(f"Failed to determine menu icon variant: {e}")
+            return "lite"  # Default to lite icons for dark backgrounds
     
     def _get_emoji_font_stack(self) -> str:
         """Get a font stack that supports emoji rendering on Windows."""
@@ -4058,7 +4242,7 @@ class REPLWidget(QWidget):
             role_name = "You" if message.role == MessageRole.USER else "AI"
             style = "input" if message.role == MessageRole.USER else "response"
             
-            timestamp = message.timestamp.strftime("%H:%M")
+            timestamp = message.timestamp.strftime("%m/%d %H:%M")
             self.append_output(f"[{timestamp}] {role_icon} {role_name}: {message.content}", style)
         
         if not conversation.messages:
@@ -4967,6 +5151,9 @@ def test_theme():
         select_all_action = context_menu.addAction("🗂️ Select All")
         select_all_action.triggered.connect(self.output_display.selectAll)
         
+        # Apply menu styling
+        self._style_menu(context_menu)
+        
         # Show context menu
         context_menu.exec(self.output_display.mapToGlobal(position))
     
@@ -5596,27 +5783,12 @@ def test_theme():
         """Handle help button click - open help docs directly in browser."""
         logger.info("Help button clicked - opening help docs in browser")
         import webbrowser
-        import sys
-        from pathlib import Path
         
         try:
-            # Try to find local help documentation
-            possible_paths = [
-                # Development mode
-                Path(__file__).parent.parent.parent.parent / "assets" / "help" / "index.html",
-                # Installed package mode
-                Path(sys.prefix) / "share" / "ghostman" / "help" / "index.html",
-                # Bundled executable mode
-                Path(getattr(sys, '_MEIPASS', Path.cwd())) / "ghostman" / "assets" / "help" / "index.html",
-                # Relative to current working directory
-                Path.cwd() / "ghostman" / "assets" / "help" / "index.html",
-            ]
+            # Try to find local help documentation using centralized resolver
+            from ...utils.resource_resolver import resolve_help_file
             
-            help_path = None
-            for path in possible_paths:
-                if path.exists():
-                    help_path = path
-                    break
+            help_path = resolve_help_file()
             
             if help_path:
                 # Open local help file
@@ -5753,15 +5925,25 @@ def test_theme():
     def _show_new_conv_menu(self):
         """Show the new conversation menu for title button."""
         if hasattr(self, 'title_new_conv_menu'):
+            # Re-apply styling before showing menu
+            logger.debug("Re-styling title menu before show")
+            self._style_menu(self.title_new_conv_menu)
+            
             # Position menu below the button
             button_pos = self.title_new_conv_btn.mapToGlobal(self.title_new_conv_btn.rect().bottomLeft())
+            logger.debug(f"Showing title menu at position: {button_pos}")
             self.title_new_conv_menu.exec(button_pos)
     
     def _show_toolbar_new_conv_menu(self):
         """Show the new conversation menu for toolbar button."""
         if hasattr(self, 'toolbar_new_conv_menu'):
+            # Re-apply styling before showing menu
+            logger.debug("Re-styling toolbar menu before show")
+            self._style_menu(self.toolbar_new_conv_menu)
+            
             # Position menu below the button
             button_pos = self.toolbar_new_conv_btn.mapToGlobal(self.toolbar_new_conv_btn.rect().bottomLeft())
+            logger.debug(f"Showing toolbar menu at position: {button_pos}")
             self.toolbar_new_conv_menu.exec(button_pos)
     
     def _on_settings_clicked(self):
@@ -5792,6 +5974,140 @@ def test_theme():
                 # Reset to normal styling
                 self._style_title_button(self.move_btn)
                 print("🔘 Move mode OFF - grips hidden, normal control")
+    
+    def _save_current_conversation(self):
+        """Save the current conversation without starting a new one."""
+        try:
+            if not self.conversation_manager:
+                self.append_output("⚠ Conversation management not available", "error")
+                return
+            
+            # Get AI service for conversation integration
+            ai_service = None
+            if self.conversation_manager:
+                ai_service = self.conversation_manager.get_ai_service()
+            
+            if not ai_service or not hasattr(ai_service, 'conversation_service'):
+                self.append_output("⚠ AI service doesn't support conversation management", "error")
+                return
+            
+            async def save_conversation():
+                try:
+                    # Force sync between REPL and AI service first
+                    if self.current_conversation and self.conversation_manager and self.conversation_manager.has_ai_service():
+                        ai_service_current = ai_service.get_current_conversation_id()
+                        if ai_service_current != self.current_conversation.id:
+                            logger.debug(f"Syncing conversations before save: AI={ai_service_current}, REPL={self.current_conversation.id}")
+                            ai_service.set_current_conversation(self.current_conversation.id)
+                    
+                    current_id = ai_service.get_current_conversation_id()
+                    logger.debug(f"Save attempt - AI service current ID: {current_id}")
+                    logger.debug(f"Save attempt - REPL current conversation: {self.current_conversation.id if self.current_conversation else None}")
+                    
+                    # Determine which conversation to save
+                    conversation = None
+                    
+                    # First try: Use AI service current conversation
+                    if current_id:
+                        conversation = await ai_service.conversation_service.get_conversation(current_id, include_messages=True)
+                        if conversation and conversation.messages:
+                            logger.debug(f"Found conversation via AI service with {len(conversation.messages)} messages")
+                        else:
+                            logger.debug(f"AI service conversation has no messages: {conversation.messages if conversation else 'No conversation'}")
+                    
+                    # Second try: Use REPL's current conversation if AI service doesn't have a good one
+                    if (not conversation or not conversation.messages) and self.current_conversation:
+                        logger.debug(f"Trying REPL current conversation: {self.current_conversation.id}")
+                        current_id = self.current_conversation.id
+                        
+                        # Try to get it from the database
+                        try:
+                            conversation = await ai_service.conversation_service.get_conversation(current_id, include_messages=True)
+                            if conversation and conversation.messages:
+                                logger.debug(f"Found REPL conversation in database with {len(conversation.messages)} messages")
+                            else:
+                                # Use the in-memory conversation object directly
+                                conversation = self.current_conversation
+                                logger.debug(f"Using in-memory REPL conversation with {len(conversation.messages) if hasattr(conversation, 'messages') else 'unknown'} messages")
+                        except Exception as e:
+                            logger.debug(f"Failed to get REPL conversation from database, using in-memory: {e}")
+                            conversation = self.current_conversation
+                    
+                    if not current_id:
+                        self.append_output("⚠ No active conversation to save", "system")
+                        return
+                    
+                    if not conversation:
+                        self.append_output("⚠ No conversation found to save", "system")
+                        return
+                        
+                    # Check for messages in various ways
+                    has_messages = False
+                    message_count = 0
+                    
+                    if hasattr(conversation, 'messages') and conversation.messages:
+                        has_messages = True
+                        message_count = len(conversation.messages)
+                    elif hasattr(conversation, 'message_count') and conversation.message_count > 0:
+                        has_messages = True
+                        message_count = conversation.message_count
+                    
+                    if not has_messages:
+                        # Final check: see if there are unsent messages in the UI
+                        ui_has_messages = self._has_unsaved_messages()
+                        if ui_has_messages:
+                            self.append_output("⚠ Conversation has content but messages may need to be sent first", "system") 
+                            logger.debug("UI has messages but conversation object is empty - possible unsaved state")
+                        else:
+                            self.append_output("⚠ No conversation content to save", "system")
+                            logger.debug(f"No messages found in conversation {current_id}")
+                        return
+                    
+                    logger.debug(f"Proceeding with save for conversation {current_id} with {message_count} messages")
+                    
+                    # Generate title if needed
+                    if len(conversation.messages) >= 2:
+                        if conversation.title in ["New Conversation", "Untitled Conversation"] or not conversation.title.strip():
+                            generated_title = await ai_service.conversation_service.generate_conversation_title(current_id)
+                            if generated_title:
+                                await ai_service.conversation_service.update_conversation_title(current_id, generated_title)
+                                logger.info(f"Generated title for saved conversation: {generated_title}")
+                                self.append_output(f"💾 Conversation saved with title: {generated_title}", "system")
+                            else:
+                                self.append_output("💾 Conversation saved", "system")
+                        else:
+                            self.append_output(f"💾 Conversation '{conversation.title}' saved", "system")
+                    else:
+                        self.append_output("💾 Conversation saved", "system")
+                    
+                    # Refresh conversation list to reflect any title changes
+                    await self._load_conversations()
+                    
+                except Exception as e:
+                    logger.error(f"Failed to save conversation: {e}")
+                    self.append_output(f"✗ Error saving conversation: {e}", "error")
+            
+            # Use Qt timer to safely handle async operations
+            from PyQt6.QtCore import QTimer
+            
+            def run_async():
+                try:
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        loop.run_until_complete(save_conversation())
+                    finally:
+                        loop.close()
+                except Exception as e:
+                    logger.error(f"Failed to execute save conversation async: {e}")
+                    self.append_output(f"✗ Error: {e}", "error")
+            
+            QTimer.singleShot(100, run_async)
+            
+        except Exception as e:
+            logger.error(f"Save conversation failed: {e}")
+            self.append_output(f"✗ Error: {e}", "error")
     
     def _start_new_conversation(self, save_current: bool = False):
         """Start a new conversation with optional saving of current."""
