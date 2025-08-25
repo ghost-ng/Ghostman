@@ -93,7 +93,8 @@
       "WebFetch(domain:platform.openai.com)",
       "WebFetch(domain:cookbook.openai.com)",
       "Bash(del:*)",
-      "Bash(.venvScriptsactivate)"
+      "Bash(.venvScriptsactivate)",
+      "Read(/c:\\Users\\miguel\\Downloads/**)"
     ],
     "deny": []
   }

@@ -31,8 +31,12 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread, QObject, QSize, pyqtSlot
 from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QTextCharFormat, QColor, QPalette, QIcon, QPixmap, QAction
 
+
 # Import startup service for preamble
 from ...application.startup_service import startup_service
+
+# Tab system not available in simple mode
+TAB_SYSTEM_AVAILABLE = False
 # Import font service for font configuration
 from ...application.font_service import font_service
 
@@ -767,6 +771,10 @@ class REPLWidget(QWidget):
             
             # CRITICAL: Force style refresh for all components to ensure immediate theme updates
             self._force_comprehensive_style_refresh()
+            
+            # CRITICAL: Ensure tab frame transparency after theme changes
+            # Schedule this to run after theme styles have been fully applied
+            self._schedule_tab_transparency_enforcement()
             
             logger.debug("REPL widget styles updated for new theme")
         except Exception as e:
@@ -1512,6 +1520,165 @@ class REPLWidget(QWidget):
         
         self.status_label.setToolTip(tooltip)
     
+    def _init_tab_bar(self, parent_layout):
+        """Initialize simple tab bar above the title bar with clear background."""
+        # Create a frame for the tab bar - give it a unique class to avoid inheritance
+        self.tab_frame = QFrame()
+        self.tab_frame.setObjectName("tab_frame")
+        
+        # Set the frame to have no parent background inheritance
+        self.tab_frame.setAutoFillBackground(False)
+        
+        # Apply initial transparent styling (will be reinforced by _ensure_tab_frame_transparency)
+        self.tab_frame.setStyleSheet("""
+            QFrame[objectName="tab_frame"] {
+                background-color: rgba(0,0,0,0) !important;
+                background: none !important;
+                border: none !important;
+                margin: 0px;
+                padding: 0px;
+                min-height: 30px;
+                max-height: 30px;
+            }
+        """)
+        
+        # Create horizontal layout for tabs
+        self.tab_layout = QHBoxLayout(self.tab_frame)
+        self.tab_layout.setContentsMargins(8, 4, 8, 4)
+        self.tab_layout.setSpacing(4)
+        
+        # Create placeholder tabs only
+        self._create_placeholder_tabs()
+        
+        # Add stretch to push tabs to the left
+        self.tab_layout.addStretch()
+        
+        # Add the tab frame to parent layout
+        parent_layout.addWidget(self.tab_frame)
+        
+        # Schedule tab frame transparency enforcement after theme styles are applied
+        self._schedule_tab_transparency_enforcement()
+    
+    def _ensure_tab_frame_transparency(self):
+        """Force tab frame transparency using maximum CSS specificity."""
+        if not hasattr(self, 'tab_frame'):
+            return
+            
+        # Maximum specificity override with comprehensive background property coverage
+        transparency_css = """
+            QFrame[objectName="tab_frame"],
+            #repl-root QFrame#tab_frame,
+            #repl-root QFrame[objectName="tab_frame"] {
+                background: transparent !important;
+                background-color: transparent !important;
+                background-image: none !important;
+            }
+        """
+        
+        try:
+            self.tab_frame.setStyleSheet(transparency_css)
+            # Force immediate style update
+            self.tab_frame.style().polish(self.tab_frame)
+        except Exception as e:
+            logger.warning(f"Failed to enforce tab transparency: {e}")
+    
+    def _schedule_tab_transparency_enforcement(self):
+        """Schedule tab transparency enforcement with multiple timing intervals."""
+        try:
+            # Immediate application
+            self._ensure_tab_frame_transparency()
+            
+            # Schedule at multiple intervals to handle theme system timing
+            QTimer.singleShot(10, self._ensure_tab_frame_transparency)
+            QTimer.singleShot(50, self._ensure_tab_frame_transparency)
+            QTimer.singleShot(100, self._ensure_tab_frame_transparency)
+            
+        except Exception as e:
+            logger.warning(f"Failed to schedule tab transparency: {e}")
+            
+            # Also ensure autoFillBackground is disabled
+            self.tab_frame.setAutoFillBackground(False)
+            
+            # Force immediate style update
+            self.tab_frame.style().polish(self.tab_frame)
+            
+        except Exception as e:
+            from ...utils.logger import logger
+            logger.warning(f"Failed to enforce tab frame transparency: {e}")
+    
+    def _schedule_tab_transparency_enforcement(self):
+        """Schedule tab frame transparency enforcement using QTimer for proper timing.
+        
+        This ensures the transparency override is applied after the theme system
+        has finished applying its styles, preventing inheritance conflicts.
+        """
+        try:
+            from PyQt6.QtCore import QTimer
+            
+            # Schedule multiple enforcement attempts to handle different timing scenarios
+            # Immediate attempt (0ms) - for cases where theme hasn't been applied yet
+            QTimer.singleShot(0, self._ensure_tab_frame_transparency)
+            
+            # Short delay (10ms) - for most theme application scenarios
+            QTimer.singleShot(10, self._ensure_tab_frame_transparency)
+            
+            # Medium delay (50ms) - for complex theme loading scenarios
+            QTimer.singleShot(50, self._ensure_tab_frame_transparency)
+            
+            # Longer delay (100ms) - safety net for slow systems
+            QTimer.singleShot(100, self._ensure_tab_frame_transparency)
+            
+        except Exception as e:
+            from ...utils.logger import logger
+            logger.warning(f"Failed to schedule tab frame transparency enforcement: {e}")
+            # Fallback to immediate application if QTimer fails
+            self._ensure_tab_frame_transparency()
+        
+    def _create_placeholder_tabs(self):
+        """Create placeholder tabs for UI consistency."""
+        # Placeholder tab buttons (for UI consistency)
+        self.tab_buttons = []
+        
+        # Add first placeholder tab (active)
+        tab1 = QPushButton("Tab 1")
+        tab1.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(147, 112, 219, 0.9);
+                color: white;
+                border: 1px solid rgba(147, 112, 219, 1.0);
+                border-radius: 3px;
+                padding: 4px 12px;
+                min-width: 60px;
+                max-height: 22px;
+            }
+            QPushButton:hover {
+                background-color: rgba(147, 112, 219, 1.0);
+            }
+        """)
+        self.tab_buttons.append(tab1)
+        self.tab_layout.addWidget(tab1)
+        
+        # Add second placeholder tab (inactive)
+        tab2 = QPushButton("Tab 2")
+        tab2.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(60, 60, 60, 0.8);
+                color: rgba(255, 255, 255, 0.9);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 3px;
+                padding: 4px 12px;
+                min-width: 60px;
+                max-height: 22px;
+            }
+            QPushButton:hover {
+                background-color: rgba(80, 80, 80, 0.9);
+            }
+        """)
+        self.tab_buttons.append(tab2)
+        self.tab_layout.addWidget(tab2)
+        
+        logger.debug("Created placeholder tabs for UI consistency")
+    
     def _init_title_bar(self, parent_layout):
         """Initialize title bar with new conversation and help buttons."""
         # Create a frame for the title bar to make it more visible and draggable
@@ -1556,6 +1723,13 @@ class REPLWidget(QWidget):
         
         # Create menu for new conversation options
         new_conv_menu = QMenu(self.title_new_conv_btn)
+        
+        # Add New Tab option if tab system is available
+        if TAB_SYSTEM_AVAILABLE and hasattr(self, 'tab_manager') and self.tab_manager:
+            new_tab_action = QAction("New Tab", self.title_new_conv_btn)
+            new_tab_action.triggered.connect(self._create_new_tab)
+            new_conv_menu.addAction(new_tab_action)
+            new_conv_menu.addSeparator()
         
         # Start new conversation action
         new_action = QAction("Start New Conversation", self.title_new_conv_btn)
@@ -2002,6 +2176,13 @@ class REPLWidget(QWidget):
         
         # Create menu for new conversation options FIRST
         new_conv_menu = QMenu(self.toolbar_new_conv_btn)
+        
+        # Add New Tab option if tab system is available
+        if TAB_SYSTEM_AVAILABLE and hasattr(self, 'tab_manager') and self.tab_manager:
+            new_tab_action = QAction("New Tab", self.toolbar_new_conv_btn)
+            new_tab_action.triggered.connect(self._create_new_tab)
+            new_conv_menu.addAction(new_tab_action)
+            new_conv_menu.addSeparator()
         
         # Start new conversation action
         new_action = QAction("Start New Conversation", self.toolbar_new_conv_btn)
@@ -2956,9 +3137,13 @@ class REPLWidget(QWidget):
         """Initialize the enhanced user interface."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(3)  # Reduce default spacing by ~50% (from ~6 to 3)
         
         # Initialize resize functionality
         self._init_resize_functionality()
+        
+        # Tab bar above title bar
+        self._init_tab_bar(layout)
         
         # Title bar with new conversation and help buttons
         self._init_title_bar(layout)
@@ -3038,8 +3223,11 @@ class REPLWidget(QWidget):
             lineedit_style = f"#repl-root QLineEdit {{ background-color: {child_bg}; color: {colors.text_primary}; border: 1px solid {colors.border_primary}; border-radius: 3px; padding: 5px; selection-background-color: {colors.secondary}; selection-color: {colors.text_primary}; }}"
             lineedit_focus_style = f"#repl-root QLineEdit:focus {{ border: 2px solid {colors.border_focus}; }}"
             
+            # Add explicit tab frame transparency to override theme inheritance
+            tab_frame_style = "#repl-root QFrame#tab_frame { background-color: rgba(0,0,0,0) !important; background: none !important; }"
+            
             # Properly combine all styles (root style includes border-radius)
-            combined_style = f"{style} {textedit_style} {lineedit_style} {lineedit_focus_style}"
+            combined_style = f"{style} {textedit_style} {lineedit_style} {lineedit_focus_style} {tab_frame_style}"
             
             
             self.setStyleSheet(combined_style)
@@ -3070,7 +3258,10 @@ class REPLWidget(QWidget):
         lineedit_fallback = f"#repl-root QLineEdit {{ background-color: {lineedit_bg}; color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 3px; padding: 5px; }}"
         lineedit_focus_fallback = "#repl-root QLineEdit:focus { border: 1px solid #4CAF50; }"
         
-        self.setStyleSheet(f"{root_style} {textedit_fallback} {lineedit_fallback} {lineedit_focus_fallback}")
+        # Add explicit tab frame transparency to override theme inheritance  
+        tab_frame_fallback = "#repl-root QFrame#tab_frame { background-color: rgba(0,0,0,0) !important; background: none !important; }"
+        
+        self.setStyleSheet(f"{root_style} {textedit_fallback} {lineedit_fallback} {lineedit_focus_fallback} {tab_frame_fallback}")
 
     def set_panel_opacity(self, opacity: float):
         """Set the frame (panel) background opacity only.
@@ -3098,6 +3289,9 @@ class REPLWidget(QWidget):
         # Also update the output display style with new opacity
         if hasattr(self, 'output_display'):
             self._style_output_display()
+            
+        # Ensure tab frame transparency after opacity changes (which may trigger style reapplication)
+        self._schedule_tab_transparency_enforcement()
             
         logger.info(f"✓ REPL panel opacity applied successfully: {new_val:.3f}")
         
@@ -3538,6 +3732,9 @@ class REPLWidget(QWidget):
         
         # Reset idle detector for new conversation
         self.idle_detector.reset_activity(conversation.id)
+        
+        # Sync tab title with conversation
+        self._sync_tab_with_conversation()
         
         # Emit signal for external components
         self.conversation_changed.emit(conversation.id)
@@ -5750,6 +5947,161 @@ def test_theme():
         except Exception as e:
             logger.error(f"Failed to handle regex toggle: {e}")
     
+    
+    
+    @pyqtSlot(str, str)
+    def _on_tab_switched(self, old_tab_id: str, new_tab_id: str):
+        """Handle tab switching event."""
+        try:
+            logger.debug(f"Tab switched from {old_tab_id} to {new_tab_id}")
+            
+            # The context switch will be handled by _on_conversation_context_switched
+            # This is just for UI updates if needed
+            
+        except Exception as e:
+            logger.error(f"Error handling tab switch: {e}")
+    
+    @pyqtSlot(str)
+    def _on_conversation_context_switched(self, conversation_id: str):
+        """Handle conversation context switching from tab manager."""
+        try:
+            if not conversation_id:
+                # Clear current conversation for new conversation
+                self._clear_current_conversation()
+                return
+                
+            # Find the conversation
+            if not self.conversation_manager:
+                logger.warning("Cannot switch conversation context - no conversation manager")
+                return
+                
+            # Load the conversation asynchronously
+            async def load_conversation():
+                try:
+                    conversation = await self.conversation_manager.get_conversation(conversation_id)
+                    if conversation:
+                        # Switch to the conversation (this will update UI)
+                        self._switch_to_conversation(conversation)
+                        logger.info(f"Switched to conversation context: {conversation.title}")
+                    else:
+                        logger.warning(f"Conversation {conversation_id} not found")
+                        
+                except Exception as e:
+                    logger.error(f"Failed to load conversation {conversation_id}: {e}")
+            
+            # Run the async operation
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # Schedule for later execution
+                    asyncio.create_task(load_conversation())
+                else:
+                    loop.run_until_complete(load_conversation())
+            except Exception as e:
+                logger.error(f"Error running async conversation load: {e}")
+                
+        except Exception as e:
+            logger.error(f"Error switching conversation context: {e}")
+    
+    @pyqtSlot(str, str) 
+    def _on_tab_created(self, tab_id: str, title: str):
+        """Handle tab creation event."""
+        try:
+            logger.debug(f"Tab created: {tab_id} - {title}")
+            
+            # Update active tab title if this is the current conversation
+            if hasattr(self, 'tab_manager') and self.tab_manager:
+                active_tab = self.tab_manager.get_active_tab()
+                if active_tab and self.current_conversation:
+                    # Sync tab title with conversation title
+                    if self.current_conversation.title and self.current_conversation.title != title:
+                        self.tab_manager.update_tab_title(tab_id, self.current_conversation.title)
+                        
+        except Exception as e:
+            logger.error(f"Error handling tab creation: {e}")
+    
+    @pyqtSlot(str)
+    def _on_tab_closed(self, tab_id: str):
+        """Handle tab closure event."""
+        try:
+            logger.debug(f"Tab closed: {tab_id}")
+            
+            # UI cleanup is handled by tab manager
+            # Just log the event for now
+            
+        except Exception as e:
+            logger.error(f"Error handling tab closure: {e}")
+    
+    def _clear_current_conversation(self):
+        """Clear current conversation for new tab/conversation."""
+        try:
+            self.current_conversation = None
+            
+            # Clear output display
+            self.output_display.clear()
+            
+            # Show welcome message
+            self.append_output("🎆 Start a new conversation!", "info")
+            
+            # Reset status label
+            if hasattr(self, 'status_label'):
+                self.status_label.setText("Ready")
+                self.status_label.setStyleSheet("color: #4CAF50; font-weight: bold; font-size: 10px;")
+            
+            # Reset idle detector
+            if hasattr(self, 'idle_detector'):
+                self.idle_detector.reset_activity(None)
+                
+            logger.debug("Cleared current conversation for new context")
+            
+        except Exception as e:
+            logger.error(f"Error clearing current conversation: {e}")
+    
+    def _sync_tab_with_conversation(self):
+        """Sync active tab title with current conversation title."""
+        try:
+            if not (hasattr(self, 'tab_manager') and self.tab_manager and self.current_conversation):
+                return
+                
+            active_tab = self.tab_manager.get_active_tab()
+            if active_tab:
+                conversation_title = self.current_conversation.title or "New Chat"
+                if active_tab.title != conversation_title:
+                    self.tab_manager.update_tab_title(active_tab.tab_id, conversation_title)
+                    logger.debug(f"Synced tab title: {conversation_title}")
+                    
+        except Exception as e:
+            logger.error(f"Error syncing tab with conversation: {e}")
+    
+    # Tab event handlers
+    def _on_tab_switched(self, tab_id: str):
+        """Handle tab switching - change conversation context."""
+        if hasattr(self, 'tab_manager') and self.tab_manager:
+            active_tab = self.tab_manager.get_active_tab()
+            if active_tab and active_tab.conversation_id:
+                # Switch to the conversation associated with this tab
+                logger.debug(f"Switching to conversation for tab: {tab_id}")
+                # TODO: Implement conversation context switching
+    
+    def _on_tab_created(self, tab_id: str):
+        """Handle new tab creation."""
+        logger.debug(f"New tab created: {tab_id}")
+        # Tab is automatically switched to by the manager
+    
+    def _on_tab_closed(self, tab_id: str):
+        """Handle tab closing."""
+        logger.debug(f"Tab closed: {tab_id}")
+        # Tab manager handles cleanup and switching to another tab
+    
+    def _on_new_tab_requested(self):
+        """Handle new tab request from plus button."""
+        if hasattr(self, 'tab_manager') and self.tab_manager:
+            new_tab_id = self.tab_manager.create_tab()
+            logger.debug(f"Created new tab from plus button: {new_tab_id}")
+        else:
+            logger.warning("Tab manager not available for new tab request")
+    
     def shutdown(self):
         """Shutdown the enhanced REPL widget."""
         logger.info("Shutting down Enhanced REPL Widget...")
@@ -5772,6 +6124,11 @@ def test_theme():
             # Clear summarization queue
             self.summarization_queue.clear()
             self.is_summarizing = False
+            
+            # Clean up tab manager
+            if hasattr(self, 'tab_manager') and self.tab_manager:
+                self.tab_manager.cleanup()
+                logger.debug("Tab manager cleaned up")
             
             # Clear conversation references
             self.current_conversation = None
