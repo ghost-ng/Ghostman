@@ -93,6 +93,22 @@ class ResourceResolver:
             Path.cwd() / "ghostman" / "assets" / "icons" / full_icon_name,
         ]
         
+        # Special case for avatar, icon, and ghost - also check in main assets directory
+        if icon_name in ["avatar", "icon", "ghost"] and not theme_suffix:
+            # Add paths for icons in the main assets directory
+            possible_paths.extend([
+                # Development mode - relative to this file
+                Path(__file__).parent.parent.parent.parent / "assets" / full_icon_name,
+                # Alternative development path
+                Path(__file__).parent.parent.parent / "assets" / full_icon_name,
+                # Installed package mode
+                Path(sys.prefix) / "share" / "ghostman" / full_icon_name,
+                # Bundled executable mode
+                Path(getattr(sys, '_MEIPASS', Path.cwd())) / "ghostman" / "assets" / full_icon_name,
+                # Relative to current working directory
+                Path.cwd() / "ghostman" / "assets" / full_icon_name,
+            ])
+        
         result = self._find_existing_path(possible_paths, f"icon '{full_icon_name}'")
         self._cache[cache_key] = result
         return result

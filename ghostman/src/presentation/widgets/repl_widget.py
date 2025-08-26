@@ -34,6 +34,14 @@ from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QTextCharFormat, QColor, 
 # Import startup service for preamble
 from ...application.startup_service import startup_service
 
+# Tab system imports - conditional availability
+try:
+    from .tab_conversation_manager import TabConversationManager
+    TAB_SYSTEM_AVAILABLE = True
+except ImportError:
+    TAB_SYSTEM_AVAILABLE = False
+    logger.warning("Tab system not available - falling back to single conversation mode")
+
 class ReplLinkHandler:
     """Robust link detection and handling system for REPL widgets."""
     
@@ -351,6 +359,7 @@ class MarkdownRenderer:
                     'strikethrough', # ~~strikethrough~~ support
                     'mark',         # ==highlight== support
                     'insert',       # ++insert++ support
+                    'task_lists',   # [x] and [ ] checkbox support
                 ],
                 # mistune v3 has built-in support for:
                 # - Fenced code blocks (```code```)
@@ -1486,6 +1495,9 @@ class REPLWidget(QWidget):
             if hasattr(self, 'title_help_btn'):
                 self._load_help_icon(self.title_help_btn)
             
+            if hasattr(self, 'help_command_btn'):
+                self._load_help_command_icon(self.help_command_btn)
+            
             if hasattr(self, 'title_settings_btn'):
                 self._load_gear_icon(self.title_settings_btn)
             
@@ -2249,9 +2261,9 @@ class REPLWidget(QWidget):
         self._style_title_button(self.title_help_btn)
         title_layout.addWidget(self.title_help_btn)
         
-        # Help command button (with ? mark)
+        # Help command button (with help icon)
         self.help_command_btn = QToolButton()
-        self.help_command_btn.setText("?")
+        self._load_help_command_icon(self.help_command_btn)
         self.help_command_btn.setToolTip("Send 'help' command to chat")
         self.help_command_btn.clicked.connect(self._on_help_command_clicked)
         self._style_title_button(self.help_command_btn)
@@ -3172,6 +3184,36 @@ class REPLWidget(QWidget):
             self.stop_button, colors, "push", "small", "danger"
         )
     
+    def _style_menu(self, menu):
+        """Apply theme-based styling to a QMenu."""
+        if not self.theme_manager or not THEME_SYSTEM_AVAILABLE:
+            return
+        
+        colors = self.theme_manager.current_theme
+        if colors:
+            from ...ui.themes.style_templates import StyleTemplates
+            menu.setStyleSheet(StyleTemplates.get_menu_style(colors))
+    
+    def _refresh_menu_styling(self):
+        """Refresh styling for all menus in the widget."""
+        # Re-style title bar new conversation menu if it exists
+        if hasattr(self, 'title_new_conv_menu') and self.title_new_conv_menu:
+            self._style_menu(self.title_new_conv_menu)
+        
+        # Re-style toolbar new conversation menu if it exists
+        if hasattr(self, 'toolbar_new_conv_menu') and self.toolbar_new_conv_menu:
+            self._style_menu(self.toolbar_new_conv_menu)
+        
+        # Re-style any other menus that might exist
+        for attr_name in dir(self):
+            if 'menu' in attr_name.lower():
+                attr = getattr(self, attr_name, None)
+                if attr and hasattr(attr, 'setStyleSheet'):
+                    try:
+                        self._style_menu(attr)
+                    except:
+                        pass  # Skip if not a QMenu
+    
     def _update_search_button_state(self):
         """Update search button visual state using unified styling system."""
         try:
@@ -3500,6 +3542,30 @@ class REPLWidget(QWidget):
                 
         except Exception as e:
             logger.error(f"Failed to load help icon: {e}")
+            button.setText("❓")  # Fallback
+    
+    def _load_help_command_icon(self, button):
+        """Load theme-appropriate regular help icon for help command button."""
+        try:
+            # Determine if theme is dark or light  
+            icon_variant = self._get_icon_variant()
+            
+            # Use regular help icon (not help-docs)
+            help_icon_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", 
+                "assets", "icons", f"help_{icon_variant}.png"
+            )
+            
+            if os.path.exists(help_icon_path):
+                help_icon = QIcon(help_icon_path)
+                button.setIcon(help_icon)
+                logger.debug(f"Loaded help command icon: help_{icon_variant}.png")
+            else:
+                logger.warning(f"Help command icon not found: {help_icon_path}")
+                button.setText("❓")  # Fallback
+                
+        except Exception as e:
+            logger.error(f"Failed to load help command icon: {e}")
             button.setText("❓")  # Fallback
     
     def _load_move_icon(self, button):

@@ -413,7 +413,7 @@ class AvatarWidget(SimpleAvatarArrowMixin, AvatarResizableMixin, QWidget):
         context_menu.addAction(settings_action)
         
         # Help documentation action
-        help_action = QAction("Help Documentation", self)
+        help_action = QAction(self._get_theme_icon("help-docs"), "Help Documentation", self)
         help_action.triggered.connect(self._on_help_clicked)
         context_menu.addAction(help_action)
         

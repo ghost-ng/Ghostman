@@ -28,13 +28,15 @@ class ConversationTab:
         self.set_title(title)
         
     def set_title(self, title: str):
-        """Update tab title and button text with 40 character limit."""
+        """Update tab title and button text with 25 character limit."""
         # Store full title
         self.full_title = title
         
-        # Apply 40 character limit or truncate to 37 + "..."
-        if len(title) > 40:
-            self.title = title[:37] + "..."
+        # Apply 25 character limit: if over 20, truncate to 17 + "..."
+        if len(title) > 25:
+            self.title = title[:22] + "..."
+        elif len(title) > 20:
+            self.title = title[:17] + "..."
         else:
             self.title = title
             
@@ -230,8 +232,8 @@ class TabConversationManager(QObject):
                     button.setStyleSheet(enhanced_style)
                     
                     # Set consistent size constraints
-                    button.setMinimumSize(120, 22)
-                    button.setMaximumSize(240, 22)  # Prevent excessive growth
+                    button.setMinimumSize(100, 36)
+                    button.setMaximumSize(200, 36)  # Prevent excessive growth
                     
                     logger.debug(f"Applied theme-aware tab styling: active={active}, primary={colors.primary}")
                     return
@@ -344,22 +346,36 @@ class TabConversationManager(QObject):
                 QPushButton {
                     background-color: rgba(120, 120, 120, 0.9) !important;
                     color: white !important;
-                    border: 1px solid rgba(150, 150, 150, 1.0) !important;
+                    border: none !important;
                     border-radius: 4px;
-                    padding: 4px 12px;
-                    width: 140px;
-                    min-width: 120px;
-                    max-width: 240px;
-                    height: 22px;
+                    padding: 8px 10px;
+                    min-width: 100px;
+                    max-width: 200px;
+                    height: 36px;
+                    cursor: pointer;
                     font-weight: bold;
                     font-size: 11px;
+                    outline: none;
+                }
+                QPushButton * {
+                    pointer-events: none;
                 }
                 QPushButton:hover {
                     background-color: rgba(140, 140, 140, 1.0) !important;
-                    border-color: rgba(170, 170, 170, 1.0) !important;
+                    border: none !important;
+                    height: 36px !important;
+                    cursor: pointer !important;
                 }
                 QPushButton:pressed {
-                    transform: scale(0.98);
+                    background-color: rgba(100, 100, 100, 1.0) !important;
+                    border: none !important;
+                    height: 36px !important;
+                    cursor: pointer !important;
+                    padding: 8px 10px !important;
+                }
+                QPushButton:focus {
+                    outline: none !important;
+                    border: none !important;
                 }
             """)
         else:
@@ -368,28 +384,42 @@ class TabConversationManager(QObject):
                 QPushButton {
                     background-color: rgba(70, 70, 70, 0.9) !important;
                     color: rgba(240, 240, 240, 0.9) !important;
-                    border: 1px solid rgba(120, 120, 120, 0.3) !important;
+                    border: none !important;
                     border-radius: 4px;
-                    padding: 4px 12px;
-                    width: 140px;
-                    min-width: 120px;
-                    max-width: 240px;
-                    height: 22px;
+                    padding: 8px 10px;
+                    min-width: 100px;
+                    max-width: 200px;
+                    height: 36px;
+                    cursor: pointer;
                     font-size: 11px;
+                    outline: none;
+                }
+                QPushButton * {
+                    pointer-events: none;
                 }
                 QPushButton:hover {
                     background-color: rgba(90, 90, 90, 0.9) !important;
                     color: white !important;
-                    border-color: rgba(140, 140, 140, 0.5) !important;
+                    border: none !important;
+                    height: 36px !important;
+                    cursor: pointer !important;
                 }
                 QPushButton:pressed {
-                    transform: scale(0.98);
+                    background-color: rgba(50, 50, 50, 1.0) !important;
+                    border: none !important;
+                    height: 36px !important;
+                    cursor: pointer !important;
+                    padding: 8px 10px !important;
+                }
+                QPushButton:focus {
+                    outline: none !important;
+                    border: none !important;
                 }
             """)
         
         # Set consistent size constraints for fallback as well
-        button.setMinimumSize(120, 22)
-        button.setMaximumSize(240, 22)
+        button.setMinimumSize(100, 36)
+        button.setMaximumSize(200, 36)
     
     def cleanup(self):
         """Clean up resources."""

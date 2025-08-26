@@ -44,6 +44,21 @@ def get_preset_themes() -> Dict[str, ColorSystem]:
         "fireswamp": get_fireswamp_theme(),
         "cyber": get_cyber_theme(),
         "steampunk": get_steampunk_theme(),
+        # New themed collections
+        "winter": get_winter_theme(),
+        "birthday_cake": get_birthday_cake_theme(),
+        "dawn": get_dawn_theme(),
+        "dusk": get_dusk_theme(),
+        "jade": get_jade_theme(),
+        "gryffindor": get_gryffindor_theme(),
+        "hufflepuff": get_hufflepuff_theme(),
+        "slytherin": get_slytherin_theme(),
+        "ravenclaw": get_ravenclaw_theme(),
+        # Star Wars themed collection
+        "sith": get_sith_theme(),
+        "jedi": get_jedi_theme(),
+        "republic": get_republic_theme(),
+        "empire": get_empire_theme(),
     }
 
 
@@ -1111,4 +1126,537 @@ def get_steampunk_theme() -> ColorSystem:
         border_secondary="#4a3b2a",  # Dark bronze
         border_focus="#d2691e",  # Copper focus
         separator="#3d2f22",  # Dark brown separator
+    )
+
+
+def get_winter_theme() -> ColorSystem:
+    """Cool, crisp winter theme with light backgrounds and icy accents."""
+    return ColorSystem(
+        # Primary colors - Cool winter blues and silvers
+        primary="#4a90e2",  # Crisp winter sky blue
+        primary_hover="#3a7bc8",  # Deeper winter blue
+        secondary="#7bb3f0",  # Light frost blue
+        secondary_hover="#6ba6e8",  # Medium frost blue
+        
+        # Backgrounds - Clean winter whites with subtle cool tints
+        background_primary="#fafbfc",  # Pure winter white
+        background_secondary="#f4f6f8",  # Light frost gray
+        background_tertiary="#eef2f7",  # Cool winter gray
+        background_overlay="#00000040",  # Subtle overlay
+        
+        # Text - Dark colors for excellent contrast on light backgrounds
+        text_primary="#1c2e45",  # Deep winter blue-black
+        text_secondary="#2d415c",  # Dark slate blue
+        text_tertiary="#4a5f7a",  # Medium slate blue
+        text_disabled="#8fa4b8",  # Light steel blue
+        
+        # Interactive - Cool interactive states
+        interactive_normal="#e6f0fa",  # Very light winter blue
+        interactive_hover="#d1e7f5",  # Light winter blue
+        interactive_active="#bcd9ee",  # Medium winter blue
+        interactive_disabled="#f4f6f8",  # Disabled gray
+        
+        # Status - Winter-appropriate status colors
+        status_success="#2d7d32",  # Evergreen
+        status_warning="#ed6c02",  # Warm amber contrast
+        status_error="#c62828",  # Winter red
+        status_info="#4a90e2",  # Winter blue
+        
+        # Borders - Subtle winter tones
+        border_primary="#b8cce0",  # Light winter blue
+        border_secondary="#d4e2f0",  # Very light winter blue
+        border_focus="#4a90e2",  # Focus winter blue
+        separator="#eef2f7",  # Light separator
+    )
+
+
+def get_birthday_cake_theme() -> ColorSystem:
+    """Festive birthday cake theme with pastel celebration colors."""
+    return ColorSystem(
+        # Primary colors - Sweet pastel celebration colors
+        primary="#e91e63",  # Birthday pink
+        primary_hover="#c2185b",  # Deeper pink
+        secondary="#ff9800",  # Festive orange
+        secondary_hover="#f57c00",  # Deeper orange
+        
+        # Backgrounds - Light celebratory pastels
+        background_primary="#fffbf7",  # Warm vanilla cake white
+        background_secondary="#fef7f0",  # Light peach cream
+        background_tertiary="#fdf2e9",  # Soft apricot cream
+        background_overlay="#00000030",  # Light overlay
+        
+        # Text - Rich colors for readability
+        text_primary="#2d1b3d",  # Deep purple-brown
+        text_secondary="#4a2c5a",  # Medium purple
+        text_tertiary="#6b4c7a",  # Light purple
+        text_disabled="#a08ca1",  # Muted lavender
+        
+        # Interactive - Festive interactive states
+        interactive_normal="#fce4ec",  # Very light pink
+        interactive_hover="#f8bbd9",  # Light pink
+        interactive_active="#f48fb1",  # Medium pink
+        interactive_disabled="#fef7f0",  # Disabled cream
+        
+        # Status - Party-appropriate status colors
+        status_success="#388e3c",  # Party green
+        status_warning="#ff8f00",  # Celebration amber
+        status_error="#d32f2f",  # Party red
+        status_info="#1976d2",  # Party blue
+        
+        # Borders - Soft celebratory tones
+        border_primary="#f0a8c4",  # Light pink border
+        border_secondary="#f5d5e0",  # Very light pink border
+        border_focus="#e91e63",  # Pink focus
+        separator="#fdf2e9",  # Light separator
+    )
+
+
+def get_dawn_theme() -> ColorSystem:
+    """Warm sunrise colors transitioning from night to day."""
+    return ColorSystem(
+        # Primary colors - Sunrise palette
+        primary="#ff6b35",  # Bright sunrise orange
+        primary_hover="#e55a2b",  # Deeper sunrise orange
+        secondary="#ffa726",  # Golden sunrise
+        secondary_hover="#ff9800",  # Deeper golden sunrise
+        
+        # Backgrounds - Dawn sky progression
+        background_primary="#1a1625",  # Pre-dawn darkness
+        background_secondary="#2d2438",  # Early dawn purple
+        background_tertiary="#4a3d52",  # Lightening dawn
+        background_overlay="#1a162580",  # Dawn overlay
+        
+        # Text - Dawn light colors
+        text_primary="#fff8e1",  # Bright dawn light
+        text_secondary="#ffe0b2",  # Golden dawn light
+        text_tertiary="#ffcc80",  # Warm dawn glow
+        text_disabled="#6d5a73",  # Muted dawn
+        
+        # Interactive - Dawn progression states
+        interactive_normal="#5d4a66",  # Dark dawn purple
+        interactive_hover="#7a6280",  # Medium dawn purple
+        interactive_active="#99799a",  # Light dawn purple
+        interactive_disabled="#2d2438",  # Very dark dawn
+        
+        # Status - Dawn-inspired status colors
+        status_success="#66bb6a",  # Dawn green (new growth)
+        status_warning="#ffa726",  # Dawn golden (matches secondary)
+        status_error="#ef5350",  # Dawn red
+        status_info="#42a5f5",  # Dawn sky blue
+        
+        # Borders - Dawn sky tones
+        border_primary="#7a6280",  # Medium dawn purple
+        border_secondary="#5d4a66",  # Dark dawn purple
+        border_focus="#ff6b35",  # Sunrise orange focus
+        separator="#4a3d52",  # Dawn separator
+    )
+
+
+def get_dusk_theme() -> ColorSystem:
+    """Evening twilight colors with deep purples and warm oranges."""
+    return ColorSystem(
+        # Primary colors - Twilight palette
+        primary="#9c27b0",  # Deep twilight purple
+        primary_hover="#7b1fa2",  # Darker twilight purple
+        secondary="#ff7043",  # Warm twilight orange
+        secondary_hover="#f4511e",  # Deeper twilight orange
+        
+        # Backgrounds - Evening sky progression
+        background_primary="#0d0a1a",  # Deep twilight
+        background_secondary="#1a1333",  # Medium twilight
+        background_tertiary="#2d204d",  # Light twilight
+        background_overlay="#0d0a1a80",  # Twilight overlay
+        
+        # Text - Evening light
+        text_primary="#f3e5f5",  # Soft twilight light
+        text_secondary="#e1bee7",  # Medium twilight light
+        text_tertiary="#ce93d8",  # Warm twilight glow
+        text_disabled="#4a3366",  # Muted twilight
+        
+        # Interactive - Twilight progression
+        interactive_normal="#4a148c",  # Deep twilight purple
+        interactive_hover="#6a1b9a",  # Medium twilight purple
+        interactive_active="#8e24aa",  # Light twilight purple
+        interactive_disabled="#1a1333",  # Very dark twilight
+        
+        # Status - Evening-inspired colors
+        status_success="#4caf50",  # Twilight green
+        status_warning="#ff9800",  # Twilight amber
+        status_error="#f44336",  # Twilight red
+        status_info="#3f51b5",  # Twilight indigo
+        
+        # Borders - Twilight tones
+        border_primary="#6a1b9a",  # Medium twilight purple
+        border_secondary="#4a148c",  # Dark twilight purple
+        border_focus="#9c27b0",  # Purple focus
+        separator="#2d204d",  # Twilight separator
+    )
+
+
+def get_jade_theme() -> ColorSystem:
+    """Green gem-inspired theme with various jade tones and natural elegance."""
+    return ColorSystem(
+        # Primary colors - Jade gemstone palette
+        primary="#00695c",  # Deep jade green
+        primary_hover="#004d40",  # Darker jade
+        secondary="#26a69a",  # Light jade green
+        secondary_hover="#00897b",  # Medium jade green
+        
+        # Backgrounds - Natural jade depths
+        background_primary="#0a1514",  # Deep jade shadow
+        background_secondary="#152726",  # Medium jade shadow
+        background_tertiary="#1f3f3a",  # Light jade shadow
+        background_overlay="#0a151480",  # Jade overlay
+        
+        # Text - Jade light reflections
+        text_primary="#e0f2f1",  # Bright jade light
+        text_secondary="#b2dfdb",  # Medium jade light
+        text_tertiary="#80cbc4",  # Soft jade glow
+        text_disabled="#4a6862",  # Muted jade
+        
+        # Interactive - Jade polish states
+        interactive_normal="#004d40",  # Polished jade
+        interactive_hover="#00695c",  # Slightly brighter jade
+        interactive_active="#00897b",  # Bright jade
+        interactive_disabled="#152726",  # Dull jade
+        
+        # Status - Natural gemstone colors
+        status_success="#4caf50",  # Natural green (harmony)
+        status_warning="#ff8f00",  # Amber (complementary warm)
+        status_error="#e53935",  # Ruby red (contrasting gem)
+        status_info="#00acc1",  # Aquamarine blue (complementary gem)
+        
+        # Borders - Jade edge tones
+        border_primary="#4db6ac",  # Light jade border
+        border_secondary="#26a69a",  # Medium jade border
+        border_focus="#00695c",  # Deep jade focus
+        separator="#1f3f3a",  # Jade separator
+    )
+
+
+def get_gryffindor_theme() -> ColorSystem:
+    """Harry Potter Gryffindor house theme with authentic deep reds and golds."""
+    return ColorSystem(
+        # Primary colors - Gryffindor house colors
+        primary="#d32f2f",  # Gryffindor scarlet red
+        primary_hover="#b71c1c",  # Darker Gryffindor red
+        secondary="#ffa000",  # Gryffindor gold
+        secondary_hover="#ff8f00",  # Deeper Gryffindor gold
+        
+        # Backgrounds - Gryffindor common room depths
+        background_primary="#1a0808",  # Deep crimson shadow
+        background_secondary="#2e1010",  # Medium crimson
+        background_tertiary="#4a1a1a",  # Light crimson
+        background_overlay="#1a080880",  # Crimson overlay
+        
+        # Text - Gryffindor light tones
+        text_primary="#ffebee",  # Warm light (firelight)
+        text_secondary="#ffcdd2",  # Soft red light
+        text_tertiary="#ef9a9a",  # Gentle red glow
+        text_disabled="#6b2c2c",  # Muted red
+        
+        # Interactive - Gryffindor courage states
+        interactive_normal="#5d4037",  # Dark red-brown
+        interactive_hover="#8d6e63",  # Medium red-brown
+        interactive_active="#a1887f",  # Light red-brown
+        interactive_disabled="#2e1010",  # Very dark red
+        
+        # Status - House-appropriate colors
+        status_success="#388e3c",  # House rivalry green (Slytherin)
+        status_warning="#ffa000",  # Gryffindor gold (matches secondary)
+        status_error="#d32f2f",  # Gryffindor red (matches primary)
+        status_info="#1976d2",  # Ravenclaw blue (house alliance)
+        
+        # Borders - Gryffindor trim
+        border_primary="#8d4444",  # Medium red border
+        border_secondary="#6b2c2c",  # Dark red border
+        border_focus="#d32f2f",  # Gryffindor red focus
+        separator="#4a1a1a",  # Red separator
+    )
+
+
+def get_hufflepuff_theme() -> ColorSystem:
+    """Harry Potter Hufflepuff house theme with authentic yellows and blacks."""
+    return ColorSystem(
+        # Primary colors - Hufflepuff house colors
+        primary="#ffb300",  # Hufflepuff yellow/gold
+        primary_hover="#ff8f00",  # Deeper Hufflepuff yellow
+        secondary="#424242",  # Hufflepuff black/dark gray
+        secondary_hover="#212121",  # Deeper black
+        
+        # Backgrounds - Hufflepuff basement warmth
+        background_primary="#1a1a0a",  # Deep earth shadow
+        background_secondary="#2e2e18",  # Medium earth tone
+        background_tertiary="#4a4a2a",  # Light earth tone
+        background_overlay="#1a1a0a80",  # Earth overlay
+        
+        # Text - Hufflepuff warmth and light
+        text_primary="#fffde7",  # Warm candlelight
+        text_secondary="#fff9c4",  # Soft yellow light
+        text_tertiary="#fff176",  # Gentle yellow glow
+        text_disabled="#6b6b3a",  # Muted earth tone
+        
+        # Interactive - Hufflepuff loyalty states
+        interactive_normal="#5d4e37",  # Dark earth brown
+        interactive_hover="#8b7355",  # Medium earth brown
+        interactive_active="#a1947a",  # Light earth brown
+        interactive_disabled="#2e2e18",  # Very dark earth
+        
+        # Status - House-appropriate colors
+        status_success="#689f38",  # Natural green (earth connection)
+        status_warning="#ffb300",  # Hufflepuff yellow (matches primary)
+        status_error="#d84315",  # Earth red
+        status_info="#455a64",  # Badger gray-blue
+        
+        # Borders - Hufflepuff trim
+        border_primary="#9e9d24",  # Darker yellow-green
+        border_secondary="#6b6b3a",  # Muted earth border
+        border_focus="#ffb300",  # Hufflepuff yellow focus
+        separator="#4a4a2a",  # Earth separator
+    )
+
+
+def get_slytherin_theme() -> ColorSystem:
+    """Harry Potter Slytherin house theme with authentic greens and silvers."""
+    return ColorSystem(
+        # Primary colors - Slytherin house colors
+        primary="#1b5e20",  # Slytherin dark green
+        primary_hover="#0d47a1",  # Deeper Slytherin green
+        secondary="#9e9e9e",  # Slytherin silver
+        secondary_hover="#757575",  # Deeper silver
+        
+        # Backgrounds - Slytherin dungeon depths
+        background_primary="#0a1a0a",  # Deep dungeon shadow
+        background_secondary="#1a2e1a",  # Medium dungeon green
+        background_tertiary="#2a4a2a",  # Light dungeon green
+        background_overlay="#0a1a0a80",  # Dungeon overlay
+        
+        # Text - Slytherin cold light
+        text_primary="#e8f5e8",  # Cold silver-green light
+        text_secondary="#c8e6c9",  # Medium green light
+        text_tertiary="#a5d6a7",  # Soft green glow
+        text_disabled="#4a5a4a",  # Muted green-gray
+        
+        # Interactive - Slytherin ambition states
+        interactive_normal="#2e7d32",  # Medium green
+        interactive_hover="#388e3c",  # Brighter green
+        interactive_active="#4caf50",  # Bright green
+        interactive_disabled="#1a2e1a",  # Very dark green
+        
+        # Status - House-appropriate colors
+        status_success="#1b5e20",  # Slytherin green (matches primary)
+        status_warning="#ff8f00",  # Amber (contrasts with green)
+        status_error="#b71c1c",  # Dark red (Gryffindor rivalry)
+        status_info="#0d47a1",  # Deep blue
+        
+        # Borders - Slytherin metallic trim
+        border_primary="#616161",  # Medium silver border
+        border_secondary="#4a5a4a",  # Dark green-gray border
+        border_focus="#1b5e20",  # Slytherin green focus
+        separator="#2a4a2a",  # Green separator
+    )
+
+
+def get_ravenclaw_theme() -> ColorSystem:
+    """Harry Potter Ravenclaw house theme with authentic blues and bronzes."""
+    return ColorSystem(
+        # Primary colors - Ravenclaw house colors
+        primary="#1565c0",  # Ravenclaw deep blue
+        primary_hover="#0d47a1",  # Deeper Ravenclaw blue
+        secondary="#8d6e63",  # Ravenclaw bronze
+        secondary_hover="#6d4c41",  # Deeper bronze
+        
+        # Backgrounds - Ravenclaw tower heights
+        background_primary="#0a1220",  # Deep night sky
+        background_secondary="#1a2332",  # Medium night blue
+        background_tertiary="#2a3a4a",  # Light night blue
+        background_overlay="#0a122080",  # Night overlay
+        
+        # Text - Ravenclaw starlight
+        text_primary="#e3f2fd",  # Bright starlight
+        text_secondary="#bbdefb",  # Medium starlight
+        text_tertiary="#90caf9",  # Soft star glow
+        text_disabled="#4a5a6a",  # Muted night blue
+        
+        # Interactive - Ravenclaw wisdom states
+        interactive_normal="#263238",  # Dark blue-gray
+        interactive_hover="#34495e",  # Medium blue-gray
+        interactive_active="#455a64",  # Light blue-gray
+        interactive_disabled="#1a2332",  # Very dark blue
+        
+        # Status - House-appropriate colors
+        status_success="#388e3c",  # Wisdom green
+        status_warning="#8d6e63",  # Ravenclaw bronze (matches secondary)
+        status_error="#c62828",  # Scholar red
+        status_info="#1565c0",  # Ravenclaw blue (matches primary)
+        
+        # Borders - Ravenclaw metallic accents
+        border_primary="#795548",  # Bronze border
+        border_secondary="#4a5a6a",  # Blue-gray border
+        border_focus="#1565c0",  # Ravenclaw blue focus
+        separator="#2a3a4a",  # Blue separator
+    )
+
+
+def get_sith_theme() -> ColorSystem:
+    """Star Wars Sith Lords theme with deep reds, blacks, and dark side power."""
+    return ColorSystem(
+        # Primary colors - Dark side power
+        primary="#dc2626",  # Sith lightsaber red
+        primary_hover="#b91c1c",  # Deeper Sith red
+        secondary="#991b1b",  # Dark crimson
+        secondary_hover="#7f1d1d",  # Very dark red
+        
+        # Backgrounds - Deep dark side shadows
+        background_primary="#0a0a0a",  # Pure darkness
+        background_secondary="#1a0f0f",  # Dark crimson shadow
+        background_tertiary="#2d1a1a",  # Medium crimson shadow
+        background_overlay="#00000080",  # Shadow overlay
+        
+        # Text - Pale Sith lord complexion and red glows
+        text_primary="#f5f5f4",  # Pale silver-white
+        text_secondary="#e7e5e4",  # Light gray
+        text_tertiary="#d6d3d1",  # Medium gray
+        text_disabled="#525252",  # Muted dark gray
+        
+        # Interactive - Dark side power states
+        interactive_normal="#451a03",  # Very dark red-brown
+        interactive_hover="#7c2d12",  # Dark red-brown
+        interactive_active="#dc2626",  # Sith red active
+        interactive_disabled="#1a0f0f",  # Very dark
+        
+        # Status - Dark side appropriate colors
+        status_success="#15803d",  # Dark green (rare mercy)
+        status_warning="#ca8a04",  # Dark amber (caution)
+        status_error="#dc2626",  # Sith red (matches primary)
+        status_info="#1e40af",  # Dark blue (Imperial alliance)
+        
+        # Borders - Dark side metallic accents
+        border_primary="#7c2d12",  # Dark red-brown
+        border_secondary="#451a03",  # Very dark red-brown
+        border_focus="#dc2626",  # Sith red focus
+        separator="#2d1a1a",  # Dark separator
+    )
+
+
+def get_jedi_theme() -> ColorSystem:
+    """Star Wars Jedi Order theme with blues, whites, and light side serenity."""
+    return ColorSystem(
+        # Primary colors - Light side wisdom
+        primary="#2563eb",  # Jedi lightsaber blue
+        primary_hover="#1d4ed8",  # Deeper Jedi blue
+        secondary="#1e40af",  # Noble blue
+        secondary_hover="#1e3a8a",  # Deep noble blue
+        
+        # Backgrounds - Clean light side purity
+        background_primary="#fefefe",  # Pure light
+        background_secondary="#f8fafc",  # Light blue-white
+        background_tertiary="#f1f5f9",  # Soft blue-gray
+        background_overlay="#00000030",  # Light overlay
+        
+        # Text - Dark colors for excellent readability
+        text_primary="#1e293b",  # Dark blue-gray
+        text_secondary="#334155",  # Medium blue-gray
+        text_tertiary="#475569",  # Light blue-gray
+        text_disabled="#94a3b8",  # Muted blue-gray
+        
+        # Interactive - Light side harmony
+        interactive_normal="#e0f2fe",  # Very light blue
+        interactive_hover="#bae6fd",  # Light blue
+        interactive_active="#7dd3fc",  # Medium blue
+        interactive_disabled="#f8fafc",  # Disabled light
+        
+        # Status - Light side balance
+        status_success="#16a34a",  # Jedi green (life/growth)
+        status_warning="#d97706",  # Amber (mindful caution)
+        status_error="#dc2626",  # Red (controlled passion)
+        status_info="#2563eb",  # Jedi blue (matches primary)
+        
+        # Borders - Clean light side lines
+        border_primary="#94a3b8",  # Medium blue-gray
+        border_secondary="#cbd5e1",  # Light blue-gray
+        border_focus="#2563eb",  # Jedi blue focus
+        separator="#f1f5f9",  # Light separator
+    )
+
+
+def get_republic_theme() -> ColorSystem:
+    """Star Wars Galactic Republic theme with golds, blues, and diplomatic colors."""
+    return ColorSystem(
+        # Primary colors - Republic gold and diplomatic blue
+        primary="#b45309",  # Republic gold
+        primary_hover="#92400e",  # Deeper gold
+        secondary="#1e40af",  # Republic blue
+        secondary_hover="#1e3a8a",  # Deeper blue
+        
+        # Backgrounds - Clean diplomatic chambers
+        background_primary="#fffef7",  # Warm ivory
+        background_secondary="#fef7ed",  # Light golden cream
+        background_tertiary="#fed7aa",  # Soft gold
+        background_overlay="#00000020",  # Light overlay
+        
+        # Text - Professional diplomatic text
+        text_primary="#1c2833",  # Very dark blue-gray
+        text_secondary="#2d3748",  # Dark gray
+        text_tertiary="#4a5568",  # Medium gray
+        text_disabled="#a0aec0",  # Light gray
+        
+        # Interactive - Diplomatic courtesy
+        interactive_normal="#fef3c7",  # Very light gold
+        interactive_hover="#fde68a",  # Light gold
+        interactive_active="#f59e0b",  # Medium gold
+        interactive_disabled="#fef7ed",  # Disabled cream
+        
+        # Status - Republic governance
+        status_success="#059669",  # Republic green (prosperity)
+        status_warning="#b45309",  # Republic gold (matches primary)
+        status_error="#dc2626",  # Diplomatic red (conflict)
+        status_info="#1e40af",  # Republic blue (matches secondary)
+        
+        # Borders - Refined diplomatic trim
+        border_primary="#d69e2e",  # Medium gold
+        border_secondary="#f6e05e",  # Light gold
+        border_focus="#b45309",  # Republic gold focus
+        separator="#fed7aa",  # Gold separator
+    )
+
+
+def get_empire_theme() -> ColorSystem:
+    """Star Wars Galactic Empire theme with grays, blacks, and imperial authority."""
+    return ColorSystem(
+        # Primary colors - Imperial authority
+        primary="#6b7280",  # Imperial gray
+        primary_hover="#4b5563",  # Darker gray
+        secondary="#374151",  # Dark Imperial gray
+        secondary_hover="#1f2937",  # Very dark gray
+        
+        # Backgrounds - Imperial command bridge
+        background_primary="#0f172a",  # Deep space black
+        background_secondary="#1e293b",  # Dark Imperial gray
+        background_tertiary="#334155",  # Medium Imperial gray
+        background_overlay="#00000080",  # Imperial overlay
+        
+        # Text - Imperial data display
+        text_primary="#f8fafc",  # Bright Imperial white
+        text_secondary="#e2e8f0",  # Light Imperial gray
+        text_tertiary="#cbd5e1",  # Medium Imperial gray
+        text_disabled="#475569",  # Muted Imperial gray
+        
+        # Interactive - Imperial efficiency
+        interactive_normal="#374151",  # Dark gray
+        interactive_hover="#4b5563",  # Medium gray
+        interactive_active="#6b7280",  # Light gray
+        interactive_disabled="#1e293b",  # Very dark gray
+        
+        # Status - Imperial control
+        status_success="#10b981",  # Imperial green (operational)
+        status_warning="#f59e0b",  # Imperial amber (caution)
+        status_error="#ef4444",  # Imperial red (alert)
+        status_info="#3b82f6",  # Imperial blue (data)
+        
+        # Borders - Imperial command structure
+        border_primary="#6b7280",  # Imperial gray
+        border_secondary="#4b5563",  # Dark Imperial gray
+        border_focus="#6b7280",  # Imperial gray focus
+        separator="#334155",  # Imperial separator
     )

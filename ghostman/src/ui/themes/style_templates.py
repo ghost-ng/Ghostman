@@ -109,7 +109,7 @@ class ButtonStyleManager:
     PADDING = "8px"           # Universal padding for all buttons
     BORDER_RADIUS = "4px"     # Universal border radius for all buttons
     FONT_SIZE = "12px"        # Universal font size for button text
-    DEFAULT_ICON_SIZE = 10    # Default icon size in pixels (fallback)
+    DEFAULT_ICON_SIZE = 16    # Default icon size in pixels (fallback)
     
     @staticmethod
     def get_icon_size():
@@ -1409,32 +1409,39 @@ class StyleTemplates:
             QPushButton {{
                 background-color: {colors.primary} !important;
                 color: {text_color} !important;
-                border: 1px solid {colors.primary} !important;
+                border: none !important;
                 border-radius: 4px;
-                padding: 6px 12px;
-                width: 140px;
-                min-width: 120px;
-                max-width: 280px;
-                height: 28px;
+                padding: 8px 10px;
+                min-width: 100px;
+                max-width: 200px;
+                height: 36px;
                 font-weight: bold;
                 font-size: 11px;
                 text-align: center;
-                margin: 0px 1px;
+                margin: 0px 2px;
+                cursor: pointer;
+                outline: none;
+            }}
+            QPushButton * {{
+                pointer-events: none;
             }}
             QPushButton:hover {{
                 background-color: {colors.primary_hover} !important;
-                border-color: {colors.primary_hover} !important;
                 color: {text_color} !important;
+                border: none !important;
+                height: 36px !important;
+                cursor: pointer !important;
             }}
             QPushButton:pressed {{
                 background-color: {pressed_color} !important;
                 border: none !important;
                 outline: none !important;
-                transform: scale(0.98);
+                padding: 8px 10px !important;
+                height: 36px !important;
             }}
             QPushButton:focus {{
-                outline: 2px solid {colors.border_focus};
-                outline-offset: 1px;
+                outline: none !important;
+                border: none !important;
             }}
             """
         else:
@@ -1447,33 +1454,40 @@ class StyleTemplates:
             QPushButton {{
                 background-color: {colors.background_tertiary} !important;
                 color: {inactive_text_color} !important;
-                border: 1px solid {colors.border_secondary} !important;
+                border: none !important;
                 border-radius: 4px;
-                padding: 6px 12px;
-                width: 140px;
-                min-width: 120px;
-                max-width: 280px;
-                height: 28px;
+                padding: 8px 10px;
+                min-width: 100px;
+                max-width: 200px;
+                height: 36px;
                 font-size: 11px;
                 text-align: center;
-                margin: 0px 1px;
+                margin: 0px 2px;
                 font-weight: 500;
+                cursor: pointer;
+                outline: none;
+            }}
+            QPushButton * {{
+                pointer-events: none;
             }}
             QPushButton:hover {{
                 background-color: {colors.interactive_hover} !important;
                 color: {colors.text_primary} !important;
-                border-color: {colors.border_focus} !important;
+                border: none !important;
                 font-weight: bold;
+                height: 36px !important;
+                cursor: pointer !important;
             }}
             QPushButton:pressed {{
                 background-color: {colors.interactive_active} !important;
                 border: none !important;
                 outline: none !important;
-                transform: scale(0.98);
+                padding: 8px 10px !important;
+                height: 36px !important;
             }}
             QPushButton:focus {{
-                outline: 2px solid {colors.border_focus};
-                outline-offset: 1px;
+                outline: none !important;
+                border: none !important;
             }}
             """
 
