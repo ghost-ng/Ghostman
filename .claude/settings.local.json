@@ -102,7 +102,8 @@
       "Read(/C:\\Users\\miguel\\Downloads/**)",
       "Read(/C:\\Users\\miguel\\Downloads/**)",
       "Read(/C:\\Users\\miguel\\Downloads/**)",
-      "Bash(./venv/Scripts/Activate.ps1)"
+      "Bash(./venv/Scripts/Activate.ps1)",
+      "WebFetch(domain:pyapp-kit.github.io)"
     ],
     "deny": []
   }
