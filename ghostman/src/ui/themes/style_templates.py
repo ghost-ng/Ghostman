@@ -2098,3 +2098,153 @@ class StyleTemplates:
             background-color: {colors.border_primary};
         }}
         """
+    
+    @staticmethod
+    def get_code_snippet_widget_style(colors: ColorSystem) -> str:
+        """
+        Style template for CodeSnippetWidget components.
+        
+        Provides comprehensive styling for the code snippet widget including:
+        - Main widget container with border and background
+        - Header styling for title, language tag, and copy button
+        - Code display area with syntax highlighting support
+        - Scrollbar styling for code overflow
+        - Copy button feedback states
+        
+        Args:
+            colors: ColorSystem for theme colors
+            
+        Returns:
+            CSS string for complete code snippet widget styling
+            
+        Design Notes:
+        - Rounded corners for modern appearance
+        - Distinct header and code areas
+        - Theme-aware syntax highlighting background
+        - Accessible contrast ratios for all text
+        - Smooth transitions for interactive elements
+        
+        Usage:
+            widget.setStyleSheet(StyleTemplates.get_code_snippet_widget_style(colors))
+        """
+        # Build CSS using string concatenation
+        css_parts = []
+        
+        css_parts.append(f"""
+        QFrame#code-snippet-container {{
+            background-color: {colors.background_tertiary};
+            border: 1px solid {colors.border_primary};
+            border-radius: 8px;
+            margin: 8px 0;
+        }}""")
+        
+        css_parts.append(f"""
+        QWidget#code-snippet-header {{
+            background-color: {colors.background_secondary};
+            border-bottom: 1px solid {colors.border_secondary};
+            border-radius: 7px 7px 0px 0px;
+        }}""")
+        
+        css_parts.append(f"""
+        QLabel#code-snippet-title {{
+            color: {colors.text_primary};
+            font-weight: 600;
+            font-size: 13px;
+            background-color: transparent;
+            margin: 0;
+            padding: 0;
+            border: none;
+        }}""")
+        
+        css_parts.append(f"""
+        QLabel#code-snippet-language-tag {{
+            background-color: {colors.secondary};
+            color: {colors.text_primary};
+            font-size: 11px;
+            font-weight: 500;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin: 0;
+            border: none;
+        }}""")
+        
+        css_parts.append(f"""
+        QPushButton#code-snippet-copy-button {{
+            background-color: {colors.interactive_normal};
+            color: {colors.text_primary};
+            border: 1px solid {colors.border_primary};
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 11px;
+            font-weight: 500;
+            min-width: 50px;
+        }}
+        
+        QPushButton#code-snippet-copy-button:hover {{
+            background-color: {colors.interactive_hover};
+            border-color: {colors.border_focus};
+        }}
+        
+        QPushButton#code-snippet-copy-button:pressed {{
+            background-color: {colors.interactive_active};
+        }}
+        
+        QPushButton#code-snippet-copy-button:disabled {{
+            background-color: {colors.interactive_disabled};
+            color: {colors.text_disabled};
+            border-color: {colors.border_secondary};
+        }}""")
+        
+        css_parts.append(f"""
+        QTextEdit#code-snippet-code-display {{
+            background-color: {colors.background_tertiary};
+            color: {colors.text_primary};
+            border: none;
+            border-top: 1px solid {colors.border_secondary};
+            border-radius: 0 0 6px 6px;
+            padding: 12px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 10pt;
+            line-height: 1.4;
+            selection-background-color: {colors.primary};
+            selection-color: {colors.text_primary};
+        }}""")
+        
+        css_parts.append(f"""
+        QTextEdit#code-snippet-code-display QScrollBar:vertical {{
+            background-color: {colors.background_secondary};
+            width: 12px;
+            border-radius: 6px;
+            border: none;
+        }}
+        
+        QTextEdit#code-snippet-code-display QScrollBar::handle:vertical {{
+            background-color: {colors.interactive_normal};
+            border-radius: 6px;
+            min-height: 20px;
+            margin: 2px;
+        }}
+        
+        QTextEdit#code-snippet-code-display QScrollBar::handle:vertical:hover {{
+            background-color: {colors.interactive_hover};
+        }}
+        
+        QTextEdit#code-snippet-code-display QScrollBar:horizontal {{
+            background-color: {colors.background_secondary};
+            height: 12px;
+            border-radius: 6px;
+            border: none;
+        }}
+        
+        QTextEdit#code-snippet-code-display QScrollBar::handle:horizontal {{
+            background-color: {colors.interactive_normal};
+            border-radius: 6px;
+            min-width: 20px;
+            margin: 2px;
+        }}
+        
+        QTextEdit#code-snippet-code-display QScrollBar::handle:horizontal:hover {{
+            background-color: {colors.interactive_hover};
+        }}""")
+        
+        return '\n'.join(css_parts)

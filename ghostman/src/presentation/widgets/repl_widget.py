@@ -417,34 +417,158 @@ class MarkdownRenderer:
                         self.pygments_style = 'monokai'  # Default
                 
                 def block_code(self, code, info=None):
-                    """Render code blocks with Pygments syntax highlighting."""
-                    if info and info.strip():
+                    """Render code blocks with enhanced widget-style appearance and syntax highlighting."""
+                    language = info.strip() if info else ""
+                    language_display = language.upper() if language else ""
+                    
+                    # Get theme colors for styling
+                    colors = self._get_theme_colors()
+                    
+                    # Generate the header HTML
+                    header_html = self._generate_code_header(language_display, colors)
+                    
+                    # Generate syntax-highlighted code content
+                    code_content_html = self._generate_highlighted_code(code, language, colors)
+                    
+                    # Combine into widget-style structure
+                    return f"""
+                    <div style="
+                        background-color: {colors['bg_secondary']};
+                        border: 1px solid {colors['border']};
+                        border-radius: 6px;
+                        margin: 8px 0;
+                        overflow: hidden;
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+                    ">
+                        {header_html}
+                        {code_content_html}
+                    </div>
+                    """
+                
+                def _get_theme_colors(self):
+                    """Get theme-appropriate colors for the code widget."""
+                    # Try to get colors from theme manager
+                    if self.theme_manager and hasattr(self.theme_manager, 'current_theme'):
+                        theme = self.theme_manager.current_theme
+                        return {
+                            'bg_primary': getattr(theme, 'background_primary', '#1a1a1a'),
+                            'bg_secondary': getattr(theme, 'background_secondary', '#2a2a2a'),
+                            'bg_tertiary': getattr(theme, 'background_tertiary', '#3a3a3a'),
+                            'text_primary': getattr(theme, 'text_primary', '#ffffff'),
+                            'text_secondary': getattr(theme, 'text_secondary', '#cccccc'),
+                            'border': getattr(theme, 'border_primary', '#4a4a4a'),
+                            'interactive': getattr(theme, 'interactive_normal', '#4a4a4a'),
+                            'interactive_hover': getattr(theme, 'interactive_hover', '#5a5a5a'),
+                        }
+                    
+                    # Fallback dark theme colors
+                    return {
+                        'bg_primary': '#1a1a1a',
+                        'bg_secondary': '#2a2a2a', 
+                        'bg_tertiary': '#3a3a3a',
+                        'text_primary': '#ffffff',
+                        'text_secondary': '#cccccc',
+                        'border': '#4a4a4a',
+                        'interactive': '#4a4a4a',
+                        'interactive_hover': '#5a5a5a',
+                    }
+                
+                def _generate_code_header(self, language_display, colors):
+                    """Generate the header HTML for the code widget."""
+                    # Language tag (only if language is specified)
+                    language_tag = ""
+                    if language_display:
+                        language_tag = f"""
+                        <span style="
+                            background-color: {colors['bg_tertiary']};
+                            color: {colors['text_secondary']};
+                            padding: 2px 6px;
+                            border-radius: 3px;
+                            font-size: 11px;
+                            font-weight: 500;
+                        ">{language_display}</span>
+                        """
+                    
+                    return f"""
+                    <div style="
+                        background-color: {colors['bg_secondary']};
+                        padding: 8px 12px;
+                        border-bottom: 1px solid {colors['border']};
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                    ">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <span style="
+                                color: {colors['text_primary']};
+                                font-weight: 600;
+                                font-size: 13px;
+                            ">Code</span>
+                            {language_tag}
+                        </div>
+                        <span style="
+                            color: {colors['text_secondary']};
+                            font-size: 11px;
+                            padding: 4px 8px;
+                            background-color: {colors['interactive']};
+                            border-radius: 3px;
+                            cursor: pointer;
+                        " title="Click to copy">Copy</span>
+                    </div>
+                    """
+                
+                def _generate_highlighted_code(self, code, language, colors):
+                    """Generate syntax-highlighted code content."""
+                    if language:
                         try:
                             # Get lexer for the specified language
-                            lexer = get_lexer_by_name(info.strip(), stripall=True)
+                            lexer = get_lexer_by_name(language, stripall=True)
                             
-                            # Create formatter with inline styles for QTextEdit compatibility
+                            # Create formatter with theme-appropriate styling
                             formatter = html.HtmlFormatter(
                                 style=self.pygments_style,
-                                noclasses=True,      # Use inline styles instead of CSS classes
-                                nobackground=True,   # Let QTextEdit handle background
-                                nowrap=False,        # Include <pre><code> wrapper
-                                cssclass='highlight' # Add CSS class for potential styling
+                                noclasses=True,
+                                nobackground=True,
+                                nowrap=True,  # Don't include <pre><code> wrapper
                             )
                             
                             # Generate highlighted HTML
-                            return highlight(code, lexer, formatter)
+                            highlighted_code = highlight(code, lexer, formatter)
+                            
+                            return f"""
+                            <div style="
+                                background-color: {colors['bg_tertiary']};
+                                padding: 12px;
+                                overflow-x: auto;
+                                font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+                                font-size: 10pt;
+                                line-height: 1.4;
+                                color: {colors['text_primary']};
+                            ">
+                                <pre style="margin: 0; white-space: pre-wrap;">{highlighted_code}</pre>
+                            </div>
+                            """
                             
                         except ClassNotFound:
-                            # Language not supported, fall back to plain code block
-                            pass
+                            logger.debug(f"Language '{language}' not supported by Pygments")
                         except Exception as e:
-                            # Any other error, log and fall back
-                            logger.debug(f"Pygments highlighting failed for '{info}': {e}")
+                            logger.debug(f"Pygments highlighting failed for '{language}': {e}")
                     
-                    # Fallback to plain code block with HTML escaping
+                    # Fallback to plain code with HTML escaping
                     escaped_code = mistune.escape(code)
-                    return f'<pre><code>{escaped_code}</code></pre>'
+                    return f"""
+                    <div style="
+                        background-color: {colors['bg_tertiary']};
+                        padding: 12px;
+                        overflow-x: auto;
+                        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+                        font-size: 10pt;
+                        line-height: 1.4;
+                        color: {colors['text_primary']};
+                    ">
+                        <pre style="margin: 0; white-space: pre-wrap;">{escaped_code}</pre>
+                    </div>
+                    """
             
             # Return the custom renderer instance
             return PygmentsRenderer(self.theme_manager)
