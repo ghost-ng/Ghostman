@@ -350,10 +350,10 @@ class MarkdownRenderer:
         self.theme_manager = theme_manager
         
         if self.markdown_available:
-            # Configure mistune v3 renderer with AI-friendly plugins
+            # Configure mistune v3 renderer with AI-friendly plugins and Pygments syntax highlighting
             # mistune v3 provides better performance and more robust parsing
             self.md_processor = mistune.create_markdown(
-                renderer='html',
+                renderer=self._create_enhanced_renderer(),
                 plugins=[
                     'table',        # Table support (replaces 'tables')
                     'strikethrough', # ~~strikethrough~~ support
@@ -375,6 +375,88 @@ class MarkdownRenderer:
         # Performance cache for repeated renders (small cache to avoid memory issues)
         self._render_cache = {}
         self._cache_max_size = 100
+    
+    def _create_enhanced_renderer(self):
+        """Create a custom mistune renderer with Pygments syntax highlighting."""
+        try:
+            # Try to import Pygments for syntax highlighting
+            from pygments import highlight
+            from pygments.lexers import get_lexer_by_name
+            from pygments.formatters import html
+            from pygments.util import ClassNotFound
+            
+            class PygmentsRenderer(mistune.HTMLRenderer):
+                """Custom mistune renderer with Pygments syntax highlighting."""
+                
+                def __init__(self, theme_manager=None):
+                    super().__init__()
+                    self.theme_manager = theme_manager
+                    self._get_pygments_style()
+                
+                def _get_pygments_style(self):
+                    """Get Pygments style based on current theme."""
+                    # Default to a dark theme style since most AI themes are dark
+                    if self.theme_manager and hasattr(self.theme_manager, 'current_theme'):
+                        try:
+                            theme = self.theme_manager.current_theme
+                            # Determine if theme is light or dark based on background
+                            if hasattr(theme, 'background_primary'):
+                                bg = theme.background_primary
+                                # Simple luminance calculation
+                                if bg.startswith('#'):
+                                    r, g, b = int(bg[1:3], 16), int(bg[3:5], 16), int(bg[5:7], 16)
+                                    luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+                                    self.pygments_style = 'github' if luminance > 0.5 else 'monokai'
+                                else:
+                                    self.pygments_style = 'monokai'  # Default to dark
+                            else:
+                                self.pygments_style = 'monokai'
+                        except Exception:
+                            self.pygments_style = 'monokai'  # Fallback
+                    else:
+                        self.pygments_style = 'monokai'  # Default
+                
+                def block_code(self, code, info=None):
+                    """Render code blocks with Pygments syntax highlighting."""
+                    if info and info.strip():
+                        try:
+                            # Get lexer for the specified language
+                            lexer = get_lexer_by_name(info.strip(), stripall=True)
+                            
+                            # Create formatter with inline styles for QTextEdit compatibility
+                            formatter = html.HtmlFormatter(
+                                style=self.pygments_style,
+                                noclasses=True,      # Use inline styles instead of CSS classes
+                                nobackground=True,   # Let QTextEdit handle background
+                                nowrap=False,        # Include <pre><code> wrapper
+                                cssclass='highlight' # Add CSS class for potential styling
+                            )
+                            
+                            # Generate highlighted HTML
+                            return highlight(code, lexer, formatter)
+                            
+                        except ClassNotFound:
+                            # Language not supported, fall back to plain code block
+                            pass
+                        except Exception as e:
+                            # Any other error, log and fall back
+                            logger.debug(f"Pygments highlighting failed for '{info}': {e}")
+                    
+                    # Fallback to plain code block with HTML escaping
+                    escaped_code = mistune.escape(code)
+                    return f'<pre><code>{escaped_code}</code></pre>'
+            
+            # Return the custom renderer instance
+            return PygmentsRenderer(self.theme_manager)
+            
+        except ImportError:
+            # Pygments not available, fall back to standard HTML renderer
+            logger.warning("Pygments not available - using standard code block rendering")
+            return 'html'
+        except Exception as e:
+            # Any other error, fall back to standard renderer
+            logger.warning(f"Failed to create enhanced renderer: {e} - using standard HTML renderer")
+            return 'html'
     
     def _update_color_scheme(self):
         """Update color scheme based on current theme or use defaults."""
