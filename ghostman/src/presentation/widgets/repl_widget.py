@@ -574,6 +574,9 @@ class MarkdownRenderer:
             # mistune v3 uses direct function call instead of .convert()
             html_content = self.md_processor(text)
             
+            # Convert HTML input checkboxes to Unicode symbols for QTextEdit compatibility
+            html_content = self._convert_checkboxes_to_unicode(html_content)
+            
             # Apply message-type styling to the HTML
             styled_html = self._apply_color_styling(html_content, base_color, style)
             
@@ -675,6 +678,39 @@ class MarkdownRenderer:
         except (ValueError, IndexError):
             # Return original color if adjustment fails
             return hex_color
+    
+    def _convert_checkboxes_to_unicode(self, html_content: str) -> str:
+        """
+        Convert HTML input checkboxes to Unicode symbols for QTextEdit compatibility.
+        
+        QTextEdit cannot render HTML <input> elements, but mistune's task_lists plugin
+        generates them. This method converts them to Unicode checkbox symbols that
+        display properly in QTextEdit.
+        
+        Args:
+            html_content: HTML content with potential checkbox inputs
+            
+        Returns:
+            HTML content with checkboxes converted to Unicode symbols
+        """
+        # Flexible pattern to match checkbox inputs with any attribute order
+        checkbox_pattern = r'<input[^>]*?(?=.*class="task-list-item-checkbox")(?=.*type="checkbox")[^>]*?/?>'
+        
+        def replace_checkbox(match):
+            checkbox_html = match.group(0)
+            # Check if checkbox is checked
+            if 'checked' in checkbox_html:
+                return '☑ '  # Checked box with space
+            else:
+                return '☐ '  # Unchecked box with space
+        
+        # Replace checkbox inputs with Unicode symbols
+        result = re.sub(checkbox_pattern, replace_checkbox, html_content)
+        
+        # Clean up the task-list-item class since it's no longer needed for styling
+        result = re.sub(r'<li class="task-list-item">', '<li>', result)
+        
+        return result
     
     def _optimize_qt_html(self, html_content: str) -> str:
         """
