@@ -27,6 +27,9 @@ from PyQt6.QtWidgets import (
     QToolButton, QMenu, QProgressBar, QListWidget, QSizePolicy,
     QListWidgetItem, QApplication, QMessageBox, QDialog, QCheckBox
 )
+
+# Import our custom mixed content display
+from .mixed_content_display import MixedContentDisplay
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread, QObject, QSize, pyqtSlot, QPropertyAnimation, QEasingCurve, QUrl, QPoint
 import weakref
 from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QTextCharFormat, QColor, QPalette, QIcon, QPixmap, QAction, QTextOption, QFontMetrics
@@ -394,27 +397,32 @@ class MarkdownRenderer:
                     self._get_pygments_style()
                 
                 def _get_pygments_style(self):
-                    """Get Pygments style based on current theme."""
-                    # Default to a dark theme style since most AI themes are dark
+                    """Get Pygments style based on current theme with improved detection."""
                     if self.theme_manager and hasattr(self.theme_manager, 'current_theme'):
                         try:
                             theme = self.theme_manager.current_theme
-                            # Determine if theme is light or dark based on background
+                            # Use the same theme detection logic as StyleTemplates
                             if hasattr(theme, 'background_primary'):
                                 bg = theme.background_primary
-                                # Simple luminance calculation
                                 if bg.startswith('#'):
+                                    # Enhanced luminance calculation for better theme detection
                                     r, g, b = int(bg[1:3], 16), int(bg[3:5], 16), int(bg[5:7], 16)
-                                    luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-                                    self.pygments_style = 'github' if luminance > 0.5 else 'monokai'
+                                    luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+                                    # Use vs (light) and vs2015 (dark) for better code highlighting
+                                    self.pygments_style = 'vs' if luminance > 0.5 else 'vs2015'
+                                    self.is_dark_theme = luminance <= 0.5
                                 else:
-                                    self.pygments_style = 'monokai'  # Default to dark
+                                    self.pygments_style = 'vs2015'
+                                    self.is_dark_theme = True
                             else:
-                                self.pygments_style = 'monokai'
+                                self.pygments_style = 'vs2015'
+                                self.is_dark_theme = True
                         except Exception:
-                            self.pygments_style = 'monokai'  # Fallback
+                            self.pygments_style = 'vs2015'
+                            self.is_dark_theme = True
                     else:
-                        self.pygments_style = 'monokai'  # Default
+                        self.pygments_style = 'vs2015'
+                        self.is_dark_theme = True
                 
                 def block_code(self, code, info=None):
                     """Render code blocks with enhanced widget-style appearance and syntax highlighting."""
@@ -430,15 +438,19 @@ class MarkdownRenderer:
                     # Generate syntax-highlighted code content
                     code_content_html = self._generate_highlighted_code(code, language, colors)
                     
-                    # Combine into widget-style structure
+                    # Combine into widget-style structure with modern styling
+                    container_bg = colors['bg_tertiary'] if hasattr(self, 'is_dark_theme') and self.is_dark_theme else colors['bg_primary']
+                    border_color = colors['border']
+                    
                     return f"""
                     <div style="
-                        background-color: {colors['bg_secondary']};
-                        border: 1px solid {colors['border']};
-                        border-radius: 6px;
-                        margin: 8px 0;
+                        background-color: {container_bg};
+                        border: 1px solid {border_color};
+                        border-radius: 8px;
+                        margin: 6px 0;
                         overflow: hidden;
-                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+                        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
                     ">
                         {header_html}
                         {code_content_html}
@@ -478,42 +490,60 @@ class MarkdownRenderer:
                     # Language tag (only if language is specified)
                     language_tag = ""
                     if language_display:
+                        # Enhanced language tag with primary color accent and opacity
+                        primary_color = getattr(self.theme_manager.current_theme, 'primary', '#4CAF50') if self.theme_manager and hasattr(self.theme_manager, 'current_theme') else '#4CAF50'
+                        tag_bg = f"{primary_color}20"  # 20% opacity
+                        
                         language_tag = f"""
                         <span style="
-                            background-color: {colors['bg_tertiary']};
-                            color: {colors['text_secondary']};
-                            padding: 2px 6px;
-                            border-radius: 3px;
+                            background-color: {tag_bg};
+                            color: {primary_color};
+                            padding: 3px 8px;
+                            border-radius: 4px;
                             font-size: 11px;
                             font-weight: 500;
+                            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
                         ">{language_display}</span>
                         """
                     
+                    # Modern header styling to match CodeSnippetWidget
+                    header_bg = colors['bg_secondary']
+                    title = f"{language_display} Snippet" if language_display else "Code Snippet"
+                    
                     return f"""
                     <div style="
-                        background-color: {colors['bg_secondary']};
-                        padding: 8px 12px;
+                        background-color: {header_bg};
+                        padding: 12px 16px;
                         border-bottom: 1px solid {colors['border']};
                         display: flex;
                         align-items: center;
                         justify-content: space-between;
+                        border-radius: 7px 7px 0 0;
                     ">
                         <div style="display: flex; align-items: center; gap: 12px;">
                             <span style="
                                 color: {colors['text_primary']};
                                 font-weight: 600;
                                 font-size: 13px;
-                            ">Code</span>
+                                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                            ">{title}</span>
                             {language_tag}
                         </div>
                         <span style="
-                            color: {colors['text_secondary']};
-                            font-size: 11px;
-                            padding: 4px 8px;
+                            color: {colors['text_primary']};
+                            font-size: 12px;
+                            padding: 6px 12px;
                             background-color: {colors['interactive']};
-                            border-radius: 3px;
+                            border: 1px solid {colors['border']};
+                            border-radius: 4px;
                             cursor: pointer;
-                        " title="Click to copy">Copy</span>
+                            font-weight: 500;
+                            transition: all 0.2s ease;
+                        " title="Click to copy" 
+                           onmouseover="this.style.backgroundColor='{colors['interactive_hover']}'" 
+                           onmouseout="this.style.backgroundColor='{colors['interactive']}'">
+                            Copy
+                        </span>
                     </div>
                     """
                 
@@ -523,6 +553,7 @@ class MarkdownRenderer:
                         try:
                             # Get lexer for the specified language
                             lexer = get_lexer_by_name(language, stripall=True)
+                            logger.debug(f"🎨 First highlighting system: Got lexer '{lexer.name}' for language '{language}'")
                             
                             # Create formatter with theme-appropriate styling
                             formatter = html.HtmlFormatter(
@@ -534,39 +565,60 @@ class MarkdownRenderer:
                             
                             # Generate highlighted HTML
                             highlighted_code = highlight(code, lexer, formatter)
+                            logger.debug(f"🎨 First highlighting system: Generated {len(highlighted_code)} chars of highlighted HTML")
                             
                             return f"""
                             <div style="
                                 background-color: {colors['bg_tertiary']};
-                                padding: 12px;
+                                padding: 16px;
                                 overflow-x: auto;
-                                font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-                                font-size: 10pt;
-                                line-height: 1.4;
+                                font-family: 'Consolas', 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+                                font-size: 14px;
+                                line-height: 1.5;
                                 color: {colors['text_primary']};
+                                border-radius: 0 0 7px 7px;
+                                min-height: 60px;
                             ">
-                                <pre style="margin: 0; white-space: pre-wrap;">{highlighted_code}</pre>
+                                <pre style="
+                                    margin: 0; 
+                                    white-space: pre-wrap; 
+                                    font-family: inherit;
+                                    background-color: {colors['bg_tertiary']} !important;
+                                    width: 100%;
+                                    display: block;
+                                    padding: 0;
+                                ">{highlighted_code}</pre>
                             </div>
                             """
                             
                         except ClassNotFound:
-                            logger.debug(f"Language '{language}' not supported by Pygments")
+                            logger.debug(f"🚫 First highlighting system: Language '{language}' not supported by Pygments")
                         except Exception as e:
-                            logger.debug(f"Pygments highlighting failed for '{language}': {e}")
+                            logger.debug(f"🚫 First highlighting system: Pygments highlighting failed for '{language}': {e}")
                     
-                    # Fallback to plain code with HTML escaping
+                    # Fallback to plain code with HTML escaping and modern styling
                     escaped_code = mistune.escape(code)
                     return f"""
                     <div style="
                         background-color: {colors['bg_tertiary']};
-                        padding: 12px;
+                        padding: 16px;
                         overflow-x: auto;
-                        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-                        font-size: 10pt;
-                        line-height: 1.4;
+                        font-family: 'Consolas', 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+                        font-size: 14px;
+                        line-height: 1.5;
                         color: {colors['text_primary']};
+                        border-radius: 0 0 7px 7px;
+                        min-height: 60px;
                     ">
-                        <pre style="margin: 0; white-space: pre-wrap;">{escaped_code}</pre>
+                        <pre style="
+                            margin: 0; 
+                            white-space: pre-wrap; 
+                            font-family: inherit;
+                            background-color: {colors['bg_tertiary']} !important;
+                            width: 100%;
+                            display: block;
+                            padding: 0;
+                        ">{escaped_code}</pre>
                     </div>
                     """
             
@@ -831,7 +883,7 @@ class MarkdownRenderer:
         # Apply specific styling to elements
         replacements = {
             '<code>': f'<code style="background-color: rgba(255,255,255,0.1); padding: {{\'2px\'}} {{\'4px\'}}; border-radius: {{\'3px\'}}; color: {style_colors["code"]}; font-family: Consolas, Monaco, monospace;">',
-            '<pre>': f'<pre style="background-color: rgba(255,255,255,0.05); padding: {{\'8px\'}}; border-radius: {{\'4px\'}}; border-left: {{\'3px\'}} solid {base_color}; margin: {{\'4px\'}} {{\'0\'}}; overflow-x: auto;">',
+            # Skip pre tag replacement to avoid overriding code snippet solid backgrounds
             '<em>': f'<em style="color: {style_colors["em"]}; font-style: italic;">',
             '<strong>': f'<strong style="color: {style_colors["strong"]}; font-weight: bold;">',
             '<h1>': f'<h1 style="color: {style_colors["h1"]}; font-size: {{\'1.4em\'}}; margin: {{\'8px\'}} {{\'0\'}} {{\'4px\'}} {{\'0\'}}; border-bottom: {{\'2px\'}} solid {base_color};">',
@@ -1590,47 +1642,46 @@ class REPLWidget(QWidget):
                     # Fallback for non-hex colors
                     bg_color = f"rgba(30, 30, 30, {alpha:.3f})"
             
-            # CRITICAL: Use !important to prevent style overrides AND apply text color properly
-            self.output_display.setStyleSheet(f"""
-                QTextEdit {{
-                    background-color: {bg_color} !important;
-                    color: {colors.text_primary} !important;
-                    border: none;
-                    selection-background-color: {colors.primary};
-                    selection-color: {colors.background_primary};
-                }}
-                QScrollBar:vertical {{
-                    background: {colors.background_secondary};
-                    width: 12px;
-                    border-radius: 6px;
-                }}
-                QScrollBar::handle:vertical {{
-                    background: {colors.interactive_normal};
-                    border-radius: 6px;
-                    min-height: 20px;
-                }}
-                QScrollBar::handle:vertical:hover {{
-                    background: {colors.interactive_hover};
-                }}
-                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
-                    border: none;
-                    background: none;
-                }}
-            """)
+            # Create theme color dictionary for MixedContentDisplay
+            theme_colors = {
+                'bg_primary': bg_color,
+                'bg_secondary': colors.background_secondary,
+                'bg_tertiary': colors.background_tertiary,
+                'text_primary': colors.text_primary,
+                'text_secondary': colors.text_secondary,
+                'border': colors.border_primary,
+                'info': getattr(colors, 'info', '#4A9EFF'),
+                'warning': getattr(colors, 'warning', '#FFB84D'),
+                'error': getattr(colors, 'error', '#FF4D4D'),
+                'keyword': getattr(colors, 'keyword', '#d73a49'),
+                'string': getattr(colors, 'string', '#032f62'),
+                'comment': getattr(colors, 'comment', '#6a737d'),
+                'function': getattr(colors, 'function', '#6f42c1'),
+                'number': getattr(colors, 'number', '#005cc5'),
+                'interactive': getattr(colors, 'interactive', colors.background_tertiary),
+                'interactive_hover': getattr(colors, 'interactive_hover', colors.border_primary),
+                'selection': colors.primary
+            }
             
-            logger.debug(f"Applied output display opacity: {alpha:.3f} (bg: {bg_color})")
+            # Update MixedContentDisplay theme colors
+            self.output_display.set_theme_colors(theme_colors)
+            
+            logger.debug(f"Applied MixedContentDisplay theme colors with opacity: {alpha:.3f}")
         except Exception as e:
-            logger.warning(f"Failed to style output display: {e}")
-            # Fallback styling with manual opacity
-            alpha = max(0.0, min(1.0, self._panel_opacity))
-            bg_color = f"rgba(30, 30, 30, {alpha:.3f})"
-            self.output_display.setStyleSheet(f"""
-                QTextEdit {{
-                    background-color: {bg_color} !important;
-                    color: #ffffff;
-                    border: none;
-                }}
-            """)
+            logger.warning(f"Failed to apply theme to MixedContentDisplay: {e}")
+            # Fallback theme colors
+            fallback_colors = {
+                'bg_primary': f"rgba(30, 30, 30, {max(0.0, min(1.0, self._panel_opacity)):.3f})",
+                'bg_secondary': '#2a2a2a',
+                'bg_tertiary': '#3a3a3a',
+                'text_primary': '#ffffff',
+                'text_secondary': '#a0a0a0',
+                'border': '#4a4a4a',
+                'info': '#4A9EFF',
+                'warning': '#FFB84D',
+                'error': '#FF4D4D'
+            }
+            self.output_display.set_theme_colors(fallback_colors)
     
     def _update_layout_component_themes(self):
         """Update theme styling for layout components like frames and separators."""
@@ -4097,19 +4148,13 @@ class REPLWidget(QWidget):
         # Title bar with new conversation and help buttons
         self._init_title_bar(layout)
         
-        # Output display - using QTextEdit instead of QTextBrowser to prevent navigation
-        self.output_display = QTextEdit()
-        self.output_display.setReadOnly(True)
-        # Enable rich text features for proper link support
-        self.output_display.setAcceptRichText(True)
+        # Output display - using MixedContentDisplay for complete control over content rendering
+        self.output_display = MixedContentDisplay()
         # Enable manual link detection and handling
         self._setup_link_handling()
         # Enable custom context menu for link operations
         self.output_display.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.output_display.customContextMenuRequested.connect(self._show_output_context_menu)
-        # Use font service for AI response font (default for output display)
-        ai_font = font_service.create_qfont('ai_response')
-        self.output_display.setFont(ai_font)
         self.output_display.setMinimumHeight(300)
         layout.addWidget(self.output_display, 1)
         
@@ -4419,9 +4464,8 @@ class REPLWidget(QWidget):
             # Clear font service cache to get latest settings
             font_service.clear_cache()
             
-            # Update output display font (AI response font)
-            ai_font = font_service.create_qfont('ai_response')
-            self.output_display.setFont(ai_font)
+            # MixedContentDisplay handles fonts internally through theme colors
+            # No need to set font directly
             
             # Update input font (user input font)
             input_font = font_service.create_qfont('user_input')
@@ -4451,102 +4495,15 @@ class REPLWidget(QWidget):
                 self._markdown_renderer.clear_cache()
                 self._markdown_renderer.update_theme()
             
-            # Get current cursor position to restore later
-            cursor = self.output_display.textCursor()
-            current_position = cursor.position()
-            
-            # Store current scroll position
-            scrollbar = self.output_display.verticalScrollBar()
-            scroll_position = scrollbar.value()
-            
-            # Update the document font with new theme settings
-            document = self.output_display.document()
-            ai_font = font_service.create_qfont('ai_response')
-            document.setDefaultFont(ai_font)
-            
-            # Update text color formats for existing content with improved theme awareness
-            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
-                colors = self.theme_manager.current_theme
-                
-                # Update the default text format for the entire document
-                default_format = QTextCharFormat()
-                default_format.setForeground(QColor(colors.text_primary))
-                
-                # Apply new colors to the entire document
-                cursor.select(QTextCursor.SelectionType.Document)
-                cursor.setCharFormat(default_format)
-                
-                # Create comprehensive color updates for inline styled text
-                self._update_inline_text_colors(colors)
-                
-                # Force a complete refresh of the widget with opacity support
-                alpha = max(0.0, min(1.0, self._panel_opacity))
-                if alpha >= 1.0:
-                    bg_color = colors.background_primary
-                elif colors.background_primary.startswith('#'):
-                    r = int(colors.background_primary[1:3], 16)
-                    g = int(colors.background_primary[3:5], 16)
-                    b = int(colors.background_primary[5:7], 16)
-                    bg_color = f"rgba({r}, {g}, {b}, {alpha:.3f})"
-                else:
-                    bg_color = colors.background_primary
-                    
-                self.output_display.setStyleSheet(f"""
-                    QTextEdit {{
-                        background-color: {bg_color};
-                        color: {colors.text_primary};
-                        border: none;
-                        selection-background-color: {colors.primary};
-                        selection-color: {colors.background_primary};
-                    }}
-                """)
-                
-            # Restore cursor position and scroll
-            cursor.setPosition(min(current_position, document.characterCount() - 1))
-            self.output_display.setTextCursor(cursor)
-            
-            # Restore scroll position
-            scrollbar.setValue(scroll_position)
+            # MixedContentDisplay theme colors are already updated in _style_output_display()
+            # Just ensure theme colors are applied to the display
+            self._style_output_display()
             
             logger.debug("Existing output refreshed with new theme colors")
             
         except Exception as e:
             logger.error(f"Failed to refresh existing output: {e}")
     
-    def _update_inline_text_colors(self, colors):
-        """Update colors for inline styled text elements."""
-        try:
-            # Get the document
-            document = self.output_display.document()
-            cursor = QTextCursor(document)
-            
-            # Color mappings based on common text patterns
-            color_mappings = {
-                'input': colors.primary,
-                'response': colors.text_primary,
-                'system': colors.text_tertiary,
-                'info': colors.status_info,
-                'warning': colors.status_warning,
-                'error': colors.status_error,
-                'divider': colors.separator
-            }
-            
-            # Iterate through the document and update color-specific formats
-            cursor.movePosition(QTextCursor.MoveOperation.Start)
-            
-            while not cursor.atEnd():
-                char_format = cursor.charFormat()
-                current_color = char_format.foreground().color()
-                
-                # Check if this text needs color updating based on context
-                # This is a simplified approach - could be enhanced with more sophisticated detection
-                
-                cursor.movePosition(QTextCursor.MoveOperation.NextCharacter)
-            
-            logger.debug("Updated inline text colors for theme")
-            
-        except Exception as e:
-            logger.warning(f"Failed to update inline text colors: {e}")
     
     def clear_output(self):
         """Clear the output display and reset markdown renderer cache."""
@@ -4850,7 +4807,7 @@ class REPLWidget(QWidget):
             logger.error(f"Failed to run async conversation creation: {e}")
     
     def _load_conversation_messages(self, conversation: Conversation):
-        """Load conversation messages into output display."""
+        """Load conversation messages into output display with proper rendering."""
         self.clear_output()
         
         self.append_output(f"💬 Conversation: {conversation.title}", "system")
@@ -4863,17 +4820,27 @@ class REPLWidget(QWidget):
         
         self.append_output("-" * 50, "system")
         
-        # Load messages with appropriate icons
+        # Load messages with proper rendering
         for message in conversation.messages:
             if message.role == MessageRole.SYSTEM:
                 continue  # Skip system messages in display
             
-            role_icon = "👤" if message.role == MessageRole.USER else "🤖"
-            role_name = "You" if message.role == MessageRole.USER else "AI"
-            style = "input" if message.role == MessageRole.USER else "response"
+            if message.role == MessageRole.USER:
+                # User messages - show with timestamp and icon
+                timestamp = message.timestamp.strftime("%m/%d %H:%M")
+                self.append_output(f"[{timestamp}] 👤 You:", "input")
+                # Render the actual message content preserving markdown
+                self.append_output(message.content, "input")
+                
+            elif message.role == MessageRole.ASSISTANT:
+                # AI messages - show with timestamp and proper markdown rendering
+                timestamp = message.timestamp.strftime("%m/%d %H:%M")
+                self.append_output(f"[{timestamp}] 🤖 AI:", "response")
+                # Render the AI response with full markdown support (including code blocks)
+                self.append_output(message.content, "response")
             
-            timestamp = message.timestamp.strftime("%m/%d %H:%M")
-            self.append_output(f"[{timestamp}] {role_icon} {role_name}: {message.content}", style)
+            # Add spacing between messages
+            self.append_output("", "normal")
         
         if not conversation.messages:
             self.append_output("🎆 Start a new conversation!", "info")
@@ -5167,6 +5134,7 @@ class REPLWidget(QWidget):
         - Preserves message type color coding
         - Graceful fallback to plain text rendering
         - Performance optimized for long conversations
+        - Code snippets with solid backgrounds and proper formatting
         
         Args:
             text: Text to append (supports markdown formatting)
@@ -5176,53 +5144,31 @@ class REPLWidget(QWidget):
         if not hasattr(self, '_markdown_renderer'):
             self._markdown_renderer = MarkdownRenderer(self.theme_manager)
         
-        cursor = self.output_display.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.End)
-        
         # Render content with markdown support
         try:
-            html_content = self._markdown_renderer.render(text, style, force_plain)
+            if force_plain:
+                # Plain text rendering - use add_plain_text method
+                self.output_display.add_plain_text(text, style)
+            else:
+                html_content = self._markdown_renderer.render(text, style, force_plain)
+                # Use the MixedContentDisplay method to add HTML content with code block extraction
+                self.output_display.add_html_content(html_content, style)
             
-            # Insert the rendered HTML content with proper anchor handling
-            self._insert_html_with_anchors(cursor, html_content)
-            
-            # Performance optimization: limit document size for very long conversations
+            # Performance optimization: limit content size for very long conversations
             self._manage_document_size()
             
         except Exception as e:
             logger.error(f"Error rendering output: {e}")
-            # Fallback to simple text rendering
-            color = self._markdown_renderer.color_scheme.get(style, self._markdown_renderer.color_scheme.get("normal", "#f0f0f0"))
-            escaped_text = html.escape(str(text))
-            cursor.insertHtml(f'<span style="color: {color};">{escaped_text}</span><br>')
-        
-        # Auto-scroll to bottom
-        self.output_display.setTextCursor(cursor)
-        self.output_display.ensureCursorVisible()
+            # Fallback to plain text rendering
+            self.output_display.add_plain_text(str(text), style)
     
     def _manage_document_size(self):
         """
         Manage document size for performance in long conversations.
-        Removes older content when document becomes too large.
+        Uses MixedContentDisplay's built-in content management.
         """
-        document = self.output_display.document()
-        block_count = document.blockCount()
-        
-        # If document has more than 1000 blocks, remove the oldest 200
-        if block_count > 1000:
-            cursor = QTextCursor(document)
-            cursor.movePosition(QTextCursor.MoveOperation.Start)
-            
-            # Select first 200 blocks
-            for _ in range(200):
-                cursor.movePosition(QTextCursor.MoveOperation.NextBlock, QTextCursor.MoveMode.KeepAnchor)
-            
-            # Remove selected content and add notice
-            cursor.removeSelectedText()
-            truncate_color = self._markdown_renderer.color_scheme.get("system", "#808080") if hasattr(self, '_markdown_renderer') else "#808080"
-            cursor.insertHtml(f'<span style="color: {truncate_color}; font-style: italic;">[Previous messages truncated for performance]</span><br><br>')
-            
-            logger.debug(f"Document size managed: removed 200 blocks, {document.blockCount()} remaining")
+        # Use MixedContentDisplay's built-in content size management
+        self.output_display.manage_content_size(max_widgets=500)
     
     def clear_output(self):
         """Clear the output display and reset markdown renderer cache."""
@@ -5251,7 +5197,8 @@ class REPLWidget(QWidget):
             Dictionary containing render statistics
         """
         stats = {
-            'document_blocks': self.output_display.document().blockCount(),
+            'content_widgets': len(self.output_display.content_widgets) if hasattr(self.output_display, 'content_widgets') else 0,
+            'content_height': self.output_display.get_content_height() if hasattr(self.output_display, 'get_content_height') else 0,
             'markdown_available': MARKDOWN_AVAILABLE
         }
         
@@ -5728,23 +5675,20 @@ def test_theme():
         """Add a resend button option to the output display."""
         try:
             # Create a clickable resend link using HTML
-            resend_html = '''
+            message_preview = self.last_failed_message[:100] + "..." if len(self.last_failed_message) > 100 else self.last_failed_message
+            resend_html = f'''
             <div style="margin: 10px 0; padding: 8px; border: 1px solid #666; border-radius: 4px; background-color: rgba(255,255,255,0.05);">
                 <a href="resend_message" style="color: #4CAF50; text-decoration: none; font-weight: bold;">
                     🔄 Click here to resend your message
                 </a>
                 <br><span style="color: #888; font-size: 10px;">
-                    Message: "{}"
+                    Message: "{html.escape(message_preview)}"
                 </span>
             </div>
-            '''.format(html.escape(self.last_failed_message[:100] + "..." if len(self.last_failed_message) > 100 else self.last_failed_message))
+            '''
             
-            # Insert the resend option
-            cursor = self.output_display.textCursor()
-            cursor.movePosition(QTextCursor.MoveOperation.End)
-            cursor.insertHtml(resend_html)
-            
-            # Link handler already connected during initialization
+            # Add the resend option using MixedContentDisplay
+            self.output_display.add_html_content(resend_html, "system")
                 
         except Exception as e:
             logger.error(f"Failed to add resend option: {e}")
@@ -5779,33 +5723,19 @@ def test_theme():
         
     def _show_output_context_menu(self, position):
         """Show context menu for output display with link operations."""
-        # Get cursor at position
-        cursor = self.output_display.cursorForPosition(position)
-        
-        # Check if cursor is on a link
-        char_format = cursor.charFormat()
-        link_url = char_format.anchorHref()
-        
         # Create context menu
         context_menu = QMenu(self.output_display)
         
-        if link_url:
-            # Add link-specific actions
-            open_action = context_menu.addAction("🌐 Open Link")
-            open_action.triggered.connect(lambda: self._handle_link_click(QUrl(link_url)))
-            
-            copy_action = context_menu.addAction("📋 Copy Link Address")
-            copy_action.triggered.connect(lambda: self._copy_link_to_clipboard(link_url))
-            
-            context_menu.addSeparator()
+        # MixedContentDisplay doesn't have cursor/link detection like QTextEdit
+        # Provide general context menu actions
         
-        # Add standard text operations
-        if self.output_display.textCursor().hasSelection():
-            copy_text_action = context_menu.addAction("📄 Copy Text")
-            copy_text_action.triggered.connect(self.output_display.copy)
+        clear_action = context_menu.addAction("🗑️ Clear Display")
+        clear_action.triggered.connect(self.clear_output)
         
-        select_all_action = context_menu.addAction("🗂️ Select All")
-        select_all_action.triggered.connect(self.output_display.selectAll)
+        context_menu.addSeparator()
+        
+        refresh_action = context_menu.addAction("🔄 Refresh Theme")
+        refresh_action.triggered.connect(self._refresh_existing_output)
         
         # Show context menu
         context_menu.exec(self.output_display.mapToGlobal(position))
@@ -5821,70 +5751,10 @@ def test_theme():
             logger.error(f"Failed to copy link to clipboard: {e}")
     
     def _setup_link_handling(self):
-        """Setup robust link detection and handling for QTextEdit."""
-        # Initialize the production-ready link handler
-        self.link_handler = ReplLinkHandler(self.output_display, self)
-        
-        # Install event filter and enable mouse tracking
-        self.output_display.installEventFilter(self)
-        self.output_display.setMouseTracking(True)
+        """Setup link detection and handling for MixedContentDisplay."""
+        # Connect the MixedContentDisplay link_clicked signal
+        self.output_display.link_clicked.connect(self._handle_link_click)
     
-    def _insert_html_with_anchors(self, cursor, html_content):
-        """
-        Insert HTML content with proper anchor formatting for reliable link detection.
-        
-        This method parses HTML content and ensures that links are properly formatted
-        with Qt's rich text anchor system for reliable cursor hover and click detection.
-        """
-        try:
-            # Parse HTML content to extract and properly format links
-            import re
-            
-            # Find all links in the HTML content
-            link_pattern = r'<a\s+href="([^"]+)"[^>]*>(.*?)</a>'
-            links = re.findall(link_pattern, html_content, re.IGNORECASE | re.DOTALL)
-            
-            if links:
-                # Split content by links and insert each part separately
-                parts = re.split(link_pattern, html_content, flags=re.IGNORECASE | re.DOTALL)
-                
-                i = 0
-                while i < len(parts):
-                    if i + 2 < len(parts) and parts[i + 1] and parts[i + 2]:
-                        # Insert text before link
-                        if parts[i]:
-                            cursor.insertHtml(parts[i])
-                        
-                        # Insert link with proper anchor formatting
-                        link_url = parts[i + 1]
-                        link_text = parts[i + 2]
-                        
-                        # Create proper character format for the link
-                        char_format = QTextCharFormat()
-                        char_format.setAnchor(True)
-                        char_format.setAnchorHref(link_url)
-                        char_format.setForeground(QColor("#2196F3"))  # Link color
-                        char_format.setFontUnderline(True)
-                        
-                        cursor.insertText(link_text, char_format)
-                        i += 3
-                    else:
-                        # Regular content
-                        if parts[i]:
-                            cursor.insertHtml(parts[i])
-                        i += 1
-            else:
-                # No links found, insert as regular HTML
-                cursor.insertHtml(html_content)
-            
-        except Exception as e:
-            logger.error(f"Error inserting HTML content with anchors: {e}")
-            # Fallback to standard HTML insertion
-            try:
-                cursor.insertHtml(html_content)
-            except:
-                # Final fallback to plain text
-                cursor.insertText(html_content)
     
     
     def _on_stop_query(self):
@@ -6044,15 +5914,13 @@ def test_theme():
         if not self.current_conversation:
             return False
         
-        # Check if there's content in the REPL that hasn't been saved
-        output_text = self.output_display.toPlainText().strip()
-        if not output_text:
+        # Check if there's content in the MixedContentDisplay
+        if not hasattr(self.output_display, 'content_widgets'):
             return False
-        
-        # Basic check - if there's user input or AI responses beyond just system messages
-        lines = output_text.split('\n')
-        user_messages = [line for line in lines if line.strip().startswith('>>>')]
-        return len(user_messages) > 0
+            
+        # If there are content widgets, assume there might be unsaved content
+        # This is a simplified check since MixedContentDisplay doesn't have toPlainText()
+        return len(self.output_display.content_widgets) > 0
     
     async def _save_current_conversation_before_switch(self):
         """Save current conversation before switching to another."""
@@ -6256,14 +6124,32 @@ def test_theme():
             
             logger.info(f"💾 Autosaving conversation: {self.current_conversation.title}")
             
-            # Perform autosave asynchronously
-            asyncio.create_task(self._perform_autosave())
+            # Perform autosave synchronously (we're in a Qt context, not async)
+            self._perform_autosave_sync()
             
         except Exception as e:
             logger.error(f"Failed to autosave conversation: {e}")
     
+    def _perform_autosave_sync(self):
+        """Perform the actual autosave operation synchronously."""
+        try:
+            if self.conversation_manager and self.conversation_manager.has_ai_service():
+                ai_service = self.conversation_manager.get_ai_service()
+                if ai_service:
+                    # Save the conversation through the conversation manager
+                    # which handles both messages and the conversation state
+                    if hasattr(self.conversation_manager, 'save_current_conversation'):
+                        self.conversation_manager.save_current_conversation()
+                    elif hasattr(ai_service, 'save_current_conversation_sync'):
+                        # Fallback to sync method if available
+                        ai_service.save_current_conversation_sync()
+                    self.last_autosave_time = datetime.now()
+                    logger.debug(f"✓ Autosaved conversation: {self.current_conversation.id}")
+        except Exception as e:
+            logger.error(f"Failed to perform autosave: {e}")
+    
     async def _perform_autosave(self):
-        """Perform the actual autosave operation."""
+        """Perform the actual autosave operation asynchronously (legacy method)."""
         try:
             if self.conversation_manager and self.conversation_manager.has_ai_service():
                 ai_service = self.conversation_manager.get_ai_service()
@@ -7360,149 +7246,34 @@ def test_theme():
             if not self.current_search_matches or self.current_search_index < 0:
                 return
             
-            # Clear previous highlights first
-            self._clear_search_highlights()
+            # MixedContentDisplay doesn't support text highlighting like QTextEdit
+            # Scroll to bottom as a simple fallback
+            self.output_display.scroll_to_bottom()
             
-            # Highlight all matches with subtle background
-            self._highlight_all_matches()
-            
-            # Highlight current match with prominent colors
-            match = self.current_search_matches[self.current_search_index]
-            
-            # Create prominent highlight format for current match
-            current_highlight_format = QTextCharFormat()
-            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
-                current_bg = self.theme_manager.current_theme.status_warning
-                current_fg = self.theme_manager.current_theme.background_primary
-            else:
-                current_bg = "#ffff00"  # Yellow background
-                current_fg = "#000000"  # Black text
-            current_highlight_format.setBackground(QColor(current_bg))
-            current_highlight_format.setForeground(QColor(current_fg))
-            
-            # Apply current match highlight
-            cursor = self.output_display.textCursor()
-            cursor.setPosition(match['start'])
-            cursor.setPosition(match['end'], cursor.MoveMode.KeepAnchor)
-            
-            # Store original format to restore later
-            original_format = cursor.charFormat()
-            
-            # Merge with original format to preserve original styling where possible
-            merged_format = QTextCharFormat(original_format)
-            merged_format.setBackground(current_highlight_format.background())
-            merged_format.setForeground(current_highlight_format.foreground())
-            
-            cursor.setCharFormat(merged_format)
-            
-            # Store highlight info for cleanup
-            if not hasattr(self, '_current_highlight_positions'):
-                self._current_highlight_positions = []
-            self._current_highlight_positions.append({
-                'start': match['start'],
-                'end': match['end'],
-                'original_format': original_format
-            })
-            
-            # Scroll to the match
-            self.output_display.setTextCursor(cursor)
-            self.output_display.ensureCursorVisible()
-            
-            logger.debug(f"Highlighted current match at position {match['start']}-{match['end']}")
+            logger.debug("Search highlighting not supported with MixedContentDisplay")
             
         except Exception as e:
             logger.error(f"Failed to highlight current match: {e}")
     
     def _highlight_all_matches(self):
         """Highlight all search matches with subtle background color."""
-        try:
-            if not self.current_search_matches:
-                return
-            
-            # Create subtle highlight format for all matches
-            all_matches_format = QTextCharFormat()
-            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
-                # Use a more subtle color for all matches
-                all_bg = self.theme_manager.current_theme.status_info if hasattr(self.theme_manager.current_theme, 'status_info') else "#e6f3ff"
-            else:
-                all_bg = "#e6f3ff"  # Very light blue background
-            
-            all_matches_format.setBackground(QColor(all_bg))
-            
-            # Initialize storage for all match positions
-            if not hasattr(self, '_all_match_positions'):
-                self._all_match_positions = []
-            self._all_match_positions = []
-            
-            cursor = self.output_display.textCursor()
-            
-            # Apply subtle highlight to all matches except current one
-            for i, match in enumerate(self.current_search_matches):
-                if i == self.current_search_index:
-                    continue  # Skip current match, it gets special highlighting
-                
-                cursor.setPosition(match['start'])
-                cursor.setPosition(match['end'], cursor.MoveMode.KeepAnchor)
-                
-                # Store original format
-                original_format = cursor.charFormat()
-                
-                # Merge with original format to preserve styling
-                merged_format = QTextCharFormat(original_format)
-                merged_format.setBackground(all_matches_format.background())
-                
-                cursor.setCharFormat(merged_format)
-                
-                # Store for cleanup
-                self._all_match_positions.append({
-                    'start': match['start'],
-                    'end': match['end'],
-                    'original_format': original_format
-                })
-            
-            logger.debug(f"Applied subtle highlighting to {len(self._all_match_positions)} matches")
-            
-        except Exception as e:
-            logger.error(f"Failed to highlight all matches: {e}")
+        # MixedContentDisplay doesn't support text highlighting
+        logger.debug("Search highlighting not supported with MixedContentDisplay")
     
     def _clear_search_highlights(self):
         """Clear all search highlights from conversation display without destroying original formatting."""
         try:
-            if not hasattr(self, 'output_display') or not self.output_display:
-                return
-            
-            # Clear stored highlight positions
+            # MixedContentDisplay doesn't support text highlighting
+            # Just clear the stored positions for cleanup
             if hasattr(self, '_current_highlight_positions'):
-                cursor = self.output_display.textCursor()
-                for highlight_info in self._current_highlight_positions:
-                    # Restore original format for each highlighted position
-                    cursor.setPosition(highlight_info['start'])
-                    cursor.setPosition(highlight_info['end'], cursor.MoveMode.KeepAnchor)
-                    cursor.setCharFormat(highlight_info['original_format'])
-                
                 self._current_highlight_positions = []
-            
-            # Clear all match highlights
             if hasattr(self, '_all_match_positions'):
-                cursor = self.output_display.textCursor()
-                for highlight_info in self._all_match_positions:
-                    cursor.setPosition(highlight_info['start'])
-                    cursor.setPosition(highlight_info['end'], cursor.MoveMode.KeepAnchor)
-                    cursor.setCharFormat(highlight_info['original_format'])
-                
                 self._all_match_positions = []
             
-            logger.debug("Search highlights cleared without destroying original formatting")
+            logger.debug("Search position cleanup completed for MixedContentDisplay")
             
         except Exception as e:
             logger.error(f"Failed to clear search highlights: {e}")
-            # Fallback: restore from original HTML if available
-            try:
-                if hasattr(self, '_original_html_content'):
-                    logger.warning("Fallback: restoring original HTML content")
-                    self.output_display.setHtml(self._original_html_content)
-            except Exception as fallback_error:
-                logger.error(f"Failed to restore original content: {fallback_error}")
     
     def _on_search_text_changed(self, text: str):
         """Handle search input text changes with debouncing."""

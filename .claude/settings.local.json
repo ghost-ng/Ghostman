@@ -105,8 +105,19 @@
       "Bash(./venv/Scripts/Activate.ps1)",
       "WebFetch(domain:pyapp-kit.github.io)",
       "Read(/C:\\Users\\miguel\\Downloads/**)",
+      "Read(/C:\\Users\\miguel\\Downloads/**)",
+      "Read(/C:\\Users\\miguel\\Downloads/**)",
+      "Read(/C:\\Users\\miguel\\Downloads/**)",
+      "WebFetch(domain:wiki.python.org)",
+      "Read(/C:\\Users\\miguel\\Downloads/**)",
+      "Read(/C:\\Users\\miguel\\Downloads/**)",
+      "Bash(./venv/Scripts/pip.exe install Pygments)",
+      "Read(/C:\\Users\\miguel\\Downloads/**)",
       "Read(/C:\\Users\\miguel\\Downloads/**)"
     ],
-    "deny": []
+    "deny": [],
+    "additionalDirectories": [
+      "C:\\Users\\miguel\\AppData\\Roaming\\Ghostman\\logs"
+    ]
   }
 }
