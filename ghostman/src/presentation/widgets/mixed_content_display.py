@@ -51,6 +51,9 @@ class MixedContentDisplay(QScrollArea):
         self.content_widgets = []
         self.theme_colors = None
         
+        # Store original content for re-rendering on theme change
+        self.content_history = []  # List of (content, message_style, widget_type) tuples
+        
         # Register with theme manager for automatic updates
         self._init_theme_system()
         
@@ -85,17 +88,12 @@ class MixedContentDisplay(QScrollArea):
             logger.debug("Theme system not available for MixedContentDisplay")
         
     def set_theme_colors(self, colors: Dict[str, str]):
-        """Update theme colors for all content including existing code widgets."""
+        """Update theme colors and re-render all content with new theme."""
         self.theme_colors = colors
         self._update_stylesheet()
         
-        # Update existing code widgets with new theme colors
-        for widget in self.content_widgets:
-            if hasattr(widget, 'set_theme_colors'):
-                try:
-                    widget.set_theme_colors(colors)
-                except Exception as e:
-                    logger.warning(f"Failed to update theme colors for widget: {e}")
+        # Re-render all content with new theme colors
+        self._rerender_all_content()
         
     def _update_stylesheet(self):
         """Update the stylesheet based on theme colors."""
@@ -116,11 +114,32 @@ class MixedContentDisplay(QScrollArea):
             }}
         """)
         
+    def _rerender_all_content(self):
+        """Re-render all content with new theme colors."""
+        # Clear existing widgets
+        for widget in self.content_widgets:
+            widget.setParent(None)
+            widget.deleteLater()
+        self.content_widgets.clear()
+        
+        # Re-add all content with new theme
+        for content, message_style, widget_type in self.content_history:
+            if widget_type == 'html':
+                self._add_html_content_internal(content, message_style, store_history=False)
+            elif widget_type == 'code':
+                self._add_code_snippet_internal(content[0], content[1], store_history=False)
+    
     def add_html_content(self, html_text: str, message_style: str = "normal"):
         """
         Add HTML content as a label.
         Preserves HTML formatting while maintaining theme consistency.
         """
+        # Store in history for re-rendering
+        self.content_history.append((html_text, message_style, 'html'))
+        self._add_html_content_internal(html_text, message_style, store_history=False)
+    
+    def _add_html_content_internal(self, html_text: str, message_style: str = "normal", store_history: bool = True):
+        """Internal method to add HTML content without storing history."""
         label = QLabel()
         label.setWordWrap(True)
         label.setTextInteractionFlags(
@@ -461,6 +480,12 @@ class MixedContentDisplay(QScrollArea):
         """
         Add an embedded code snippet widget with full formatting control and theme support.
         """
+        # Store in history for re-rendering
+        self.content_history.append(((code, language), None, 'code'))
+        self._add_code_snippet_internal(code, language, store_history=False)
+    
+    def _add_code_snippet_internal(self, code: str, language: str = "", store_history: bool = True):
+        """Internal method to add code snippet without storing history."""
         if not code.strip():
             logger.warning("Attempted to add empty code snippet")
             return
@@ -523,6 +548,9 @@ class MixedContentDisplay(QScrollArea):
         for widget in self.content_widgets:
             widget.deleteLater()
         self.content_widgets.clear()
+        
+        # Clear history
+        self.content_history.clear()
         
         # Clear the layout
         while self.content_layout.count():
