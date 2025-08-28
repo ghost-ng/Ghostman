@@ -766,7 +766,7 @@ class StyleTemplates:
         #repl-root {{
             background-color: {panel_bg} !important;
             border-radius: 10px 10px 0px 0px;
-            border: 1px solid {border_color};
+            border: none;
         }}
         """
     
@@ -797,7 +797,7 @@ class StyleTemplates:
         return f"""
         QFrame {{
             background-color: {colors.background_tertiary};
-            border: 1px solid {colors.border_secondary};
+            border: none;
             border-radius: 4px;
             padding: 0px;
         }}

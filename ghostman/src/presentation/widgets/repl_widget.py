@@ -877,25 +877,27 @@ class MarkdownRenderer:
         font_type = 'user_input' if style == 'input' else 'ai_response'
         font_css = font_service.get_css_font_style(font_type)
         
-        # Wrap entire content with base color and font configuration
-        styled_html = f'<div style="color: {base_color}; line-height: {{\'1.4\'}}; {font_css};">{html_content}</div>'
+        # Wrap entire content with base color and font configuration - explicitly remove backgrounds
+        styled_html = f'<div style="color: {base_color}; line-height: {{\'1.4\'}}; {font_css}; background: none !important;">{html_content}</div>'
         
-        # Apply specific styling to elements
+        # Apply specific styling to elements - remove backgrounds to prevent line coloring
         replacements = {
-            '<code>': f'<code style="background-color: rgba(255,255,255,0.1); padding: {{\'2px\'}} {{\'4px\'}}; border-radius: {{\'3px\'}}; color: {style_colors["code"]}; font-family: Consolas, Monaco, monospace;">',
+            '<code>': f'<code style="padding: {{\'2px\'}} {{\'4px\'}}; border-radius: {{\'3px\'}}; color: {style_colors["code"]}; font-family: Consolas, Monaco, monospace; background: none !important;">',
             # Skip pre tag replacement to avoid overriding code snippet solid backgrounds
-            '<em>': f'<em style="color: {style_colors["em"]}; font-style: italic;">',
-            '<strong>': f'<strong style="color: {style_colors["strong"]}; font-weight: bold;">',
-            '<h1>': f'<h1 style="color: {style_colors["h1"]}; font-size: {{\'1.4em\'}}; margin: {{\'8px\'}} {{\'0\'}} {{\'4px\'}} {{\'0\'}}; border-bottom: {{\'2px\'}} solid {base_color};">',
-            '<h2>': f'<h2 style="color: {style_colors["h2"]}; font-size: {{\'1.3em\'}}; margin: {{\'6px\'}} {{\'0\'}} {{\'3px\'}} {{\'0\'}}; border-bottom: {{\'1px\'}} solid {base_color};">',
-            '<h3>': f'<h3 style="color: {style_colors["h3"]}; font-size: {{\'1.2em\'}}; margin: {{\'4px\'}} {{\'0\'}} {{\'2px\'}} {{\'0\'}};">',
-            '<blockquote>': f'<blockquote style="color: {style_colors["blockquote"]}; border-left: {{\'3px\'}} solid {base_color}; padding-left: {{\'12px\'}}; margin: {{\'4px\'}} {{\'0\'}}; font-style: italic;">',
-            '<ul>': '<ul style="margin: 4px 0; padding-left: 20px;">',
-            '<ol>': '<ol style="margin: 4px 0; padding-left: 20px;">',
-            '<li>': f'<li style="margin: {{\'2px\'}} {{\'0\'}};">',
-            '<table>': f'<table style="border-collapse: collapse; margin: 8px 0; border: 1px solid {base_color};">',
-            '<th>': f'<th style="padding: 4px 8px; border: 1px solid {base_color}; background-color: rgba(255,255,255,0.1); font-weight: bold;">',
-            '<td>': f'<td style="padding: 4px 8px; border: 1px solid {base_color};">',
+            '<em>': f'<em style="color: {style_colors["em"]}; font-style: italic; background: none !important;">',
+            '<strong>': f'<strong style="color: {style_colors["strong"]}; font-weight: bold; background: none !important;">',
+            '<h1>': f'<h1 style="color: {style_colors["h1"]}; font-size: {{\'1.4em\'}}; margin: {{\'8px\'}} {{\'0\'}} {{\'4px\'}} {{\'0\'}}; border-bottom: {{\'2px\'}} solid {base_color}; background: none !important;">',
+            '<h2>': f'<h2 style="color: {style_colors["h2"]}; font-size: {{\'1.3em\'}}; margin: {{\'6px\'}} {{\'0\'}} {{\'3px\'}} {{\'0\'}}; border-bottom: {{\'1px\'}} solid {base_color}; background: none !important;">',
+            '<h3>': f'<h3 style="color: {style_colors["h3"]}; font-size: {{\'1.2em\'}}; margin: {{\'4px\'}} {{\'0\'}} {{\'2px\'}} {{\'0\'}}; background: none !important;">',
+            '<blockquote>': f'<blockquote style="color: {style_colors["blockquote"]}; border-left: {{\'3px\'}} solid {base_color}; padding-left: {{\'12px\'}}; margin: {{\'4px\'}} {{\'0\'}}; font-style: italic; background: none !important;">',
+            '<ul>': '<ul style="margin: 4px 0; padding-left: 20px; background: none !important;">',
+            '<ol>': '<ol style="margin: 4px 0; padding-left: 20px; background: none !important;">',
+            '<li>': f'<li style="margin: {{\'2px\'}} {{\'0\'}}; background: none !important;">',
+            '<table>': f'<table style="border-collapse: collapse; margin: 8px 0; border: 1px solid {base_color}; background: none !important;">',
+            '<th>': f'<th style="padding: 4px 8px; border: 1px solid {base_color}; font-weight: bold; background: none !important;">',
+            '<td>': f'<td style="padding: 4px 8px; border: 1px solid {base_color}; background: none !important;">',
+            '<p>': '<p style="background: none !important;">',
+            '<div>': '<div style="background: none !important;">',
         }
         
         for old, new in replacements.items():
@@ -1481,7 +1483,9 @@ class REPLWidget(QWidget):
         if THEME_SYSTEM_AVAILABLE:
             try:
                 self.theme_manager = get_theme_manager()
-                # Connect to theme change signal for live updates
+                # Register with theme manager for automatic theme updates
+                self.theme_manager.register_widget(self, "_on_theme_changed")
+                # Also connect to signal for backward compatibility
                 self.theme_manager.theme_changed.connect(self._on_theme_changed)
                 logger.debug("Theme system initialized for REPL widget")
             except Exception as e:
@@ -1697,7 +1701,7 @@ class REPLWidget(QWidget):
                     frame.setStyleSheet(f"""
                         QFrame {{
                             background-color: {colors.background_secondary};
-                            border: 1px solid {colors.border_secondary};
+                            border: none;
                         }}
                     """)
             
@@ -2478,7 +2482,7 @@ class REPLWidget(QWidget):
             self.title_frame.setStyleSheet(f"""
                 QFrame {{
                     background-color: rgba(40, 40, 40, 1.0);
-                    border: 1px solid rgba(255, 255, 255, 0.2);
+                    border: none;
                     border-radius: 5px;
                     margin: 0px;
                 }}
@@ -3048,10 +3052,10 @@ class REPLWidget(QWidget):
             border_color = colors.border_secondary
             focus_color = colors.border_focus
             
-            style = f"QComboBox {{background-color: {bg_color}; color: {text_color}; border: 1px solid {border_color}; border-radius: 5px; padding: 5px 10px; font-size: 11px;}} QComboBox:hover {{border: 1px solid {focus_color};}} QComboBox::drop-down {{border: none; width: 20px;}} QComboBox::down-arrow {{image: none; border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 5px solid {text_color}; margin-top: 2px;}} QComboBox QAbstractItemView {{background-color: {colors.background_primary}; color: {text_color}; selection-background-color: {colors.primary}; border: 1px solid {border_color}; outline: none;}}"
+            style = f"QComboBox {{background-color: {bg_color}; color: {text_color}; border: none; border-radius: 5px; padding: 5px 10px; font-size: 11px;}} QComboBox:hover {{border: none;}} QComboBox::drop-down {{border: none; width: 20px;}} QComboBox::down-arrow {{image: none; border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 5px solid {text_color}; margin-top: 2px;}} QComboBox QAbstractItemView {{background-color: {colors.background_primary}; color: {text_color}; selection-background-color: {colors.primary}; border: none; outline: none;}}"
         else:
             # Fallback styles - ALWAYS fully opaque
-            style = f"QComboBox {{background-color: rgba(40, 40, 40, 1.0); color: white; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 5px; padding: 5px 10px; font-size: 11px;}} QComboBox:hover {{border: 1px solid #4CAF50;}} QComboBox::drop-down {{border: none; width: 20px;}} QComboBox::down-arrow {{image: none; border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 5px solid white; margin-top: 2px;}} QComboBox QAbstractItemView {{background-color: rgba(30, 30, 30, 1.0); color: white; selection-background-color: #4CAF50; border: 1px solid rgba(255, 255, 255, 0.3); outline: none;}}"
+            style = f"QComboBox {{background-color: rgba(40, 40, 40, 1.0); color: white; border: none; border-radius: 5px; padding: 5px 10px; font-size: 11px;}} QComboBox:hover {{border: none;}} QComboBox::drop-down {{border: none; width: 20px;}} QComboBox::down-arrow {{image: none; border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 5px solid white; margin-top: 2px;}} QComboBox QAbstractItemView {{background-color: rgba(30, 30, 30, 1.0); color: white; selection-background-color: #4CAF50; border: none; outline: none;}}"
         
         self.conversation_selector.setStyleSheet(style)
     
@@ -4250,16 +4254,16 @@ class REPLWidget(QWidget):
             # Add input field styles
             input_style = StyleTemplates.get_input_field_style(colors)
             
-            # Child element backgrounds - ALWAYS fully opaque for UI controls
-            child_bg = colors.background_tertiary
+            # Child element backgrounds - ALWAYS fully opaque for UI controls - use same as panel for consistency
+            child_bg = colors.background_secondary
             
             # Combine styles using string formatting to avoid CSS syntax issues
-            # UI components (input fields, etc.) stay fully opaque
-            textedit_style = f"#repl-root QTextEdit {{ background-color: {child_bg}; color: {colors.text_primary}; border: 1px solid {colors.border_secondary}; border-radius: 5px; padding: 5px; selection-background-color: {colors.secondary}; selection-color: {colors.text_primary}; }}"
-            lineedit_style = f"#repl-root QLineEdit {{ background-color: {child_bg}; color: {colors.text_primary}; border: 1px solid {colors.border_primary}; border-radius: 3px; padding: 5px; selection-background-color: {colors.secondary}; selection-color: {colors.text_primary}; }}"
-            lineedit_focus_style = f"#repl-root QLineEdit:focus {{ border: 2px solid {colors.border_focus}; }}"
-            plaintext_style = f"#repl-root QPlainTextEdit {{ background-color: {child_bg}; color: {colors.text_primary}; border: 1px solid {colors.border_primary}; border-radius: 3px; padding: 5px; selection-background-color: {colors.secondary}; selection-color: {colors.text_primary}; }}"
-            plaintext_focus_style = f"#repl-root QPlainTextEdit:focus {{ border: 2px solid {colors.border_focus}; }}"
+            # UI components (input fields, etc.) stay fully opaque - remove unnecessary borders
+            textedit_style = f"#repl-root QTextEdit {{ background-color: {child_bg}; color: {colors.text_primary}; border: none; border-radius: 5px; padding: 5px; selection-background-color: {colors.secondary}; selection-color: {colors.text_primary}; }}"
+            lineedit_style = f"#repl-root QLineEdit {{ background-color: {child_bg}; color: {colors.text_primary}; border: none; border-radius: 3px; padding: 5px; selection-background-color: {colors.secondary}; selection-color: {colors.text_primary}; }}"
+            lineedit_focus_style = f"#repl-root QLineEdit:focus {{ border: none; }}"
+            plaintext_style = f"#repl-root QPlainTextEdit {{ background-color: {child_bg}; color: {colors.text_primary}; border: none; border-radius: 3px; padding: 5px; selection-background-color: {colors.secondary}; selection-color: {colors.text_primary}; }}"
+            plaintext_focus_style = f"#repl-root QPlainTextEdit:focus {{ border: none; }}"
             
             # Add explicit tab frame transparency to override theme inheritance
             tab_frame_style = "#repl-root QFrame#tab_frame { background-color: rgba(0,0,0,0) !important; background: none !important; }"
@@ -4290,13 +4294,13 @@ class REPLWidget(QWidget):
         logger.debug(f"  📦 Panel background: {panel_bg}")
         logger.debug(f"  📝 Text area background: {textedit_bg}")
         logger.debug(f"  ⌨️  Input background: {lineedit_bg}")
-        # Use simple string formatting to avoid CSS syntax issues
+        # Use simple string formatting to avoid CSS syntax issues - remove unnecessary borders
         root_style = f"#repl-root {{ background-color: {panel_bg}; {border_style} }}"
-        textedit_fallback = f"#repl-root QTextEdit {{ background-color: {textedit_bg}; color: #f0f0f0; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 5px; padding: 5px; }}"
-        lineedit_fallback = f"#repl-root QLineEdit {{ background-color: {lineedit_bg}; color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 3px; padding: 5px; }}"
-        lineedit_focus_fallback = "#repl-root QLineEdit:focus { border: 1px solid #4CAF50; }"
-        plaintext_fallback = f"#repl-root QPlainTextEdit {{ background-color: {lineedit_bg}; color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 3px; padding: 5px; }}"
-        plaintext_focus_fallback = "#repl-root QPlainTextEdit:focus { border: 1px solid #4CAF50; }"
+        textedit_fallback = f"#repl-root QTextEdit {{ background-color: {textedit_bg}; color: #f0f0f0; border: none; border-radius: 5px; padding: 5px; }}"
+        lineedit_fallback = f"#repl-root QLineEdit {{ background-color: {lineedit_bg}; color: #ffffff; border: none; border-radius: 3px; padding: 5px; }}"
+        lineedit_focus_fallback = "#repl-root QLineEdit:focus { border: none; }"
+        plaintext_fallback = f"#repl-root QPlainTextEdit {{ background-color: {lineedit_bg}; color: #ffffff; border: none; border-radius: 3px; padding: 5px; }}"
+        plaintext_focus_fallback = "#repl-root QPlainTextEdit:focus { border: none; }"
         
         self.setStyleSheet(f"{root_style} {textedit_fallback} {lineedit_fallback} {lineedit_focus_fallback} {plaintext_fallback} {plaintext_focus_fallback}")
 
@@ -4434,7 +4438,7 @@ class REPLWidget(QWidget):
                 self.title_frame.setStyleSheet(f"""
                     QFrame {{
                         background-color: {frame_bg} !important;
-                        border: 1px solid {colors.border_secondary};
+                        border: none;
                         border-radius: 4px;
                         padding: 0px;
                     }}
@@ -4449,7 +4453,7 @@ class REPLWidget(QWidget):
                 self.title_frame.setStyleSheet(f"""
                     QFrame {{
                         background-color: {frame_bg} !important;
-                        border: 1px solid rgba(255, 255, 255, 0.2);
+                        border: none;
                         border-radius: 5px;
                         margin: 0px;
                         padding: 4px;

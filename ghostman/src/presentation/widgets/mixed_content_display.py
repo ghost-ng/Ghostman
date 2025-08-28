@@ -28,6 +28,13 @@ except ImportError as e:
 
 logger = logging.getLogger('ghostman.mixed_content_display')
 
+# Theme system imports
+try:
+    from ...ui.themes.theme_manager import get_theme_manager
+    THEME_SYSTEM_AVAILABLE = True
+except ImportError:
+    THEME_SYSTEM_AVAILABLE = False
+
 
 class MixedContentDisplay(QScrollArea):
     """
@@ -43,6 +50,9 @@ class MixedContentDisplay(QScrollArea):
         # Store references to widgets for cleanup
         self.content_widgets = []
         self.theme_colors = None
+        
+        # Register with theme manager for automatic updates
+        self._init_theme_system()
         
         # Container widget for the scrollable content
         self.content_widget = QWidget()
@@ -60,6 +70,19 @@ class MixedContentDisplay(QScrollArea):
         
         # Set frame style to match QTextEdit appearance
         self.setFrameStyle(QFrame.Shape.StyledPanel)
+    
+    def _init_theme_system(self):
+        """Initialize theme system connection."""
+        if THEME_SYSTEM_AVAILABLE:
+            try:
+                theme_manager = get_theme_manager()
+                # Register with theme manager using set_theme_colors method
+                theme_manager.register_widget(self, "set_theme_colors")
+                logger.debug("MixedContentDisplay registered with theme system")
+            except Exception as e:
+                logger.warning(f"Failed to initialize theme system: {e}")
+        else:
+            logger.debug("Theme system not available for MixedContentDisplay")
         
     def set_theme_colors(self, colors: Dict[str, str]):
         """Update theme colors for all content including existing code widgets."""
@@ -79,9 +102,9 @@ class MixedContentDisplay(QScrollArea):
         if not self.theme_colors:
             return
             
-        bg_color = self.theme_colors.get('bg_primary', '#1a1a1a')
+        bg_color = self.theme_colors.get('bg_primary', self.theme_colors.get('background_primary', '#1a1a1a'))
         text_color = self.theme_colors.get('text_primary', '#ffffff')
-        border_color = self.theme_colors.get('border', '#3a3a3a')
+        border_color = self.theme_colors.get('border', self.theme_colors.get('border_subtle', '#3a3a3a'))
         
         self.setStyleSheet(f"""
             QScrollArea {{
@@ -105,9 +128,32 @@ class MixedContentDisplay(QScrollArea):
             Qt.TextInteractionFlag.LinksAccessibleByMouse
         )
         label.setOpenExternalLinks(False)  # We'll handle links manually
+        label.setAutoFillBackground(False)  # Prevent Qt from filling background
+        label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)  # Make widget transparent
         
         # Process the HTML to extract and handle code blocks
         processed_html, code_blocks = self._extract_code_blocks(html_text)
+        
+        # Force no backgrounds by adding inline styles to all HTML elements
+        import re
+        
+        # Add inline style to all HTML opening tags to remove backgrounds
+        def add_background_removal(match):
+            full_match = match.group(0)
+            tag_name = match.group(1)
+            
+            # If already has style attribute, append to it
+            if 'style=' in full_match:
+                # Replace existing style attribute
+                full_match = re.sub(r'style="([^"]*)"', r'style="\1; background: none !important; background-color: transparent !important;"', full_match)
+            else:
+                # Add new style attribute before closing >
+                full_match = full_match[:-1] + ' style="background: none !important; background-color: transparent !important;">'
+            
+            return full_match
+        
+        # Apply to all HTML tags except code-related tags (to preserve code widget backgrounds)
+        processed_html = re.sub(r'<(p|div|span|h[1-6]|ul|ol|li|blockquote|a)(?:\s[^>]*)?>(?!</)', add_background_removal, processed_html)
         
         if code_blocks:
             # If we have code blocks, add the text before the first code block
@@ -122,6 +168,8 @@ class MixedContentDisplay(QScrollArea):
                         Qt.TextInteractionFlag.TextSelectableByMouse | 
                         Qt.TextInteractionFlag.LinksAccessibleByMouse
                     )
+                    text_label.setAutoFillBackground(False)  # Prevent Qt from filling background
+                    text_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)  # Make widget transparent
                     text_label.setText(part)
                     self._apply_label_styling(text_label, message_style)
                     self.content_layout.addWidget(text_label)
@@ -379,7 +427,8 @@ class MixedContentDisplay(QScrollArea):
         label.setStyleSheet(f"""
             QLabel {{
                 color: {color};
-                background-color: transparent;
+                background-color: transparent !important;
+                background: none !important;
                 padding: 4px;
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
                 font-size: 14px;
@@ -388,9 +437,23 @@ class MixedContentDisplay(QScrollArea):
             QLabel a {{
                 color: {self.theme_colors.get('info', '#4A9EFF')};
                 text-decoration: none;
+                background: none !important;
             }}
             QLabel a:hover {{
                 text-decoration: underline;
+                background: none !important;
+            }}
+            QLabel p {{
+                background: none !important;
+                background-color: transparent !important;
+            }}
+            QLabel div {{
+                background: none !important;
+                background-color: transparent !important;
+            }}
+            QLabel span {{
+                background: none !important;
+                background-color: transparent !important;
             }}
         """)
         
