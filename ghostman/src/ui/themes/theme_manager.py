@@ -302,7 +302,10 @@ class ThemeManager(QObject):
         """Apply current theme to all registered widgets."""
         dead_refs = set()
         
-        for widget_ref in self._registered_widgets:
+        # Create a copy to avoid RuntimeError if widgets register during iteration
+        widgets_to_update = list(self._registered_widgets)
+        
+        for widget_ref in widgets_to_update:
             widget = widget_ref()
             if widget is None:
                 # Widget has been garbage collected
