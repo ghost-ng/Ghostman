@@ -22,6 +22,13 @@ except ImportError:
 
 logger = logging.getLogger('ghostman.embedded_code_widget')
 
+# Theme system imports
+try:
+    from ...ui.themes.theme_manager import get_theme_manager
+    THEME_SYSTEM_AVAILABLE = True
+except ImportError:
+    THEME_SYSTEM_AVAILABLE = False
+
 
 class CodeContentWidget(QTextEdit):
     """Custom text widget for code display with solid background."""
@@ -79,12 +86,17 @@ class CodeContentWidget(QTextEdit):
         # CRITICAL: Set solid background color that fills ALL space
         selection_bg = self.theme_colors.get('selection', '#073642')  # Darker selection for dark themes
         
+        # Map color keys to handle both old and new theme formats
+        bg_color = self.theme_colors.get('bg_tertiary', self.theme_colors.get('background_tertiary', '#094352'))
+        text_color = self.theme_colors.get('text_primary', '#839496')
+        border_color = self.theme_colors.get('border', self.theme_colors.get('border_subtle', '#073642'))
+        
         self.setStyleSheet(f"""
             QTextEdit {{
-                background-color: {self.theme_colors['bg_tertiary']};
-                color: {self.theme_colors['text_primary']};
+                background-color: {bg_color};
+                color: {text_color};
                 padding: 16px;
-                border: 1px solid {self.theme_colors['border']};
+                border: 1px solid {border_color};
                 border-radius: 6px;
                 selection-background-color: {selection_bg};
                 font-family: 'Consolas', 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
@@ -92,7 +104,7 @@ class CodeContentWidget(QTextEdit):
                 tab-size: 4;
             }}
             QTextEdit::viewport {{
-                background-color: {self.theme_colors['bg_tertiary']};
+                background-color: {bg_color};
             }}
         """)
         
@@ -100,7 +112,7 @@ class CodeContentWidget(QTextEdit):
         self.document().setDefaultStyleSheet(f"""
             * {{
                 line-height: 150%;
-                background-color: {self.theme_colors['bg_tertiary']};
+                background-color: {bg_color};
                 white-space: pre;
                 tab-size: 4;
             }}
@@ -393,6 +405,9 @@ class EmbeddedCodeSnippetWidget(QWidget):
         self.theme_colors = theme_colors or self._get_default_colors()
         self.copy_button = None
         
+        # Register with theme manager for automatic theme updates
+        self._init_theme_system()
+        
         self._setup_ui()
         
     def _get_default_colors(self):
@@ -513,6 +528,18 @@ class EmbeddedCodeSnippetWidget(QWidget):
             logger.warning(f"⚠️ Code widget language detection failed: {e}")
             return 'text'
     
+    def _init_theme_system(self):
+        """Initialize theme system connection."""
+        if THEME_SYSTEM_AVAILABLE:
+            try:
+                theme_manager = get_theme_manager()
+                # Register with theme manager using set_theme_colors method
+                theme_manager.register_widget(self, "set_theme_colors")
+                logger.debug("EmbeddedCodeSnippetWidget registered with theme system")
+            except Exception as e:
+                logger.warning(f"Failed to initialize theme system: {e}")
+        else:
+            logger.debug("Theme system not available for EmbeddedCodeSnippetWidget")
     
     def _setup_ui(self):
         """Setup the widget UI with overlay language and copy buttons."""

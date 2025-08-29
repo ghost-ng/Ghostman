@@ -1239,6 +1239,9 @@ class REPLWidget(QWidget):
         self.summarization_queue: List[str] = []  # conversation IDs
         self.is_summarizing = False
         
+        # Startup task control
+        self._startup_tasks_completed = False
+        
         # Autosave functionality
         self.autosave_timer = QTimer()
         self.autosave_timer.timeout.connect(self._autosave_current_conversation)
@@ -1828,12 +1831,16 @@ class REPLWidget(QWidget):
                 self._load_pin_icon()
             
             # Update button visual states
-            self._update_search_button_state()
-            self._update_attach_button_state()
-            self._update_pin_button_state()
+            if hasattr(self, 'search_btn'):
+                self._update_search_button_state()
+            if hasattr(self, 'attach_btn'):
+                self._update_attach_button_state()
+            if hasattr(self, 'pin_btn'):
+                self._update_pin_button_state()
             
             # Reload theme-specific icons
-            self._load_search_icon()
+            if hasattr(self, 'search_btn'):
+                self._load_search_icon()
             self._load_chain_icon()
             self._load_chat_icon()
             if hasattr(self, 'title_settings_btn'):
@@ -2134,6 +2141,11 @@ class REPLWidget(QWidget):
     
     def _perform_startup_tasks(self):
         """Perform application startup tasks and display preamble."""
+        # Prevent multiple executions during theme switching or re-initialization
+        if self._startup_tasks_completed:
+            logger.debug("Startup tasks already completed - skipping duplicate execution")
+            return
+            
         try:
             logger.info("Performing startup tasks...")
             
@@ -2157,12 +2169,18 @@ class REPLWidget(QWidget):
             
             logger.info(f"Startup tasks completed - first_run: {startup_result.get('first_run')}, api_status: {startup_result.get('api_status')}")
             
+            # Mark startup tasks as completed to prevent re-execution during theme switching
+            self._startup_tasks_completed = True
+            
         except Exception as e:
             logger.error(f"✗ Failed to perform startup tasks: {e}")
             # Fallback to basic welcome message
             self.append_output("💬 Ghostman AI Assistant", "system")
             self.append_output("Type your message or 'help' for commands", "system")
             self.append_output("-" * 50, "system")
+            
+            # Mark startup tasks as completed even on failure to prevent retry loops
+            self._startup_tasks_completed = True
     
     def _load_conversations_deferred(self):
         """Load conversations after UI is fully initialized."""
@@ -3686,7 +3704,8 @@ class REPLWidget(QWidget):
                 
         except Exception as e:
             logger.error(f"Failed to load search icon: {e}")
-            self.search_btn.setText("⌕")  # Fallback
+            if hasattr(self, 'search_btn') and self.search_btn:
+                self.search_btn.setText("⌕")  # Fallback
     
     def _load_chain_icon(self):
         """Load theme-appropriate chain icon."""
@@ -4501,7 +4520,8 @@ class REPLWidget(QWidget):
             
             # MixedContentDisplay theme colors are already updated in _style_output_display()
             # Just ensure theme colors are applied to the display
-            self._style_output_display()
+            if hasattr(self, 'output_display'):
+                self._style_output_display()
             
             logger.debug("Existing output refreshed with new theme colors")
             

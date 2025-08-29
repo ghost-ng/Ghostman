@@ -13,7 +13,7 @@ from typing import Dict, Optional, List, Any, Set
 from pathlib import Path
 from datetime import datetime
 
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 from PyQt6.QtWidgets import QApplication
 
 from .color_system import ColorSystem, ColorUtils
@@ -57,6 +57,10 @@ class ThemeManager(QObject):
         
         # Performance optimization: Cache theme color dictionary
         self._theme_color_dict_cache: Optional[Dict[str, str]] = None
+        
+        # Theme switch debouncing to prevent notification spam
+        self._theme_switch_debounce_timer = None
+        self._is_switching_theme = False
         
         # Initialize theme directories
         self._init_theme_directories()
@@ -333,10 +337,23 @@ class ThemeManager(QObject):
         Returns:
             True if theme was set successfully, False otherwise
         """
+        # Debounce rapid theme changes to prevent notification spam
+        if self._is_switching_theme:
+            logger.debug(f"Theme switch debounced: {name} (already switching)")
+            return False
+        
         theme = self.get_theme(name)
         if theme is None:
             logger.error(f"Theme '{name}' not found")
             return False
+        
+        # Set debounce flag to prevent rapid switching
+        self._is_switching_theme = True
+        
+        # Clear any existing debounce timer
+        if self._theme_switch_debounce_timer:
+            self._theme_switch_debounce_timer.stop()
+            self._theme_switch_debounce_timer = None
         
         # Validate theme
         is_valid, issues = theme.validate()
@@ -371,7 +388,19 @@ class ThemeManager(QObject):
         self.theme_loaded.emit(name)
         
         logger.info(f"Theme changed to: {name} - applied to {len(self._registered_widgets)} registered widgets")
+        
+        # Set up debounce timer to reset flag after theme switching is complete
+        self._theme_switch_debounce_timer = QTimer()
+        self._theme_switch_debounce_timer.setSingleShot(True)
+        self._theme_switch_debounce_timer.timeout.connect(self._reset_theme_switching_flag)
+        self._theme_switch_debounce_timer.start(500)  # 500ms debounce
+        
         return True
+    
+    def _reset_theme_switching_flag(self):
+        """Reset the theme switching flag to allow new theme changes."""
+        self._is_switching_theme = False
+        logger.debug("Theme switching debounce flag reset")
     
     def set_custom_theme(self, color_system: ColorSystem, name: Optional[str] = None) -> bool:
         """
