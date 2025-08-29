@@ -612,26 +612,70 @@ class MarkdownRenderer:
             'a': self.color_scheme.get('info', '#4A9EFF')  # Link color from theme
         }
         
-        # Get appropriate font based on message style
-        font_type = 'user_input' if style == 'input' else 'ai_response'
-        font_css = font_service.get_css_font_style(font_type)
+        # Get appropriate font based on message style and prepare code font CSS
+        try:
+            from ...application.font_service import font_service
+            font_type = 'user_input' if style == 'input' else 'ai_response'
+            font_css = font_service.get_css_font_style(font_type)
+            
+            # Get code font from settings for both inline replacements and CSS
+            code_font_config = font_service.get_font_config('code_snippets')
+            code_font_css_style = font_service.get_css_font_style('code_snippets')
+            code_font_family = code_font_config['family']
+            code_font_size = code_font_config['size']
+            
+            # Create comprehensive CSS for code elements - will be used by MarkdownRenderer
+            self._code_font_css_style = code_font_css_style
+            self._code_font_family = code_font_family
+            self._code_font_size = code_font_size
+            
+        except Exception as e:
+            logger.warning(f"Failed to get font settings: {e}")
+            # Fallback styles
+            font_css = "font-family: 'Segoe UI'; font-size: 11pt"
+            self._code_font_css_style = "font-family: Consolas, Monaco, 'Courier New', monospace; font-size: 10pt"
+            self._code_font_family = "Consolas"
+            self._code_font_size = 10
+            code_font_family = "Consolas"
+            code_font_size = 10
         
-        # Wrap entire content with base color and font configuration
-        styled_html = f'<div style="color: {base_color}; line-height: {{\'1.4\'}}; {font_css};">{html_content}</div>'
+        # Get semantic font CSS from font service
+        try:
+            from ...application.font_service import font_service
+            semantic_font_css = font_service.get_semantic_font_css()
+        except Exception as e:
+            logger.warning(f"Failed to get semantic font CSS: {e}")
+            semantic_font_css = ""
         
-        # Apply specific styling to elements
+        # Determine message container class based on style
+        container_class = "ghostman-user-input" if style == 'input' else "ghostman-ai-response"
+        
+        # Wrap entire content with semantic classes and styling
+        styled_html = f"""<!DOCTYPE html>
+        <html>
+        <head>
+            <style>{semantic_font_css}</style>
+        </head>
+        <body>
+            <div class="ghostman-message-container {container_class}" style="color: {base_color}; line-height: 1.4;">
+                <div class="gm-text">{html_content}</div>
+            </div>
+        </body>
+        </html>"""
+        
+        # Apply specific styling with semantic classes for reliable font targeting
         replacements = {
-            '<code>': f'<code style="background-color: rgba(255,255,255,0.1); padding: {{\'2px\'}} {{\'4px\'}}; border-radius: {{\'3px\'}}; color: {style_colors["code"]}; font-family: Consolas, Monaco, monospace;">',
-            '<pre>': f'<pre style="background-color: rgba(255,255,255,0.05); padding: {{\'8px\'}}; border-radius: {{\'4px\'}}; border-left: {{\'3px\'}} solid {base_color}; margin: {{\'4px\'}} {{\'0\'}}; overflow-x: auto;">',
-            '<em>': f'<em style="color: {style_colors["em"]}; font-style: italic;">',
-            '<strong>': f'<strong style="color: {style_colors["strong"]}; font-weight: bold;">',
-            '<h1>': f'<h1 style="color: {style_colors["h1"]}; font-size: {{\'1.4em\'}}; margin: {{\'8px\'}} {{\'0\'}} {{\'4px\'}} {{\'0\'}}; border-bottom: {{\'2px\'}} solid {base_color};">',
-            '<h2>': f'<h2 style="color: {style_colors["h2"]}; font-size: {{\'1.3em\'}}; margin: {{\'6px\'}} {{\'0\'}} {{\'3px\'}} {{\'0\'}}; border-bottom: {{\'1px\'}} solid {base_color};">',
-            '<h3>': f'<h3 style="color: {style_colors["h3"]}; font-size: {{\'1.2em\'}}; margin: {{\'4px\'}} {{\'0\'}} {{\'2px\'}} {{\'0\'}};">',
-            '<blockquote>': f'<blockquote style="color: {style_colors["blockquote"]}; border-left: {{\'3px\'}} solid {base_color}; padding-left: {{\'12px\'}}; margin: {{\'4px\'}} {{\'0\'}}; font-style: italic;">',
+            '<code>': f'<code class="gm-code-inline" style="background-color: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 3px; color: {style_colors["code"]};">',
+            '<pre>': f'<pre class="gm-code-block" style="background-color: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; border-left: 3px solid {base_color}; margin: 4px 0; overflow-x: auto;">',
+            '<em>': f'<em class="gm-emphasis" style="color: {style_colors["em"]}; font-style: italic;">',
+            '<strong>': f'<strong class="gm-strong" style="color: {style_colors["strong"]}; font-weight: bold;">',
+            '<h1>': f'<h1 class="gm-heading" style="color: {style_colors["h1"]}; font-size: 1.4em; margin: 8px 0 4px 0; border-bottom: 2px solid {base_color};">',
+            '<h2>': f'<h2 class="gm-heading" style="color: {style_colors["h2"]}; font-size: 1.3em; margin: 6px 0 3px 0; border-bottom: 1px solid {base_color};">',
+            '<h3>': f'<h3 class="gm-heading" style="color: {style_colors["h3"]}; font-size: 1.2em; margin: 4px 0 2px 0;">',
+            '<blockquote>': f'<blockquote class="gm-quote" style="color: {style_colors["blockquote"]}; border-left: 3px solid {base_color}; padding-left: 12px; margin: 4px 0; font-style: italic;">',
             '<ul>': '<ul style="margin: 4px 0; padding-left: 20px;">',
             '<ol>': '<ol style="margin: 4px 0; padding-left: 20px;">',
-            '<li>': f'<li style="margin: {{\'2px\'}} {{\'0\'}};">',
+            '<li>': '<li style="margin: 2px 0;">',
             '<table>': f'<table style="border-collapse: collapse; margin: 8px 0; border: 1px solid {base_color};">',
             '<th>': f'<th style="padding: 4px 8px; border: 1px solid {base_color}; background-color: rgba(255,255,255,0.1); font-weight: bold;">',
             '<td>': f'<td style="padding: 4px 8px; border: 1px solid {base_color};">',
@@ -643,7 +687,7 @@ class MarkdownRenderer:
         # Handle links with special care - ensure proper anchor formatting for Qt
         styled_html = re.sub(
             r'<a href="([^"]+)"([^>]*)>',
-            f'<a href="\\1" style="color: {style_colors["a"]}; text-decoration: underline;"\\2>',
+            f'<a href="\\1" class="gm-link" style="color: {style_colors["a"]}; text-decoration: underline;"\\2>',
             styled_html
         )
         
@@ -1189,6 +1233,17 @@ class REPLWidget(QWidget):
                 self.theme_manager = get_theme_manager()
                 # Connect to theme change signal for live updates
                 self.theme_manager.theme_changed.connect(self._on_theme_changed)
+                
+                # Register as theme-aware widget to prevent generic styling
+                # This ensures our custom HTML styles are not overridden
+                try:
+                    from ...ui.themes.theme_applicator import get_theme_applicator
+                    theme_applicator = get_theme_applicator()
+                    theme_applicator.register_widget(self, theme_aware=True)
+                    logger.debug("REPL registered as theme-aware widget")
+                except ImportError:
+                    logger.debug("Theme applicator not available")
+                
                 logger.debug("Theme system initialized for REPL widget")
             except Exception as e:
                 logger.warning(f"Failed to initialize theme system: {e}")
@@ -3866,6 +3921,7 @@ class REPLWidget(QWidget):
         self.output_display.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.output_display.customContextMenuRequested.connect(self._show_output_context_menu)
         # Use font service for AI response font (default for output display)
+        # Note: We set the widget font to the AI response font, but HTML CSS will override for code elements
         ai_font = font_service.create_qfont('ai_response')
         self.output_display.setFont(ai_font)
         self.output_display.setMinimumHeight(300)
@@ -4174,37 +4230,255 @@ class REPLWidget(QWidget):
     def refresh_fonts(self):
         """Refresh fonts from font service when settings change."""
         try:
-            # Clear font service cache to get latest settings
+            logger.info("🔤 Starting comprehensive font refresh process...")
+            
+            # Clear all font caches to get latest settings
             font_service.clear_cache()
             
-            # Update output display font (AI response font)
-            ai_font = font_service.create_qfont('ai_response')
-            self.output_display.setFont(ai_font)
+            # Get current font configurations for logging
+            ai_config = font_service.get_font_config('ai_response')
+            input_config = font_service.get_font_config('user_input')
+            code_config = font_service.get_font_config('code_snippets')
             
-            # Update input font (user input font)
-            input_font = font_service.create_qfont('user_input')
-            self.command_input.setFont(input_font)
+            logger.info(f"  AI Response font: {ai_config['family']} {ai_config['size']}pt {ai_config['weight']} {ai_config['style']}")
+            logger.info(f"  User Input font: {input_config['family']} {input_config['size']}pt {input_config['weight']} {input_config['style']}")
+            logger.info(f"  Code Snippets font: {code_config['family']} {code_config['size']}pt {code_config['weight']} {code_config['style']}")
             
-            # Clear markdown renderer cache so it uses new fonts and update theme
+            # Update widget fonts for immediate feedback
+            try:
+                # Update output display font (AI response font as base)
+                ai_font = font_service.create_qfont('ai_response')
+                self.output_display.setFont(ai_font)
+                self.output_display.document().setDefaultFont(ai_font)
+                logger.debug("  Updated output display base font and document default")
+                
+                # Update input font (user input font)
+                input_font = font_service.create_qfont('user_input')
+                self.command_input.setFont(input_font)
+                logger.debug("  Updated command input font")
+                
+            except Exception as e:
+                logger.warning(f"Failed to update widget fonts: {e}")
+            
+            # Clear and update markdown renderer to use new fonts
             if hasattr(self, '_markdown_renderer'):
-                self._markdown_renderer.clear_cache()
-                self._markdown_renderer.update_theme()
+                try:
+                    self._markdown_renderer.clear_cache()
+                    self._markdown_renderer.update_theme()
+                    logger.debug("  Cleared markdown renderer cache and updated theme")
+                except Exception as e:
+                    logger.warning(f"Failed to update markdown renderer: {e}")
             
-            # Re-apply output display styling to ensure font colors are correct
-            self._style_output_display()
+            # Re-apply output display styling with new fonts
+            try:
+                self._style_output_display()
+                logger.debug("  Re-applied output display styling")
+            except Exception as e:
+                logger.warning(f"Failed to update output styling: {e}")
             
-            # Re-render existing content with new fonts
-            self._refresh_existing_output()
+            # Update all existing content with new semantic CSS system
+            try:
+                self._update_existing_content_fonts()
+                logger.debug("  Updated existing content with semantic font CSS")
+            except Exception as e:
+                logger.error(f"Failed to update existing content fonts: {e}")
             
-            logger.info("✓ Fonts refreshed from settings")
+            # Force immediate visual refresh
+            try:
+                self.output_display.update()
+                self.output_display.repaint()
+                self.command_input.update()
+                logger.debug("  Forced visual refresh of widgets")
+            except Exception as e:
+                logger.warning(f"Failed to force visual refresh: {e}")
+            
+            # Emit signal for any other components that need to update fonts
+            try:
+                if hasattr(self, 'fonts_changed'):
+                    self.fonts_changed.emit()
+                    logger.debug("  Emitted font change signal")
+            except Exception as e:
+                logger.warning(f"Failed to emit font change signal: {e}")
+            
+            logger.info("✅ Font refresh completed successfully - changes should be visible immediately")
             
         except Exception as e:
-            logger.error(f"Failed to refresh fonts: {e}")
+            logger.error(f"Critical error during font refresh: {e}", exc_info=True)
+            # Emergency fallback: at least try to apply basic fonts
+            try:
+                from PyQt6.QtGui import QFont
+                fallback_font = QFont("Segoe UI", 11)
+                self.output_display.setFont(fallback_font)
+                self.command_input.setFont(QFont("Consolas", 10))
+                logger.info("Applied emergency fallback fonts")
+            except Exception as fallback_error:
+                logger.error(f"Even fallback font application failed: {fallback_error}")
+    
+    def _update_existing_content_fonts(self):
+        """Update all existing content with new semantic font CSS system."""
+        try:
+            logger.debug("Updating existing content with semantic font CSS system")
+            
+            # Store current cursor position and scroll
+            cursor_pos = self.output_display.textCursor().position()
+            scroll_pos = self.output_display.verticalScrollBar().value()
+            
+            # Get current HTML content
+            current_html = self.output_display.toHtml()
+            
+            # Get the updated semantic CSS from font service
+            semantic_css = font_service.get_semantic_font_css()
+            
+            # Find and update the CSS in the HTML head section
+            import re
+            
+            # More comprehensive CSS pattern matching
+            css_patterns = [
+                r'<style[^>]*>.*?</style>',  # Standard style tags
+                r'<style[^>]*>[\s\S]*?</style>',  # Multi-line style tags
+            ]
+            
+            # Create the new CSS block with ghostman-specific identifier
+            new_css_block = f'<style id="ghostman-fonts">{semantic_css}</style>'
+            
+            updated_html = current_html
+            css_replaced = False
+            
+            # Try to replace existing CSS blocks
+            for pattern in css_patterns:
+                matches = re.findall(pattern, current_html, re.DOTALL | re.IGNORECASE)
+                if matches:
+                    # Replace the first CSS block (usually contains our font styles)
+                    updated_html = re.sub(pattern, new_css_block, updated_html, count=1, flags=re.DOTALL | re.IGNORECASE)
+                    css_replaced = True
+                    logger.debug(f"Replaced existing CSS block with semantic font CSS (pattern matched: {len(matches)} blocks)")
+                    break
+            
+            if not css_replaced:
+                # Insert CSS into head section or at the beginning
+                head_pattern = r'<head[^>]*>'
+                if re.search(head_pattern, current_html, re.IGNORECASE):
+                    updated_html = re.sub(head_pattern, f'\\g<0>\n{new_css_block}', current_html, flags=re.IGNORECASE)
+                    logger.debug("Added semantic font CSS to head section")
+                elif re.search(r'<html[^>]*>', current_html, re.IGNORECASE):
+                    # Add after HTML tag if head doesn't exist
+                    updated_html = re.sub(r'(<html[^>]*>)', f'\\1\n<head>\n{new_css_block}\n</head>', current_html, flags=re.IGNORECASE)
+                    logger.debug("Added semantic font CSS with new head section")
+                else:
+                    # Fallback: add at the beginning of HTML
+                    updated_html = new_css_block + current_html
+                    logger.debug("Added semantic font CSS at beginning of HTML")
+                    logger.debug("Added semantic font CSS to head section")
+                else:
+                    # Fallback: add at the beginning of HTML
+                    updated_html = new_css_block + current_html
+                    logger.debug("Added semantic font CSS at beginning of HTML")
+            
+            # Ensure all content has semantic classes for proper font targeting
+            # Update any missing semantic classes in existing content
+            semantic_class_updates = [
+                # Ensure message containers have proper semantic classes
+                (r'<div([^>]*style="color:[^;]*;[^"]*")([^>]*class=")(?!.*ghostman-message-container)', 
+                 r'<div\1\2ghostman-message-container ghostman-ai-response '),
+                
+                # Update code elements that might be missing semantic classes
+                (r'<code(?![^>]*class="[^"]*gm-code)', '<code class="gm-code-inline"'),
+                (r'<pre(?![^>]*class="[^"]*gm-code)', '<pre class="gm-code-block"'),
+                
+                # Update text formatting elements
+                (r'<em(?![^>]*class="[^"]*gm-)', '<em class="gm-emphasis"'),
+                (r'<strong(?![^>]*class="[^"]*gm-)', '<strong class="gm-strong"'),
+                (r'<h([1-6])(?![^>]*class="[^"]*gm-)', r'<h\1 class="gm-heading"'),
+                (r'<blockquote(?![^>]*class="[^"]*gm-)', '<blockquote class="gm-quote"'),
+                
+                # Update links
+                (r'<a\s+href="([^"]*)"(?![^>]*class="[^"]*gm-)', r'<a href="\1" class="gm-link"'),
+            ]
+            
+            # Apply semantic class updates
+            for pattern, replacement in semantic_class_updates:
+                matches_before = len(re.findall(pattern, updated_html))
+                updated_html = re.sub(pattern, replacement, updated_html)
+                matches_after = len(re.findall(pattern, updated_html))
+                if matches_before > 0:
+                    logger.debug(f"Updated {matches_before} elements with semantic classes (pattern: {pattern[:50]}...)")
+            
+            # Ensure all text content is wrapped in gm-text containers
+            # Find content that needs to be wrapped in semantic text containers
+            if 'gm-text' not in updated_html:
+                # Look for body content that isn't wrapped
+                body_pattern = r'<body[^>]*>(.*?)</body>'
+                body_match = re.search(body_pattern, updated_html, re.DOTALL | re.IGNORECASE)
+                
+                if body_match:
+                    body_content = body_match.group(1).strip()
+                    if body_content and '<div class="gm-text">' not in body_content:
+                        wrapped_content = f'''
+                        <div class="ghostman-message-container ghostman-ai-response">
+                            <div class="gm-text">{body_content}</div>
+                        </div>
+                        '''
+                        updated_html = updated_html.replace(body_content, wrapped_content)
+                        logger.debug("Wrapped body content in semantic message container")
+            
+            # Ensure proper message type classification
+            # Update container classes based on content context if needed
+            if 'ghostman-user-input' not in updated_html and 'You:' in updated_html:
+                updated_html = updated_html.replace('ghostman-ai-response', 'ghostman-user-input')
+                logger.debug("Updated container class to user input based on content context")
+            
+            # Update the display if changes were made
+            if updated_html != current_html:
+                # Perform the HTML update
+                self.output_display.setHtml(updated_html)
+                
+                # Restore cursor and scroll position with bounds checking
+                try:
+                    cursor = self.output_display.textCursor()
+                    doc_length = self.output_display.document().characterCount()
+                    safe_pos = max(0, min(cursor_pos, doc_length - 1)) if doc_length > 0 else 0
+                    cursor.setPosition(safe_pos)
+                    self.output_display.setTextCursor(cursor)
+                    
+                    # Restore scroll position with bounds checking
+                    scrollbar = self.output_display.verticalScrollBar()
+                    max_scroll = scrollbar.maximum()
+                    safe_scroll = max(0, min(scroll_pos, max_scroll))
+                    scrollbar.setValue(safe_scroll)
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to restore cursor/scroll position: {e}")
+                
+                # Force visual update to ensure fonts are applied immediately
+                self.output_display.update()
+                self.output_display.repaint()
+                
+                # Also update the document's default font as fallback
+                try:
+                    ai_font = font_service.create_qfont('ai_response')
+                    self.output_display.document().setDefaultFont(ai_font)
+                except Exception as e:
+                    logger.warning(f"Failed to set document default font: {e}")
+                
+                logger.info(f"✓ Successfully updated existing content with semantic font system ({len(current_html)} -> {len(updated_html)} chars)")
+            else:
+                logger.debug("No changes needed - content already uses semantic font system")
+                
+        except Exception as e:
+            logger.error(f"Failed to update existing content fonts: {e}", exc_info=True)
+            
+            # Fallback: at least try to update the document's default font
+            try:
+                ai_font = font_service.create_qfont('ai_response')
+                self.output_display.document().setDefaultFont(ai_font)
+                logger.info("Applied fallback font update to document default font")
+            except Exception as fallback_error:
+                logger.error(f"Fallback font update also failed: {fallback_error}")
     
     def _refresh_existing_output(self):
-        """Re-render all existing output with current theme colors - preserves content."""
+        """Re-render all existing output with current theme colors and fonts - preserves content."""
         try:
-            # Clear markdown renderer cache to ensure fresh colors
+            # Clear markdown renderer cache to ensure fresh colors and fonts
             if hasattr(self, '_markdown_renderer'):
                 self._markdown_renderer.clear_cache()
                 self._markdown_renderer.update_theme()
@@ -4221,6 +4495,19 @@ class REPLWidget(QWidget):
             document = self.output_display.document()
             ai_font = font_service.create_qfont('ai_response')
             document.setDefaultFont(ai_font)
+            
+            # IMPORTANT: Update code font variables for HTML re-processing
+            # This ensures any future HTML generation uses the new code fonts
+            try:
+                code_font_config = font_service.get_font_config('code_snippets')
+                self._code_font_family = code_font_config['family']
+                self._code_font_size = code_font_config['size']
+                self._code_font_css_style = font_service.get_css_font_style('code_snippets')
+                logger.debug(f"Updated code font variables: {self._code_font_family} {self._code_font_size}pt")
+            except Exception as e:
+                logger.warning(f"Failed to update code font variables: {e}")
+                self._code_font_family = "Consolas"
+                self._code_font_size = 10
             
             # Update text color formats for existing content with improved theme awareness
             if self.theme_manager and THEME_SYSTEM_AVAILABLE:
