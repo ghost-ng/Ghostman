@@ -113,7 +113,8 @@
       "Read(/C:\\Users\\miguel\\Downloads/**)",
       "Bash(./venv/Scripts/pip.exe install Pygments)",
       "Read(/C:\\Users\\miguel\\Downloads/**)",
-      "Read(/C:\\Users\\miguel\\Downloads/**)"
+      "Read(/C:\\Users\\miguel\\Downloads/**)",
+      "Bash(git stash:*)"
     ],
     "deny": [],
     "additionalDirectories": [
