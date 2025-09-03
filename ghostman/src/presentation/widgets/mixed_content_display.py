@@ -116,14 +116,22 @@ class MixedContentDisplay(QScrollArea):
         
     def _update_existing_widgets_theme(self):
         """Update theme colors for existing widgets without re-rendering."""
-        # Update only the code snippet widgets with new colors
-        for widget in self.content_widgets:
-            if CODE_WIDGET_AVAILABLE and hasattr(widget, 'set_theme_colors'):
-                try:
-                    # Update the code widget's theme colors using existing method
-                    widget.set_theme_colors(self.theme_colors)
-                except Exception as e:
-                    logger.debug(f"Widget doesn't support theme update: {e}")
+        # Update all widgets with new theme colors
+        for i, (content, message_style, widget_type) in enumerate(self.content_history):
+            if i < len(self.content_widgets):
+                widget = self.content_widgets[i]
+                
+                # Update code snippet widgets
+                if CODE_WIDGET_AVAILABLE and hasattr(widget, 'set_theme_colors'):
+                    try:
+                        widget.set_theme_colors(self.theme_colors)
+                    except Exception as e:
+                        logger.debug(f"Widget doesn't support theme update: {e}")
+                
+                # Update QLabel widgets (text content)
+                elif isinstance(widget, QLabel) and widget_type == 'html':
+                    # Re-apply styling to existing label with new colors
+                    self._apply_label_styling(widget, message_style)
     
     def _rerender_all_content(self):
         """Re-render all content with new theme colors."""
@@ -442,14 +450,16 @@ class MixedContentDisplay(QScrollArea):
             return
             
         # Get color based on message style
+        # Use more visible colors for better contrast
         style_colors = {
             'normal': self.theme_colors.get('text_primary', '#ffffff'),
-            'input': self.theme_colors.get('text_secondary', '#a0a0a0'),
-            'response': self.theme_colors.get('info', '#4A9EFF'),
+            'input': self.theme_colors.get('primary', self.theme_colors.get('text_primary', '#ffffff')),  # Use primary color or text_primary for better visibility
+            'response': self.theme_colors.get('text_primary', '#ffffff'),  # Use text_primary for AI responses
             'system': self.theme_colors.get('text_secondary', '#808080'),
             'info': self.theme_colors.get('info', '#4A9EFF'),
             'warning': self.theme_colors.get('warning', '#FFB84D'),
             'error': self.theme_colors.get('error', '#FF4D4D'),
+            'divider': self.theme_colors.get('text_secondary', '#808080'),  # For dividers
         }
         
         color = style_colors.get(message_style, self.theme_colors.get('text_primary', '#ffffff'))
