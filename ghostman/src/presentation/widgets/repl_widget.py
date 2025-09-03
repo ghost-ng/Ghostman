@@ -462,12 +462,25 @@ class MarkdownRenderer:
                     # Try to get colors from theme manager
                     if self.theme_manager and hasattr(self.theme_manager, 'current_theme'):
                         theme = self.theme_manager.current_theme
+                        
+                        # Smart fallbacks based on theme detection
+                        bg_primary = getattr(theme, 'background_primary', '#1a1a1a')
+                        # Use theme detection to provide appropriate text fallbacks
+                        if hasattr(self, 'is_dark_theme') and not self.is_dark_theme:
+                            # Light theme fallbacks
+                            text_fallback = '#2d2d2d'
+                            text_secondary_fallback = '#666666'
+                        else:
+                            # Dark theme fallbacks  
+                            text_fallback = '#ffffff'
+                            text_secondary_fallback = '#cccccc'
+                        
                         return {
-                            'bg_primary': getattr(theme, 'background_primary', '#1a1a1a'),
+                            'bg_primary': bg_primary,
                             'bg_secondary': getattr(theme, 'background_secondary', '#2a2a2a'),
                             'bg_tertiary': getattr(theme, 'background_tertiary', '#3a3a3a'),
-                            'text_primary': getattr(theme, 'text_primary', '#ffffff'),
-                            'text_secondary': getattr(theme, 'text_secondary', '#cccccc'),
+                            'text_primary': getattr(theme, 'text_primary', text_fallback),
+                            'text_secondary': getattr(theme, 'text_secondary', text_secondary_fallback),
                             'border': getattr(theme, 'border_primary', '#4a4a4a'),
                             'interactive': getattr(theme, 'interactive_normal', '#4a4a4a'),
                             'interactive_hover': getattr(theme, 'interactive_hover', '#5a5a5a'),
@@ -690,6 +703,41 @@ class MarkdownRenderer:
                         
         except Exception as e:
             logger.warning(f"Failed to validate color contrast: {e}")
+    
+    def _get_smart_text_fallback(self, bg_color: str) -> str:
+        """
+        Get smart text color fallback based on background brightness.
+        Returns dark text for light backgrounds and light text for dark backgrounds.
+        """
+        try:
+            # Remove # if present
+            hex_color = bg_color.lstrip('#')
+            
+            # Convert hex to RGB
+            if len(hex_color) == 6:
+                r = int(hex_color[0:2], 16)
+                g = int(hex_color[2:4], 16) 
+                b = int(hex_color[4:6], 16)
+            elif len(hex_color) == 3:
+                r = int(hex_color[0], 16) * 17
+                g = int(hex_color[1], 16) * 17
+                b = int(hex_color[2], 16) * 17
+            else:
+                # Invalid color, use dark fallback
+                return '#2d2d2d'
+            
+            # Calculate luminance (0.299*R + 0.587*G + 0.114*B)
+            luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+            
+            # Return dark text for light backgrounds, light text for dark backgrounds
+            if luminance > 0.5:
+                return '#2d2d2d'  # Dark text for light background
+            else:
+                return '#f0f0f0'  # Light text for dark background
+                
+        except (ValueError, TypeError):
+            # Fallback if color parsing fails
+            return '#2d2d2d'
     
     def _ensure_minimum_contrast(self, text_color: str, background_color: str, min_ratio: float = 4.5) -> str:
         """Ensure minimum contrast ratio between text and background colors."""
@@ -1925,7 +1973,9 @@ class REPLWidget(QWidget):
 
             # Avoid identical bg/text
             if text_color.lower() == bg_color.lower():
-                text_color = getattr(colors, 'text_primary', '#FFFFFF')
+                # Use smart fallback based on background brightness
+                fallback_text = self._get_smart_text_fallback(bg_color)
+                text_color = getattr(colors, 'text_primary', fallback_text)
 
             # Compose stylesheet (force solid background independent of panel opacity)
             self.prompt_label.setStyleSheet(

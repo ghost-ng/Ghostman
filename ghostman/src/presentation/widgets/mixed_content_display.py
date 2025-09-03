@@ -101,7 +101,11 @@ class MixedContentDisplay(QScrollArea):
             return
             
         bg_color = self.theme_colors.get('bg_primary', self.theme_colors.get('background_primary', '#1a1a1a'))
-        text_color = self.theme_colors.get('text_primary', '#ffffff')
+        # Only use fallback if text_primary is missing
+        text_color = self.theme_colors.get('text_primary')
+        if not text_color:
+            text_color = self._get_smart_text_fallback(bg_color)
+            logger.debug(f"text_primary missing in stylesheet update, using fallback: {text_color}")
         border_color = self.theme_colors.get('border', self.theme_colors.get('border_subtle', '#3a3a3a'))
         
         self.setStyleSheet(f"""
@@ -113,6 +117,41 @@ class MixedContentDisplay(QScrollArea):
                 background-color: {bg_color};
             }}
         """)
+    
+    def _get_smart_text_fallback(self, bg_color: str) -> str:
+        """
+        Get smart text color fallback based on background brightness.
+        Returns dark text for light backgrounds and light text for dark backgrounds.
+        """
+        try:
+            # Remove # if present
+            hex_color = bg_color.lstrip('#')
+            
+            # Convert hex to RGB
+            if len(hex_color) == 6:
+                r = int(hex_color[0:2], 16)
+                g = int(hex_color[2:4], 16) 
+                b = int(hex_color[4:6], 16)
+            elif len(hex_color) == 3:
+                r = int(hex_color[0], 16) * 17
+                g = int(hex_color[1], 16) * 17
+                b = int(hex_color[2], 16) * 17
+            else:
+                # Invalid color, use dark fallback
+                return '#2d2d2d'
+            
+            # Calculate luminance (0.299*R + 0.587*G + 0.114*B)
+            luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+            
+            # Return dark text for light backgrounds, light text for dark backgrounds
+            if luminance > 0.5:
+                return '#2d2d2d'  # Dark text for light background
+            else:
+                return '#f0f0f0'  # Light text for dark background
+                
+        except (ValueError, TypeError):
+            # Fallback if color parsing fails
+            return '#2d2d2d'
         
     def _update_existing_widgets_theme(self):
         """Update theme colors for existing widgets without re-rendering."""
@@ -450,11 +489,20 @@ class MixedContentDisplay(QScrollArea):
             return
             
         # Get color based on message style
-        # Use more visible colors for better contrast
+        # Only use smart fallback if text_primary is actually missing
+        bg_color = self.theme_colors.get('bg_primary', self.theme_colors.get('background_primary', '#1a1a1a'))
+        
+        # Use theme's text_primary directly if it exists
+        text_primary = self.theme_colors.get('text_primary')
+        if not text_primary:
+            # Only calculate fallback if text_primary is missing
+            text_primary = self._get_smart_text_fallback(bg_color)
+            logger.warning(f"text_primary missing from theme_colors, using fallback: {text_primary}")
+        
         style_colors = {
-            'normal': self.theme_colors.get('text_primary', '#ffffff'),
-            'input': self.theme_colors.get('primary', self.theme_colors.get('text_primary', '#ffffff')),  # Use primary color or text_primary for better visibility
-            'response': self.theme_colors.get('text_primary', '#ffffff'),  # Use text_primary for AI responses
+            'normal': text_primary,
+            'input': self.theme_colors.get('primary', text_primary),  # Use primary color or text_primary
+            'response': text_primary,  # Use text_primary for AI responses
             'system': self.theme_colors.get('text_secondary', '#808080'),
             'info': self.theme_colors.get('info', '#4A9EFF'),
             'warning': self.theme_colors.get('warning', '#FFB84D'),
@@ -462,7 +510,7 @@ class MixedContentDisplay(QScrollArea):
             'divider': self.theme_colors.get('text_secondary', '#808080'),  # For dividers
         }
         
-        color = style_colors.get(message_style, self.theme_colors.get('text_primary', '#ffffff'))
+        color = style_colors.get(message_style, text_primary)
         
         label.setStyleSheet(f"""
             QLabel {{
@@ -511,20 +559,24 @@ class MixedContentDisplay(QScrollArea):
             logger.warning("Attempted to add empty code snippet")
             return
             
-        # Use theme colors if available, with comprehensive defaults
-        colors = self.theme_colors or {
-            'bg_primary': '#1a1a1a',
-            'bg_secondary': '#2a2a2a',
-            'bg_tertiary': '#3a3a3a',  # This will be the solid background
-            'text_primary': '#ffffff',
-            'text_secondary': '#a0a0a0',
-            'border': '#4a4a4a',
-            'interactive': '#3a3a3a',
-            'interactive_hover': '#4a4a4a',
-            'background_primary': '#1a1a1a',
-            'background_secondary': '#2a2a2a',
-            'background_tertiary': '#3a3a3a',
-        }
+        # Use theme colors if available, with smart defaults
+        if self.theme_colors:
+            colors = self.theme_colors
+        else:
+            # Smart fallback colors - assume dark theme for default
+            colors = {
+                'bg_primary': '#1a1a1a',
+                'bg_secondary': '#2a2a2a',
+                'bg_tertiary': '#3a3a3a',  # This will be the solid background
+                'text_primary': '#ffffff',
+                'text_secondary': '#a0a0a0',
+                'border': '#4a4a4a',
+                'interactive': '#3a3a3a',
+                'interactive_hover': '#4a4a4a',
+                'background_primary': '#1a1a1a',
+                'background_secondary': '#2a2a2a',
+                'background_tertiary': '#3a3a3a',
+            }
         
         try:
             # Create the embedded code widget with enhanced error handling
