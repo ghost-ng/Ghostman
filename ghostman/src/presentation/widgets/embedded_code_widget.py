@@ -127,6 +127,14 @@ class CodeContentWidget(QTextEdit):
         
     def _apply_syntax_highlighting(self):
         """Apply syntax highlighting using Pygments for any language."""
+        # Check if syntax highlighting is enabled in settings
+        from ...infrastructure.storage.settings_manager import settings
+        lexing_enabled = settings.get('advanced.enable_code_lexing', False)
+        
+        if not lexing_enabled:
+            logger.debug("🚫 Syntax highlighting disabled in settings - using plain text")
+            return
+        
         # Check if content is already highlighted by the first system
         if self.language and self.language.startswith('pre-highlighted-'):
             logger.info(f"🔄 Skipping second highlighting - content already processed by first system")

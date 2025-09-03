@@ -909,6 +909,16 @@ class SettingsDialog(QDialog):
         )
         code_display_layout.addRow("", self.auto_detect_code_language_check)
         
+        # Code syntax highlighting checkbox
+        self.enable_code_lexing_check = QCheckBox("Enable Code Syntax Highlighting")
+        self.enable_code_lexing_check.setChecked(False)  # Default to unchecked
+        self.enable_code_lexing_check.setToolTip(
+            "When enabled, applies syntax highlighting (lexing) to code snippets using Pygments. "
+            "When disabled, code appears in plain monospace font without color highlighting. "
+            "Disabling can improve performance with large code blocks."
+        )
+        code_display_layout.addRow("", self.enable_code_lexing_check)
+        
         layout.addWidget(code_display_group)
         
         # Data Storage Group
@@ -2027,7 +2037,8 @@ class SettingsDialog(QDialog):
                 "log_location": self.log_location_edit.text().strip(),
                 "log_retention_days": self.log_retention_spin.value(),
                 "ignore_ssl_verification": self.ignore_ssl_check.isChecked(),
-                "auto_detect_code_language": self.auto_detect_code_language_check.isChecked()
+                "auto_detect_code_language": self.auto_detect_code_language_check.isChecked(),
+                "enable_code_lexing": self.enable_code_lexing_check.isChecked()
             }
         }
     
@@ -2177,6 +2188,9 @@ class SettingsDialog(QDialog):
         
         if "auto_detect_code_language" in advanced_config:
             self.auto_detect_code_language_check.setChecked(bool(advanced_config["auto_detect_code_language"]))
+        
+        if "enable_code_lexing" in advanced_config:
+            self.enable_code_lexing_check.setChecked(bool(advanced_config["enable_code_lexing"]))
     
     def _load_current_settings(self):
         """Load current settings from settings manager."""

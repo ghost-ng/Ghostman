@@ -463,24 +463,31 @@ class MarkdownRenderer:
                     if self.theme_manager and hasattr(self.theme_manager, 'current_theme'):
                         theme = self.theme_manager.current_theme
                         
-                        # Smart fallbacks based on theme detection
-                        bg_primary = getattr(theme, 'background_primary', '#1a1a1a')
-                        # Use theme detection to provide appropriate text fallbacks
-                        if hasattr(self, 'is_dark_theme') and not self.is_dark_theme:
-                            # Light theme fallbacks
-                            text_fallback = '#2d2d2d'
-                            text_secondary_fallback = '#666666'
-                        else:
-                            # Dark theme fallbacks  
-                            text_fallback = '#ffffff'
-                            text_secondary_fallback = '#cccccc'
+                        # Get theme-specific colors first - PRESERVE UNIQUE THEME COLORS
+                        text_primary = getattr(theme, 'text_primary', None)
+                        text_secondary = getattr(theme, 'text_secondary', None)
+                        
+                        # Only use fallbacks if theme colors are actually missing
+                        if text_primary is None:
+                            # Use theme detection to provide appropriate text fallbacks
+                            if hasattr(self, 'is_dark_theme') and not self.is_dark_theme:
+                                text_primary = '#2d2d2d'  # Light theme fallback
+                            else:
+                                text_primary = '#ffffff'  # Dark theme fallback
+                        
+                        if text_secondary is None:
+                            # Use theme detection to provide appropriate secondary fallbacks
+                            if hasattr(self, 'is_dark_theme') and not self.is_dark_theme:
+                                text_secondary = '#666666'  # Light theme fallback
+                            else:
+                                text_secondary = '#cccccc'  # Dark theme fallback
                         
                         return {
-                            'bg_primary': bg_primary,
+                            'bg_primary': getattr(theme, 'background_primary', '#1a1a1a'),
                             'bg_secondary': getattr(theme, 'background_secondary', '#2a2a2a'),
                             'bg_tertiary': getattr(theme, 'background_tertiary', '#3a3a3a'),
-                            'text_primary': getattr(theme, 'text_primary', text_fallback),
-                            'text_secondary': getattr(theme, 'text_secondary', text_secondary_fallback),
+                            'text_primary': text_primary,  # PRESERVE unique theme colors
+                            'text_secondary': text_secondary,  # PRESERVE unique theme colors
                             'border': getattr(theme, 'border_primary', '#4a4a4a'),
                             'interactive': getattr(theme, 'interactive_normal', '#4a4a4a'),
                             'interactive_hover': getattr(theme, 'interactive_hover', '#5a5a5a'),
@@ -3485,7 +3492,7 @@ class REPLWidget(QWidget):
                     color: white;
                     border: none;
                     border-radius: 4px;
-                    padding: 6px 12px;
+                    padding: 4px 4px;
                     font-weight: bold;
                 }
                 QPushButton:hover {

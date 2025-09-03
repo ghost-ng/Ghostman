@@ -512,6 +512,11 @@ class MixedContentDisplay(QScrollArea):
         
         color = style_colors.get(message_style, text_primary)
         
+        # Get text size setting for consistent font sizes
+        from ...infrastructure.storage.settings_manager import settings
+        text_size_percent = settings.get('ui.text_size', 100)
+        base_font_size = int(14 * text_size_percent / 100)  # Base 14px scaled
+        
         label.setStyleSheet(f"""
             QLabel {{
                 color: {color};
@@ -519,7 +524,7 @@ class MixedContentDisplay(QScrollArea):
                 background: none !important;
                 padding: 4px;
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-                font-size: 14px;
+                font-size: {base_font_size}px;
                 line-height: 1.5;
             }}
             QLabel a {{
@@ -542,6 +547,42 @@ class MixedContentDisplay(QScrollArea):
             QLabel span {{
                 background: none !important;
                 background-color: transparent !important;
+            }}
+            QLabel h1 {{
+                font-size: {int(base_font_size * 2.0)}px;
+                font-weight: bold;
+                margin: 0.5em 0;
+                color: {color};
+            }}
+            QLabel h2 {{
+                font-size: {int(base_font_size * 1.7)}px;
+                font-weight: bold;
+                margin: 0.4em 0;
+                color: {color};
+            }}
+            QLabel h3 {{
+                font-size: {int(base_font_size * 1.4)}px;
+                font-weight: bold;
+                margin: 0.3em 0;
+                color: {color};
+            }}
+            QLabel h4 {{
+                font-size: {int(base_font_size * 1.2)}px;
+                font-weight: bold;
+                margin: 0.2em 0;
+                color: {color};
+            }}
+            QLabel h5 {{
+                font-size: {int(base_font_size * 1.1)}px;
+                font-weight: bold;
+                margin: 0.2em 0;
+                color: {color};
+            }}
+            QLabel h6 {{
+                font-size: {base_font_size}px;
+                font-weight: bold;
+                margin: 0.2em 0;
+                color: {color};
             }}
         """)
         
