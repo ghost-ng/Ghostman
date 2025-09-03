@@ -556,8 +556,12 @@ class EmbeddedCodeSnippetWidget(QWidget):
         self.code_content = CodeContentWidget(self.code, self.language, self.theme_colors)
         container_layout.addWidget(self.code_content)
         
-        # Create floating language button (left side)
-        if self.language and not self.language.startswith('pre-highlighted-'):
+        # Create floating language button (left side) - only if auto detect is enabled
+        # Check the setting from settings manager
+        from ...infrastructure.storage.settings_manager import settings
+        show_language = settings.get('advanced.auto_detect_code_language', False)
+        
+        if show_language and self.language and not self.language.startswith('pre-highlighted-'):
             self.language_button = LanguageButton(container, self.language)
             self.language_button.apply_theme_style(self.theme_colors)
         else:

@@ -5047,10 +5047,7 @@ class REPLWidget(QWidget):
         # Reset history navigation
         self.history_index = -1
         self.current_input = ""
-        
-        # Add light grey divider before user input reflection
-        self.append_output("--------------------------------------------------", "divider")
-        
+                
         # Display command in output with better separation
         self.append_output(f"👤 **You:**\n{command}", "input")
         self.append_output("", "normal")  # Add spacing

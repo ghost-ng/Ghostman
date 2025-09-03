@@ -255,13 +255,13 @@ class MixedContentDisplay(QScrollArea):
                 code_content = re.sub(r'class="[^"]*"', '', code_content)
                 
                 # Clean up whitespace artifacts from HTML stripping
-                code_content = re.sub(r'\n\s*\n', '\n', code_content)  # Remove extra blank lines
-                code_content = re.sub(r'^\s+', '', code_content, flags=re.MULTILINE)  # Remove leading spaces on each line
+                # IMPORTANT: Do NOT remove leading spaces - they are indentation!
+                code_content = re.sub(r'\n\s*\n', '\n', code_content)  # Remove extra blank lines only
                 
                 logger.debug(f"Cleaned code content: {len(code_content)} chars, first 50: {repr(code_content[:50])}")
                 
-                # Clean up extra whitespace but preserve code structure
-                code_content = code_content.strip()
+                # Only strip trailing whitespace, preserve leading indentation
+                code_content = code_content.rstrip()
                 
                 # Try to detect language from the full match context
                 language = self._detect_language_from_html(match.group(0))

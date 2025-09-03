@@ -895,6 +895,22 @@ class SettingsDialog(QDialog):
         
         layout.addWidget(security_group)
         
+        # Code Display Group
+        code_display_group = QGroupBox("Code Display")
+        code_display_layout = QFormLayout(code_display_group)
+        
+        # Auto detect code language checkbox
+        self.auto_detect_code_language_check = QCheckBox("Auto Detect Code Language")
+        self.auto_detect_code_language_check.setChecked(False)  # Default to unchecked
+        self.auto_detect_code_language_check.setToolTip(
+            "When enabled, attempts to automatically detect the programming language "
+            "of code snippets and displays the detected language label. "
+            "When disabled, language labels are hidden for cleaner display."
+        )
+        code_display_layout.addRow("", self.auto_detect_code_language_check)
+        
+        layout.addWidget(code_display_group)
+        
         # Data Storage Group
         storage_group = QGroupBox("Data Storage")
         storage_layout = QFormLayout(storage_group)
@@ -2010,7 +2026,8 @@ class SettingsDialog(QDialog):
                 "log_level": self.log_level_combo.currentText(),
                 "log_location": self.log_location_edit.text().strip(),
                 "log_retention_days": self.log_retention_spin.value(),
-                "ignore_ssl_verification": self.ignore_ssl_check.isChecked()
+                "ignore_ssl_verification": self.ignore_ssl_check.isChecked(),
+                "auto_detect_code_language": self.auto_detect_code_language_check.isChecked()
             }
         }
     
@@ -2157,6 +2174,9 @@ class SettingsDialog(QDialog):
         
         if "ignore_ssl_verification" in advanced_config:
             self.ignore_ssl_check.setChecked(bool(advanced_config["ignore_ssl_verification"]))
+        
+        if "auto_detect_code_language" in advanced_config:
+            self.auto_detect_code_language_check.setChecked(bool(advanced_config["auto_detect_code_language"]))
     
     def _load_current_settings(self):
         """Load current settings from settings manager."""
