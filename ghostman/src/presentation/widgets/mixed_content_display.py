@@ -78,22 +78,22 @@ class MixedContentDisplay(QScrollArea):
         """Initialize theme system connection."""
         if THEME_SYSTEM_AVAILABLE:
             try:
-                theme_manager = get_theme_manager()
-                # Register with theme manager using set_theme_colors method
-                theme_manager.register_widget(self, "set_theme_colors")
-                logger.debug("MixedContentDisplay registered with theme system")
+                # NOTE: MixedContentDisplay is NOT registered with theme manager
+                # The REPL widget manually passes opacity-adjusted colors to this widget
+                # This prevents double updates and ensures proper opacity handling
+                logger.debug("MixedContentDisplay uses manual theme updates from REPL widget")
             except Exception as e:
                 logger.warning(f"Failed to initialize theme system: {e}")
         else:
             logger.debug("Theme system not available for MixedContentDisplay")
         
     def set_theme_colors(self, colors: Dict[str, str]):
-        """Update theme colors and re-render all content with new theme."""
+        """Update theme colors without re-rendering content."""
         self.theme_colors = colors
         self._update_stylesheet()
         
-        # Re-render all content with new theme colors
-        self._rerender_all_content()
+        # Update existing code widgets with new theme colors without re-rendering
+        self._update_existing_widgets_theme()
         
     def _update_stylesheet(self):
         """Update the stylesheet based on theme colors."""
@@ -114,6 +114,17 @@ class MixedContentDisplay(QScrollArea):
             }}
         """)
         
+    def _update_existing_widgets_theme(self):
+        """Update theme colors for existing widgets without re-rendering."""
+        # Update only the code snippet widgets with new colors
+        for widget in self.content_widgets:
+            if CODE_WIDGET_AVAILABLE and hasattr(widget, 'set_theme_colors'):
+                try:
+                    # Update the code widget's theme colors using existing method
+                    widget.set_theme_colors(self.theme_colors)
+                except Exception as e:
+                    logger.debug(f"Widget doesn't support theme update: {e}")
+    
     def _rerender_all_content(self):
         """Re-render all content with new theme colors."""
         # Clear existing widgets

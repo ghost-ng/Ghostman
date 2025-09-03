@@ -101,7 +101,6 @@ class CodeContentWidget(QTextEdit):
                 selection-background-color: {selection_bg};
                 font-family: 'Consolas', 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
                 white-space: pre-wrap;
-                tab-size: 4;
             }}
             QTextEdit::viewport {{
                 background-color: {bg_color};
@@ -114,7 +113,6 @@ class CodeContentWidget(QTextEdit):
                 line-height: 150%;
                 background-color: {bg_color};
                 white-space: pre;
-                tab-size: 4;
             }}
         """)
         

@@ -27,9 +27,6 @@ from PyQt6.QtWidgets import (
     QToolButton, QMenu, QProgressBar, QListWidget, QSizePolicy,
     QListWidgetItem, QApplication, QMessageBox, QDialog, QCheckBox
 )
-
-# Import our custom mixed content display
-from .mixed_content_display import MixedContentDisplay
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread, QObject, QSize, pyqtSlot, QPropertyAnimation, QEasingCurve, QUrl, QPoint
 import weakref
 from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QTextCharFormat, QColor, QPalette, QIcon, QPixmap, QAction, QTextOption, QFontMetrics
@@ -44,6 +41,8 @@ try:
 except ImportError:
     TAB_SYSTEM_AVAILABLE = False
     logger.warning("Tab system not available - falling back to single conversation mode")
+
+# Simple font system - no complex management needed
 
 class ReplLinkHandler:
     """Robust link detection and handling system for REPL widgets."""
@@ -353,10 +352,10 @@ class MarkdownRenderer:
         self.theme_manager = theme_manager
         
         if self.markdown_available:
-            # Configure mistune v3 renderer with AI-friendly plugins and Pygments syntax highlighting
+            # Configure mistune v3 renderer with AI-friendly plugins
             # mistune v3 provides better performance and more robust parsing
             self.md_processor = mistune.create_markdown(
-                renderer=self._create_enhanced_renderer(),
+                renderer='html',
                 plugins=[
                     'table',        # Table support (replaces 'tables')
                     'strikethrough', # ~~strikethrough~~ support
@@ -378,261 +377,6 @@ class MarkdownRenderer:
         # Performance cache for repeated renders (small cache to avoid memory issues)
         self._render_cache = {}
         self._cache_max_size = 100
-    
-    def _create_enhanced_renderer(self):
-        """Create a custom mistune renderer with Pygments syntax highlighting."""
-        try:
-            # Try to import Pygments for syntax highlighting
-            from pygments import highlight
-            from pygments.lexers import get_lexer_by_name
-            from pygments.formatters import html
-            from pygments.util import ClassNotFound
-            
-            class PygmentsRenderer(mistune.HTMLRenderer):
-                """Custom mistune renderer with Pygments syntax highlighting."""
-                
-                def __init__(self, theme_manager=None):
-                    super().__init__()
-                    self.theme_manager = theme_manager
-                    self._get_pygments_style()
-                
-                def _get_pygments_style(self):
-                    """Get Pygments style based on current theme with improved detection."""
-                    if self.theme_manager and hasattr(self.theme_manager, 'current_theme'):
-                        try:
-                            theme = self.theme_manager.current_theme
-                            # Use the same theme detection logic as StyleTemplates
-                            if hasattr(theme, 'background_primary'):
-                                bg = theme.background_primary
-                                if bg.startswith('#'):
-                                    # Enhanced luminance calculation for better theme detection
-                                    r, g, b = int(bg[1:3], 16), int(bg[3:5], 16), int(bg[5:7], 16)
-                                    luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
-                                    # Use vs (light) and vs2015 (dark) for better code highlighting
-                                    self.pygments_style = 'vs' if luminance > 0.5 else 'vs2015'
-                                    self.is_dark_theme = luminance <= 0.5
-                                else:
-                                    self.pygments_style = 'vs2015'
-                                    self.is_dark_theme = True
-                            else:
-                                self.pygments_style = 'vs2015'
-                                self.is_dark_theme = True
-                        except Exception:
-                            self.pygments_style = 'vs2015'
-                            self.is_dark_theme = True
-                    else:
-                        self.pygments_style = 'vs2015'
-                        self.is_dark_theme = True
-                
-                def block_code(self, code, info=None):
-                    """Render code blocks with enhanced widget-style appearance and syntax highlighting."""
-                    language = info.strip() if info else ""
-                    language_display = language.upper() if language else ""
-                    
-                    # Get theme colors for styling
-                    colors = self._get_theme_colors()
-                    
-                    # Generate the header HTML
-                    header_html = self._generate_code_header(language_display, colors)
-                    
-                    # Generate syntax-highlighted code content
-                    code_content_html = self._generate_highlighted_code(code, language, colors)
-                    
-                    # Combine into widget-style structure with modern styling
-                    container_bg = colors['bg_tertiary'] if hasattr(self, 'is_dark_theme') and self.is_dark_theme else colors['bg_primary']
-                    border_color = colors['border']
-                    
-                    return f"""
-                    <div style="
-                        background-color: {container_bg};
-                        border: 1px solid {border_color};
-                        border-radius: 8px;
-                        margin: 6px 0;
-                        overflow: hidden;
-                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
-                        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-                    ">
-                        {header_html}
-                        {code_content_html}
-                    </div>
-                    """
-                
-                def _get_theme_colors(self):
-                    """Get theme-appropriate colors for the code widget."""
-                    # Try to get colors from theme manager
-                    if self.theme_manager and hasattr(self.theme_manager, 'current_theme'):
-                        theme = self.theme_manager.current_theme
-                        return {
-                            'bg_primary': getattr(theme, 'background_primary', '#1a1a1a'),
-                            'bg_secondary': getattr(theme, 'background_secondary', '#2a2a2a'),
-                            'bg_tertiary': getattr(theme, 'background_tertiary', '#3a3a3a'),
-                            'text_primary': getattr(theme, 'text_primary', '#ffffff'),
-                            'text_secondary': getattr(theme, 'text_secondary', '#cccccc'),
-                            'border': getattr(theme, 'border_primary', '#4a4a4a'),
-                            'interactive': getattr(theme, 'interactive_normal', '#4a4a4a'),
-                            'interactive_hover': getattr(theme, 'interactive_hover', '#5a5a5a'),
-                        }
-                    
-                    # Fallback dark theme colors
-                    return {
-                        'bg_primary': '#1a1a1a',
-                        'bg_secondary': '#2a2a2a', 
-                        'bg_tertiary': '#3a3a3a',
-                        'text_primary': '#ffffff',
-                        'text_secondary': '#cccccc',
-                        'border': '#4a4a4a',
-                        'interactive': '#4a4a4a',
-                        'interactive_hover': '#5a5a5a',
-                    }
-                
-                def _generate_code_header(self, language_display, colors):
-                    """Generate the header HTML for the code widget."""
-                    # Language tag (only if language is specified)
-                    language_tag = ""
-                    if language_display:
-                        # Enhanced language tag with primary color accent and opacity
-                        primary_color = getattr(self.theme_manager.current_theme, 'primary', '#4CAF50') if self.theme_manager and hasattr(self.theme_manager, 'current_theme') else '#4CAF50'
-                        tag_bg = f"{primary_color}20"  # 20% opacity
-                        
-                        language_tag = f"""
-                        <span style="
-                            background-color: {tag_bg};
-                            color: {primary_color};
-                            padding: 3px 8px;
-                            border-radius: 4px;
-                            font-size: 11px;
-                            font-weight: 500;
-                            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-                        ">{language_display}</span>
-                        """
-                    
-                    # Modern header styling to match CodeSnippetWidget
-                    header_bg = colors['bg_secondary']
-                    title = f"{language_display} Snippet" if language_display else "Code Snippet"
-                    
-                    return f"""
-                    <div style="
-                        background-color: {header_bg};
-                        padding: 12px 16px;
-                        border-bottom: 1px solid {colors['border']};
-                        display: flex;
-                        align-items: center;
-                        justify-content: space-between;
-                        border-radius: 7px 7px 0 0;
-                    ">
-                        <div style="display: flex; align-items: center; gap: 12px;">
-                            <span style="
-                                color: {colors['text_primary']};
-                                font-weight: 600;
-                                font-size: 13px;
-                                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-                            ">{title}</span>
-                            {language_tag}
-                        </div>
-                        <span style="
-                            color: {colors['text_primary']};
-                            font-size: 12px;
-                            padding: 6px 12px;
-                            background-color: {colors['interactive']};
-                            border: 1px solid {colors['border']};
-                            border-radius: 4px;
-                            cursor: pointer;
-                            font-weight: 500;
-                            transition: all 0.2s ease;
-                        " title="Click to copy" 
-                           onmouseover="this.style.backgroundColor='{colors['interactive_hover']}'" 
-                           onmouseout="this.style.backgroundColor='{colors['interactive']}'">
-                            Copy
-                        </span>
-                    </div>
-                    """
-                
-                def _generate_highlighted_code(self, code, language, colors):
-                    """Generate syntax-highlighted code content."""
-                    if language:
-                        try:
-                            # Get lexer for the specified language
-                            lexer = get_lexer_by_name(language, stripall=True)
-                            logger.debug(f"🎨 First highlighting system: Got lexer '{lexer.name}' for language '{language}'")
-                            
-                            # Create formatter with theme-appropriate styling
-                            formatter = html.HtmlFormatter(
-                                style=self.pygments_style,
-                                noclasses=True,
-                                nobackground=True,
-                                nowrap=True,  # Don't include <pre><code> wrapper
-                            )
-                            
-                            # Generate highlighted HTML
-                            highlighted_code = highlight(code, lexer, formatter)
-                            logger.debug(f"🎨 First highlighting system: Generated {len(highlighted_code)} chars of highlighted HTML")
-                            
-                            return f"""
-                            <div style="
-                                background-color: {colors['bg_tertiary']};
-                                padding: 16px;
-                                overflow-x: auto;
-                                font-family: 'Consolas', 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
-                                font-size: 14px;
-                                line-height: 1.5;
-                                color: {colors['text_primary']};
-                                border-radius: 0 0 7px 7px;
-                                min-height: 60px;
-                            ">
-                                <pre style="
-                                    margin: 0; 
-                                    white-space: pre-wrap; 
-                                    font-family: inherit;
-                                    background-color: {colors['bg_tertiary']} !important;
-                                    width: 100%;
-                                    display: block;
-                                    padding: 0;
-                                ">{highlighted_code}</pre>
-                            </div>
-                            """
-                            
-                        except ClassNotFound:
-                            logger.debug(f"🚫 First highlighting system: Language '{language}' not supported by Pygments")
-                        except Exception as e:
-                            logger.debug(f"🚫 First highlighting system: Pygments highlighting failed for '{language}': {e}")
-                    
-                    # Fallback to plain code with HTML escaping and modern styling
-                    escaped_code = mistune.escape(code)
-                    return f"""
-                    <div style="
-                        background-color: {colors['bg_tertiary']};
-                        padding: 16px;
-                        overflow-x: auto;
-                        font-family: 'Consolas', 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
-                        font-size: 14px;
-                        line-height: 1.5;
-                        color: {colors['text_primary']};
-                        border-radius: 0 0 7px 7px;
-                        min-height: 60px;
-                    ">
-                        <pre style="
-                            margin: 0; 
-                            white-space: pre-wrap; 
-                            font-family: inherit;
-                            background-color: {colors['bg_tertiary']} !important;
-                            width: 100%;
-                            display: block;
-                            padding: 0;
-                        ">{escaped_code}</pre>
-                    </div>
-                    """
-            
-            # Return the custom renderer instance
-            return PygmentsRenderer(self.theme_manager)
-            
-        except ImportError:
-            # Pygments not available, fall back to standard HTML renderer
-            logger.warning("Pygments not available - using standard code block rendering")
-            return 'html'
-        except Exception as e:
-            # Any other error, fall back to standard renderer
-            logger.warning(f"Failed to create enhanced renderer: {e} - using standard HTML renderer")
-            return 'html'
     
     def _update_color_scheme(self):
         """Update color scheme based on current theme or use defaults."""
@@ -778,6 +522,8 @@ class MarkdownRenderer:
             # Plain text rendering with basic HTML escaping
             html_content = self._render_plain_text(text, base_color)
         
+        # Font management no longer needed - using fixed fonts
+        
         # Cache the result (with size management)
         self._manage_cache(cache_key, html_content)
         
@@ -832,9 +578,6 @@ class MarkdownRenderer:
             # mistune v3 uses direct function call instead of .convert()
             html_content = self.md_processor(text)
             
-            # Convert HTML input checkboxes to Unicode symbols for QTextEdit compatibility
-            html_content = self._convert_checkboxes_to_unicode(html_content)
-            
             # Apply message-type styling to the HTML
             styled_html = self._apply_color_styling(html_content, base_color, style)
             
@@ -873,31 +616,71 @@ class MarkdownRenderer:
             'a': self.color_scheme.get('info', '#4A9EFF')  # Link color from theme
         }
         
-        # Get appropriate font based on message style
-        font_type = 'user_input' if style == 'input' else 'ai_response'
-        font_css = font_service.get_css_font_style(font_type)
+        # Get text size scaling from settings
+        from ...infrastructure.storage.settings_manager import settings
+        text_size_percent = settings.get('ui.text_size', 100)
+        base_text_size = int(10 * text_size_percent / 100)  # Scale 10pt base size
+        base_code_size = int(9 * text_size_percent / 100)   # Scale 9pt base size
         
-        # Wrap entire content with base color and font configuration - explicitly remove backgrounds
-        styled_html = f'<div style="color: {base_color}; line-height: {{\'1.4\'}}; {font_css}; background: none !important;">{html_content}</div>'
+        # Use simple default fonts - Tahoma for regular text, scaled by percentage
+        font_css = f"font-family: 'Tahoma', 'Segoe UI', sans-serif; font-size: {base_text_size}pt;"
         
-        # Apply specific styling to elements - remove backgrounds to prevent line coloring
+        # Determine message container class based on style
+        container_class = "ghostman-user-input" if style == 'input' else "ghostman-ai-response"
+        
+        # Wrap the content with simple font styling
+        text_with_font = f'<span style="{font_css}">{html_content}</span>'
+        
+        # Count code elements in the content being added
+        code_block_count = html_content.count('<pre')
+        inline_code_count = html_content.count('<code')
+        if code_block_count > 0 or inline_code_count > 0:
+            logger.info(f"📝 APPEND OUTPUT: Content contains {code_block_count} code blocks and {inline_code_count} inline code elements")
+        
+        # Generate HTML fragment (not full document) for QTextEdit insertion
+        styled_html = f'<div class="ghostman-message-container {container_class}" style="color: {base_color}; line-height: 1.4;"><div class="gm-text">{text_with_font}</div></div>'
+        
+        # Use simple default fonts - Courier for code, scaled by percentage
+        code_font_style = f"font-family: 'Courier', 'Courier New', monospace; font-size: {base_code_size}pt; "
+        
+        # Apply specific styling - apply font directly to code/pre tags for reliability
+        # Use modern ColorUtils for rgba generation instead of hardcoded values
+        try:
+            if self.style_registry:
+                # Use modern markdown styling
+                markdown_styles = self.style_registry.get_markdown_code_styles(
+                    base_color, int(base_code_size), int(base_text_size)
+                )
+                code_bg = markdown_styles['code_style'].split('background-color: ')[1].split(';')[0]
+                pre_bg = markdown_styles['pre_style'].split('background-color: ')[1].split(';')[0]
+                table_bg = markdown_styles['table_header_style'].split('background-color: ')[1].split(';')[0]
+            else:
+                # Fallback to ColorUtils
+                from ...ui.themes.color_system import ColorUtils
+                code_bg = ColorUtils.apply_opacity_to_color("#ffffff", 0.1)
+                pre_bg = ColorUtils.apply_opacity_to_color("#ffffff", 0.05)
+                table_bg = ColorUtils.apply_opacity_to_color("#ffffff", 0.1)
+        except Exception:
+            # Ultimate fallback to original rgba values
+            code_bg = "rgba(255,255,255,0.1)"
+            pre_bg = "rgba(255,255,255,0.05)"
+            table_bg = "rgba(255,255,255,0.1)"
+        
         replacements = {
-            '<code>': f'<code style="padding: {{\'2px\'}} {{\'4px\'}}; border-radius: {{\'3px\'}}; color: {style_colors["code"]}; font-family: Consolas, Monaco, monospace; background: none !important;">',
-            # Skip pre tag replacement to avoid overriding code snippet solid backgrounds
-            '<em>': f'<em style="color: {style_colors["em"]}; font-style: italic; background: none !important;">',
-            '<strong>': f'<strong style="color: {style_colors["strong"]}; font-weight: bold; background: none !important;">',
-            '<h1>': f'<h1 style="color: {style_colors["h1"]}; font-size: {{\'1.4em\'}}; margin: {{\'8px\'}} {{\'0\'}} {{\'4px\'}} {{\'0\'}}; border-bottom: {{\'2px\'}} solid {base_color}; background: none !important;">',
-            '<h2>': f'<h2 style="color: {style_colors["h2"]}; font-size: {{\'1.3em\'}}; margin: {{\'6px\'}} {{\'0\'}} {{\'3px\'}} {{\'0\'}}; border-bottom: {{\'1px\'}} solid {base_color}; background: none !important;">',
-            '<h3>': f'<h3 style="color: {style_colors["h3"]}; font-size: {{\'1.2em\'}}; margin: {{\'4px\'}} {{\'0\'}} {{\'2px\'}} {{\'0\'}}; background: none !important;">',
-            '<blockquote>': f'<blockquote style="color: {style_colors["blockquote"]}; border-left: {{\'3px\'}} solid {base_color}; padding-left: {{\'12px\'}}; margin: {{\'4px\'}} {{\'0\'}}; font-style: italic; background: none !important;">',
-            '<ul>': '<ul style="margin: 4px 0; padding-left: 20px; background: none !important;">',
-            '<ol>': '<ol style="margin: 4px 0; padding-left: 20px; background: none !important;">',
-            '<li>': f'<li style="margin: {{\'2px\'}} {{\'0\'}}; background: none !important;">',
-            '<table>': f'<table style="border-collapse: collapse; margin: 8px 0; border: 1px solid {base_color}; background: none !important;">',
-            '<th>': f'<th style="padding: 4px 8px; border: 1px solid {base_color}; font-weight: bold; background: none !important;">',
-            '<td>': f'<td style="padding: 4px 8px; border: 1px solid {base_color}; background: none !important;">',
-            '<p>': '<p style="background: none !important;">',
-            '<div>': '<div style="background: none !important;">',
+            '<code>': f'<code style="{code_font_style}background-color: {code_bg}; padding: 2px 4px; border-radius: 3px; color: {style_colors["code"]};">',
+            '<pre>': f'<pre style="{code_font_style}background-color: {pre_bg}; padding: 8px; border-radius: 4px; border-left: 3px solid {base_color}; margin: 4px 0; overflow-x: auto;">',
+            '<em>': f'<em class="gm-emphasis" style="color: {style_colors["em"]}; font-style: italic;">',
+            '<strong>': f'<strong class="gm-strong" style="color: {style_colors["strong"]}; font-weight: bold;">',
+            '<h1>': f'<h1 class="gm-heading" style="color: {style_colors["h1"]}; font-size: {int(base_text_size * 1.4)}pt; margin: 8px 0 4px 0; border-bottom: 2px solid {base_color};">',
+            '<h2>': f'<h2 class="gm-heading" style="color: {style_colors["h2"]}; font-size: {int(base_text_size * 1.3)}pt; margin: 6px 0 3px 0; border-bottom: 1px solid {base_color};">',
+            '<h3>': f'<h3 class="gm-heading" style="color: {style_colors["h3"]}; font-size: {int(base_text_size * 1.2)}pt; margin: 4px 0 2px 0;">',
+            '<blockquote>': f'<blockquote class="gm-quote" style="color: {style_colors["blockquote"]}; border-left: 3px solid {base_color}; padding-left: 12px; margin: 4px 0; font-style: italic;">',
+            '<ul>': '<ul style="margin: 4px 0; padding-left: 20px;">',
+            '<ol>': '<ol style="margin: 4px 0; padding-left: 20px;">',
+            '<li>': '<li style="margin: 2px 0;">',
+            '<table>': f'<table style="border-collapse: collapse; margin: 8px 0; border: 1px solid {base_color};">',
+            '<th>': f'<th style="padding: 4px 8px; border: 1px solid {base_color}; background-color: {table_bg}; font-weight: bold;">',
+            '<td>': f'<td style="padding: 4px 8px; border: 1px solid {base_color};">',
         }
         
         for old, new in replacements.items():
@@ -906,7 +689,7 @@ class MarkdownRenderer:
         # Handle links with special care - ensure proper anchor formatting for Qt
         styled_html = re.sub(
             r'<a href="([^"]+)"([^>]*)>',
-            f'<a href="\\1" style="color: {style_colors["a"]}; text-decoration: underline;"\\2>',
+            f'<a href="\\1" class="gm-link" style="color: {style_colors["a"]}; text-decoration: underline;"\\2>',
             styled_html
         )
         
@@ -939,39 +722,6 @@ class MarkdownRenderer:
             # Return original color if adjustment fails
             return hex_color
     
-    def _convert_checkboxes_to_unicode(self, html_content: str) -> str:
-        """
-        Convert HTML input checkboxes to Unicode symbols for QTextEdit compatibility.
-        
-        QTextEdit cannot render HTML <input> elements, but mistune's task_lists plugin
-        generates them. This method converts them to Unicode checkbox symbols that
-        display properly in QTextEdit.
-        
-        Args:
-            html_content: HTML content with potential checkbox inputs
-            
-        Returns:
-            HTML content with checkboxes converted to Unicode symbols
-        """
-        # Flexible pattern to match checkbox inputs with any attribute order
-        checkbox_pattern = r'<input[^>]*?(?=.*class="task-list-item-checkbox")(?=.*type="checkbox")[^>]*?/?>'
-        
-        def replace_checkbox(match):
-            checkbox_html = match.group(0)
-            # Check if checkbox is checked
-            if 'checked' in checkbox_html:
-                return '☑ '  # Checked box with space
-            else:
-                return '☐ '  # Unchecked box with space
-        
-        # Replace checkbox inputs with Unicode symbols
-        result = re.sub(checkbox_pattern, replace_checkbox, html_content)
-        
-        # Clean up the task-list-item class since it's no longer needed for styling
-        result = re.sub(r'<li class="task-list-item">', '<li>', result)
-        
-        return result
-    
     def _optimize_qt_html(self, html_content: str) -> str:
         """
         Optimize HTML for Qt's text rendering engine.
@@ -984,9 +734,9 @@ class MarkdownRenderer:
         """
         # Remove problematic HTML elements/attributes that Qt doesn't handle well
         optimizations = [
-            # Remove unsupported CSS properties
-            (r'\s*white-space:\s*pre-wrap;', ''),
-            (r'\s*word-wrap:\s*break-word;', ''),
+            # CRITICAL: DO NOT remove white-space properties! Qt handles them fine and they're needed for <pre> blocks
+            # Only remove truly unsupported properties
+            (r'\s*word-wrap:\s*break-word;', ''),  # This one is actually unsupported
             # Simplify complex selectors
             (r'<p>\s*</p>', ''),  # Remove empty paragraphs
             # Ensure proper line spacing
@@ -1099,11 +849,13 @@ class ConversationCard(QWidget):
         
         # Message count
         msg_count = QLabel(f"📝 {len(self.conversation.messages)} msgs")
-        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+        if self.component_styler and self.theme_manager and THEME_SYSTEM_AVAILABLE:
+            self.component_styler.style_metadata_label(msg_count, "small")
+        elif self.theme_manager and THEME_SYSTEM_AVAILABLE:
             text_color = self.theme_manager.current_theme.text_tertiary
+            msg_count.setStyleSheet(f"color: {text_color}; font-size: 9px;")
         else:
-            text_color = "#888"
-        msg_count.setStyleSheet(f"color: {text_color}; font-size: 9px;")
+            msg_count.setStyleSheet("color: #888; font-size: 9px;")
         meta_row.addWidget(msg_count)
         
         # Last updated
@@ -1116,11 +868,13 @@ class ConversationCard(QWidget):
             time_text = f"{time_diff.seconds // 60}m ago"
         
         time_label = QLabel(f"🕒 {time_text}")
-        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+        if self.component_styler and self.theme_manager and THEME_SYSTEM_AVAILABLE:
+            self.component_styler.style_metadata_label(time_label, "small")
+        elif self.theme_manager and THEME_SYSTEM_AVAILABLE:
             text_color = self.theme_manager.current_theme.text_tertiary
+            time_label.setStyleSheet(f"color: {text_color}; font-size: 9px;")
         else:
-            text_color = "#888"
-        time_label.setStyleSheet(f"color: {text_color}; font-size: 9px;")
+            time_label.setStyleSheet("color: #888; font-size: 9px;")
         meta_row.addWidget(time_label)
         
         meta_row.addStretch()
@@ -1132,11 +886,16 @@ class ConversationCard(QWidget):
             if len(self.conversation.metadata.tags) > 3:
                 tags_text += "💬"
             tags_label = QLabel(tags_text)
-            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+            if self.component_styler and self.theme_manager and THEME_SYSTEM_AVAILABLE:
+                self.component_styler.style_metadata_label(tags_label, "tiny")
+                # Add italic style for tags specifically
+                current_style = tags_label.styleSheet()
+                tags_label.setStyleSheet(current_style + " font-style: italic;")
+            elif self.theme_manager and THEME_SYSTEM_AVAILABLE:
                 text_color = self.theme_manager.current_theme.text_tertiary
+                tags_label.setStyleSheet(f"color: {text_color}; font-size: 8px; font-style: italic;")
             else:
-                text_color = "#666"
-            tags_label.setStyleSheet(f"color: {text_color}; font-size: 8px; font-style: italic;")
+                tags_label.setStyleSheet("color: #666; font-size: 8px; font-style: italic;")
             layout.addWidget(tags_label)
     
     def _get_status_icon(self) -> str:
@@ -1215,6 +974,7 @@ class REPLWidget(QWidget):
         self.history_index = -1
         self.current_input = ""
         
+        
         # Panel (frame) opacity (only background, not text/content). 0.0 - 1.0
         # Initialize with default 90% opacity
         self._panel_opacity = 0.90
@@ -1239,8 +999,8 @@ class REPLWidget(QWidget):
         self.summarization_queue: List[str] = []  # conversation IDs
         self.is_summarizing = False
         
-        # Startup task control
-        self._startup_tasks_completed = False
+        # Text positioning verification flag
+        self._text_positioning_verified = False
         
         # Autosave functionality
         self.autosave_timer = QTimer()
@@ -1381,8 +1141,11 @@ class REPLWidget(QWidget):
         margins = self.command_input.contentsMargins()
         frame_width = self.command_input.frameWidth() if hasattr(self.command_input, 'frameWidth') else 1
         
+        # Get document margin (we set this to 8px in initialization)
+        document_margin = self.command_input.document().documentMargin()
+        
         # Calculate total internal padding (margins + frame + document margins)
-        vertical_padding = margins.top() + margins.bottom() + (frame_width * 2) + 4  # 4px for document margins
+        vertical_padding = margins.top() + margins.bottom() + (frame_width * 2) + (document_margin * 2)
         
         # CRITICAL: For single line, force exactly 32px to match button height
         # For multiple lines, calculate based on content
@@ -1486,27 +1249,73 @@ class REPLWidget(QWidget):
         if THEME_SYSTEM_AVAILABLE:
             try:
                 self.theme_manager = get_theme_manager()
-                # Register with theme manager for automatic theme updates (prefer this over signal)
-                self.theme_manager.register_widget(self, "_on_theme_changed")
-                # Note: Removed redundant signal connection to prevent double theme updates
+                # Connect to theme change signal for live updates
+                self.theme_manager.theme_changed.connect(self._on_theme_changed)
+                
+                # Initialize modern styling system
+                self._init_modern_styling()
+                
+                # Register as theme-aware widget to prevent generic styling
+                # This ensures our custom HTML styles are not overridden
+                try:
+                    from ...ui.themes.theme_applicator import get_theme_applicator
+                    theme_applicator = get_theme_applicator()
+                    theme_applicator.register_widget(self, theme_aware=True)
+                    logger.debug("REPL registered as theme-aware widget")
+                except ImportError:
+                    logger.debug("Theme applicator not available")
+                
                 logger.debug("Theme system initialized for REPL widget")
             except Exception as e:
                 logger.warning(f"Failed to initialize theme system: {e}")
                 self.theme_manager = None
+                self._init_fallback_styling()
         else:
             self.theme_manager = None
+            self._init_fallback_styling()
             logger.debug("Theme system not available - using legacy styling")
+    
+    def _init_modern_styling(self):
+        """Initialize the modern REPLStyleRegistry and REPLComponentStyler."""
+        try:
+            from ...ui.themes.style_templates import REPLStyleRegistry, REPLComponentStyler
+            
+            # Create style registry with current theme
+            self.style_registry = REPLStyleRegistry(self.theme_manager.current_theme)
+            
+            # Create component styler for fluent API
+            self.component_styler = REPLComponentStyler(self.style_registry)
+            
+            logger.debug("Modern REPL styling system initialized")
+            
+        except Exception as e:
+            logger.warning(f"Failed to initialize modern styling: {e}")
+            self._init_fallback_styling()
+    
+    def _init_fallback_styling(self):
+        """Initialize fallback styling when modern system is not available."""
+        self.style_registry = None
+        self.component_styler = None
+        logger.debug("Using fallback styling system")
     
     def _on_theme_changed(self, color_system):
         """Handle theme changes by updating widget styles."""
         try:
+            # Update modern styling system with new theme
+            if self.component_styler:
+                self.component_styler.update_theme(color_system)
+                logger.debug("Updated modern styling system with new theme")
+            
             # Update all styling when theme changes
             self._apply_styles()
             self._update_component_themes()
             
             # Update conversation selector styling
             if hasattr(self, 'conversation_selector'):
-                self._style_conversation_selector()
+                if self.component_styler:
+                    self.component_styler.style_conversation_selector(self.conversation_selector)
+                else:
+                    self._style_conversation_selector()
             
             # Update send button styling
             if hasattr(self, 'send_button'):
@@ -1520,15 +1329,24 @@ class REPLWidget(QWidget):
             if hasattr(self, 'stop_button'):
                 self._style_stop_button()
             
-            # Update search elements if they exist - use high-contrast styling
+            # Update search elements if they exist - use modern styling
             if hasattr(self, 'search_status_label'):
-                from ...ui.themes.style_templates import StyleTemplates
-                self.search_status_label.setStyleSheet(StyleTemplates.get_high_contrast_search_status_style(self.theme_manager.current_theme))
+                if self.component_styler:
+                    self.component_styler.style_search_status(self.search_status_label)
+                else:
+                    from ...ui.themes.style_templates import StyleTemplates
+                    self.search_status_label.setStyleSheet(StyleTemplates.get_high_contrast_search_status_style(self.theme_manager.current_theme))
             
             # Update summary notification styling
             if hasattr(self, 'summary_notification'):
-                summary_color = self.theme_manager.current_theme.status_success
-                self.summary_notification.setStyleSheet(f"color: {summary_color}; font-size: 9px; font-style: italic;")
+                if self.component_styler:
+                    self.component_styler.style_status_label(self.summary_notification, "success")
+                    # Add italic style for summary notifications specifically
+                    current_style = self.summary_notification.styleSheet()
+                    self.summary_notification.setStyleSheet(current_style + " font-style: italic;")
+                else:
+                    summary_color = self.theme_manager.current_theme.status_success
+                    self.summary_notification.setStyleSheet(f"color: {summary_color}; font-size: 9px; font-style: italic;")
             
             # Update markdown renderer to use new theme colors
             if hasattr(self, '_markdown_renderer'):
@@ -1602,27 +1420,18 @@ class REPLWidget(QWidget):
             return
         
         try:
-            colors = self.theme_manager.current_theme
-            self.command_input.setStyleSheet(f"""
-                QLineEdit {{
-                    background-color: {colors.background_secondary};
-                    color: {colors.text_primary};
-                    border: 2px solid {colors.border_secondary};
-                    border-radius: 8px;
-                    padding: 8px 12px;
-                    font-size: 13px;
-                    selection-background-color: {colors.primary};
-                    selection-color: {colors.background_primary};
-                }}
-                QLineEdit:focus {{
-                    border-color: {colors.border_focus};
-                }}
-                QLineEdit:hover {{
-                    border-color: {colors.primary};
-                }}
-            """)
+            if self.component_styler:
+                # Use modern styling system
+                self.component_styler.style_command_input(self.command_input)
+                logger.debug("Applied modern command input styling")
+            else:
+                # No fallback needed - modern component styler should always be available
+                logger.warning("Component styler not available - skipping command input styling")
+                
         except Exception as e:
             logger.warning(f"Failed to style command input: {e}")
+    
+
     
     def _style_output_display(self):
         """Apply theme-aware styling to the output display with TRUE transparency support."""
@@ -1630,52 +1439,34 @@ class REPLWidget(QWidget):
             return
         
         try:
-            colors = self.theme_manager.current_theme
-            
-            # Apply TRUE transparency to background
-            alpha = max(0.0, min(1.0, self._panel_opacity))
-            if alpha >= 0.99:
-                # Nearly/fully opaque - use original hex color
-                bg_color = colors.background_primary
+            if self.component_styler:
+                # Use modern styling system with opacity support
+                alpha = max(0.0, min(1.0, self._panel_opacity))
+                self.component_styler.style_output_display(self.output_display, alpha)
+                logger.debug(f"Applied modern output display styling with opacity: {alpha:.3f}")
             else:
-                # TRUE TRANSPARENCY - use rgba with actual transparency
-                if colors.background_primary.startswith('#'):
-                    r = int(colors.background_primary[1:3], 16)
-                    g = int(colors.background_primary[3:5], 16)
-                    b = int(colors.background_primary[5:7], 16)
-                    bg_color = f"rgba({r}, {g}, {b}, {alpha:.3f})"
-                else:
-                    # Fallback for non-hex colors
-                    bg_color = f"rgba(30, 30, 30, {alpha:.3f})"
-            
-            # Create theme color dictionary for MixedContentDisplay
-            theme_colors = {
-                'bg_primary': bg_color,
-                'bg_secondary': colors.background_secondary,
-                'bg_tertiary': colors.background_tertiary,
-                'text_primary': colors.text_primary,
-                'text_secondary': colors.text_secondary,
-                'border': colors.border_primary,
-                'info': getattr(colors, 'info', '#4A9EFF'),
-                'warning': getattr(colors, 'warning', '#FFB84D'),
-                'error': getattr(colors, 'error', '#FF4D4D'),
-                'keyword': getattr(colors, 'keyword', '#d73a49'),
-                'string': getattr(colors, 'string', '#032f62'),
-                'comment': getattr(colors, 'comment', '#6a737d'),
-                'function': getattr(colors, 'function', '#6f42c1'),
-                'number': getattr(colors, 'number', '#005cc5'),
-                'interactive': getattr(colors, 'interactive', colors.background_tertiary),
-                'interactive_hover': getattr(colors, 'interactive_hover', colors.border_primary),
-                'selection': colors.primary
-            }
-            
-            # Pass opacity-adjusted colors to MixedContentDisplay
-            # This won't cause duplication since we fixed set_theme_colors to not re-render
-            self.output_display.set_theme_colors(theme_colors)
-            
-            logger.debug(f"Applied MixedContentDisplay theme colors with opacity: {alpha:.3f}")
+                # No fallback needed - modern component styler should always be available
+                logger.warning("Component styler not available - skipping output display styling")
+                
         except Exception as e:
-            logger.warning(f"Theme update handled automatically by theme manager: {e}")
+            logger.warning(f"Failed to style output display: {e}")
+            # Ultimate fallback
+            self._apply_fallback_output_display_styling()
+    
+    def _apply_fallback_output_display_styling(self):
+        """Apply ultimate fallback styling when all else fails."""
+        alpha = max(0.0, min(1.0, self._panel_opacity))
+        from ...ui.themes.color_system import ColorUtils
+        bg_color = ColorUtils.apply_opacity_to_color("#1e1e1e", alpha)
+        
+        self.output_display.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: {bg_color} !important;
+                color: #ffffff;
+                border: none;
+            }}
+        """)
+        logger.debug(f"Applied fallback output display styling with opacity: {alpha:.3f}")
     
     def _update_layout_component_themes(self):
         """Update theme styling for layout components like frames and separators."""
@@ -1691,7 +1482,7 @@ class REPLWidget(QWidget):
                     frame.setStyleSheet(f"""
                         QFrame {{
                             background-color: {colors.background_secondary};
-                            border: none;
+                            border: 1px solid {colors.border_secondary};
                         }}
                     """)
             
@@ -1711,9 +1502,23 @@ class REPLWidget(QWidget):
         try:
             colors = self.theme_manager.current_theme
             
+            if self.component_styler:
+                # Use modern styling system
+                self._apply_modern_component_styles()
+            else:
+                # Fallback to legacy styling
+                logger.warning("Component styler not available - skipping component styling")
+                
+        except Exception as e:
+            logger.warning(f"Failed to update component themes: {e}")
+    
+    def _apply_modern_component_styles(self):
+        """Apply component styles using the modern styling system."""
+        try:
             # Update title frame if it exists
             if hasattr(self, 'title_frame'):
-                self.title_frame.setStyleSheet(StyleTemplates.get_title_frame_style(colors))
+                # Keep using StyleTemplates for title frame as it's more complex
+                self.title_frame.setStyleSheet(StyleTemplates.get_title_frame_style(self.theme_manager.current_theme))
             
             # Update various buttons if they exist
             if hasattr(self, 'send_button'):
@@ -1722,13 +1527,13 @@ class REPLWidget(QWidget):
             if hasattr(self, 'stop_button'):
                 self._style_stop_button()
             
-            # Update conversation selector if it exists
+            # Update conversation selector with modern styling
             if hasattr(self, 'conversation_selector'):
-                self.conversation_selector.setStyleSheet(StyleTemplates.get_combo_box_style(colors))
+                self.component_styler.style_conversation_selector(self.conversation_selector)
             
-            # Update search frame if it exists
+            # Update search frame with modern styling
             if hasattr(self, 'search_frame'):
-                self.search_frame.setStyleSheet(StyleTemplates.get_search_frame_style(colors))
+                self.component_styler.style_search_frame(self.search_frame)
                 
             # Update search input if it exists
             if hasattr(self, 'search_input'):
@@ -1737,8 +1542,9 @@ class REPLWidget(QWidget):
                 # Ensure frame is always disabled after theme changes
                 self.search_input.setFrame(False)
                 
-            # Update search icon label if it exists
+            # Update search icon label with modern styling (still using direct styling due to complexity)
             if hasattr(self, 'search_icon_label'):
+                colors = self.theme_manager.current_theme
                 self.search_icon_label.setStyleSheet(f"""
                     QLabel {{
                         color: {colors.text_primary};
@@ -1753,108 +1559,18 @@ class REPLWidget(QWidget):
                     }}
                 """)
             
-            # Update status labels to use theme colors
+            # Update status labels with modern styling
             if hasattr(self, 'status_label'):
-                self.status_label.setStyleSheet(StyleTemplates.get_label_style(colors, "secondary"))
+                self.component_styler.style_status_label(self.status_label, "normal")
             
             if hasattr(self, 'search_status_label'):
-                # Use high-contrast styling instead of generic tertiary text
-                self.search_status_label.setStyleSheet(StyleTemplates.get_high_contrast_search_status_style(colors))
+                self.component_styler.style_search_status(self.search_status_label)
             
             if hasattr(self, 'summary_notification'):
-                self.summary_notification.setStyleSheet(StyleTemplates.get_label_style(colors, "success"))
-            
-            # Update main output display styling with current opacity
-            if hasattr(self, 'output_display'):
-                self._style_output_display()
-            
-            # Update main input field styling
-            if hasattr(self, 'command_input'):
-                self._style_command_input()
-            
-            # Update all QToolButton widgets with new theme
-            self._update_all_tool_buttons()
-            
-            # Re-apply search button size constraints after theme styling
-            self._reapply_search_button_sizing()
-            
-            # Update all icon buttons to match new theme variant (dark/lite)
-            if hasattr(self, 'title_help_btn'):
-                self._load_help_icon(self.title_help_btn)
-            
-            if hasattr(self, 'help_command_btn'):
-                self._load_help_command_icon(self.help_command_btn)
-            
-            if hasattr(self, 'title_settings_btn'):
-                self._load_gear_icon(self.title_settings_btn)
-            
-            if hasattr(self, 'title_new_btn'):
-                self._load_plus_icon(self.title_new_btn)
-            
-            if hasattr(self, 'chat_btn'):
-                self._load_chat_icon()
-            
-            if hasattr(self, 'attach_btn'):
-                self._load_chain_icon()
-            
-            if hasattr(self, 'move_btn'):
-                self._load_move_icon(self.move_btn)
-            
-            # Update main input field styling
-            if hasattr(self, 'command_input'):
-                self._style_command_input()
-            
-            # Update main output display styling
-            if hasattr(self, 'output_display'):
-                self._style_output_display()
-            
-            # Ensure all layout components get theme updates
-            self._update_layout_component_themes()
-            
-            if hasattr(self, 'search_btn'):
-                self._load_search_icon()
-            
-            if hasattr(self, 'pin_btn'):
-                self._load_pin_icon()
-            
-            # Update button visual states
-            if hasattr(self, 'search_btn'):
-                self._update_search_button_state()
-            if hasattr(self, 'attach_btn'):
-                self._update_attach_button_state()
-            if hasattr(self, 'pin_btn'):
-                self._update_pin_button_state()
-            
-            # Reload theme-specific icons
-            if hasattr(self, 'search_btn'):
-                self._load_search_icon()
-            self._load_chain_icon()
-            self._load_chat_icon()
-            if hasattr(self, 'title_settings_btn'):
-                self._load_gear_icon(self.title_settings_btn)
-            if hasattr(self, 'settings_btn'):
-                self._load_gear_icon(self.settings_btn)
-            if hasattr(self, 'title_new_conv_btn'):
-                self._load_plus_icon(self.title_new_conv_btn)
-            if hasattr(self, 'move_btn'):
-                self._load_move_icon(self.move_btn)
-            if hasattr(self, 'pin_btn'):
-                self._load_pin_icon()
-            
-            # Note: help_btn is a local variable, so it's handled during initialization
-            
-            # Update prompt label with new theme
-            if hasattr(self, 'prompt_label'):
-                # Check if we're currently in processing mode
-                current_text = self.prompt_label.text()
-                is_processing = current_text != ">>>"
-                self._style_prompt_label(normal=not is_processing, processing=is_processing)
-            
-            # Refresh toolbar button icons to prevent ellipses
-            self._refresh_toolbar_icons()
-            
+                self.component_styler.style_status_label(self.summary_notification, "success")
+                
         except Exception as e:
-            logger.error(f"Failed to update component themes: {e}")
+            logger.warning(f"Failed to apply modern component styles: {e}")
     
     def _update_all_tool_buttons(self):
         """Update all QToolButton and QPushButton widgets in the widget hierarchy with current theme."""
@@ -1966,22 +1682,6 @@ class REPLWidget(QWidget):
         g = int(hex_color[2:4], 16) 
         b = int(hex_color[4:6], 16)
         return f"{r}, {g}, {b}"
-    
-    def _get_uniform_button_style(self, size="medium", button_type="push"):
-        """
-        DEPRECATED: Use ButtonStyleManager.get_unified_button_style() instead.
-        Legacy wrapper for backward compatibility.
-        """
-        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
-            colors = self.theme_manager.current_theme
-            return ButtonStyleManager.get_unified_button_style(colors, button_type, size)
-        else:
-            # Fallback for systems without theme support
-            return ButtonStyleManager.get_unified_button_style(None, button_type, size)
-    
-    def _get_themed_button_style(self, variant="secondary"):
-        """Get themed button style string (legacy method for backward compatibility)."""
-        return self._get_uniform_button_style("medium", "tool")
     
     def _get_search_checkbox_style(self):
         """Get theme-aware styling for search checkbox."""
@@ -2128,42 +1828,35 @@ class REPLWidget(QWidget):
     
     def _perform_startup_tasks(self):
         """Perform application startup tasks and display preamble."""
-        # Prevent multiple executions during theme switching or re-initialization
-        if self._startup_tasks_completed:
-            logger.debug("Startup tasks already completed - skipping duplicate execution")
-            return
-            
         try:
             logger.info("Performing startup tasks...")
             
             # Perform startup tasks
             startup_result = startup_service.perform_startup_tasks()
             
-            # Only show preamble if there's an issue (API failure, errors, etc)
-            api_status = startup_result.get('api_status', True)
-            errors = startup_result.get('errors', [])
+            # Display the appropriate preamble
+            preamble = startup_result.get('preamble', '')
+            if preamble:
+                # Split preamble into lines and display each one
+                for line in preamble.split('\n'):
+                    if line.strip():  # Only display non-empty lines
+                        self.append_output(line, "system")
+            else:
+                # Empty preamble for first run - display nothing
+                logger.info("First run detected - showing empty preamble")
             
-            if not api_status or errors:
-                # Show error message if API failed or there are errors
-                if not api_status:
-                    self.append_output("⚠️ API connection failed - check settings", "warning")
-                for error in errors:
-                    self.append_output(f"❌ {error}", "error")
+            # Add separator if preamble was shown
+            if preamble:
                 self.append_output("-" * 50, "system")
-            # Otherwise show nothing - clean start
             
-            logger.info(f"Startup tasks completed - first_run: {startup_result.get('first_run')}, api_status: {api_status}")
-            
-            # Mark startup tasks as completed to prevent re-execution during theme switching
-            self._startup_tasks_completed = True
+            logger.info(f"Startup tasks completed - first_run: {startup_result.get('first_run')}, api_status: {startup_result.get('api_status')}")
             
         except Exception as e:
             logger.error(f"✗ Failed to perform startup tasks: {e}")
-            # Show error only
-            self.append_output(f"❌ Startup failed: {e}", "error")
-            
-            # Mark startup tasks as completed even on failure to prevent retry loops
-            self._startup_tasks_completed = True
+            # Fallback to basic welcome message
+            self.append_output("💬 Ghostman AI Assistant", "system")
+            self.append_output("Type your message or 'help' for commands", "system")
+            self.append_output("-" * 50, "system")
     
     def _load_conversations_deferred(self):
         """Load conversations after UI is fully initialized."""
@@ -2264,8 +1957,13 @@ class REPLWidget(QWidget):
             
         if not conversation:
             self.status_label.setText("🆕 New")
-            new_color = self.theme_manager.current_theme.status_info if (self.theme_manager and THEME_SYSTEM_AVAILABLE) else "#FFA500"
-            self.status_label.setStyleSheet(f"color: {new_color}; font-weight: bold; font-size: 10px;")
+            if self.component_styler and self.theme_manager and THEME_SYSTEM_AVAILABLE:
+                self.component_styler.style_status_label(self.status_label, "info")
+            elif self.theme_manager and THEME_SYSTEM_AVAILABLE:
+                new_color = self.theme_manager.current_theme.status_info
+                self.status_label.setStyleSheet(f"color: {new_color}; font-weight: bold; font-size: 10px;")
+            else:
+                self.status_label.setStyleSheet("color: #FFA500; font-weight: bold; font-size: 10px;")
             return
         
         status_text = conversation.status.value.title()
@@ -2273,22 +1971,34 @@ class REPLWidget(QWidget):
         self.status_label.setText(f"{icon} {status_text}")
         
         # Color coding based on status with theme support
-        if self.theme_manager and THEME_SYSTEM_AVAILABLE:
-            colors = {
-                "Active": self.theme_manager.current_theme.status_success,
-                "Pinned": self.theme_manager.current_theme.status_warning, 
-                "Archived": self.theme_manager.current_theme.text_disabled,
-                "Deleted": self.theme_manager.current_theme.status_error
+        if self.component_styler and self.theme_manager and THEME_SYSTEM_AVAILABLE:
+            # Map status to modern style variants
+            status_variant_map = {
+                "Active": "success",
+                "Pinned": "warning", 
+                "Archived": "normal",
+                "Deleted": "error"
             }
+            variant = status_variant_map.get(status_text, "success")
+            self.component_styler.style_status_label(self.status_label, variant)
         else:
-            colors = {
-                "Active": "#4CAF50",
-                "Pinned": "#FFD700", 
-                "Archived": "#888888",
-                "Deleted": "#FF5555"
-            }
-        color = colors.get(status_text, colors.get("Active", "#4CAF50"))
-        self.status_label.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 10px;")
+            # Fallback to legacy styling
+            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+                colors = {
+                    "Active": self.theme_manager.current_theme.status_success,
+                    "Pinned": self.theme_manager.current_theme.status_warning, 
+                    "Archived": self.theme_manager.current_theme.text_disabled,
+                    "Deleted": self.theme_manager.current_theme.status_error
+                }
+            else:
+                colors = {
+                    "Active": "#4CAF50",
+                    "Pinned": "#FFD700", 
+                    "Archived": "#888888",
+                    "Deleted": "#FF5555"
+                }
+            color = colors.get(status_text, colors.get("Active", "#4CAF50"))
+            self.status_label.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 10px;")
         
         # Show summary indicator if available
         if conversation.summary:
@@ -2483,7 +2193,7 @@ class REPLWidget(QWidget):
             self.title_frame.setStyleSheet(f"""
                 QFrame {{
                     background-color: rgba(40, 40, 40, 1.0);
-                    border: none;
+                    border: 1px solid rgba(255, 255, 255, 0.2);
                     border-radius: 5px;
                     margin: 0px;
                 }}
@@ -3053,10 +2763,10 @@ class REPLWidget(QWidget):
             border_color = colors.border_secondary
             focus_color = colors.border_focus
             
-            style = f"QComboBox {{background-color: {bg_color}; color: {text_color}; border: none; border-radius: 5px; padding: 5px 10px; font-size: 11px;}} QComboBox:hover {{border: none;}} QComboBox::drop-down {{border: none; width: 20px;}} QComboBox::down-arrow {{image: none; border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 5px solid {text_color}; margin-top: 2px;}} QComboBox QAbstractItemView {{background-color: {colors.background_primary}; color: {text_color}; selection-background-color: {colors.primary}; border: none; outline: none;}}"
+            style = f"QComboBox {{background-color: {bg_color}; color: {text_color}; border: 1px solid {border_color}; border-radius: 5px; padding: 5px 10px; font-size: 11px;}} QComboBox:hover {{border: 1px solid {focus_color};}} QComboBox::drop-down {{border: none; width: 20px;}} QComboBox::down-arrow {{image: none; border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 5px solid {text_color}; margin-top: 2px;}} QComboBox QAbstractItemView {{background-color: {colors.background_primary}; color: {text_color}; selection-background-color: {colors.primary}; border: 1px solid {border_color}; outline: none;}}"
         else:
             # Fallback styles - ALWAYS fully opaque
-            style = f"QComboBox {{background-color: rgba(40, 40, 40, 1.0); color: white; border: none; border-radius: 5px; padding: 5px 10px; font-size: 11px;}} QComboBox:hover {{border: none;}} QComboBox::drop-down {{border: none; width: 20px;}} QComboBox::down-arrow {{image: none; border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 5px solid white; margin-top: 2px;}} QComboBox QAbstractItemView {{background-color: rgba(30, 30, 30, 1.0); color: white; selection-background-color: #4CAF50; border: none; outline: none;}}"
+            style = f"QComboBox {{background-color: rgba(40, 40, 40, 1.0); color: white; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 5px; padding: 5px 10px; font-size: 11px;}} QComboBox:hover {{border: 1px solid #4CAF50;}} QComboBox::drop-down {{border: none; width: 20px;}} QComboBox::down-arrow {{image: none; border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 5px solid white; margin-top: 2px;}} QComboBox QAbstractItemView {{background-color: rgba(30, 30, 30, 1.0); color: white; selection-background-color: #4CAF50; border: 1px solid rgba(255, 255, 255, 0.3); outline: none;}}"
         
         self.conversation_selector.setStyleSheet(style)
     
@@ -3687,8 +3397,7 @@ class REPLWidget(QWidget):
                 
         except Exception as e:
             logger.error(f"Failed to load search icon: {e}")
-            if hasattr(self, 'search_btn') and self.search_btn:
-                self.search_btn.setText("⌕")  # Fallback
+            self.search_btn.setText("⌕")  # Fallback
     
     def _load_chain_icon(self):
         """Load theme-appropriate chain icon."""
@@ -4154,13 +3863,20 @@ class REPLWidget(QWidget):
         # Title bar with new conversation and help buttons
         self._init_title_bar(layout)
         
-        # Output display - using MixedContentDisplay for complete control over content rendering
-        self.output_display = MixedContentDisplay()
+        # Output display - using QTextEdit instead of QTextBrowser to prevent navigation
+        self.output_display = QTextEdit()
+        self.output_display.setReadOnly(True)
+        # Enable rich text features for proper link support
+        self.output_display.setAcceptRichText(True)
         # Enable manual link detection and handling
         self._setup_link_handling()
         # Enable custom context menu for link operations
         self.output_display.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.output_display.customContextMenuRequested.connect(self._show_output_context_menu)
+        # Use font service for AI response font (default for output display)
+        # Note: We set the widget font to the AI response font, but HTML CSS will override for code elements
+        ai_font = font_service.create_qfont('ai_response')
+        self.output_display.setFont(ai_font)
         self.output_display.setMinimumHeight(300)
         layout.addWidget(self.output_display, 1)
         
@@ -4188,12 +3904,31 @@ class REPLWidget(QWidget):
         
         # Command input - using QPlainTextEdit for multiline support
         self.command_input = QPlainTextEdit()
-        # Use font service for user input font
-        input_font = font_service.create_qfont('user_input')
+        # Use FIXED font for user input (not affected by text size scaling)
+        input_font = QFont()
+        input_font.setFamily('Segoe UI')
+        input_font.setPointSize(11)  # Fixed 11pt size
+        input_font.setWeight(QFont.Weight.Normal)
         self.command_input.setFont(input_font)
+        
+        # CRITICAL: Set document margins to prevent text cutoff
+        # This is the primary solution for text positioning issues
+        self.command_input.setContentsMargins(0, 0, 0, 0)  # Remove widget margins
+        document = self.command_input.document()
+        document.setDocumentMargin(8)  # Use document margin instead of CSS padding
+        
+        # Alternative approach: Set viewport margins for better text positioning control
+        # This provides additional fine-tuning for text positioning
+        viewport = self.command_input.viewport()
+        viewport.setContentsMargins(2, 4, 2, 4)  # left, top, right, bottom - fine-tune as needed
+        
+        # Add runtime verification to ensure text positioning is correct
+        self._verify_text_positioning()
+        
         # Enable word wrapping for long text
         self.command_input.setWordWrapMode(QTextOption.WrapMode.WordWrap)
         self.command_input.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+        
         # Set initial height to match button height (32px) to prevent font squishing
         # The dynamic height system will take over after initialization, but this ensures
         # proper baseline alignment from the start
@@ -4213,9 +3948,8 @@ class REPLWidget(QWidget):
         # Send button - align to bottom baseline
         self.send_button = QPushButton("Send")
         self.send_button.clicked.connect(self._on_command_entered)
-        self.send_button.setFixedHeight(32)  # Match prompt label height
         self._style_send_button()
-        input_layout.addWidget(self.send_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        input_layout.addWidget(self.send_button, 0, Qt.AlignmentFlag.AlignBottom)
         
         # Stop button (hidden by default) - align to bottom baseline
         self.stop_button = QPushButton("Stop")
@@ -4244,68 +3978,35 @@ class REPLWidget(QWidget):
             self._apply_themed_styles()
         else:
             # Fallback to legacy styling
-            self._apply_legacy_styles()
+            logger.warning("Legacy fallback removed - ensure modern theme system is working")
     
     def _apply_themed_styles(self):
-        """Apply styles using the theme system - NO opacity for UI components."""
+        """Apply styles using the modern theme system - NO opacity for UI components."""
         try:
-            colors = self.theme_manager.current_theme
-            
-            # Generate themed style WITHOUT opacity (root panel stays opaque)
-            style = StyleTemplates.get_repl_panel_style(colors)
-            
-            # Add input field styles
-            input_style = StyleTemplates.get_input_field_style(colors)
-            
-            # Child element backgrounds - ALWAYS fully opaque for UI controls - use same as panel for consistency
-            child_bg = colors.background_secondary
-            
-            # Combine styles using string formatting to avoid CSS syntax issues
-            # UI components (input fields, etc.) stay fully opaque - remove unnecessary borders
-            textedit_style = f"#repl-root QTextEdit {{ background-color: {child_bg}; color: {colors.text_primary}; border: none; border-radius: 5px; padding: 5px; selection-background-color: {colors.secondary}; selection-color: {colors.text_primary}; }}"
-            lineedit_style = f"#repl-root QLineEdit {{ background-color: {child_bg}; color: {colors.text_primary}; border: none; border-radius: 3px; padding: 5px; selection-background-color: {colors.secondary}; selection-color: {colors.text_primary}; }}"
-            lineedit_focus_style = f"#repl-root QLineEdit:focus {{ border: none; }}"
-            plaintext_style = f"#repl-root QPlainTextEdit {{ background-color: {child_bg}; color: {colors.text_primary}; border: none; border-radius: 3px; padding: 5px; selection-background-color: {colors.secondary}; selection-color: {colors.text_primary}; }}"
-            plaintext_focus_style = f"#repl-root QPlainTextEdit:focus {{ border: none; }}"
-            
-            # Add explicit tab frame transparency to override theme inheritance
-            tab_frame_style = "#repl-root QFrame#tab_frame { background-color: rgba(0,0,0,0) !important; background: none !important; }"
-            
-            # Properly combine all styles (root style includes border-radius)
-            combined_style = f"{style} {textedit_style} {lineedit_style} {lineedit_focus_style} {plaintext_style} {plaintext_focus_style}"
-            
-            
-            self.setStyleSheet(combined_style)
-            logger.debug("🎨 Applied themed REPL styles (no opacity for UI controls)")
-            
+            if self.style_registry:
+                # Use modern styling system for root container
+                root_style = self.style_registry.get_repl_root_style()
+                
+                # Get tab frame transparency with modern system
+                tab_frame_style = self.style_registry.get_tab_frame_transparent_style()
+                
+                # Combine styles for root container
+                combined_style = f"{root_style} {tab_frame_style}"
+                self.setStyleSheet(combined_style)
+                
+                logger.debug("🎨 Applied modern themed REPL styles (no opacity for UI controls)")
+            else:
+                # Fallback to legacy styled theming
+                logger.warning("Modern style registry not available - skipping themed styling")
+                
         except Exception as e:
             logger.error(f"Failed to apply themed styles: {e}")
-            # Fallback to legacy styles
-            self._apply_legacy_styles()
+            # No legacy fallback - modern system should handle all cases
+            logger.warning("Failed to apply any themed styles - check theme system initialization")
     
-    def _apply_legacy_styles(self):
-        """Apply legacy hardcoded styles as fallback - NO opacity for UI controls."""
-        # Root panel always opaque for UI controls
-        panel_bg = "rgba(30, 30, 30, 1.0)"
-        border_style = "border-radius: 10px 10px 0px 0px;"
-            
-        # UI elements always fully opaque (opacity only applied to output display separately)
-        textedit_bg = "rgba(20, 20, 20, 1.0)"
-        lineedit_bg = "rgba(40, 40, 40, 1.0)"
-        
-        logger.debug(f"🎨 Legacy CSS colors generated (no opacity for UI controls):")
-        logger.debug(f"  📦 Panel background: {panel_bg}")
-        logger.debug(f"  📝 Text area background: {textedit_bg}")
-        logger.debug(f"  ⌨️  Input background: {lineedit_bg}")
-        # Use simple string formatting to avoid CSS syntax issues - remove unnecessary borders
-        root_style = f"#repl-root {{ background-color: {panel_bg}; {border_style} }}"
-        textedit_fallback = f"#repl-root QTextEdit {{ background-color: {textedit_bg}; color: #f0f0f0; border: none; border-radius: 5px; padding: 5px; }}"
-        lineedit_fallback = f"#repl-root QLineEdit {{ background-color: {lineedit_bg}; color: #ffffff; border: none; border-radius: 3px; padding: 5px; }}"
-        lineedit_focus_fallback = "#repl-root QLineEdit:focus { border: none; }"
-        plaintext_fallback = f"#repl-root QPlainTextEdit {{ background-color: {lineedit_bg}; color: #ffffff; border: none; border-radius: 3px; padding: 5px; }}"
-        plaintext_focus_fallback = "#repl-root QPlainTextEdit:focus { border: none; }"
-        
-        self.setStyleSheet(f"{root_style} {textedit_fallback} {lineedit_fallback} {lineedit_focus_fallback} {plaintext_fallback} {plaintext_focus_fallback}")
+
+    
+
 
     def set_panel_opacity(self, opacity: float):
         """Set the frame (panel) background opacity only.
@@ -4441,7 +4142,7 @@ class REPLWidget(QWidget):
                 self.title_frame.setStyleSheet(f"""
                     QFrame {{
                         background-color: {frame_bg} !important;
-                        border: none;
+                        border: 1px solid {colors.border_secondary};
                         border-radius: 4px;
                         padding: 0px;
                     }}
@@ -4456,7 +4157,7 @@ class REPLWidget(QWidget):
                 self.title_frame.setStyleSheet(f"""
                     QFrame {{
                         background-color: {frame_bg} !important;
-                        border: none;
+                        border: 1px solid rgba(255, 255, 255, 0.2);
                         border-radius: 5px;
                         margin: 0px;
                         padding: 4px;
@@ -4466,52 +4167,247 @@ class REPLWidget(QWidget):
             logger.warning(f"Failed to style title frame: {e}")
     
     def refresh_fonts(self):
-        """Refresh fonts from font service when settings change."""
+        """Refresh text size scaling from settings and update existing content."""
+        logger.info("🔤 Font refresh called - updating text size scaling")
+        
+        # Clear markdown renderer cache to pick up new sizes
+        if hasattr(self, '_markdown_renderer'):
+            self._markdown_renderer.clear_cache()
+        
+        # Update existing content with new text size
+        self._update_existing_text_sizes()
+        
+        # Force a visual refresh
+        self.output_display.update()
+    
+    def _update_existing_text_sizes(self):
+        """Update all existing text with new size scaling."""
         try:
-            # Clear font service cache to get latest settings
-            font_service.clear_cache()
+            from ...infrastructure.storage.settings_manager import settings
+            text_size_percent = settings.get('ui.text_size', 100)
             
-            # MixedContentDisplay handles fonts internally through theme colors
-            # No need to set font directly
+            logger.info(f"📏 Updating existing text to {text_size_percent}% scaling")
             
-            # Update input font (user input font)
-            input_font = font_service.create_qfont('user_input')
-            self.command_input.setFont(input_font)
+            # Get current HTML
+            html = self.output_display.toHtml()
             
-            # Clear markdown renderer cache so it uses new fonts and update theme
-            if hasattr(self, '_markdown_renderer'):
-                self._markdown_renderer.clear_cache()
-                self._markdown_renderer.update_theme()
+            # Parse with BeautifulSoup for reliable HTML manipulation  
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html, 'html.parser')
             
-            # Re-apply output display styling to ensure font colors are correct
-            self._style_output_display()
+            # Calculate new sizes
+            base_text_size = int(10 * text_size_percent / 100)
+            base_code_size = int(9 * text_size_percent / 100)
             
-            # Re-render existing content with new fonts
-            self._refresh_existing_output()
+            updates = 0
             
-            logger.info("✓ Fonts refreshed from settings")
+            # Update all elements with font-size styles
+            for element in soup.find_all():
+                style = element.get('style', '')
+                if 'font-size:' in style:
+                    # Parse the style
+                    style_parts = []
+                    for part in style.split(';'):
+                        if ':' in part:
+                            key, value = part.split(':', 1)
+                            key = key.strip().lower()
+                            value = value.strip()
+                            
+                            if key == 'font-size':
+                                # Determine if this is code or regular text
+                                parent_classes = element.get('class', [])
+                                if isinstance(parent_classes, str):
+                                    parent_classes = [parent_classes]
+                                
+                                # Check if element or parent contains code
+                                is_code = (
+                                    element.name in ['code', 'pre'] or
+                                    any('code' in cls.lower() for cls in parent_classes) or
+                                    self._is_inside_code_element(element)
+                                )
+                                
+                                if is_code:
+                                    new_size = f"{base_code_size}pt"
+                                else:
+                                    # Check if it's a header size (proportional)
+                                    if 'gm-heading' in parent_classes or element.name in ['h1', 'h2', 'h3']:
+                                        if element.name == 'h1':
+                                            new_size = f"{int(base_text_size * 1.4)}pt"
+                                        elif element.name == 'h2':
+                                            new_size = f"{int(base_text_size * 1.3)}pt"
+                                        elif element.name == 'h3':
+                                            new_size = f"{int(base_text_size * 1.2)}pt"
+                                        else:
+                                            new_size = f"{base_text_size}pt"
+                                    else:
+                                        new_size = f"{base_text_size}pt"
+                                
+                                style_parts.append(f"{key}: {new_size}")
+                                updates += 1
+                            else:
+                                style_parts.append(f"{key}: {value}")
+                        elif part.strip():
+                            style_parts.append(part.strip())
+                    
+                    # Rebuild style
+                    new_style = '; '.join(style_parts)
+                    if new_style and not new_style.endswith(';'):
+                        new_style += ';'
+                    element['style'] = new_style
+            
+            logger.info(f"📏 Updated {updates} elements with new text sizes")
+            
+            # Apply the updated HTML
+            self.output_display.setHtml(str(soup))
+            
+            # Restore cursor to end
+            cursor = self.output_display.textCursor()
+            cursor.movePosition(cursor.MoveOperation.End)
+            self.output_display.setTextCursor(cursor)
             
         except Exception as e:
-            logger.error(f"Failed to refresh fonts: {e}")
+            logger.error(f"Failed to update existing text sizes: {e}")
+    
+    def _is_inside_code_element(self, element):
+        """Check if element is inside a code-related element."""
+        parent = element.parent
+        while parent:
+            if parent.name in ['code', 'pre']:
+                return True
+            parent_classes = parent.get('class', [])
+            if isinstance(parent_classes, str):
+                parent_classes = [parent_classes]
+            if any('code' in cls.lower() for cls in parent_classes):
+                return True
+            parent = parent.parent
+        return False
+    
+    def _update_existing_content_fonts(self):
+        """No-op - using fixed fonts."""
+        pass
     
     def _refresh_existing_output(self):
-        """Re-render all existing output with current theme colors - preserves content."""
+        """Re-render all existing output with current theme colors and fonts - preserves content."""
         try:
-            # Clear markdown renderer cache to ensure fresh colors
+            # Clear markdown renderer cache to ensure fresh colors and fonts
             if hasattr(self, '_markdown_renderer'):
                 self._markdown_renderer.clear_cache()
                 self._markdown_renderer.update_theme()
             
-            # MixedContentDisplay theme colors are already updated in _style_output_display()
-            # Just ensure theme colors are applied to the display
-            if hasattr(self, 'output_display'):
-                self._style_output_display()
+            # Get current cursor position to restore later
+            cursor = self.output_display.textCursor()
+            current_position = cursor.position()
+            
+            # Store current scroll position
+            scrollbar = self.output_display.verticalScrollBar()
+            scroll_position = scrollbar.value()
+            
+            # Update the document font with new theme settings
+            document = self.output_display.document()
+            ai_font = font_service.create_qfont('ai_response')
+            document.setDefaultFont(ai_font)
+            
+            # IMPORTANT: Update code font variables for HTML re-processing
+            # This ensures any future HTML generation uses the new code fonts
+            try:
+                # Get code font config - check for overrides first
+                try:
+                    from .font_state_manager import font_state_manager
+                    code_font_config = font_state_manager.get_current_font('code_snippets') or font_service.get_font_config('code_snippets')
+                except ImportError:
+                    code_font_config = font_service.get_font_config('code_snippets')
+                self._code_font_family = code_font_config['family']
+                self._code_font_size = code_font_config['size']
+                self._code_font_css_style = font_service.get_css_font_style('code_snippets')
+                logger.debug(f"Updated code font variables: {self._code_font_family} {self._code_font_size}pt")
+            except Exception as e:
+                logger.warning(f"Failed to update code font variables: {e}")
+                self._code_font_family = "Consolas"
+                self._code_font_size = 10
+            
+            # Update text color formats for existing content with improved theme awareness
+            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+                colors = self.theme_manager.current_theme
+                
+                # Update the default text format for the entire document
+                default_format = QTextCharFormat()
+                default_format.setForeground(QColor(colors.text_primary))
+                
+                # Apply new colors to the entire document
+                cursor.select(QTextCursor.SelectionType.Document)
+                cursor.setCharFormat(default_format)
+                
+                # Create comprehensive color updates for inline styled text
+                self._update_inline_text_colors(colors)
+                
+                # Force a complete refresh of the widget with opacity support
+                alpha = max(0.0, min(1.0, self._panel_opacity))
+                if alpha >= 1.0:
+                    bg_color = colors.background_primary
+                elif colors.background_primary.startswith('#'):
+                    r = int(colors.background_primary[1:3], 16)
+                    g = int(colors.background_primary[3:5], 16)
+                    b = int(colors.background_primary[5:7], 16)
+                    bg_color = f"rgba({r}, {g}, {b}, {alpha:.3f})"
+                else:
+                    bg_color = colors.background_primary
+                    
+                self.output_display.setStyleSheet(f"""
+                    QTextEdit {{
+                        background-color: {bg_color};
+                        color: {colors.text_primary};
+                        border: none;
+                        selection-background-color: {colors.primary};
+                        selection-color: {colors.background_primary};
+                    }}
+                """)
+                
+            # Restore cursor position and scroll
+            cursor.setPosition(min(current_position, document.characterCount() - 1))
+            self.output_display.setTextCursor(cursor)
+            
+            # Restore scroll position
+            scrollbar.setValue(scroll_position)
             
             logger.debug("Existing output refreshed with new theme colors")
             
         except Exception as e:
             logger.error(f"Failed to refresh existing output: {e}")
     
+    def _update_inline_text_colors(self, colors):
+        """Update colors for inline styled text elements."""
+        try:
+            # Get the document
+            document = self.output_display.document()
+            cursor = QTextCursor(document)
+            
+            # Color mappings based on common text patterns
+            color_mappings = {
+                'input': colors.primary,
+                'response': colors.text_primary,
+                'system': colors.text_tertiary,
+                'info': colors.status_info,
+                'warning': colors.status_warning,
+                'error': colors.status_error,
+                'divider': colors.separator
+            }
+            
+            # Iterate through the document and update color-specific formats
+            cursor.movePosition(QTextCursor.MoveOperation.Start)
+            
+            while not cursor.atEnd():
+                char_format = cursor.charFormat()
+                current_color = char_format.foreground().color()
+                
+                # Check if this text needs color updating based on context
+                # This is a simplified approach - could be enhanced with more sophisticated detection
+                
+                cursor.movePosition(QTextCursor.MoveOperation.NextCharacter)
+            
+            logger.debug("Updated inline text colors for theme")
+            
+        except Exception as e:
+            logger.warning(f"Failed to update inline text colors: {e}")
     
     def clear_output(self):
         """Clear the output display and reset markdown renderer cache."""
@@ -4815,7 +4711,7 @@ class REPLWidget(QWidget):
             logger.error(f"Failed to run async conversation creation: {e}")
     
     def _load_conversation_messages(self, conversation: Conversation):
-        """Load conversation messages into output display with proper rendering."""
+        """Load conversation messages into output display."""
         self.clear_output()
         
         self.append_output(f"💬 Conversation: {conversation.title}", "system")
@@ -4828,27 +4724,17 @@ class REPLWidget(QWidget):
         
         self.append_output("-" * 50, "system")
         
-        # Load messages with proper rendering
+        # Load messages with appropriate icons
         for message in conversation.messages:
             if message.role == MessageRole.SYSTEM:
                 continue  # Skip system messages in display
             
-            if message.role == MessageRole.USER:
-                # User messages - show with timestamp and icon
-                timestamp = message.timestamp.strftime("%m/%d %H:%M")
-                self.append_output(f"[{timestamp}] 👤 You:", "input")
-                # Render the actual message content preserving markdown
-                self.append_output(message.content, "input")
-                
-            elif message.role == MessageRole.ASSISTANT:
-                # AI messages - show with timestamp and proper markdown rendering
-                timestamp = message.timestamp.strftime("%m/%d %H:%M")
-                self.append_output(f"[{timestamp}] 🤖 AI:", "response")
-                # Render the AI response with full markdown support (including code blocks)
-                self.append_output(message.content, "response")
+            role_icon = "👤" if message.role == MessageRole.USER else "🤖"
+            role_name = "You" if message.role == MessageRole.USER else "AI"
+            style = "input" if message.role == MessageRole.USER else "response"
             
-            # Add spacing between messages
-            self.append_output("", "normal")
+            timestamp = message.timestamp.strftime("%m/%d %H:%M")
+            self.append_output(f"[{timestamp}] {role_icon} {role_name}: {message.content}", style)
         
         if not conversation.messages:
             self.append_output("🎆 Start a new conversation!", "info")
@@ -5115,11 +5001,6 @@ class REPLWidget(QWidget):
         
         elif command_lower == "test_themes":
             # Debug command to test all theme switching
-            # Prevent recursive theme switching during automated theme changes
-            app = QApplication.instance()
-            if app and app.property("theme_switching"):
-                self.append_output("⚠ Theme testing disabled during theme switching to prevent recursion", "warning")
-                return
             self._test_all_themes()
         
         elif command_lower == "resend":
@@ -5147,7 +5028,6 @@ class REPLWidget(QWidget):
         - Preserves message type color coding
         - Graceful fallback to plain text rendering
         - Performance optimized for long conversations
-        - Code snippets with solid backgrounds and proper formatting
         
         Args:
             text: Text to append (supports markdown formatting)
@@ -5157,31 +5037,64 @@ class REPLWidget(QWidget):
         if not hasattr(self, '_markdown_renderer'):
             self._markdown_renderer = MarkdownRenderer(self.theme_manager)
         
+        cursor = self.output_display.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        
+        # Ensure semantic font CSS is injected into the document
+        self._ensure_semantic_css_injected()
+        
         # Render content with markdown support
         try:
-            if force_plain:
-                # Plain text rendering - use add_plain_text method
-                self.output_display.add_plain_text(text, style)
-            else:
-                html_content = self._markdown_renderer.render(text, style, force_plain)
-                # Use the MixedContentDisplay method to add HTML content with code block extraction
-                self.output_display.add_html_content(html_content, style)
+            html_content = self._markdown_renderer.render(text, style, force_plain)
             
-            # Performance optimization: limit content size for very long conversations
+            # Insert the rendered HTML content with proper anchor handling
+            self._insert_html_with_anchors(cursor, html_content)
+            
+            # Performance optimization: limit document size for very long conversations
             self._manage_document_size()
             
         except Exception as e:
             logger.error(f"Error rendering output: {e}")
-            # Fallback to plain text rendering
-            self.output_display.add_plain_text(str(text), style)
+            # Fallback to simple text rendering
+            color = self._markdown_renderer.color_scheme.get(style, self._markdown_renderer.color_scheme.get("normal", "#f0f0f0"))
+            escaped_text = html.escape(str(text))
+            cursor.insertHtml(f'<span style="color: {color};">{escaped_text}</span><br>')
+        
+        # Auto-scroll to bottom
+        self.output_display.setTextCursor(cursor)
+        self.output_display.ensureCursorVisible()
+    
+    def _ensure_semantic_css_injected(self):
+        """No-op - using simple inline styles instead of CSS injection."""
+        pass
+    
+    def _reinject_semantic_css(self):
+        """No-op - using simple inline styles instead of CSS injection."""
+        pass
     
     def _manage_document_size(self):
         """
         Manage document size for performance in long conversations.
-        Uses MixedContentDisplay's built-in content management.
+        Removes older content when document becomes too large.
         """
-        # Use MixedContentDisplay's built-in content size management
-        self.output_display.manage_content_size(max_widgets=500)
+        document = self.output_display.document()
+        block_count = document.blockCount()
+        
+        # If document has more than 1000 blocks, remove the oldest 200
+        if block_count > 1000:
+            cursor = QTextCursor(document)
+            cursor.movePosition(QTextCursor.MoveOperation.Start)
+            
+            # Select first 200 blocks
+            for _ in range(200):
+                cursor.movePosition(QTextCursor.MoveOperation.NextBlock, QTextCursor.MoveMode.KeepAnchor)
+            
+            # Remove selected content and add notice
+            cursor.removeSelectedText()
+            truncate_color = self._markdown_renderer.color_scheme.get("system", "#808080") if hasattr(self, '_markdown_renderer') else "#808080"
+            cursor.insertHtml(f'<span style="color: {truncate_color}; font-style: italic;">[Previous messages truncated for performance]</span><br><br>')
+            
+            logger.debug(f"Document size managed: removed 200 blocks, {document.blockCount()} remaining")
     
     def clear_output(self):
         """Clear the output display and reset markdown renderer cache."""
@@ -5210,8 +5123,7 @@ class REPLWidget(QWidget):
             Dictionary containing render statistics
         """
         stats = {
-            'content_widgets': len(self.output_display.content_widgets) if hasattr(self.output_display, 'content_widgets') else 0,
-            'content_height': self.output_display.get_content_height() if hasattr(self.output_display, 'get_content_height') else 0,
+            'document_blocks': self.output_display.document().blockCount(),
             'markdown_available': MARKDOWN_AVAILABLE
         }
         
@@ -5334,12 +5246,6 @@ class REPLWidget(QWidget):
         """Test switching through all available themes to verify rendering consistency."""
         if not (self.theme_manager and THEME_SYSTEM_AVAILABLE):
             self.append_output("⚠ Theme system not available for testing", "error")
-            return
-            
-        # Additional safety check against recursive theme switching
-        app = QApplication.instance()
-        if app and app.property("theme_switching"):
-            self.append_output("⚠ Theme testing aborted: detected ongoing theme switch to prevent recursion", "warning")
             return
         
         self.append_output("=== Theme Switching Test ===", "info")
@@ -5694,20 +5600,23 @@ def test_theme():
         """Add a resend button option to the output display."""
         try:
             # Create a clickable resend link using HTML
-            message_preview = self.last_failed_message[:100] + "..." if len(self.last_failed_message) > 100 else self.last_failed_message
-            resend_html = f'''
+            resend_html = '''
             <div style="margin: 10px 0; padding: 8px; border: 1px solid #666; border-radius: 4px; background-color: rgba(255,255,255,0.05);">
                 <a href="resend_message" style="color: #4CAF50; text-decoration: none; font-weight: bold;">
                     🔄 Click here to resend your message
                 </a>
                 <br><span style="color: #888; font-size: 10px;">
-                    Message: "{html.escape(message_preview)}"
+                    Message: "{}"
                 </span>
             </div>
-            '''
+            '''.format(html.escape(self.last_failed_message[:100] + "..." if len(self.last_failed_message) > 100 else self.last_failed_message))
             
-            # Add the resend option using MixedContentDisplay
-            self.output_display.add_html_content(resend_html, "system")
+            # Insert the resend option
+            cursor = self.output_display.textCursor()
+            cursor.movePosition(QTextCursor.MoveOperation.End)
+            cursor.insertHtml(resend_html)
+            
+            # Link handler already connected during initialization
                 
         except Exception as e:
             logger.error(f"Failed to add resend option: {e}")
@@ -5742,19 +5651,33 @@ def test_theme():
         
     def _show_output_context_menu(self, position):
         """Show context menu for output display with link operations."""
+        # Get cursor at position
+        cursor = self.output_display.cursorForPosition(position)
+        
+        # Check if cursor is on a link
+        char_format = cursor.charFormat()
+        link_url = char_format.anchorHref()
+        
         # Create context menu
         context_menu = QMenu(self.output_display)
         
-        # MixedContentDisplay doesn't have cursor/link detection like QTextEdit
-        # Provide general context menu actions
+        if link_url:
+            # Add link-specific actions
+            open_action = context_menu.addAction("🌐 Open Link")
+            open_action.triggered.connect(lambda: self._handle_link_click(QUrl(link_url)))
+            
+            copy_action = context_menu.addAction("📋 Copy Link Address")
+            copy_action.triggered.connect(lambda: self._copy_link_to_clipboard(link_url))
+            
+            context_menu.addSeparator()
         
-        clear_action = context_menu.addAction("🗑️ Clear Display")
-        clear_action.triggered.connect(self.clear_output)
+        # Add standard text operations
+        if self.output_display.textCursor().hasSelection():
+            copy_text_action = context_menu.addAction("📄 Copy Text")
+            copy_text_action.triggered.connect(self.output_display.copy)
         
-        context_menu.addSeparator()
-        
-        refresh_action = context_menu.addAction("🔄 Refresh Theme")
-        refresh_action.triggered.connect(self._refresh_existing_output)
+        select_all_action = context_menu.addAction("🗂️ Select All")
+        select_all_action.triggered.connect(self.output_display.selectAll)
         
         # Show context menu
         context_menu.exec(self.output_display.mapToGlobal(position))
@@ -5770,10 +5693,354 @@ def test_theme():
             logger.error(f"Failed to copy link to clipboard: {e}")
     
     def _setup_link_handling(self):
-        """Setup link detection and handling for MixedContentDisplay."""
-        # Connect the MixedContentDisplay link_clicked signal
-        self.output_display.link_clicked.connect(self._handle_link_click)
+        """Setup robust link detection and handling for QTextEdit."""
+        # Initialize the production-ready link handler
+        self.link_handler = ReplLinkHandler(self.output_display, self)
+        
+        # Install event filter and enable mouse tracking
+        self.output_display.installEventFilter(self)
+        self.output_display.setMouseTracking(True)
     
+    def _insert_html_with_anchors(self, cursor, html_content):
+        """
+        Insert HTML content with direct font formatting applied for code elements.
+        
+        Since Qt doesn't support custom CSS classes, this method parses the HTML
+        to identify code sections and applies font formatting directly.
+        """
+        logger.info(f"💻 HTML INSERT: Starting HTML insertion process ({len(html_content)} chars)")
+        try:
+            import re
+            import html
+            from PyQt6.QtGui import QTextCharFormat, QFont
+            from ...application.font_service import font_service
+            
+            # Get font configurations - check for overrides first
+            try:
+                from .font_state_manager import font_state_manager
+                code_config = font_state_manager.get_current_font('code_snippets') or font_service.get_font_config('code_snippets')
+                response_config = font_state_manager.get_current_font('ai_response') or font_service.get_font_config('ai_response')
+            except ImportError:
+                code_config = font_service.get_font_config('code_snippets')
+                response_config = font_service.get_font_config('ai_response')
+            
+            # Create font objects
+            code_font = QFont()
+            code_font.setFamily(code_config['family'])
+            code_font.setPointSize(code_config['size'])
+            if code_config['weight'] == 'bold':
+                code_font.setWeight(QFont.Weight.Bold)
+            
+            response_font = QFont()
+            response_font.setFamily(response_config['family'])
+            response_font.setPointSize(response_config['size'])
+            if response_config['weight'] == 'bold':
+                response_font.setWeight(QFont.Weight.Bold)
+            
+            # Parse HTML to extract code sections and regular text
+            # Pattern to match BOTH semantic classes AND existing font styles
+            # 1. Semantic classes (first time processing)
+            code_block_pattern = r'<pre\s+class="[^"]*gm-code-block[^"]*"[^>]*>.*?<code[^>]*>(.*?)</code>.*?</pre>'
+            inline_code_pattern = r'<code\s+class="[^"]*gm-code-inline[^"]*"[^>]*>(.*?)</code>'
+            # 2. Existing font styles (subsequent processing)
+            font_style_pattern = r'<span\s+style="[^"]*font-family:[^"]*monospace[^"]*"[^>]*>(.*?)</span>'
+            monospace_span_pattern = r'<span\s+style="[^"]*font-family:\s*\'?([^;"\'>]*monospace[^;"\'>]*|Consolas|Courier[^;"\'>]*|Monaco|Cascadia[^;"\'>]*|Fira[^;"\'>]*Code[^;"\'>]*|Source[^;"\'>]*Code[^;"\'>]*)\'?[^>]*>(.*?)</span>'
+            
+            # Replace semantic divs with simpler structure for Qt
+            # Remove semantic container classes but keep basic HTML structure
+            simplified_html = re.sub(r'<div class="ghostman-message-container[^"]*"[^>]*>', '<div>', html_content)
+            simplified_html = re.sub(r'<div class="gm-text"[^>]*>', '<div>', simplified_html)
+            
+            # Find all code sections first - both semantic AND styled
+            code_blocks = []
+            inline_codes = []
+            
+            # Look for semantic classes first (fresh markdown)
+            for match in re.finditer(code_block_pattern, simplified_html, re.DOTALL):
+                code_blocks.append((match.start(), match.end(), match.group(1)))
+            
+            for match in re.finditer(inline_code_pattern, simplified_html, re.DOTALL):
+                inline_codes.append((match.start(), match.end(), match.group(1)))
+            
+            # Look for existing monospace font styles (already processed HTML)
+            for match in re.finditer(monospace_span_pattern, simplified_html, re.DOTALL | re.IGNORECASE):
+                # Extract the text content (group 2) 
+                inline_codes.append((match.start(), match.end(), match.group(2)))
+            
+            # Look for our own gm-code-element spans
+            gm_code_pattern = r'<span\s+class="gm-code-element"[^>]*>(.*?)</span>'
+            for match in re.finditer(gm_code_pattern, simplified_html, re.DOTALL | re.IGNORECASE):
+                inline_codes.append((match.start(), match.end(), match.group(1)))
+            
+            # If we found ONLY inline code (not code blocks), process them specially
+            # Code blocks in <pre> tags should be left alone as they already preserve formatting
+            if inline_codes and not code_blocks:
+                # Split content around inline code sections and insert with proper formatting
+                all_codes = sorted(inline_codes, key=lambda x: x[0])
+                
+                pos = 0
+                for start, end, code_text in all_codes:
+                    # Insert text before code
+                    if pos < start:
+                        before_text = simplified_html[pos:start]
+                        cursor.insertHtml(before_text)
+                    
+                    # Insert inline code with proper formatting
+                    clean_code = re.sub(r'<[^>]+>', '', code_text)
+                    clean_code = html.unescape(clean_code)
+                    
+                    # Create HTML span with unique class for inline code elements
+                    # Use white-space: nowrap for inline code (not pre)
+                    code_html = f'<span class="gm-code-element" style="font-family: \'{code_config["family"]}\'; font-size: {code_config["size"]}pt; white-space: nowrap; background-color: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 3px;">{clean_code}</span>'
+                    logger.info(f"💻 HTML INSERT: Applying code font TO {code_config['family']} {code_config['size']}pt for inline code element (length: {len(clean_code)} chars)")
+                    cursor.insertHtml(code_html)
+                    pos = end
+                
+                # Insert remaining text after last code section
+                if pos < len(simplified_html):
+                    remaining_text = simplified_html[pos:]
+                    cursor.insertHtml(remaining_text)
+            else:
+                # Either no code sections OR code blocks present - insert as regular HTML
+                # Code blocks in <pre><code> should be preserved as-is
+                cursor.insertHtml(simplified_html)
+            
+        except Exception as e:
+            logger.warning(f"Smart HTML insertion failed: {e}")
+            # Fallback to standard HTML insertion
+            try:
+                cursor.insertHtml(html_content)
+            except:
+                # Final fallback to plain text
+                cursor.insertText(html_content)
+    
+    def _get_semantic_font_css_safe(self):
+        """Safely get semantic font CSS or return empty string."""
+        try:
+            from ...application.font_service import font_service
+            return font_service.get_semantic_font_css() or ""
+        except:
+            return ""
+    
+    def _update_existing_font_formatting(self):
+        """No-op - using fixed fonts."""
+        pass
+    
+    def _update_fonts_fallback(self):
+        """Fallback font update method."""
+        try:
+            from ...application.font_service import font_service
+            import re
+            
+            # Get configurations - check for overrides first
+            try:
+                from .font_state_manager import font_state_manager
+                ai_config = font_state_manager.get_current_font('ai_response') or font_service.get_font_config('ai_response')
+                code_config = font_state_manager.get_current_font('code_snippets') or font_service.get_font_config('code_snippets')
+            except ImportError:
+                ai_config = font_service.get_font_config('ai_response')
+                code_config = font_service.get_font_config('code_snippets')
+            
+            # Get HTML
+            html = self.output_display.toHtml()
+            
+            # Simple replacement - update ALL font declarations
+            # For code fonts (monospace)
+            monospace_fonts = ['Consolas', 'Courier', 'Monaco', 'Lucida Console', 'Cascadia', 'monospace']
+            
+            for mono_font in monospace_fonts:
+                # Replace any monospace font with the configured code font
+                html = re.sub(
+                    rf'font-family:\s*[\'"]?{re.escape(mono_font)}[^\'";]*[\'"]?',
+                    f"font-family: '{code_config['family']}'",
+                    html,
+                    flags=re.IGNORECASE
+                )
+            
+            # For regular text fonts
+            regular_fonts = ['Arial', 'Segoe UI', 'Times New Roman', 'Calibri', 'sans-serif']
+            
+            for reg_font in regular_fonts:
+                # Replace any regular font with the configured AI response font
+                html = re.sub(
+                    rf'font-family:\s*[\'"]?{re.escape(reg_font)}[^\'";]*[\'"]?',
+                    f"font-family: '{ai_config['family']}'",
+                    html,
+                    flags=re.IGNORECASE
+                )
+            
+            # Update sizes
+            # This is tricky - we need to be more targeted
+            # Update sizes after monospace fonts
+            html = re.sub(
+                rf'(font-family:\s*[\'"]?(?:{'|'.join(re.escape(f) for f in monospace_fonts)})[^>]*?[\'"]?[^>]*?)font-size:\s*\d+(?:\.\d+)?pt',
+                rf"\1font-size: {code_config['size']}pt",
+                html,
+                flags=re.IGNORECASE
+            )
+            
+            # Update sizes after regular fonts  
+            html = re.sub(
+                rf'(font-family:\s*[\'"]?(?:{'|'.join(re.escape(f) for f in regular_fonts)})[^>]*?[\'"]?[^>]*?)font-size:\s*\d+(?:\.\d+)?pt',
+                rf"\1font-size: {ai_config['size']}pt",
+                html,
+                flags=re.IGNORECASE
+            )
+            
+            # Set the HTML back
+            self.output_display.setHtml(html)
+            
+        except Exception as e:
+            logger.error(f"Fallback font update also failed: {e}")
+    
+    def _update_font_by_monospace_pattern(self, html_content, code_config):
+        """Update all monospace fonts to new code font settings."""
+        try:
+            import re
+            
+            # Pattern to match any monospace font families
+            monospace_fonts = [
+                'Consolas', 'Monaco', 'Courier New', 'Courier', 'Lucida Console', 
+                'monospace', 'Cascadia Code', 'Cascadia', 'Fira.*Code', 'Source.*Code'
+            ]
+            monospace_pattern = '|'.join(monospace_fonts)
+            
+            # Pattern to find font-family styles with monospace fonts
+            pattern = rf'font-family:\s*["\']?([^;"\'>]*(?:{monospace_pattern})[^;"\'>]*)["\']?'
+            
+            def replace_font(match):
+                # Replace with new code font
+                return f'font-family: \'{code_config["family"]}\''
+            
+            updated_html = re.sub(pattern, replace_font, html_content, flags=re.IGNORECASE)
+            
+            # Also update font-size for code elements
+            # Fixed pattern: handles intermediate CSS properties between font-family and font-size
+            # Now also looks for the current code font family for size updates
+            current_code_family = re.escape(code_config["family"])
+            all_code_fonts = monospace_pattern + '|' + current_code_family
+            size_pattern = r'(font-family:\s*["\']?[^;"\'>]*(?:' + all_code_fonts + r')[^;"\'>]*["\']?[^;]*?(?:;[^;]*?)*?)font-size:\s*\d+(?:\.\d+)?pt'
+            
+            def replace_font_and_size(match):
+                return f'{match.group(1)}font-size: {code_config["size"]}pt'
+            
+            updated_html = re.sub(size_pattern, replace_font_and_size, updated_html, flags=re.IGNORECASE)
+            
+            return updated_html
+            
+        except Exception as e:
+            logger.warning(f"Failed to update monospace fonts: {e}")
+            return html_content
+    
+    def _update_font_by_family_pattern(self, html_content, font_config):
+        """Update ALL font families (except monospace) to new settings.""" 
+        try:
+            import re
+            
+            new_family = font_config['family']
+            new_size = font_config['size']
+            
+            # Pattern to find ANY non-monospace font-family declarations
+            # Exclude known monospace fonts
+            monospace_fonts = ['Consolas', 'Monaco', 'Courier', 'Lucida Console', 'Cascadia']
+            
+            # Find all font-family declarations
+            pattern = r'font-family:\s*["\']?([^"\';]+)["\']?'
+            
+            def replace_font(match):
+                old_family = match.group(1).strip()
+                # Only replace if it's NOT a monospace font
+                is_monospace = any(mono in old_family for mono in monospace_fonts)
+                if not is_monospace:
+                    return f'font-family: \'{new_family}\''
+                return match.group(0)  # Keep monospace fonts unchanged
+            
+            updated_html = re.sub(pattern, replace_font, html_content, flags=re.IGNORECASE)
+            
+            # Update font sizes for non-monospace fonts
+            # Pattern to find font-size after non-monospace font-family
+            size_pattern = r'(font-family:\s*["\']?([^"\';]+)["\']?[^;]*?(?:;[^;]*?)*?)font-size:\s*\d+(?:\.\d+)?pt'
+            
+            def replace_size(match):
+                font_family = match.group(2).strip()
+                # Only update size if it's NOT a monospace font
+                is_monospace = any(mono in font_family for mono in monospace_fonts)
+                if not is_monospace:
+                    return f'{match.group(1)}font-size: {new_size}pt'
+                return match.group(0)  # Keep monospace font sizes unchanged
+                
+            updated_html = re.sub(size_pattern, replace_size, updated_html, flags=re.IGNORECASE)
+            
+            return updated_html
+            
+        except Exception as e:
+            logger.warning(f"Failed to update font family {font_config.get('family', 'unknown')}: {e}")
+            return html_content
+    
+    def _fix_structural_font_formatting(self):
+        """Fix malformed HTML with structural font declarations."""
+        try:
+            from ...application.font_service import font_service
+            import re
+            
+            # Get the target font - check for overrides first
+            try:
+                from .font_state_manager import font_state_manager
+                code_config = font_state_manager.get_current_font('code_snippets') or font_service.get_font_config('code_snippets')
+            except ImportError:
+                code_config = font_service.get_font_config('code_snippets')
+            target_font = code_config['family']
+            
+            # Get current HTML
+            current_html = self.output_display.toHtml()
+            
+            # Get list of monospace fonts to replace
+            monospace_fonts = font_service.get_monospace_fonts()
+            
+            updated_html = current_html
+            changes_made = 0
+            
+            # Fix each monospace font in structural elements
+            for old_font in monospace_fonts:
+                if old_font == target_font:
+                    continue
+                
+                # Pattern to find structural elements with font-family declarations
+                pattern = rf"(<(?:li|div|span|p)[^>]*\s)font-family:\s*['\"]?\s*{re.escape(old_font)}\s*['\"]?([^;\"'>]*)"
+                
+                def replace_font(match):
+                    nonlocal changes_made
+                    changes_made += 1
+                    # Replace the font-family declaration with the target font
+                    return f"{match.group(1)}font-family: '{target_font}'{match.group(2)}"
+                
+                updated_html = re.sub(pattern, replace_font, updated_html, flags=re.IGNORECASE)
+            
+            # Also fix duplicate style attributes (like: style="..." style="...")
+            # This handles the malformed HTML we identified
+            pattern = r'(\sstyle="[^"]*")\s+style="([^"]*)"'
+            
+            def merge_styles(match):
+                nonlocal changes_made
+                changes_made += 1
+                style1 = match.group(1)[8:-1]  # Remove 'style="' and '"'
+                style2 = match.group(2)
+                # Merge the styles, giving priority to the first one for conflicting properties
+                merged = f' style="{style1}; {style2}"'
+                logger.debug(f"Merged duplicate styles: {match.group(0)} -> {merged}")
+                return merged
+            
+            updated_html = re.sub(pattern, merge_styles, updated_html)
+            
+            # Apply the corrected HTML if changes were made
+            if changes_made > 0:
+                self.output_display.setHtml(updated_html)
+                logger.debug(f"Fixed {changes_made} structural font formatting issues")
+            else:
+                logger.debug("No structural font formatting issues found")
+                
+        except Exception as e:
+            logger.warning(f"Failed to fix structural font formatting: {e}")
     
     
     def _on_stop_query(self):
@@ -5933,13 +6200,15 @@ def test_theme():
         if not self.current_conversation:
             return False
         
-        # Check if there's content in the MixedContentDisplay
-        if not hasattr(self.output_display, 'content_widgets'):
+        # Check if there's content in the REPL that hasn't been saved
+        output_text = self.output_display.toPlainText().strip()
+        if not output_text:
             return False
-            
-        # If there are content widgets, assume there might be unsaved content
-        # This is a simplified check since MixedContentDisplay doesn't have toPlainText()
-        return len(self.output_display.content_widgets) > 0
+        
+        # Basic check - if there's user input or AI responses beyond just system messages
+        lines = output_text.split('\n')
+        user_messages = [line for line in lines if line.strip().startswith('>>>')]
+        return len(user_messages) > 0
     
     async def _save_current_conversation_before_switch(self):
         """Save current conversation before switching to another."""
@@ -6143,32 +6412,14 @@ def test_theme():
             
             logger.info(f"💾 Autosaving conversation: {self.current_conversation.title}")
             
-            # Perform autosave synchronously (we're in a Qt context, not async)
-            self._perform_autosave_sync()
+            # Perform autosave asynchronously
+            asyncio.create_task(self._perform_autosave())
             
         except Exception as e:
             logger.error(f"Failed to autosave conversation: {e}")
     
-    def _perform_autosave_sync(self):
-        """Perform the actual autosave operation synchronously."""
-        try:
-            if self.conversation_manager and self.conversation_manager.has_ai_service():
-                ai_service = self.conversation_manager.get_ai_service()
-                if ai_service:
-                    # Save the conversation through the conversation manager
-                    # which handles both messages and the conversation state
-                    if hasattr(self.conversation_manager, 'save_current_conversation'):
-                        self.conversation_manager.save_current_conversation()
-                    elif hasattr(ai_service, 'save_current_conversation_sync'):
-                        # Fallback to sync method if available
-                        ai_service.save_current_conversation_sync()
-                    self.last_autosave_time = datetime.now()
-                    logger.debug(f"✓ Autosaved conversation: {self.current_conversation.id}")
-        except Exception as e:
-            logger.error(f"Failed to perform autosave: {e}")
-    
     async def _perform_autosave(self):
-        """Perform the actual autosave operation asynchronously (legacy method)."""
+        """Perform the actual autosave operation."""
         try:
             if self.conversation_manager and self.conversation_manager.has_ai_service():
                 ai_service = self.conversation_manager.get_ai_service()
@@ -7265,34 +7516,149 @@ def test_theme():
             if not self.current_search_matches or self.current_search_index < 0:
                 return
             
-            # MixedContentDisplay doesn't support text highlighting like QTextEdit
-            # Scroll to bottom as a simple fallback
-            self.output_display.scroll_to_bottom()
+            # Clear previous highlights first
+            self._clear_search_highlights()
             
-            logger.debug("Search highlighting not supported with MixedContentDisplay")
+            # Highlight all matches with subtle background
+            self._highlight_all_matches()
+            
+            # Highlight current match with prominent colors
+            match = self.current_search_matches[self.current_search_index]
+            
+            # Create prominent highlight format for current match
+            current_highlight_format = QTextCharFormat()
+            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+                current_bg = self.theme_manager.current_theme.status_warning
+                current_fg = self.theme_manager.current_theme.background_primary
+            else:
+                current_bg = "#ffff00"  # Yellow background
+                current_fg = "#000000"  # Black text
+            current_highlight_format.setBackground(QColor(current_bg))
+            current_highlight_format.setForeground(QColor(current_fg))
+            
+            # Apply current match highlight
+            cursor = self.output_display.textCursor()
+            cursor.setPosition(match['start'])
+            cursor.setPosition(match['end'], cursor.MoveMode.KeepAnchor)
+            
+            # Store original format to restore later
+            original_format = cursor.charFormat()
+            
+            # Merge with original format to preserve original styling where possible
+            merged_format = QTextCharFormat(original_format)
+            merged_format.setBackground(current_highlight_format.background())
+            merged_format.setForeground(current_highlight_format.foreground())
+            
+            cursor.setCharFormat(merged_format)
+            
+            # Store highlight info for cleanup
+            if not hasattr(self, '_current_highlight_positions'):
+                self._current_highlight_positions = []
+            self._current_highlight_positions.append({
+                'start': match['start'],
+                'end': match['end'],
+                'original_format': original_format
+            })
+            
+            # Scroll to the match
+            self.output_display.setTextCursor(cursor)
+            self.output_display.ensureCursorVisible()
+            
+            logger.debug(f"Highlighted current match at position {match['start']}-{match['end']}")
             
         except Exception as e:
             logger.error(f"Failed to highlight current match: {e}")
     
     def _highlight_all_matches(self):
         """Highlight all search matches with subtle background color."""
-        # MixedContentDisplay doesn't support text highlighting
-        logger.debug("Search highlighting not supported with MixedContentDisplay")
+        try:
+            if not self.current_search_matches:
+                return
+            
+            # Create subtle highlight format for all matches
+            all_matches_format = QTextCharFormat()
+            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+                # Use a more subtle color for all matches
+                all_bg = self.theme_manager.current_theme.status_info if hasattr(self.theme_manager.current_theme, 'status_info') else "#e6f3ff"
+            else:
+                all_bg = "#e6f3ff"  # Very light blue background
+            
+            all_matches_format.setBackground(QColor(all_bg))
+            
+            # Initialize storage for all match positions
+            if not hasattr(self, '_all_match_positions'):
+                self._all_match_positions = []
+            self._all_match_positions = []
+            
+            cursor = self.output_display.textCursor()
+            
+            # Apply subtle highlight to all matches except current one
+            for i, match in enumerate(self.current_search_matches):
+                if i == self.current_search_index:
+                    continue  # Skip current match, it gets special highlighting
+                
+                cursor.setPosition(match['start'])
+                cursor.setPosition(match['end'], cursor.MoveMode.KeepAnchor)
+                
+                # Store original format
+                original_format = cursor.charFormat()
+                
+                # Merge with original format to preserve styling
+                merged_format = QTextCharFormat(original_format)
+                merged_format.setBackground(all_matches_format.background())
+                
+                cursor.setCharFormat(merged_format)
+                
+                # Store for cleanup
+                self._all_match_positions.append({
+                    'start': match['start'],
+                    'end': match['end'],
+                    'original_format': original_format
+                })
+            
+            logger.debug(f"Applied subtle highlighting to {len(self._all_match_positions)} matches")
+            
+        except Exception as e:
+            logger.error(f"Failed to highlight all matches: {e}")
     
     def _clear_search_highlights(self):
         """Clear all search highlights from conversation display without destroying original formatting."""
         try:
-            # MixedContentDisplay doesn't support text highlighting
-            # Just clear the stored positions for cleanup
+            if not hasattr(self, 'output_display') or not self.output_display:
+                return
+            
+            # Clear stored highlight positions
             if hasattr(self, '_current_highlight_positions'):
+                cursor = self.output_display.textCursor()
+                for highlight_info in self._current_highlight_positions:
+                    # Restore original format for each highlighted position
+                    cursor.setPosition(highlight_info['start'])
+                    cursor.setPosition(highlight_info['end'], cursor.MoveMode.KeepAnchor)
+                    cursor.setCharFormat(highlight_info['original_format'])
+                
                 self._current_highlight_positions = []
+            
+            # Clear all match highlights
             if hasattr(self, '_all_match_positions'):
+                cursor = self.output_display.textCursor()
+                for highlight_info in self._all_match_positions:
+                    cursor.setPosition(highlight_info['start'])
+                    cursor.setPosition(highlight_info['end'], cursor.MoveMode.KeepAnchor)
+                    cursor.setCharFormat(highlight_info['original_format'])
+                
                 self._all_match_positions = []
             
-            logger.debug("Search position cleanup completed for MixedContentDisplay")
+            logger.debug("Search highlights cleared without destroying original formatting")
             
         except Exception as e:
             logger.error(f"Failed to clear search highlights: {e}")
+            # Fallback: restore from original HTML if available
+            try:
+                if hasattr(self, '_original_html_content'):
+                    logger.warning("Fallback: restoring original HTML content")
+                    self.output_display.setHtml(self._original_html_content)
+            except Exception as fallback_error:
+                logger.error(f"Failed to restore original content: {fallback_error}")
     
     def _on_search_text_changed(self, text: str):
         """Handle search input text changes with debouncing."""
@@ -7646,3 +8012,56 @@ def test_theme():
             
         except Exception as e:
             logger.error(f"✗ Error during REPL widget shutdown: {e}")
+    
+    def _verify_text_positioning(self):
+        """
+        Verify that text positioning is correct in the QPlainTextEdit.
+        This method can detect and fix common text cutoff issues.
+        """
+        if self._text_positioning_verified:
+            return
+            
+        try:
+            from PyQt6.QtGui import QFontMetrics
+            
+            # Get font metrics for analysis
+            font = self.command_input.font()
+            metrics = QFontMetrics(font)
+            
+            # Analyze font characteristics
+            ascent = metrics.ascent()
+            descent = metrics.descent()
+            height = metrics.height()
+            
+            # Get current margins
+            document = self.command_input.document()
+            doc_margin = document.documentMargin()
+            viewport = self.command_input.viewport()
+            viewport_margins = viewport.contentsMargins()
+            
+            logger.debug(f"📏 Font Analysis - Ascent: {ascent}px, Descent: {descent}px, Height: {height}px")
+            logger.debug(f"📏 Current Margins - Document: {doc_margin}px, Viewport: {viewport_margins.top()}px top")
+            
+            # Calculate if margins are sufficient
+            min_top_margin = max(4, descent // 2)  # Minimum to prevent cutoff
+            current_effective_top = viewport_margins.top() + doc_margin
+            
+            if current_effective_top < min_top_margin:
+                logger.warning(f"⚠️ Text positioning may be insufficient. Current: {current_effective_top}px, Recommended: {min_top_margin}px")
+                
+                # Auto-adjust if needed
+                new_viewport_top = max(4, min_top_margin - doc_margin)
+                viewport.setContentsMargins(
+                    viewport_margins.left(),
+                    new_viewport_top,
+                    viewport_margins.right(),
+                    viewport_margins.bottom()
+                )
+                logger.info(f"🔧 Auto-adjusted viewport top margin to {new_viewport_top}px")
+            
+            self._text_positioning_verified = True
+            logger.debug("✅ Text positioning verification complete")
+            
+        except Exception as e:
+            logger.error(f"❌ Text positioning verification failed: {e}")
+            # Continue without verification - not critical

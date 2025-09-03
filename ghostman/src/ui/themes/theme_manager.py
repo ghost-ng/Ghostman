@@ -61,6 +61,7 @@ class ThemeManager(QObject):
         # Theme switch debouncing to prevent notification spam
         self._theme_switch_debounce_timer = None
         self._is_switching_theme = False
+        self._pending_theme_name = None  # Track the most recent theme switch request
         
         # Initialize theme directories
         self._init_theme_directories()
@@ -350,6 +351,11 @@ class ThemeManager(QObject):
         # Set debounce flag to prevent rapid switching
         self._is_switching_theme = True
         
+        # Set global flag to prevent dialog/window creation during theme switching
+        app = QApplication.instance()
+        if app:
+            app.setProperty("theme_switching", True)
+        
         # Clear any existing debounce timer
         if self._theme_switch_debounce_timer:
             self._theme_switch_debounce_timer.stop()
@@ -380,8 +386,29 @@ class ThemeManager(QObject):
         except Exception as e:
             logger.error(f"Failed to save theme setting: {e}")
         
-        # Apply theme to all registered widgets immediately
-        self._apply_theme_to_all_widgets()
+        # Temporarily reduce logging verbosity during theme switching
+        theme_loggers = [
+            logging.getLogger("ghostman.theme_manager"),
+            logging.getLogger("ghostman.repl_widget"),
+            logging.getLogger("ghostman.embedded_code_widget"),
+            logging.getLogger("ghostman.style_registry"),
+            logging.getLogger("ghostman.style_templates"),
+        ]
+        
+        # Store original levels and set to WARNING to reduce spam
+        original_levels = []
+        for theme_logger in theme_loggers:
+            original_levels.append(theme_logger.level)
+            if theme_logger.level < logging.WARNING:
+                theme_logger.setLevel(logging.WARNING)
+        
+        try:
+            # Apply theme to all registered widgets immediately
+            self._apply_theme_to_all_widgets()
+        finally:
+            # Restore original logging levels
+            for theme_logger, original_level in zip(theme_loggers, original_levels):
+                theme_logger.setLevel(original_level)
         
         # Emit signals
         self.theme_changed.emit(theme)
@@ -393,13 +420,19 @@ class ThemeManager(QObject):
         self._theme_switch_debounce_timer = QTimer()
         self._theme_switch_debounce_timer.setSingleShot(True)
         self._theme_switch_debounce_timer.timeout.connect(self._reset_theme_switching_flag)
-        self._theme_switch_debounce_timer.start(500)  # 500ms debounce
+        self._theme_switch_debounce_timer.start(200)  # 200ms debounce for more responsive switching
         
         return True
     
     def _reset_theme_switching_flag(self):
         """Reset the theme switching flag to allow new theme changes."""
         self._is_switching_theme = False
+        
+        # Clear global flag to allow dialog/window creation again
+        app = QApplication.instance()
+        if app:
+            app.setProperty("theme_switching", False)
+        
         logger.debug("Theme switching debounce flag reset")
     
     def set_custom_theme(self, color_system: ColorSystem, name: Optional[str] = None) -> bool:
@@ -435,8 +468,29 @@ class ThemeManager(QObject):
         # Invalidate cached color dictionary for performance optimization
         self._theme_color_dict_cache = None
         
-        # Apply theme to all registered widgets immediately
-        self._apply_theme_to_all_widgets()
+        # Temporarily reduce logging verbosity during theme switching
+        theme_loggers = [
+            logging.getLogger("ghostman.theme_manager"),
+            logging.getLogger("ghostman.repl_widget"),
+            logging.getLogger("ghostman.embedded_code_widget"),
+            logging.getLogger("ghostman.style_registry"),
+            logging.getLogger("ghostman.style_templates"),
+        ]
+        
+        # Store original levels and set to WARNING to reduce spam
+        original_levels = []
+        for theme_logger in theme_loggers:
+            original_levels.append(theme_logger.level)
+            if theme_logger.level < logging.WARNING:
+                theme_logger.setLevel(logging.WARNING)
+        
+        try:
+            # Apply theme to all registered widgets immediately
+            self._apply_theme_to_all_widgets()
+        finally:
+            # Restore original logging levels
+            for theme_logger, original_level in zip(theme_loggers, original_levels):
+                theme_logger.setLevel(original_level)
         
         # Emit signals
         self.theme_changed.emit(color_system)
