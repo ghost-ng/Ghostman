@@ -1,0 +1,33 @@
+{
+  "name": "forest",
+  "display_name": "Forest",
+  "description": "Built-in Forest theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#7ba572",
+    "primary_hover": "#5a8a52",
+    "secondary": "#6d9865",
+    "secondary_hover": "#7ba572",
+    "background_primary": "#0f1b0d",
+    "background_secondary": "#1a2e18",
+    "background_tertiary": "#2a4a26",
+    "background_overlay": "#000000cc",
+    "text_primary": "#e8f2e5",
+    "text_secondary": "#c8dfc2",
+    "text_tertiary": "#a8cc9f",
+    "text_disabled": "#4a5948",
+    "interactive_normal": "#1e3a1c",
+    "interactive_hover": "#2d5128",
+    "interactive_active": "#3c6835",
+    "interactive_disabled": "#1a2e18",
+    "status_success": "#66bb6a",
+    "status_warning": "#ff8f00",
+    "status_error": "#e53935",
+    "status_info": "#29b6f6",
+    "border_primary": "#4a5948",
+    "border_secondary": "#3c6835",
+    "border_focus": "#4e7c47",
+    "separator": "#2a4a26"
+  }
+}

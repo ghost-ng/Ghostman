@@ -1,0 +1,33 @@
+{
+  "name": "arctic_white",
+  "display_name": "Arctic White",
+  "description": "Built-in Arctic White theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#1565c0",
+    "primary_hover": "#1976d2",
+    "secondary": "#1e88e5",
+    "secondary_hover": "#2196f3",
+    "background_primary": "#ffffff",
+    "background_secondary": "#f8f9fa",
+    "background_tertiary": "#e9ecef",
+    "background_overlay": "#00000080",
+    "text_primary": "#111111",
+    "text_secondary": "#333333",
+    "text_tertiary": "#555555",
+    "text_disabled": "#999999",
+    "interactive_normal": "#f0f4f8",
+    "interactive_hover": "#e3f2fd",
+    "interactive_active": "#bbdefb",
+    "interactive_disabled": "#f8f9fa",
+    "status_success": "#28a745",
+    "status_warning": "#fd7e14",
+    "status_error": "#dc3545",
+    "status_info": "#1565c0",
+    "border_primary": "#6c757d",
+    "border_secondary": "#dee2e6",
+    "border_focus": "#1565c0",
+    "separator": "#e9ecef"
+  }
+}

@@ -91,15 +91,47 @@ class ThemeManager(QObject):
         logger.debug(f"Theme directories initialized: {self._themes_dir}")
     
     def _load_preset_themes(self):
-        """Load built-in preset themes."""
-        # Import preset themes (will be created next)
-        try:
-            from .preset_themes import get_preset_themes
-            self._preset_themes = get_preset_themes()
-            logger.info(f"Loaded {len(self._preset_themes)} preset themes")
-        except ImportError:
-            logger.warning("Preset themes not available, using openai_like theme only")
+        """Load built-in preset themes from JSON files."""
+        self._preset_themes = {}
+        
+        # Get the built-in themes directory (relative to this file)
+        builtin_themes_dir = Path(__file__).parent / "json"
+        
+        if not builtin_themes_dir.exists():
+            logger.warning(f"Built-in themes directory not found: {builtin_themes_dir}")
+            # Fall back to a default theme
             self._preset_themes = {"openai_like": ColorSystem()}
+            return
+        
+        # Load all JSON theme files from the built-in directory
+        for theme_file in builtin_themes_dir.glob("*.json"):
+            try:
+                with open(theme_file, 'r', encoding='utf-8') as f:
+                    theme_data = json.load(f)
+                
+                # Use 'name' field from JSON if available, otherwise use filename
+                theme_name = theme_data.get('name', theme_file.stem)
+                
+                # Create ColorSystem from colors data
+                color_system = ColorSystem.from_dict(theme_data.get('colors', {}))
+                
+                # Store additional metadata if available
+                if hasattr(color_system, '_metadata'):
+                    color_system._metadata = {
+                        'display_name': theme_data.get('display_name', theme_name),
+                        'description': theme_data.get('description', ''),
+                        'author': theme_data.get('author', 'Unknown'),
+                        'version': theme_data.get('version', '1.0.0')
+                    }
+                
+                # Add to preset themes
+                self._preset_themes[theme_name] = color_system
+                logger.debug(f"Loaded built-in theme: {theme_name}")
+                    
+            except Exception as e:
+                logger.error(f"Failed to load built-in theme {theme_file}: {e}")
+        
+        logger.info(f"Loaded {len(self._preset_themes)} preset themes")
     
     def _load_custom_themes(self):
         """Load custom themes from disk (themes folder)."""
@@ -340,8 +372,15 @@ class ThemeManager(QObject):
         """
         # Debounce rapid theme changes to prevent notification spam
         if self._is_switching_theme:
-            logger.debug(f"Theme switch debounced: {name} (already switching)")
-            return False
+            # Check if debounce timer is still running
+            if (self._theme_switch_debounce_timer is not None and 
+                self._theme_switch_debounce_timer.isActive()):
+                logger.debug(f"Theme switch debounced: {name} (already switching)")
+                return False
+            else:
+                # Timer finished but flag wasn't reset - reset it now
+                logger.debug(f"Resetting stuck debounce flag for theme: {name}")
+                self._is_switching_theme = False
         
         theme = self.get_theme(name)
         if theme is None:

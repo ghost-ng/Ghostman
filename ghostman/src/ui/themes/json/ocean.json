@@ -1,0 +1,33 @@
+{
+  "name": "ocean",
+  "display_name": "Ocean",
+  "description": "Built-in Ocean theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#0EA5E9",
+    "primary_hover": "#38BDF8",
+    "secondary": "#06B6D4",
+    "secondary_hover": "#22D3EE",
+    "background_primary": "#0C1222",
+    "background_secondary": "#1E293B",
+    "background_tertiary": "#334155",
+    "background_overlay": "#0C1222dd",
+    "text_primary": "#F1F5F9",
+    "text_secondary": "#CBD5E1",
+    "text_tertiary": "#B4C6D3",
+    "text_disabled": "#64748B",
+    "interactive_normal": "#1E293B",
+    "interactive_hover": "#334155",
+    "interactive_active": "#0EA5E9",
+    "interactive_disabled": "#0F172A",
+    "status_success": "#059669",
+    "status_warning": "#D97706",
+    "status_error": "#EF4444",
+    "status_info": "#0EA5E9",
+    "border_primary": "#475569",
+    "border_secondary": "#334155",
+    "border_focus": "#0EA5E9",
+    "separator": "#1E293B"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "jedi",
+  "display_name": "Jedi",
+  "description": "Built-in Jedi theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#2563eb",
+    "primary_hover": "#1d4ed8",
+    "secondary": "#1e40af",
+    "secondary_hover": "#1e3a8a",
+    "background_primary": "#fefefe",
+    "background_secondary": "#f8fafc",
+    "background_tertiary": "#f1f5f9",
+    "background_overlay": "#00000030",
+    "text_primary": "#1e293b",
+    "text_secondary": "#334155",
+    "text_tertiary": "#475569",
+    "text_disabled": "#94a3b8",
+    "interactive_normal": "#e0f2fe",
+    "interactive_hover": "#bae6fd",
+    "interactive_active": "#7dd3fc",
+    "interactive_disabled": "#f8fafc",
+    "status_success": "#16a34a",
+    "status_warning": "#d97706",
+    "status_error": "#dc2626",
+    "status_info": "#2563eb",
+    "border_primary": "#94a3b8",
+    "border_secondary": "#cbd5e1",
+    "border_focus": "#2563eb",
+    "separator": "#f1f5f9"
+  }
+}

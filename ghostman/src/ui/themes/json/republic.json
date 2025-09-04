@@ -1,0 +1,33 @@
+{
+  "name": "republic",
+  "display_name": "Republic",
+  "description": "Built-in Republic theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#b45309",
+    "primary_hover": "#92400e",
+    "secondary": "#1e40af",
+    "secondary_hover": "#1e3a8a",
+    "background_primary": "#fffef7",
+    "background_secondary": "#fef7ed",
+    "background_tertiary": "#fed7aa",
+    "background_overlay": "#00000020",
+    "text_primary": "#1c2833",
+    "text_secondary": "#2d3748",
+    "text_tertiary": "#4a5568",
+    "text_disabled": "#a0aec0",
+    "interactive_normal": "#fef3c7",
+    "interactive_hover": "#fde68a",
+    "interactive_active": "#f59e0b",
+    "interactive_disabled": "#fef7ed",
+    "status_success": "#059669",
+    "status_warning": "#b45309",
+    "status_error": "#dc2626",
+    "status_info": "#1e40af",
+    "border_primary": "#d69e2e",
+    "border_secondary": "#f6e05e",
+    "border_focus": "#b45309",
+    "separator": "#fed7aa"
+  }
+}

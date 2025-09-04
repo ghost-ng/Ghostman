@@ -1,0 +1,33 @@
+{
+  "name": "empire",
+  "display_name": "Empire",
+  "description": "Built-in Empire theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#6b7280",
+    "primary_hover": "#4b5563",
+    "secondary": "#374151",
+    "secondary_hover": "#1f2937",
+    "background_primary": "#0f172a",
+    "background_secondary": "#1e293b",
+    "background_tertiary": "#334155",
+    "background_overlay": "#00000080",
+    "text_primary": "#f8fafc",
+    "text_secondary": "#e2e8f0",
+    "text_tertiary": "#cbd5e1",
+    "text_disabled": "#475569",
+    "interactive_normal": "#374151",
+    "interactive_hover": "#4b5563",
+    "interactive_active": "#6b7280",
+    "interactive_disabled": "#1e293b",
+    "status_success": "#10b981",
+    "status_warning": "#f59e0b",
+    "status_error": "#ef4444",
+    "status_info": "#3b82f6",
+    "border_primary": "#6b7280",
+    "border_secondary": "#4b5563",
+    "border_focus": "#6b7280",
+    "separator": "#334155"
+  }
+}

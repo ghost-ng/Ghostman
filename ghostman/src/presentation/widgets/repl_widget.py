@@ -1559,6 +1559,9 @@ class REPLWidget(QWidget):
             self._apply_styles()
             self._update_component_themes()
             
+            # CRITICAL: Update output display theme colors - this was missing!
+            self._style_output_display()
+            
             # Update conversation selector styling
             if hasattr(self, 'conversation_selector'):
                 self._style_conversation_selector()
@@ -1704,6 +1707,7 @@ class REPLWidget(QWidget):
                     bg_color = f"rgba(30, 30, 30, {alpha:.3f})"
             
             # Create theme color dictionary for MixedContentDisplay
+            # Use theme-specific colors directly from ColorSystem - NO generic fallbacks
             theme_colors = {
                 'bg_primary': bg_color,
                 'bg_secondary': colors.background_secondary,
@@ -1711,16 +1715,16 @@ class REPLWidget(QWidget):
                 'text_primary': colors.text_primary,
                 'text_secondary': colors.text_secondary,
                 'border': colors.border_primary,
-                'info': getattr(colors, 'info', '#4A9EFF'),
-                'warning': getattr(colors, 'warning', '#FFB84D'),
-                'error': getattr(colors, 'error', '#FF4D4D'),
-                'keyword': getattr(colors, 'keyword', '#d73a49'),
-                'string': getattr(colors, 'string', '#032f62'),
-                'comment': getattr(colors, 'comment', '#6a737d'),
-                'function': getattr(colors, 'function', '#6f42c1'),
-                'number': getattr(colors, 'number', '#005cc5'),
-                'interactive': getattr(colors, 'interactive', colors.background_tertiary),
-                'interactive_hover': getattr(colors, 'interactive_hover', colors.border_primary),
+                'info': colors.status_info,  # Use theme's unique status colors
+                'warning': colors.status_warning,
+                'error': colors.status_error,
+                'keyword': colors.primary,  # Use theme's primary color for keywords
+                'string': colors.secondary,  # Use theme's secondary color for strings
+                'comment': colors.text_tertiary,  # Use theme's tertiary text for comments
+                'function': colors.primary,  # Use theme's primary color for functions
+                'number': colors.secondary,  # Use theme's secondary color for numbers
+                'interactive': colors.interactive_normal,  # Use proper ColorSystem properties
+                'interactive_hover': colors.interactive_hover,
                 'selection': colors.primary
             }
             
@@ -4213,6 +4217,16 @@ class REPLWidget(QWidget):
         
         # Output display - using MixedContentDisplay for complete control over content rendering
         self.output_display = MixedContentDisplay()
+        
+        # CRITICAL FIX: Apply theme colors immediately after output_display is created
+        # This ensures existing conversation content gets proper theme colors on startup
+        if hasattr(self, 'theme_manager') and self.theme_manager:
+            try:
+                self._style_output_display()
+                logger.debug("Applied initial theme colors to output_display")
+            except Exception as e:
+                logger.warning(f"Failed to apply initial theme colors: {e}")
+        
         # Enable manual link detection and handling
         self._setup_link_handling()
         # Enable custom context menu for link operations
@@ -4874,6 +4888,15 @@ class REPLWidget(QWidget):
     def _load_conversation_messages(self, conversation: Conversation):
         """Load conversation messages into output display with proper rendering."""
         self.clear_output()
+        
+        # CRITICAL FIX: Ensure theme colors are set before loading content
+        # This fixes the issue where existing conversation content doesn't update colors on theme switch
+        if self.theme_manager and hasattr(self, 'output_display'):
+            try:
+                self._style_output_display()
+                logger.debug("Applied theme colors before loading conversation messages")
+            except Exception as e:
+                logger.warning(f"Failed to apply theme colors before loading conversation: {e}")
         
         self.append_output(f"💬 Conversation: {conversation.title}", "system")
         

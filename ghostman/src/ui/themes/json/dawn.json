@@ -1,0 +1,33 @@
+{
+  "name": "dawn",
+  "display_name": "Dawn",
+  "description": "Built-in Dawn theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#ff6b35",
+    "primary_hover": "#e55a2b",
+    "secondary": "#ffa726",
+    "secondary_hover": "#ff9800",
+    "background_primary": "#1a1625",
+    "background_secondary": "#2d2438",
+    "background_tertiary": "#4a3d52",
+    "background_overlay": "#1a162580",
+    "text_primary": "#fff8e1",
+    "text_secondary": "#ffe0b2",
+    "text_tertiary": "#ffcc80",
+    "text_disabled": "#6d5a73",
+    "interactive_normal": "#5d4a66",
+    "interactive_hover": "#7a6280",
+    "interactive_active": "#99799a",
+    "interactive_disabled": "#2d2438",
+    "status_success": "#66bb6a",
+    "status_warning": "#ffa726",
+    "status_error": "#ef5350",
+    "status_info": "#42a5f5",
+    "border_primary": "#7a6280",
+    "border_secondary": "#5d4a66",
+    "border_focus": "#ff6b35",
+    "separator": "#4a3d52"
+  }
+}

@@ -88,25 +88,27 @@ class MixedContentDisplay(QScrollArea):
             logger.debug("Theme system not available for MixedContentDisplay")
         
     def set_theme_colors(self, colors: Dict[str, str]):
-        """Update theme colors without re-rendering content."""
+        """Update theme colors with comprehensive widget updating."""
         self.theme_colors = colors
         self._update_stylesheet()
         
-        # Update existing code widgets with new theme colors without re-rendering
+        # Update existing widgets with new theme colors using our advanced system
         self._update_existing_widgets_theme()
+        
+        # Note: _update_existing_widgets_theme() now handles all refresh scheduling
         
     def _update_stylesheet(self):
         """Update the stylesheet based on theme colors."""
         if not self.theme_colors:
             return
             
-        bg_color = self.theme_colors.get('bg_primary', self.theme_colors.get('background_primary', '#1a1a1a'))
+        bg_color = self.theme_colors.get('bg_primary', self.theme_colors.get('background_primary', '#000000'))
         # Only use fallback if text_primary is missing
         text_color = self.theme_colors.get('text_primary')
         if not text_color:
             text_color = self._get_smart_text_fallback(bg_color)
             logger.debug(f"text_primary missing in stylesheet update, using fallback: {text_color}")
-        border_color = self.theme_colors.get('border', self.theme_colors.get('border_subtle', '#3a3a3a'))
+        border_color = self.theme_colors.get('border', self.theme_colors.get('border_subtle', '#666666'))
         
         self.setStyleSheet(f"""
             QScrollArea {{
@@ -152,25 +154,505 @@ class MixedContentDisplay(QScrollArea):
         except (ValueError, TypeError):
             # Fallback if color parsing fails
             return '#2d2d2d'
+    
+    def _get_message_style_color(self, message_style: str) -> str:
+        """Get the appropriate color for a message style from the current theme."""
+        if not self.theme_colors:
+            return '#ffffff'  # Fallback to white if no theme
+        
+        # Get base colors
+        bg_color = self.theme_colors.get('bg_primary', self.theme_colors.get('background_primary', '#000000'))
+        text_primary = self.theme_colors.get('text_primary')
+        
+        if not text_primary:
+            text_primary = self._get_smart_text_fallback(bg_color)
+        
+        # Map message styles to colors
+        style_colors = {
+            'normal': text_primary,
+            'input': self.theme_colors.get('primary', text_primary),
+            'response': text_primary,
+            'system': self.theme_colors.get('text_secondary', text_primary),
+            'info': self.theme_colors.get('info', text_primary),
+            'warning': self.theme_colors.get('warning', text_primary),
+            'error': self.theme_colors.get('error', text_primary),
+            'divider': self.theme_colors.get('text_secondary', text_primary),
+        }
+        
+        return style_colors.get(message_style, text_primary)
+    
+    def _inject_theme_color_into_html(self, html_text: str, color: str) -> str:
+        """
+        Comprehensive HTML color injection that bypasses PyQt6 QLabel caching issues.
+        
+        This method aggressively modifies HTML content to ensure theme colors are applied
+        by using multiple strategies to overcome PyQt6's HTML rendering cache.
+        """
+        import re
+        
+        logger.debug(f"Injecting color {color} into HTML: {html_text[:100]}...")
+        
+        # STRATEGY 1: Remove ALL existing color styles to prevent conflicts
+        # This includes inline styles, CSS color properties, and text color attributes
+        cleanup_patterns = [
+            r'color:\s*[^;}"\']+[;]?',  # CSS color properties
+            r'style="[^"]*color[^"]*[;"]',  # Inline color styles
+            r'text="[^"]*"',  # HTML text attributes
+            r'color="[^"]*"',  # Direct color attributes
+        ]
+        
+        for pattern in cleanup_patterns:
+            html_text = re.sub(pattern, '', html_text, flags=re.IGNORECASE)
+        
+        # STRATEGY 2: Wrap the entire content in a color-controlling div
+        # This ensures that even if individual elements don't get color injection,
+        # they inherit from the parent container
+        html_text = f'<div style="color: {color} !important; font-family: inherit; font-size: inherit;">{html_text}</div>'
+        
+        # STRATEGY 3: Inject color into ALL HTML tags systematically
+        # This covers every possible element that might contain text
+        all_text_tags = ['p', 'div', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'a', 'strong', 'em', 'b', 'i', 'u', 'li', 'ul', 'ol', 'blockquote', 'code', 'pre']
+        
+        for tag in all_text_tags:
+            # Pattern to match opening tags that don't already have color
+            pattern = f'<({tag})(?![^>]*style="[^"]*color[^"]*")([^>]*)>'
+            replacement = f'<\\1\\2 style="color: {color} !important;">'
+            html_text = re.sub(pattern, replacement, html_text, flags=re.IGNORECASE)
+        
+        # STRATEGY 4: Handle self-closing and special tags
+        # Some tags might be self-closing or have special attributes
+        special_patterns = [
+            (r'<(br|hr|img)([^>]*)/?>', f'<\\1\\2 style="color: {color} !important;" />'),
+        ]
+        
+        for pattern, replacement in special_patterns:
+            html_text = re.sub(pattern, replacement, html_text, flags=re.IGNORECASE)
+        
+        # STRATEGY 5: Add CSS reset to override any cached styles
+        # This adds a style block that should override any existing color definitions
+        css_reset = f'<style>* {{ color: {color} !important; }}</style>'
+        html_text = css_reset + html_text
+        
+        logger.debug(f"Color injection complete: {len(html_text)} chars")
+        return html_text
         
     def _update_existing_widgets_theme(self):
-        """Update theme colors for existing widgets without re-rendering."""
+        """Update theme colors for existing widgets with comprehensive widget recreation strategy.""" 
+        logger.debug(f"Updating theme colors for {len(self.content_widgets)} existing widgets")
+        
+        widgets_updated = 0
+        widgets_recreated = 0
+        
         # Update all widgets with new theme colors
         for i, (content, message_style, widget_type) in enumerate(self.content_history):
             if i < len(self.content_widgets):
                 widget = self.content_widgets[i]
                 
-                # Update code snippet widgets
-                if CODE_WIDGET_AVAILABLE and hasattr(widget, 'set_theme_colors'):
-                    try:
+                try:
+                    # Update code snippet widgets
+                    if CODE_WIDGET_AVAILABLE and hasattr(widget, 'set_theme_colors'):
                         widget.set_theme_colors(self.theme_colors)
-                    except Exception as e:
-                        logger.debug(f"Widget doesn't support theme update: {e}")
+                        # Force visual update for code widgets
+                        widget.update()
+                        widget.repaint()
+                        widgets_updated += 1
+                        logger.debug(f"Updated code widget {i} with new theme colors")
+                    
+                    # Update QLabel widgets (text content) with AGGRESSIVE approach
+                    elif isinstance(widget, QLabel) and widget_type == 'html':
+                        color = self._get_message_style_color(message_style)
+                        
+                        # STRATEGY A: Try HTML injection first (fast path)
+                        success = self._try_html_color_injection(widget, content, color, message_style)
+                        
+                        if success:
+                            widgets_updated += 1
+                            logger.debug(f"Updated label widget {i} with HTML injection")
+                        else:
+                            # STRATEGY B: Full widget recreation (nuclear option)
+                            success = self._recreate_label_widget(i, content, message_style)
+                            if success:
+                                widgets_recreated += 1
+                                logger.debug(f"Recreated label widget {i} for theme update")
+                            else:
+                                logger.warning(f"Failed to update widget {i}")
+                    
+                    # Handle other widget types
+                    else:
+                        # Apply styling and force refresh for any other widgets
+                        if hasattr(widget, 'setStyleSheet'):
+                            widget.setStyleSheet(widget.styleSheet())  # Force re-application
+                        widget.update()
+                        widget.repaint()
+                        widgets_updated += 1
+                        
+                except Exception as e:
+                    logger.warning(f"Error updating widget {i}: {e}")
+                    # Try widget recreation as fallback
+                    if widget_type == 'html' and isinstance(widget, QLabel):
+                        try:
+                            self._recreate_label_widget(i, content, message_style)
+                            widgets_recreated += 1
+                        except Exception as e2:
+                            logger.error(f"Failed to recreate widget {i}: {e2}")
+        
+        # Force comprehensive refresh of the entire container
+        self._force_complete_visual_refresh()
+        
+        logger.info(f"Theme update complete: {widgets_updated} updated, {widgets_recreated} recreated")
+        
+    def _try_html_color_injection(self, widget: QLabel, original_content: str, color: str, message_style: str) -> bool:
+        """
+        Try to update widget colors using HTML color injection.
+        
+        Returns:
+            True if injection was successful, False if widget recreation is needed
+        """
+        try:
+            # Get current HTML content from widget
+            current_html = widget.text()
+            
+            # If the current HTML doesn't match the original content, something went wrong
+            if not current_html or len(current_html) < 10:
+                logger.debug("Widget has no/minimal content, trying original content")
+                current_html = original_content
+            
+            # Apply comprehensive HTML color injection
+            updated_html = self._inject_theme_color_into_html(current_html, color)
+            
+            # Apply label styling
+            self._apply_label_styling(widget, message_style)
+            
+            # Clear and re-set HTML to force re-parse
+            widget.setText("")  # Clear cache
+            widget.setText(updated_html)  # Set new content
+            
+            # Force Qt style system refresh
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+            
+            # Force visual updates
+            widget.update()
+            widget.repaint()
+            
+            # Verify the update worked by checking if text changed
+            new_text = widget.text()
+            if len(new_text) > len(current_html) * 0.8:  # Reasonable sanity check
+                return True
+            else:
+                logger.debug("HTML injection may have failed, content size changed significantly")
+                return False
                 
-                # Update QLabel widgets (text content)
-                elif isinstance(widget, QLabel) and widget_type == 'html':
-                    # Re-apply styling to existing label with new colors
-                    self._apply_label_styling(widget, message_style)
+        except Exception as e:
+            logger.debug(f"HTML injection failed: {e}")
+            return False
+    
+    def _recreate_label_widget(self, index: int, content: str, message_style: str) -> bool:
+        """
+        Completely recreate a QLabel widget with fresh theme colors.
+        This is the nuclear option when HTML injection fails.
+        
+        Returns:
+            True if recreation was successful, False otherwise
+        """
+        try:
+            if index >= len(self.content_widgets):
+                return False
+            
+            old_widget = self.content_widgets[index]
+            
+            # Create new label with current theme colors
+            new_label = QLabel()
+            new_label.setWordWrap(True)
+            new_label.setTextInteractionFlags(
+                Qt.TextInteractionFlag.TextSelectableByMouse | 
+                Qt.TextInteractionFlag.LinksAccessibleByMouse
+            )
+            new_label.setOpenExternalLinks(False)
+            new_label.setAutoFillBackground(False)
+            new_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+            
+            # Apply theme styling BEFORE setting content
+            self._apply_label_styling(new_label, message_style)
+            
+            # Get color and inject into content
+            color = self._get_message_style_color(message_style)
+            themed_content = self._inject_theme_color_into_html(content, color)
+            
+            # Set the content
+            new_label.setText(themed_content)
+            
+            # Connect link handling
+            new_label.linkActivated.connect(self._handle_link_click)
+            
+            # Replace in layout
+            layout_item = self.content_layout.itemAt(index)
+            if layout_item:
+                # Insert new widget at the same position
+                self.content_layout.insertWidget(index, new_label)
+                
+                # Remove old widget
+                self.content_layout.removeWidget(old_widget)
+                old_widget.setParent(None)
+                old_widget.deleteLater()
+                
+                # Update widget list
+                self.content_widgets[index] = new_label
+                
+                logger.debug(f"Successfully recreated widget {index}")
+                return True
+            else:
+                logger.warning(f"Could not find layout item for widget {index}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Widget recreation failed for index {index}: {e}")
+            return False
+    
+    def _force_complete_visual_refresh(self):
+        """
+        Force a complete visual refresh of the entire widget tree.
+        This ensures all theme changes are visible.
+        """
+        try:
+            # Refresh the main scroll area
+            self.update()
+            self.repaint()
+            
+            # Refresh the content widget
+            if hasattr(self, 'content_widget') and self.content_widget:
+                self.content_widget.update()
+                self.content_widget.repaint()
+            
+            # Refresh all child widgets
+            for i, widget in enumerate(self.content_widgets):
+                if widget and hasattr(widget, 'update'):
+                    widget.update()
+                    if hasattr(widget, 'repaint'):
+                        widget.repaint()
+            
+            # Schedule final refresh to catch any remaining issues
+            QTimer.singleShot(50, self._final_visual_refresh)
+            
+            logger.debug("Complete visual refresh initiated")
+            
+        except Exception as e:
+            logger.warning(f"Error in complete visual refresh: {e}")
+    
+    def _final_visual_refresh(self):
+        """
+        Final visual refresh pass - this is the last step in the theme update process.
+        """
+        try:
+            # One final update pass for everything
+            self.update()
+            self.repaint()
+            
+            # Update viewport to ensure scroll area refreshes
+            if hasattr(self, 'viewport'):
+                self.viewport().update()
+            
+            logger.debug("Final visual refresh completed - theme update should be fully visible")
+            
+        except Exception as e:
+            logger.debug(f"Final visual refresh error (non-critical): {e}")
+    
+    def debug_color_analysis(self):
+        """Diagnostic method to analyze actual vs expected colors."""
+        print("\n=== FONT COLOR DIAGNOSTIC ===")
+        print(f"Theme colors available: {bool(self.theme_colors)}")
+        
+        if not self.theme_colors:
+            print("❌ No theme colors available!")
+            return
+            
+        print(f"Expected colors from theme:")
+        print(f"  text_primary: {self.theme_colors.get('text_primary', 'MISSING')}")
+        print(f"  text_secondary: {self.theme_colors.get('text_secondary', 'MISSING')}")
+        print(f"  error: {self.theme_colors.get('error', 'MISSING')}")
+        print(f"  info: {self.theme_colors.get('info', 'MISSING')}")
+        
+        print(f"\nAnalyzing {len(self.content_widgets)} widgets:")
+        
+        for i, widget in enumerate(self.content_widgets):
+            if isinstance(widget, QLabel):
+                # Get stylesheet
+                stylesheet = widget.styleSheet()
+                
+                # Extract color from stylesheet
+                import re
+                color_match = re.search(r'color:\s*([^;!\s]+)', stylesheet)
+                actual_color = color_match.group(1) if color_match else "NO COLOR FOUND"
+                
+                # Get message style from history
+                message_style = "unknown"
+                if i < len(self.content_history):
+                    _, message_style, _ = self.content_history[i]
+                
+                # Get text preview
+                text_preview = widget.text()[:40].replace('\n', ' ')
+                
+                print(f"  Widget {i}: style={message_style}, actual_color={actual_color}")
+                print(f"    Text: '{text_preview}'")
+                print(f"    Stylesheet length: {len(stylesheet)} chars")
+                
+                # Show first 200 chars of stylesheet
+                if stylesheet:
+                    print(f"    Stylesheet preview: {stylesheet[:200]}...")
+                
+        print("=== END DIAGNOSTIC ===\n")
+    
+    def debug_comprehensive_analysis(self):
+        """Comprehensive diagnostic method to analyze actual vs expected colors and theme state."""
+        print("\n" + "="*60)
+        print("   COMPREHENSIVE THEME COLOR DIAGNOSTIC")
+        print("="*60)
+        
+        # Basic theme availability
+        print(f"Theme colors available: {bool(self.theme_colors)}")
+        print(f"Content widgets: {len(self.content_widgets)}")
+        print(f"Content history: {len(self.content_history)}")
+        
+        if not self.theme_colors:
+            print("❌ CRITICAL: No theme colors available!")
+            print("   This suggests the theme system isn't working properly.")
+            return
+        
+        # Display current theme colors
+        print(f"\n📊 CURRENT THEME COLORS:")
+        for key, value in sorted(self.theme_colors.items()):
+            print(f"  {key}: {value}")
+        
+        print(f"\n🎯 EXPECTED MESSAGE STYLE COLORS:")
+        for style in ['normal', 'input', 'response', 'system', 'info', 'warning', 'error']:
+            color = self._get_message_style_color(style)
+            print(f"  {style}: {color}")
+        
+        print(f"\n🔍 WIDGET-BY-WIDGET ANALYSIS:")
+        widgets_with_issues = 0
+        
+        for i, widget in enumerate(self.content_widgets):
+            if isinstance(widget, QLabel):
+                # Get history info
+                message_style = "unknown"
+                content_preview = "N/A"
+                widget_type = "unknown"
+                
+                if i < len(self.content_history):
+                    content, message_style, widget_type = self.content_history[i]
+                    if isinstance(content, str):
+                        content_preview = content[:30].replace('\n', ' ')
+                    else:
+                        content_preview = str(content)[:30]
+                
+                # Get expected vs actual colors
+                expected_color = self._get_message_style_color(message_style)
+                
+                # Extract color from stylesheet
+                stylesheet = widget.styleSheet()
+                import re
+                color_matches = re.findall(r'color:\s*([^;!\s}]+)', stylesheet)
+                stylesheet_colors = color_matches if color_matches else ["NO COLOR"]
+                
+                # Extract color from HTML content
+                widget_html = widget.text()
+                html_color_matches = re.findall(r'color:\s*([^;!"\']+)', widget_html)
+                html_colors = html_color_matches if html_color_matches else ["NO COLOR"]
+                
+                # Check for issues
+                has_issues = (
+                    expected_color not in stylesheet_colors and
+                    expected_color not in html_colors and
+                    not any(color.replace(' ', '').replace('!important', '') == expected_color.replace(' ', '') for color in stylesheet_colors + html_colors)
+                )
+                
+                if has_issues:
+                    widgets_with_issues += 1
+                    status = "❌ ISSUE"
+                else:
+                    status = "✅ OK"
+                
+                print(f"\n  Widget {i} [{widget_type}] - {status}")
+                print(f"    Message style: {message_style}")
+                print(f"    Expected color: {expected_color}")
+                print(f"    Stylesheet colors: {stylesheet_colors}")
+                print(f"    HTML colors: {html_colors}")
+                print(f"    Content preview: '{content_preview}...'")
+                print(f"    HTML size: {len(widget_html)} chars")
+                
+                if has_issues:
+                    print(f"    ⚠️  Color mismatch detected!")
+                    # Show first part of HTML for debugging
+                    html_preview = widget_html[:150].replace('\n', ' ')
+                    print(f"    HTML preview: {html_preview}...")
+            
+            elif hasattr(widget, 'set_theme_colors'):
+                print(f"\n  Widget {i} [CODE] - ✅ Code widget (has set_theme_colors)")
+            else:
+                print(f"\n  Widget {i} [OTHER] - ℹ️ {type(widget).__name__}")
+        
+        # Summary
+        print(f"\n" + "="*60)
+        print(f"   DIAGNOSTIC SUMMARY")
+        print("="*60)
+        print(f"Total widgets: {len(self.content_widgets)}")
+        print(f"QLabel widgets: {sum(1 for w in self.content_widgets if isinstance(w, QLabel))}")
+        print(f"Widgets with color issues: {widgets_with_issues}")
+        
+        if widgets_with_issues == 0:
+            print("🎉 All widgets appear to have correct theme colors!")
+        else:
+            print(f"⚠️  {widgets_with_issues} widgets may have color issues.")
+            print("   Consider running debug_fix_widget_colors() to attempt fixes.")
+        
+        print("="*60 + "\n")
+    
+    def debug_fix_widget_colors(self):
+        """Debug method to forcefully fix widget colors by re-applying theme."""
+        print("\n🔧 FORCING THEME COLOR FIXES...")
+        
+        if not self.theme_colors:
+            print("❌ No theme colors available - cannot fix.")
+            return
+        
+        original_log_level = logger.level
+        logger.setLevel(logging.DEBUG)  # Enable debug logging
+        
+        try:
+            # Force comprehensive theme update
+            self._update_existing_widgets_theme()
+            print("✅ Theme color fix completed.")
+            print("   Run debug_comprehensive_analysis() again to verify fixes.")
+        except Exception as e:
+            print(f"❌ Error during theme fix: {e}")
+        finally:
+            logger.setLevel(original_log_level)  # Restore original log level
+    
+    def debug_widget_recreation_test(self, widget_index: int = 0):
+        """Debug method to test widget recreation on a specific widget."""
+        print(f"\n🧪 TESTING WIDGET RECREATION FOR INDEX {widget_index}")
+        
+        if widget_index >= len(self.content_widgets) or widget_index >= len(self.content_history):
+            print(f"❌ Invalid widget index {widget_index}")
+            return
+        
+        content, message_style, widget_type = self.content_history[widget_index]
+        widget = self.content_widgets[widget_index]
+        
+        print(f"Widget type: {type(widget).__name__}")
+        print(f"Content type: {widget_type}")
+        print(f"Message style: {message_style}")
+        
+        if isinstance(widget, QLabel) and widget_type == 'html':
+            print("🔄 Attempting widget recreation...")
+            success = self._recreate_label_widget(widget_index, content, message_style)
+            if success:
+                print("✅ Widget recreation successful!")
+            else:
+                print("❌ Widget recreation failed!")
+        else:
+            print("ℹ️ Widget recreation only supports QLabel HTML widgets.")
+    
     
     def _rerender_all_content(self):
         """Re-render all content with new theme colors."""
@@ -490,7 +972,7 @@ class MixedContentDisplay(QScrollArea):
             
         # Get color based on message style
         # Only use smart fallback if text_primary is actually missing
-        bg_color = self.theme_colors.get('bg_primary', self.theme_colors.get('background_primary', '#1a1a1a'))
+        bg_color = self.theme_colors.get('bg_primary', self.theme_colors.get('background_primary', '#000000'))
         
         # Use theme's text_primary directly if it exists
         text_primary = self.theme_colors.get('text_primary')
@@ -503,11 +985,11 @@ class MixedContentDisplay(QScrollArea):
             'normal': text_primary,
             'input': self.theme_colors.get('primary', text_primary),  # Use primary color or text_primary
             'response': text_primary,  # Use text_primary for AI responses
-            'system': self.theme_colors.get('text_secondary', '#808080'),
-            'info': self.theme_colors.get('info', '#4A9EFF'),
-            'warning': self.theme_colors.get('warning', '#FFB84D'),
-            'error': self.theme_colors.get('error', '#FF4D4D'),
-            'divider': self.theme_colors.get('text_secondary', '#808080'),  # For dividers
+            'system': self.theme_colors.get('text_secondary', text_primary),  # Use theme's text_secondary
+            'info': self.theme_colors.get('info', text_primary),  # Use theme's info color
+            'warning': self.theme_colors.get('warning', text_primary),  # Use theme's warning color
+            'error': self.theme_colors.get('error', text_primary),  # Use theme's error color
+            'divider': self.theme_colors.get('text_secondary', text_primary),  # Use theme's text_secondary
         }
         
         color = style_colors.get(message_style, text_primary)
@@ -517,9 +999,10 @@ class MixedContentDisplay(QScrollArea):
         text_size_percent = settings.get('ui.text_size', 100)
         base_font_size = int(14 * text_size_percent / 100)  # Base 14px scaled
         
-        label.setStyleSheet(f"""
+        # Build more specific stylesheet for PyQt6 with higher precedence
+        stylesheet = f"""
             QLabel {{
-                color: {color};
+                color: {color} !important;
                 background-color: transparent !important;
                 background: none !important;
                 padding: 4px;
@@ -528,7 +1011,7 @@ class MixedContentDisplay(QScrollArea):
                 line-height: 1.5;
             }}
             QLabel a {{
-                color: {self.theme_colors.get('info', '#4A9EFF')};
+                color: {self.theme_colors.get('info', text_primary)} !important;
                 text-decoration: none;
                 background: none !important;
             }}
@@ -539,52 +1022,63 @@ class MixedContentDisplay(QScrollArea):
             QLabel p {{
                 background: none !important;
                 background-color: transparent !important;
+                color: {color} !important;
             }}
             QLabel div {{
                 background: none !important;
                 background-color: transparent !important;
+                color: {color} !important;
             }}
             QLabel span {{
                 background: none !important;
                 background-color: transparent !important;
+                color: {color} !important;
             }}
             QLabel h1 {{
                 font-size: {int(base_font_size * 2.0)}px;
                 font-weight: bold;
                 margin: 0.5em 0;
-                color: {color};
+                color: {color} !important;
             }}
             QLabel h2 {{
                 font-size: {int(base_font_size * 1.7)}px;
                 font-weight: bold;
                 margin: 0.4em 0;
-                color: {color};
+                color: {color} !important;
             }}
             QLabel h3 {{
                 font-size: {int(base_font_size * 1.4)}px;
                 font-weight: bold;
                 margin: 0.3em 0;
-                color: {color};
+                color: {color} !important;
             }}
             QLabel h4 {{
                 font-size: {int(base_font_size * 1.2)}px;
                 font-weight: bold;
                 margin: 0.2em 0;
-                color: {color};
+                color: {color} !important;
             }}
             QLabel h5 {{
                 font-size: {int(base_font_size * 1.1)}px;
                 font-weight: bold;
                 margin: 0.2em 0;
-                color: {color};
+                color: {color} !important;
             }}
             QLabel h6 {{
                 font-size: {base_font_size}px;
                 font-weight: bold;
                 margin: 0.2em 0;
-                color: {color};
+                color: {color} !important;
             }}
-        """)
+        """
+        
+        # Apply stylesheet to the label
+        label.setStyleSheet(stylesheet)
+        
+        # ADDITIONAL FIX: Force immediate stylesheet refresh for PyQt6
+        # This ensures the new styles take effect immediately
+        label.style().unpolish(label)
+        label.style().polish(label)
         
     def add_code_snippet(self, code: str, language: str = ""):
         """
@@ -652,7 +1146,7 @@ class MixedContentDisplay(QScrollArea):
         separator = QFrame()
         separator.setFrameStyle(QFrame.Shape.HLine | QFrame.Shadow.Sunken)
         if self.theme_colors:
-            separator.setStyleSheet(f"background-color: {self.theme_colors.get('border', '#3a3a3a')};")
+            separator.setStyleSheet(f"background-color: {self.theme_colors.get('border', self.theme_colors.get('text_secondary', '#666666'))};")
         self.content_layout.addWidget(separator)
         self.content_widgets.append(separator)
         
@@ -715,7 +1209,7 @@ class MixedContentDisplay(QScrollArea):
             notice = QLabel("[Previous messages truncated for performance]")
             if self.theme_colors:
                 notice.setStyleSheet(f"""
-                    color: {self.theme_colors.get('text_secondary', '#808080')};
+                    color: {self.theme_colors.get('text_secondary', self.theme_colors.get('text_primary', '#cccccc'))};
                     font-style: italic;
                     padding: 4px;
                 """)

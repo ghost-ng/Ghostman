@@ -1,0 +1,33 @@
+{
+  "name": "openui_like",
+  "display_name": "Openui Like",
+  "description": "Built-in Openui Like theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#00a453",
+    "primary_hover": "#007a3d",
+    "secondary": "#555555",
+    "secondary_hover": "#444444",
+    "background_primary": "#ffffff",
+    "background_secondary": "#f2f2f2",
+    "background_tertiary": "#e8e8e8",
+    "background_overlay": "#00000040",
+    "text_primary": "#333333",
+    "text_secondary": "#555555",
+    "text_tertiary": "#777777",
+    "text_disabled": "#cccccc",
+    "interactive_normal": "#f8f9fa",
+    "interactive_hover": "#e9ecef",
+    "interactive_active": "#dee2e6",
+    "interactive_disabled": "#f8f9fa",
+    "status_success": "#00a453",
+    "status_warning": "#ff8800",
+    "status_error": "#dc3545",
+    "status_info": "#007a3d",
+    "border_primary": "#cccccc",
+    "border_secondary": "#e6e6e6",
+    "border_focus": "#00a453",
+    "separator": "#e6e6e6"
+  }
+}

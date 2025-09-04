@@ -1,0 +1,33 @@
+{
+  "name": "firefly",
+  "display_name": "Firefly",
+  "description": "Built-in Firefly theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#adff2f",
+    "primary_hover": "#9aed1f",
+    "secondary": "#c7ff58",
+    "secondary_hover": "#b8f542",
+    "background_primary": "#080025",
+    "background_secondary": "#15143d",
+    "background_tertiary": "#242455",
+    "background_overlay": "#000000dd",
+    "text_primary": "#fefdf2",
+    "text_secondary": "#e8e6d3",
+    "text_tertiary": "#d2cfb4",
+    "text_disabled": "#4e4c66",
+    "interactive_normal": "#1e1d3a",
+    "interactive_hover": "#2e2c51",
+    "interactive_active": "#3e3b68",
+    "interactive_disabled": "#15143d",
+    "status_success": "#adff2f",
+    "status_warning": "#ffc107",
+    "status_error": "#ff6b6b",
+    "status_info": "#74c0fc",
+    "border_primary": "#4e4c66",
+    "border_secondary": "#3e3b68",
+    "border_focus": "#adff2f",
+    "separator": "#242455"
+  }
+}

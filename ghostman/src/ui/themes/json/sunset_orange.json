@@ -1,0 +1,33 @@
+{
+  "name": "sunset_orange",
+  "display_name": "Sunset Orange",
+  "description": "Built-in Sunset Orange theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#f57c00",
+    "primary_hover": "#ef6c00",
+    "secondary": "#ff9800",
+    "secondary_hover": "#f57c00",
+    "background_primary": "#1a0f08",
+    "background_secondary": "#2e1b0f",
+    "background_tertiary": "#4a2c1a",
+    "background_overlay": "#000000cc",
+    "text_primary": "#fff3e0",
+    "text_secondary": "#ffe0b2",
+    "text_tertiary": "#ffcc80",
+    "text_disabled": "#4a2c1a",
+    "interactive_normal": "#5d4037",
+    "interactive_hover": "#6d4c41",
+    "interactive_active": "#795548",
+    "interactive_disabled": "#3e2723",
+    "status_success": "#4caf50",
+    "status_warning": "#ff9800",
+    "status_error": "#f44336",
+    "status_info": "#2196f3",
+    "border_primary": "#5d4037",
+    "border_secondary": "#4a2c1a",
+    "border_focus": "#f57c00",
+    "separator": "#2e1b0f"
+  }
+}

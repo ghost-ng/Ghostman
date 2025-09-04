@@ -1,0 +1,33 @@
+{
+  "name": "jade",
+  "display_name": "Jade",
+  "description": "Built-in Jade theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#00695c",
+    "primary_hover": "#004d40",
+    "secondary": "#26a69a",
+    "secondary_hover": "#00897b",
+    "background_primary": "#0a1514",
+    "background_secondary": "#152726",
+    "background_tertiary": "#1f3f3a",
+    "background_overlay": "#0a151480",
+    "text_primary": "#e0f2f1",
+    "text_secondary": "#b2dfdb",
+    "text_tertiary": "#80cbc4",
+    "text_disabled": "#4a6862",
+    "interactive_normal": "#004d40",
+    "interactive_hover": "#00695c",
+    "interactive_active": "#00897b",
+    "interactive_disabled": "#152726",
+    "status_success": "#4caf50",
+    "status_warning": "#ff8f00",
+    "status_error": "#e53935",
+    "status_info": "#00acc1",
+    "border_primary": "#4db6ac",
+    "border_secondary": "#26a69a",
+    "border_focus": "#00695c",
+    "separator": "#1f3f3a"
+  }
+}

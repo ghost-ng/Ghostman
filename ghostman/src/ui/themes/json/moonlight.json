@@ -1,0 +1,33 @@
+{
+  "name": "moonlight",
+  "display_name": "Moonlight",
+  "description": "Built-in Moonlight theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#7dd3fc",
+    "primary_hover": "#38bdf8",
+    "secondary": "#c084fc",
+    "secondary_hover": "#a855f7",
+    "background_primary": "#0f1419",
+    "background_secondary": "#1e293b",
+    "background_tertiary": "#334155",
+    "background_overlay": "#0f141980",
+    "text_primary": "#f1f5f9",
+    "text_secondary": "#cbd5e1",
+    "text_tertiary": "#b8bcc8",
+    "text_disabled": "#64748b",
+    "interactive_normal": "#1e293b",
+    "interactive_hover": "#334155",
+    "interactive_active": "#475569",
+    "interactive_disabled": "#0f1419",
+    "status_success": "#22d3ee",
+    "status_warning": "#fbbf24",
+    "status_error": "#f87171",
+    "status_info": "#7dd3fc",
+    "border_primary": "#475569",
+    "border_secondary": "#334155",
+    "border_focus": "#7dd3fc",
+    "separator": "#1e293b"
+  }
+}

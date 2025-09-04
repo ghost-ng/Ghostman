@@ -1,0 +1,33 @@
+{
+  "name": "dark_matrix",
+  "display_name": "Dark Matrix",
+  "description": "Built-in Dark Matrix theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#00ff41",
+    "primary_hover": "#00e03a",
+    "secondary": "#00cc33",
+    "secondary_hover": "#00b82e",
+    "background_primary": "#0d0d0d",
+    "background_secondary": "#1a1a1a",
+    "background_tertiary": "#2d2d2d",
+    "background_overlay": "#000000dd",
+    "text_primary": "#00ff41",
+    "text_secondary": "#00cc33",
+    "text_tertiary": "#009929",
+    "text_disabled": "#003d0f",
+    "interactive_normal": "#1a3d1a",
+    "interactive_hover": "#267326",
+    "interactive_active": "#339933",
+    "interactive_disabled": "#0d1a0d",
+    "status_success": "#00ff41",
+    "status_warning": "#ffcc00",
+    "status_error": "#ff3333",
+    "status_info": "#00ccff",
+    "border_primary": "#004d1a",
+    "border_secondary": "#003d14",
+    "border_focus": "#00ff41",
+    "separator": "#1a3d1a"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "sunburst",
+  "display_name": "Sunburst",
+  "description": "Built-in Sunburst theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#f16a1f",
+    "primary_hover": "#e85d0e",
+    "secondary": "#ff8c42",
+    "secondary_hover": "#ff7b2b",
+    "background_primary": "#1a0e08",
+    "background_secondary": "#2e1b0f",
+    "background_tertiary": "#4a2f1c",
+    "background_overlay": "#000000cc",
+    "text_primary": "#fff3e0",
+    "text_secondary": "#ffe0b2",
+    "text_tertiary": "#ffcc80",
+    "text_disabled": "#6b4423",
+    "interactive_normal": "#5d3317",
+    "interactive_hover": "#7a4420",
+    "interactive_active": "#96552a",
+    "interactive_disabled": "#2e1b0f",
+    "status_success": "#66bb6a",
+    "status_warning": "#ffb74d",
+    "status_error": "#ef5350",
+    "status_info": "#42a5f5",
+    "border_primary": "#6b4423",
+    "border_secondary": "#5d3317",
+    "border_focus": "#f16a1f",
+    "separator": "#4a2f1c"
+  }
+}

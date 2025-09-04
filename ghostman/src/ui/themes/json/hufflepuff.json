@@ -1,0 +1,33 @@
+{
+  "name": "hufflepuff",
+  "display_name": "Hufflepuff",
+  "description": "Built-in Hufflepuff theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#ffb300",
+    "primary_hover": "#ff8f00",
+    "secondary": "#424242",
+    "secondary_hover": "#212121",
+    "background_primary": "#1a1a0a",
+    "background_secondary": "#2e2e18",
+    "background_tertiary": "#4a4a2a",
+    "background_overlay": "#1a1a0a80",
+    "text_primary": "#fffde7",
+    "text_secondary": "#fff9c4",
+    "text_tertiary": "#fff176",
+    "text_disabled": "#6b6b3a",
+    "interactive_normal": "#5d4e37",
+    "interactive_hover": "#8b7355",
+    "interactive_active": "#a1947a",
+    "interactive_disabled": "#2e2e18",
+    "status_success": "#689f38",
+    "status_warning": "#ffb300",
+    "status_error": "#d84315",
+    "status_info": "#455a64",
+    "border_primary": "#9e9d24",
+    "border_secondary": "#6b6b3a",
+    "border_focus": "#ffb300",
+    "separator": "#4a4a2a"
+  }
+}

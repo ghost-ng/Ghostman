@@ -1,0 +1,33 @@
+{
+  "name": "lilac",
+  "display_name": "Lilac",
+  "description": "Built-in Lilac theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#8b5a9f",
+    "primary_hover": "#7a4e8c",
+    "secondary": "#a66bb8",
+    "secondary_hover": "#9659a5",
+    "background_primary": "#fdfcfe",
+    "background_secondary": "#f7f4f9",
+    "background_tertiary": "#f0eaf4",
+    "background_overlay": "#00000066",
+    "text_primary": "#2d1b35",
+    "text_secondary": "#483354",
+    "text_tertiary": "#6b4c7a",
+    "text_disabled": "#a691b3",
+    "interactive_normal": "#e8dced",
+    "interactive_hover": "#dcc9e3",
+    "interactive_active": "#d0b7d9",
+    "interactive_disabled": "#f2eff4",
+    "status_success": "#2d7d4a",
+    "status_warning": "#b8860b",
+    "status_error": "#c53030",
+    "status_info": "#2b6cb0",
+    "border_primary": "#b8a3c4",
+    "border_secondary": "#d5c7dd",
+    "border_focus": "#8b5a9f",
+    "separator": "#e8dced"
+  }
+}

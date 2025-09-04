@@ -1,0 +1,33 @@
+{
+  "name": "birthday_cake",
+  "display_name": "Birthday Cake",
+  "description": "Built-in Birthday Cake theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#e91e63",
+    "primary_hover": "#c2185b",
+    "secondary": "#ff9800",
+    "secondary_hover": "#f57c00",
+    "background_primary": "#fffbf7",
+    "background_secondary": "#fef7f0",
+    "background_tertiary": "#fdf2e9",
+    "background_overlay": "#00000030",
+    "text_primary": "#2d1b3d",
+    "text_secondary": "#4a2c5a",
+    "text_tertiary": "#6b4c7a",
+    "text_disabled": "#a08ca1",
+    "interactive_normal": "#fce4ec",
+    "interactive_hover": "#f8bbd9",
+    "interactive_active": "#f48fb1",
+    "interactive_disabled": "#fef7f0",
+    "status_success": "#388e3c",
+    "status_warning": "#ff8f00",
+    "status_error": "#d32f2f",
+    "status_info": "#1976d2",
+    "border_primary": "#f0a8c4",
+    "border_secondary": "#f5d5e0",
+    "border_focus": "#e91e63",
+    "separator": "#fdf2e9"
+  }
+}
