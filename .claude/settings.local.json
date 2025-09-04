@@ -1,12 +1,20 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git fetch:*)",
+      "Bash(grep:*)",
+      "Bash(git checkout:*)",
+      "Bash(git cherry-pick:*)",
+      "Bash(git push:*)",
+      "Bash(gh pr checkout:*)",
+      "Bash(git merge:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
+    "ask": [],
     "additionalDirectories": [
       "C:\\Users\\miguel\\AppData\\Roaming\\Ghostman\\logs"
-    ],
-    "ask": []
+    ]
   }
 }
