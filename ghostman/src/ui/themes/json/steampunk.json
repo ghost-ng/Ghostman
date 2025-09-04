@@ -1,0 +1,33 @@
+{
+  "name": "steampunk",
+  "display_name": "Steampunk",
+  "description": "Built-in Steampunk theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#d2691e",
+    "primary_hover": "#b8550c",
+    "secondary": "#b5a642",
+    "secondary_hover": "#9c8f38",
+    "background_primary": "#1a1612",
+    "background_secondary": "#2a211a",
+    "background_tertiary": "#3d2f22",
+    "background_overlay": "#00000099",
+    "text_primary": "#faf6f0",
+    "text_secondary": "#e6d7c3",
+    "text_tertiary": "#d4c0a1",
+    "text_disabled": "#5c4a38",
+    "interactive_normal": "#4a3b2a",
+    "interactive_hover": "#5c4833",
+    "interactive_active": "#d2691e",
+    "interactive_disabled": "#2a211a",
+    "status_success": "#6b8e23",
+    "status_warning": "#daa520",
+    "status_error": "#b22222",
+    "status_info": "#4682b4",
+    "border_primary": "#8b6914",
+    "border_secondary": "#4a3b2a",
+    "border_focus": "#d2691e",
+    "separator": "#3d2f22"
+  }
+}

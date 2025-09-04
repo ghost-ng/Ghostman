@@ -1,0 +1,33 @@
+{
+  "name": "sith",
+  "display_name": "Sith",
+  "description": "Built-in Sith theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#dc2626",
+    "primary_hover": "#b91c1c",
+    "secondary": "#991b1b",
+    "secondary_hover": "#7f1d1d",
+    "background_primary": "#0a0a0a",
+    "background_secondary": "#1a0f0f",
+    "background_tertiary": "#2d1a1a",
+    "background_overlay": "#00000080",
+    "text_primary": "#f5f5f4",
+    "text_secondary": "#e7e5e4",
+    "text_tertiary": "#d6d3d1",
+    "text_disabled": "#525252",
+    "interactive_normal": "#451a03",
+    "interactive_hover": "#7c2d12",
+    "interactive_active": "#dc2626",
+    "interactive_disabled": "#1a0f0f",
+    "status_success": "#15803d",
+    "status_warning": "#ca8a04",
+    "status_error": "#dc2626",
+    "status_info": "#1e40af",
+    "border_primary": "#7c2d12",
+    "border_secondary": "#451a03",
+    "border_focus": "#dc2626",
+    "separator": "#2d1a1a"
+  }
+}

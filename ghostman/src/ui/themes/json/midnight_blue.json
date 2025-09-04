@@ -1,0 +1,33 @@
+{
+  "name": "midnight_blue",
+  "display_name": "Midnight Blue",
+  "description": "Built-in Midnight Blue theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#1e88e5",
+    "primary_hover": "#1976d2",
+    "secondary": "#42a5f5",
+    "secondary_hover": "#2196f3",
+    "background_primary": "#0a0e1a",
+    "background_secondary": "#131b2e",
+    "background_tertiary": "#1e2742",
+    "background_overlay": "#000000cc",
+    "text_primary": "#e3f2fd",
+    "text_secondary": "#bbdefb",
+    "text_tertiary": "#90caf9",
+    "text_disabled": "#37474f",
+    "interactive_normal": "#263238",
+    "interactive_hover": "#34495e",
+    "interactive_active": "#455a64",
+    "interactive_disabled": "#1c2833",
+    "status_success": "#4caf50",
+    "status_warning": "#ff9800",
+    "status_error": "#f44336",
+    "status_info": "#2196f3",
+    "border_primary": "#34495e",
+    "border_secondary": "#263238",
+    "border_focus": "#1e88e5",
+    "separator": "#1e2742"
+  }
+}

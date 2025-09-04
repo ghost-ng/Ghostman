@@ -1,0 +1,33 @@
+{
+  "name": "slytherin",
+  "display_name": "Slytherin",
+  "description": "Built-in Slytherin theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#1b5e20",
+    "primary_hover": "#0d47a1",
+    "secondary": "#9e9e9e",
+    "secondary_hover": "#757575",
+    "background_primary": "#0a1a0a",
+    "background_secondary": "#1a2e1a",
+    "background_tertiary": "#2a4a2a",
+    "background_overlay": "#0a1a0a80",
+    "text_primary": "#e8f5e8",
+    "text_secondary": "#c8e6c9",
+    "text_tertiary": "#a5d6a7",
+    "text_disabled": "#4a5a4a",
+    "interactive_normal": "#2e7d32",
+    "interactive_hover": "#388e3c",
+    "interactive_active": "#4caf50",
+    "interactive_disabled": "#1a2e1a",
+    "status_success": "#1b5e20",
+    "status_warning": "#ff8f00",
+    "status_error": "#b71c1c",
+    "status_info": "#0d47a1",
+    "border_primary": "#616161",
+    "border_secondary": "#4a5a4a",
+    "border_focus": "#1b5e20",
+    "separator": "#2a4a2a"
+  }
+}

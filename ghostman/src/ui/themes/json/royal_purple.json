@@ -1,0 +1,33 @@
+{
+  "name": "royal_purple",
+  "display_name": "Royal Purple",
+  "description": "Built-in Royal Purple theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#ce93d8",
+    "primary_hover": "#8e24aa",
+    "secondary": "#9c27b0",
+    "secondary_hover": "#ab47bc",
+    "background_primary": "#12081a",
+    "background_secondary": "#1f0f2e",
+    "background_tertiary": "#331a4a",
+    "background_overlay": "#000000cc",
+    "text_primary": "#f3e5f5",
+    "text_secondary": "#e1bee7",
+    "text_tertiary": "#ce93d8",
+    "text_disabled": "#331a4a",
+    "interactive_normal": "#4a148c",
+    "interactive_hover": "#6a1b9a",
+    "interactive_active": "#7b1fa2",
+    "interactive_disabled": "#2e0845",
+    "status_success": "#4caf50",
+    "status_warning": "#ff9800",
+    "status_error": "#f44336",
+    "status_info": "#2196f3",
+    "border_primary": "#4a148c",
+    "border_secondary": "#331a4a",
+    "border_focus": "#7b1fa2",
+    "separator": "#1f0f2e"
+  }
+}

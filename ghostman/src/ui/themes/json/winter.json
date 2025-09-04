@@ -1,0 +1,33 @@
+{
+  "name": "winter",
+  "display_name": "Winter",
+  "description": "Built-in Winter theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#4a90e2",
+    "primary_hover": "#3a7bc8",
+    "secondary": "#7bb3f0",
+    "secondary_hover": "#6ba6e8",
+    "background_primary": "#fafbfc",
+    "background_secondary": "#f4f6f8",
+    "background_tertiary": "#eef2f7",
+    "background_overlay": "#00000040",
+    "text_primary": "#1c2e45",
+    "text_secondary": "#2d415c",
+    "text_tertiary": "#4a5f7a",
+    "text_disabled": "#8fa4b8",
+    "interactive_normal": "#e6f0fa",
+    "interactive_hover": "#d1e7f5",
+    "interactive_active": "#bcd9ee",
+    "interactive_disabled": "#f4f6f8",
+    "status_success": "#2d7d32",
+    "status_warning": "#ed6c02",
+    "status_error": "#c62828",
+    "status_info": "#4a90e2",
+    "border_primary": "#b8cce0",
+    "border_secondary": "#d4e2f0",
+    "border_focus": "#4a90e2",
+    "separator": "#eef2f7"
+  }
+}

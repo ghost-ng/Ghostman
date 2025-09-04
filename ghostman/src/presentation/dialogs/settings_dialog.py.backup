@@ -22,6 +22,7 @@ from PyQt6.QtGui import QFont, QIcon
 
 # Import font service for font configuration
 from ...application.font_service import font_service
+from ...application.safe_font_config import SafeFontConfig
 
 logger = logging.getLogger("ghostman.settings_dialog")
 
@@ -48,7 +49,7 @@ class SettingsDialog(QDialog):
         
         self._init_ui()
         self._load_current_settings()
-        self._apply_uniform_button_styles()
+        self._apply_modern_button_styles()
         
         logger.info("SettingsDialog initialized")
     
@@ -67,6 +68,14 @@ class SettingsDialog(QDialog):
         
         # Apply theme styling
         self._apply_theme()
+        
+        # Register with theme applicator for live updates
+        try:
+            from ...ui.themes.theme_applicator import get_theme_applicator
+            applicator = get_theme_applicator()
+            applicator.register_widget(self)
+        except ImportError:
+            logger.debug("Theme applicator not available")
         
         # Main layout
         layout = QVBoxLayout(self)
@@ -383,11 +392,12 @@ class SettingsDialog(QDialog):
         ai_font_group = QGroupBox("AI Response Font")
         ai_font_layout = QFormLayout(ai_font_group)
 
-        # AI Response Font Family
+        # AI Response Font Family - SAFE FONTS ONLY
         self.ai_font_family_combo = QComboBox()
         self.ai_font_family_combo.setEditable(False)
-        available_fonts = font_service.get_available_fonts()
-        self.ai_font_family_combo.addItems(available_fonts)
+        # Only show safe, validated text fonts
+        safe_text_fonts = [font for font, desc in SafeFontConfig.get_safe_text_fonts()]
+        self.ai_font_family_combo.addItems(safe_text_fonts)
         ai_font_layout.addRow("Font Family:", self.ai_font_family_combo)
 
         # AI Response Font Size with improved +/- buttons
@@ -398,10 +408,11 @@ class SettingsDialog(QDialog):
         self.ai_font_size_decrease_btn.setMaximumWidth(20)
         self.ai_font_size_decrease_btn.clicked.connect(lambda: self._adjust_ai_font_size(-1))
         
-        # Font size spin box
+        # Font size spin box - SAFE SIZES ONLY
         self.ai_font_size_spin = QSpinBox()
-        self.ai_font_size_spin.setRange(6, 72)
-        self.ai_font_size_spin.setValue(11)
+        self.ai_font_size_spin.setRange(8, 14)  # Restricted to safe range
+        self.ai_font_size_spin.setValue(10)
+        self.ai_font_size_spin.setSingleStep(1)
         self.ai_font_size_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         
         # Increase button with proper styling
@@ -432,10 +443,11 @@ class SettingsDialog(QDialog):
         user_font_group = QGroupBox("User Input Font")
         user_font_layout = QFormLayout(user_font_group)
 
-        # User Input Font Family
+        # User Input Font Family - SAFE FONTS ONLY
         self.user_font_family_combo = QComboBox()
         self.user_font_family_combo.setEditable(False)
-        self.user_font_family_combo.addItems(available_fonts)
+        # Only show safe, validated text fonts
+        self.user_font_family_combo.addItems(safe_text_fonts)
         user_font_layout.addRow("Font Family:", self.user_font_family_combo)
 
         # User Input Font Size with improved +/- buttons
@@ -446,10 +458,11 @@ class SettingsDialog(QDialog):
         self.user_font_size_decrease_btn.setMaximumWidth(20)
         self.user_font_size_decrease_btn.clicked.connect(lambda: self._adjust_user_font_size(-1))
         
-        # Font size spin box
+        # Font size spin box - SAFE SIZES ONLY
         self.user_font_size_spin = QSpinBox()
-        self.user_font_size_spin.setRange(6, 72)
-        self.user_font_size_spin.setValue(10)
+        self.user_font_size_spin.setRange(8, 14)  # Restricted to safe range
+        self.user_font_size_spin.setValue(11)
+        self.user_font_size_spin.setSingleStep(1)
         self.user_font_size_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         
         # Increase button with proper styling
@@ -476,6 +489,52 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(user_font_group)
 
+        # Code Snippets Font Group
+        code_font_group = QGroupBox("Code Snippets Font")
+        code_font_layout = QFormLayout(code_font_group)
+
+        # Code Font Family - SAFE MONOSPACE FONTS ONLY
+        self.code_font_family_combo = QComboBox()
+        self.code_font_family_combo.setEditable(False)
+        # Only show safe, validated monospace fonts
+        safe_code_fonts = [font for font, desc in SafeFontConfig.get_safe_code_fonts()]
+        self.code_font_family_combo.addItems(safe_code_fonts)
+        code_font_layout.addRow("Font Family:", self.code_font_family_combo)
+
+        # Code Font Size with improved +/- buttons
+        code_font_size_layout = QHBoxLayout()
+        
+        # Decrease button with proper styling
+        self.code_font_size_decrease_btn = QPushButton("-")
+        self.code_font_size_decrease_btn.setMaximumWidth(20)
+        self.code_font_size_decrease_btn.clicked.connect(lambda: self._adjust_code_font_size(-1))
+        
+        # Font size spin box - SAFE SIZES ONLY
+        self.code_font_size_spin = QSpinBox()
+        self.code_font_size_spin.setRange(8, 14)  # Restricted to safe range
+        self.code_font_size_spin.setValue(10)  # Default monospace size
+        self.code_font_size_spin.setSingleStep(1)
+        self.code_font_size_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        
+        # Increase button with proper styling
+        self.code_font_size_increase_btn = QPushButton("+")
+        self.code_font_size_increase_btn.setMaximumWidth(20)
+        self.code_font_size_increase_btn.clicked.connect(lambda: self._adjust_code_font_size(1))
+        
+        code_font_size_layout.addWidget(self.code_font_size_decrease_btn)
+        code_font_size_layout.addWidget(self.code_font_size_spin)
+        code_font_size_layout.addWidget(self.code_font_size_increase_btn)
+        code_font_size_layout.addStretch()
+        
+        code_font_layout.addRow("Font Size:", code_font_size_layout)
+
+        # Code Font Weight
+        self.code_font_weight_combo = QComboBox()
+        self.code_font_weight_combo.addItems(["normal", "bold"])
+        code_font_layout.addRow("Font Weight:", self.code_font_weight_combo)
+
+        layout.addWidget(code_font_group)
+
         # Font Preview Group
         preview_group = QGroupBox("Preview")
         preview_layout = QVBoxLayout(preview_group)
@@ -487,6 +546,10 @@ class SettingsDialog(QDialog):
         self.user_preview_label = QLabel("User Input: This is how your input will look.")
         self._apply_preview_label_style(self.user_preview_label)
         preview_layout.addWidget(self.user_preview_label)
+
+        self.code_preview_label = QLabel("Code: function example() { return 'Hello World'; }")
+        self._apply_preview_label_style(self.code_preview_label)
+        preview_layout.addWidget(self.code_preview_label)
 
         layout.addWidget(preview_group)
 
@@ -508,6 +571,14 @@ class SettingsDialog(QDialog):
         self.user_font_weight_combo.currentTextChanged.connect(self._apply_font_changes_immediately)
         self.user_font_style_combo.currentTextChanged.connect(self._update_font_previews)
         self.user_font_style_combo.currentTextChanged.connect(self._apply_font_changes_immediately)
+        
+        # Code font event connections
+        self.code_font_family_combo.currentTextChanged.connect(self._update_font_previews)
+        self.code_font_family_combo.currentTextChanged.connect(self._apply_font_changes_immediately)
+        self.code_font_size_spin.valueChanged.connect(self._update_font_previews)
+        self.code_font_size_spin.valueChanged.connect(self._apply_font_changes_immediately)
+        self.code_font_weight_combo.currentTextChanged.connect(self._update_font_previews)
+        self.code_font_weight_combo.currentTextChanged.connect(self._apply_font_changes_immediately)
 
         layout.addStretch()
         self.tab_widget.addTab(tab, "Fonts")
@@ -542,6 +613,14 @@ class SettingsDialog(QDialog):
             user_font.setItalic(self.user_font_style_combo.currentText() == "italic")
             self.user_preview_label.setFont(user_font)
             
+            # Create code font
+            code_font = QFont()
+            code_font.setFamily(self.code_font_family_combo.currentText())
+            code_font.setPointSize(self.code_font_size_spin.value())
+            code_font.setBold(self.code_font_weight_combo.currentText() == "bold")
+            code_font.setStyleHint(QFont.StyleHint.Monospace)  # Ensure monospace
+            self.code_preview_label.setFont(code_font)
+            
         except Exception as e:
             logger.error(f"Failed to update font previews: {e}")
     
@@ -558,6 +637,14 @@ class SettingsDialog(QDialog):
         current_size = self.user_font_size_spin.value()
         new_size = max(6, min(72, current_size + delta))
         self.user_font_size_spin.setValue(new_size)
+        # Immediately apply the font change
+        self._apply_font_changes_immediately()
+        
+    def _adjust_code_font_size(self, delta):
+        """Adjust code font size by the given delta."""
+        current_size = self.code_font_size_spin.value()
+        new_size = max(6, min(72, current_size + delta))
+        self.code_font_size_spin.setValue(new_size)
         # Immediately apply the font change
         self._apply_font_changes_immediately()
     
@@ -589,6 +676,12 @@ class SettingsDialog(QDialog):
                     "size": self.user_font_size_spin.value(),
                     "weight": self.user_font_weight_combo.currentText().lower(),
                     "style": self.user_font_style_combo.currentText().lower()
+                },
+                "code_snippets": {
+                    "family": self.code_font_family_combo.currentText(),
+                    "size": self.code_font_size_spin.value(),
+                    "weight": self.code_font_weight_combo.currentText().lower(),
+                    "style": "normal"
                 }
             }
             
@@ -604,8 +697,8 @@ class SettingsDialog(QDialog):
         except Exception as e:
             logger.error(f"Failed to apply font changes immediately: {e}")
     
-    def _apply_uniform_button_styles(self):
-        """Apply uniform styling to all buttons in the settings dialog."""
+    def _apply_modern_button_styles(self):
+        """Apply modern unified styling to all buttons and UI components in the settings dialog."""
         try:
             from ...ui.themes.style_templates import ButtonStyleManager
             from ...ui.themes.theme_manager import get_theme_manager
@@ -640,19 +733,21 @@ class SettingsDialog(QDialog):
                 }}
                 """
                 
-                # Apply to all +/- buttons
-                self.temperature_decrease_btn.setStyleSheet(plus_minus_style)
-                self.temperature_increase_btn.setStyleSheet(plus_minus_style)
-                self.max_tokens_decrease_btn.setStyleSheet(plus_minus_style)
-                self.max_tokens_increase_btn.setStyleSheet(plus_minus_style)
-                self.ai_font_size_decrease_btn.setStyleSheet(plus_minus_style)
-                self.ai_font_size_increase_btn.setStyleSheet(plus_minus_style)
-                self.user_font_size_decrease_btn.setStyleSheet(plus_minus_style)
-                self.user_font_size_increase_btn.setStyleSheet(plus_minus_style)
-                self.opacity_decrease_btn.setStyleSheet(plus_minus_style)
-                self.opacity_increase_btn.setStyleSheet(plus_minus_style)
-                self.log_retention_decrease_btn.setStyleSheet(plus_minus_style)
-                self.log_retention_increase_btn.setStyleSheet(plus_minus_style)
+                # Apply to all +/- buttons (check existence first)
+                buttons_to_style = [
+                    'temperature_decrease_btn', 'temperature_increase_btn',
+                    'max_tokens_decrease_btn', 'max_tokens_increase_btn',
+                    'ai_font_size_decrease_btn', 'ai_font_size_increase_btn',
+                    'user_font_size_decrease_btn', 'user_font_size_increase_btn',
+                    'code_font_size_decrease_btn', 'code_font_size_increase_btn',
+                    'opacity_decrease_btn', 'opacity_increase_btn',
+                    'log_retention_decrease_btn', 'log_retention_increase_btn'
+                ]
+                
+                for button_name in buttons_to_style:
+                    if hasattr(self, button_name):
+                        button = getattr(self, button_name)
+                        button.setStyleSheet(plus_minus_style)
                 
                 # Modern scroll bar styling
                 scrollbar_style = f"""
@@ -894,32 +989,6 @@ class SettingsDialog(QDialog):
         security_layout.addRow("", self.ignore_ssl_check)
         
         layout.addWidget(security_group)
-        
-        # Code Display Group
-        code_display_group = QGroupBox("Code Display")
-        code_display_layout = QFormLayout(code_display_group)
-        
-        # Auto detect code language checkbox
-        self.auto_detect_code_language_check = QCheckBox("Auto Detect Code Language")
-        self.auto_detect_code_language_check.setChecked(False)  # Default to unchecked
-        self.auto_detect_code_language_check.setToolTip(
-            "When enabled, attempts to automatically detect the programming language "
-            "of code snippets and displays the detected language label. "
-            "When disabled, language labels are hidden for cleaner display."
-        )
-        code_display_layout.addRow("", self.auto_detect_code_language_check)
-        
-        # Code syntax highlighting checkbox
-        self.enable_code_lexing_check = QCheckBox("Enable Code Syntax Highlighting")
-        self.enable_code_lexing_check.setChecked(False)  # Default to unchecked
-        self.enable_code_lexing_check.setToolTip(
-            "When enabled, applies syntax highlighting (lexing) to code snippets using Pygments. "
-            "When disabled, code appears in plain monospace font without color highlighting. "
-            "Disabling can improve performance with large code blocks."
-        )
-        code_display_layout.addRow("", self.enable_code_lexing_check)
-        
-        layout.addWidget(code_display_group)
         
         # Data Storage Group
         storage_group = QGroupBox("Data Storage")
@@ -2030,15 +2099,19 @@ class SettingsDialog(QDialog):
                     "size": self.user_font_size_spin.value(),
                     "weight": self.user_font_weight_combo.currentText(),
                     "style": self.user_font_style_combo.currentText()
+                },
+                "code_snippets": {
+                    "family": self.code_font_family_combo.currentText(),
+                    "size": self.code_font_size_spin.value(),
+                    "weight": self.code_font_weight_combo.currentText(),
+                    "style": "normal"  # Code fonts typically don't use italic
                 }
             },
             "advanced": {
                 "log_level": self.log_level_combo.currentText(),
                 "log_location": self.log_location_edit.text().strip(),
                 "log_retention_days": self.log_retention_spin.value(),
-                "ignore_ssl_verification": self.ignore_ssl_check.isChecked(),
-                "auto_detect_code_language": self.auto_detect_code_language_check.isChecked(),
-                "enable_code_lexing": self.enable_code_lexing_check.isChecked()
+                "ignore_ssl_verification": self.ignore_ssl_check.isChecked()
             }
         }
     
@@ -2152,6 +2225,20 @@ class SettingsDialog(QDialog):
             if style_index >= 0:
                 self.user_font_style_combo.setCurrentIndex(style_index)
         
+        # Code Snippets Font
+        code_font_config = fonts_config.get("code_snippets", {})
+        if "family" in code_font_config:
+            font_family = code_font_config["family"]
+            index = self.code_font_family_combo.findText(font_family)
+            if index >= 0:
+                self.code_font_family_combo.setCurrentIndex(index)
+        if "size" in code_font_config:
+            self.code_font_size_spin.setValue(code_font_config["size"])
+        if "weight" in code_font_config:
+            weight_index = self.code_font_weight_combo.findText(code_font_config["weight"])
+            if weight_index >= 0:
+                self.code_font_weight_combo.setCurrentIndex(weight_index)
+        
         # Update font previews after loading
         self._update_font_previews()
         
@@ -2185,12 +2272,6 @@ class SettingsDialog(QDialog):
         
         if "ignore_ssl_verification" in advanced_config:
             self.ignore_ssl_check.setChecked(bool(advanced_config["ignore_ssl_verification"]))
-        
-        if "auto_detect_code_language" in advanced_config:
-            self.auto_detect_code_language_check.setChecked(bool(advanced_config["auto_detect_code_language"]))
-        
-        if "enable_code_lexing" in advanced_config:
-            self.enable_code_lexing_check.setChecked(bool(advanced_config["enable_code_lexing"]))
     
     def _load_current_settings(self):
         """Load current settings from settings manager."""
@@ -2310,6 +2391,9 @@ class SettingsDialog(QDialog):
             if "user_input" in fonts_config:
                 user_font = fonts_config["user_input"]
                 font_service.update_font_config('user_input', **user_font)
+            if "code_snippets" in fonts_config:
+                code_font = fonts_config["code_snippets"]
+                font_service.update_font_config('code_snippets', **code_font)
             logger.info("✓ Font service updated with new font settings")
         
         # Emit signal with detailed config
@@ -2423,7 +2507,7 @@ class SettingsDialog(QDialog):
                 self._apply_pki_placeholder_theme(theme_manager.current_theme)
             
             # Update button styles to match new theme
-            self._apply_uniform_button_styles()
+            self._apply_modern_button_styles()
                 
             logger.debug(f"Applied theme: {theme_manager.current_theme_name}")
         except ImportError:

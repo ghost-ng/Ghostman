@@ -1,0 +1,33 @@
+{
+  "name": "solarized_dark",
+  "display_name": "Solarized Dark",
+  "description": "Built-in Solarized Dark theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#42a5f5",
+    "primary_hover": "#2AA198",
+    "secondary": "#859900",
+    "secondary_hover": "#B58900",
+    "background_primary": "#002b36",
+    "background_secondary": "#073642",
+    "background_tertiary": "#0e4853",
+    "background_overlay": "#000000cc",
+    "text_primary": "#b3c5c7",
+    "text_secondary": "#c5d7d9",
+    "text_tertiary": "#839496",
+    "text_disabled": "#073642",
+    "interactive_normal": "rgba(147, 161, 161, 0.4)",
+    "interactive_hover": "rgba(88, 110, 117, 0.3)",
+    "interactive_active": "rgba(42, 161, 152, 0.5)",
+    "interactive_disabled": "#073642",
+    "status_success": "#859900",
+    "status_warning": "#B58900",
+    "status_error": "#DC322F",
+    "status_info": "#268BD2",
+    "border_primary": "#586e75",
+    "border_secondary": "#0e4853",
+    "border_focus": "#268BD2",
+    "separator": "#073642"
+  }
+}

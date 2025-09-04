@@ -1,0 +1,33 @@
+{
+  "name": "gryffindor",
+  "display_name": "Gryffindor",
+  "description": "Built-in Gryffindor theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#d32f2f",
+    "primary_hover": "#b71c1c",
+    "secondary": "#ffa000",
+    "secondary_hover": "#ff8f00",
+    "background_primary": "#1a0808",
+    "background_secondary": "#2e1010",
+    "background_tertiary": "#4a1a1a",
+    "background_overlay": "#1a080880",
+    "text_primary": "#ffebee",
+    "text_secondary": "#ffcdd2",
+    "text_tertiary": "#ef9a9a",
+    "text_disabled": "#6b2c2c",
+    "interactive_normal": "#5d4037",
+    "interactive_hover": "#8d6e63",
+    "interactive_active": "#a1887f",
+    "interactive_disabled": "#2e1010",
+    "status_success": "#388e3c",
+    "status_warning": "#ffa000",
+    "status_error": "#d32f2f",
+    "status_info": "#1976d2",
+    "border_primary": "#8d4444",
+    "border_secondary": "#6b2c2c",
+    "border_focus": "#d32f2f",
+    "separator": "#4a1a1a"
+  }
+}

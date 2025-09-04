@@ -1,0 +1,33 @@
+{
+  "name": "solarized_light",
+  "display_name": "Solarized Light",
+  "description": "Built-in Solarized Light theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#1565c0",
+    "primary_hover": "#2AA198",
+    "secondary": "#859900",
+    "secondary_hover": "#B58900",
+    "background_primary": "#fdf6e3",
+    "background_secondary": "#eee8d5",
+    "background_tertiary": "#e3dcc6",
+    "background_overlay": "#00000080",
+    "text_primary": "#073642",
+    "text_secondary": "#2c5866",
+    "text_tertiary": "#405a63",
+    "text_disabled": "#93a1a1",
+    "interactive_normal": "#d3d0c8",
+    "interactive_hover": "#b8b5ad",
+    "interactive_active": "#a3a09a",
+    "interactive_disabled": "#eee8d5",
+    "status_success": "#859900",
+    "status_warning": "#B58900",
+    "status_error": "#DC322F",
+    "status_info": "#268BD2",
+    "border_primary": "#93a1a1",
+    "border_secondary": "#d3d0c8",
+    "border_focus": "#268BD2",
+    "separator": "#e3dcc6"
+  }
+}

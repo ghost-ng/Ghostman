@@ -1,0 +1,33 @@
+{
+  "name": "cyber",
+  "display_name": "Cyber",
+  "description": "Built-in Cyber theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#00d4ff",
+    "primary_hover": "#00b8e6",
+    "secondary": "#ff0080",
+    "secondary_hover": "#e6006b",
+    "background_primary": "#0a0a0f",
+    "background_secondary": "#141420",
+    "background_tertiary": "#1e1e30",
+    "background_overlay": "#000000d0",
+    "text_primary": "#e6fdff",
+    "text_secondary": "#b3f0ff",
+    "text_tertiary": "#80e6ff",
+    "text_disabled": "#334d66",
+    "interactive_normal": "#1a2332",
+    "interactive_hover": "#2d3a4f",
+    "interactive_active": "#00d4ff",
+    "interactive_disabled": "#0f1419",
+    "status_success": "#00ff41",
+    "status_warning": "#ffbf00",
+    "status_error": "#ff2d6d",
+    "status_info": "#00d4ff",
+    "border_primary": "#004d66",
+    "border_secondary": "#1a2332",
+    "border_focus": "#00d4ff",
+    "separator": "#1a2332"
+  }
+}

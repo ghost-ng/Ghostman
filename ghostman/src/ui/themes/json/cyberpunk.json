@@ -1,0 +1,33 @@
+{
+  "name": "cyberpunk",
+  "display_name": "Cyberpunk",
+  "description": "Built-in Cyberpunk theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#ff0080",
+    "primary_hover": "#e6006b",
+    "secondary": "#00ffff",
+    "secondary_hover": "#00e6e6",
+    "background_primary": "#0a0a0a",
+    "background_secondary": "#1a1a2e",
+    "background_tertiary": "#16213e",
+    "background_overlay": "#000000dd",
+    "text_primary": "#ffffff",
+    "text_secondary": "#ff00ff",
+    "text_tertiary": "#00ffff",
+    "text_disabled": "#4a4a4a",
+    "interactive_normal": "#0f3460",
+    "interactive_hover": "#16537e",
+    "interactive_active": "#1a6b99",
+    "interactive_disabled": "#0a0a0a",
+    "status_success": "#00ff00",
+    "status_warning": "#ffff00",
+    "status_error": "#ff0040",
+    "status_info": "#00ffff",
+    "border_primary": "#ff0080",
+    "border_secondary": "#0f3460",
+    "border_focus": "#00ffff",
+    "separator": "#16213e"
+  }
+}

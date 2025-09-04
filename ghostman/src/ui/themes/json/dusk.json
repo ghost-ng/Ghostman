@@ -1,0 +1,33 @@
+{
+  "name": "dusk",
+  "display_name": "Dusk",
+  "description": "Built-in Dusk theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#9c27b0",
+    "primary_hover": "#7b1fa2",
+    "secondary": "#ff7043",
+    "secondary_hover": "#f4511e",
+    "background_primary": "#0d0a1a",
+    "background_secondary": "#1a1333",
+    "background_tertiary": "#2d204d",
+    "background_overlay": "#0d0a1a80",
+    "text_primary": "#f3e5f5",
+    "text_secondary": "#e1bee7",
+    "text_tertiary": "#ce93d8",
+    "text_disabled": "#4a3366",
+    "interactive_normal": "#4a148c",
+    "interactive_hover": "#6a1b9a",
+    "interactive_active": "#8e24aa",
+    "interactive_disabled": "#1a1333",
+    "status_success": "#4caf50",
+    "status_warning": "#ff9800",
+    "status_error": "#f44336",
+    "status_info": "#3f51b5",
+    "border_primary": "#6a1b9a",
+    "border_secondary": "#4a148c",
+    "border_focus": "#9c27b0",
+    "separator": "#2d204d"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "mintly",
+  "display_name": "Mintly",
+  "description": "Built-in Mintly theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#26D0CE",
+    "primary_hover": "#1fb3b1",
+    "secondary": "#4ECDC4",
+    "secondary_hover": "#3db8b0",
+    "background_primary": "#0a1717",
+    "background_secondary": "#0f2a2a",
+    "background_tertiary": "#1a4040",
+    "background_overlay": "#000000cc",
+    "text_primary": "#e0f7fa",
+    "text_secondary": "#b2ebf2",
+    "text_tertiary": "#80deea",
+    "text_disabled": "#37474f",
+    "interactive_normal": "#004d40",
+    "interactive_hover": "#00695c",
+    "interactive_active": "#00796b",
+    "interactive_disabled": "#0a1717",
+    "status_success": "#4caf50",
+    "status_warning": "#ff9800",
+    "status_error": "#f44336",
+    "status_info": "#26D0CE",
+    "border_primary": "#00695c",
+    "border_secondary": "#004d40",
+    "border_focus": "#26D0CE",
+    "separator": "#1a4040"
+  }
+}

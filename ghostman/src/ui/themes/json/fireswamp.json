@@ -1,0 +1,33 @@
+{
+  "name": "fireswamp",
+  "display_name": "Fireswamp",
+  "description": "Built-in Fireswamp theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#f97316",
+    "primary_hover": "#ea580c",
+    "secondary": "#dc2626",
+    "secondary_hover": "#b91c1c",
+    "background_primary": "#1c1917",
+    "background_secondary": "#292524",
+    "background_tertiary": "#44403c",
+    "background_overlay": "#1c191780",
+    "text_primary": "#fef7ed",
+    "text_secondary": "#fed7aa",
+    "text_tertiary": "#fdba74",
+    "text_disabled": "#78716c",
+    "interactive_normal": "#44403c",
+    "interactive_hover": "#57534e",
+    "interactive_active": "#6b7280",
+    "interactive_disabled": "#292524",
+    "status_success": "#65a30d",
+    "status_warning": "#f59e0b",
+    "status_error": "#dc2626",
+    "status_info": "#2563eb",
+    "border_primary": "#78716c",
+    "border_secondary": "#57534e",
+    "border_focus": "#f97316",
+    "separator": "#44403c"
+  }
+}

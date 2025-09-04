@@ -19,6 +19,7 @@ pytest-asyncio>=0.21.0
 pytest-qt>=4.2.0
 
 mistune==3.1.2
+pygments>=2.15.0
 
 # Optional dependencies for enhanced functionality
 # anthropic>=0.7.0  # For native Anthropic API support (alternative to OpenAI-compatible)

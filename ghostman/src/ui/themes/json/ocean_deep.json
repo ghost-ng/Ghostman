@@ -1,0 +1,33 @@
+{
+  "name": "ocean_deep",
+  "display_name": "Ocean Deep",
+  "description": "Built-in Ocean Deep theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#26a69a",
+    "primary_hover": "#00796b",
+    "secondary": "#26a69a",
+    "secondary_hover": "#00897b",
+    "background_primary": "#0d1117",
+    "background_secondary": "#161b22",
+    "background_tertiary": "#21262d",
+    "background_overlay": "#000000cc",
+    "text_primary": "#e0f2f1",
+    "text_secondary": "#b2dfdb",
+    "text_tertiary": "#80cbc4",
+    "text_disabled": "#37474f",
+    "interactive_normal": "#263238",
+    "interactive_hover": "#34495e",
+    "interactive_active": "#455a64",
+    "interactive_disabled": "#1c2833",
+    "status_success": "#4caf50",
+    "status_warning": "#ff9800",
+    "status_error": "#f44336",
+    "status_info": "#00bcd4",
+    "border_primary": "#34495e",
+    "border_secondary": "#263238",
+    "border_focus": "#00695c",
+    "separator": "#161b22"
+  }
+}

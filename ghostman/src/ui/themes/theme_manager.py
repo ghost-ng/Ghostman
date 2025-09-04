@@ -8,11 +8,12 @@ theme persistence, and live theme switching capabilities.
 import logging
 import json
 import os
-from typing import Dict, Optional, List, Any
+import weakref
+from typing import Dict, Optional, List, Any, Set
 from pathlib import Path
 from datetime import datetime
 
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 from PyQt6.QtWidgets import QApplication
 
 from .color_system import ColorSystem, ColorUtils
@@ -50,6 +51,18 @@ class ThemeManager(QObject):
         self._theme_history: List[ColorSystem] = []
         self._max_history_size: int = 20
         
+        # Widget registry for comprehensive theme updates
+        self._registered_widgets: Set[weakref.ReferenceType] = set()
+        self._widget_update_methods: Dict[weakref.ReferenceType, str] = {}
+        
+        # Performance optimization: Cache theme color dictionary
+        self._theme_color_dict_cache: Optional[Dict[str, str]] = None
+        
+        # Theme switch debouncing to prevent notification spam
+        self._theme_switch_debounce_timer = None
+        self._is_switching_theme = False
+        self._pending_theme_name = None  # Track the most recent theme switch request
+        
         # Initialize theme directories
         self._init_theme_directories()
         
@@ -78,15 +91,47 @@ class ThemeManager(QObject):
         logger.debug(f"Theme directories initialized: {self._themes_dir}")
     
     def _load_preset_themes(self):
-        """Load built-in preset themes."""
-        # Import preset themes (will be created next)
-        try:
-            from .preset_themes import get_preset_themes
-            self._preset_themes = get_preset_themes()
-            logger.info(f"Loaded {len(self._preset_themes)} preset themes")
-        except ImportError:
-            logger.warning("Preset themes not available, using openai_like theme only")
+        """Load built-in preset themes from JSON files."""
+        self._preset_themes = {}
+        
+        # Get the built-in themes directory (relative to this file)
+        builtin_themes_dir = Path(__file__).parent / "json"
+        
+        if not builtin_themes_dir.exists():
+            logger.warning(f"Built-in themes directory not found: {builtin_themes_dir}")
+            # Fall back to a default theme
             self._preset_themes = {"openai_like": ColorSystem()}
+            return
+        
+        # Load all JSON theme files from the built-in directory
+        for theme_file in builtin_themes_dir.glob("*.json"):
+            try:
+                with open(theme_file, 'r', encoding='utf-8') as f:
+                    theme_data = json.load(f)
+                
+                # Use 'name' field from JSON if available, otherwise use filename
+                theme_name = theme_data.get('name', theme_file.stem)
+                
+                # Create ColorSystem from colors data
+                color_system = ColorSystem.from_dict(theme_data.get('colors', {}))
+                
+                # Store additional metadata if available
+                if hasattr(color_system, '_metadata'):
+                    color_system._metadata = {
+                        'display_name': theme_data.get('display_name', theme_name),
+                        'description': theme_data.get('description', ''),
+                        'author': theme_data.get('author', 'Unknown'),
+                        'version': theme_data.get('version', '1.0.0')
+                    }
+                
+                # Add to preset themes
+                self._preset_themes[theme_name] = color_system
+                logger.debug(f"Loaded built-in theme: {theme_name}")
+                    
+            except Exception as e:
+                logger.error(f"Failed to load built-in theme {theme_file}: {e}")
+        
+        logger.info(f"Loaded {len(self._preset_themes)} preset themes")
     
     def _load_custom_themes(self):
         """Load custom themes from disk (themes folder)."""
@@ -180,6 +225,141 @@ class ThemeManager(QObject):
             return self._custom_themes[name]
         return None
     
+    def register_widget(self, widget, update_method: str = "_on_theme_changed") -> bool:
+        """
+        Register a widget to receive theme updates.
+        
+        Args:
+            widget: The widget to register
+            update_method: Name of the method to call on theme change (default: "_on_theme_changed")
+            
+        Returns:
+            True if registration successful, False otherwise
+        """
+        try:
+            widget_ref = weakref.ref(widget, self._cleanup_widget_reference)
+            self._registered_widgets.add(widget_ref)
+            self._widget_update_methods[widget_ref] = update_method
+            
+            # Apply current theme immediately if available
+            if self._current_theme is not None:
+                self._apply_theme_to_widget(widget, update_method)
+            
+            logger.debug(f"Registered widget {widget.__class__.__name__} for theme updates")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to register widget for theme updates: {e}")
+            return False
+    
+    def unregister_widget(self, widget) -> bool:
+        """
+        Unregister a widget from theme updates.
+        
+        Args:
+            widget: The widget to unregister
+            
+        Returns:
+            True if unregistration successful, False otherwise
+        """
+        try:
+            # Find and remove widget reference
+            for widget_ref in list(self._registered_widgets):
+                if widget_ref() is widget:
+                    self._registered_widgets.discard(widget_ref)
+                    self._widget_update_methods.pop(widget_ref, None)
+                    logger.debug(f"Unregistered widget {widget.__class__.__name__} from theme updates")
+                    return True
+            
+            logger.debug(f"Widget {widget.__class__.__name__} was not registered")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Failed to unregister widget from theme updates: {e}")
+            return False
+    
+    def _cleanup_widget_reference(self, widget_ref):
+        """Clean up widget reference when widget is destroyed."""
+        self._registered_widgets.discard(widget_ref)
+        self._widget_update_methods.pop(widget_ref, None)
+    
+    def _apply_theme_to_widget(self, widget, update_method: str):
+        """Apply current theme to a specific widget."""
+        try:
+            if hasattr(widget, update_method):
+                method = getattr(widget, update_method)
+                if callable(method):
+                    if update_method == "_on_theme_changed":
+                        # Standard theme change handler expects ColorSystem
+                        method(self._current_theme)
+                    elif update_method == "set_theme_colors":
+                        # Widget expects color dictionary - use cached version for performance
+                        color_dict = self._get_cached_theme_color_dict()
+                        method(color_dict)
+                    elif update_method == "apply_theme":
+                        # Widget expects ColorSystem
+                        method(self._current_theme)
+                    else:
+                        # Generic call without parameters
+                        method()
+                    logger.debug(f"Applied theme to {widget.__class__.__name__} using {update_method}")
+                else:
+                    logger.warning(f"Widget {widget.__class__.__name__} method {update_method} is not callable")
+            else:
+                logger.warning(f"Widget {widget.__class__.__name__} missing method {update_method}")
+                
+        except Exception as e:
+            logger.error(f"Failed to apply theme to {widget.__class__.__name__}: {e}")
+    
+    def _get_cached_theme_color_dict(self) -> Dict[str, str]:
+        """Get cached theme color dictionary for performance optimization."""
+        if self._theme_color_dict_cache is None:
+            # Create and cache the color dictionary with legacy mappings
+            color_dict = self._current_theme.to_dict() if self._current_theme else {}
+            
+            # Add legacy key mappings for backward compatibility
+            if self._current_theme:
+                legacy_mappings = {
+                    'bg_primary': color_dict.get('background_primary'),
+                    'bg_secondary': color_dict.get('background_secondary'), 
+                    'bg_tertiary': color_dict.get('background_tertiary'),
+                    'border': color_dict.get('border_subtle')
+                }
+                # Add legacy keys without overwriting existing ones
+                for key, value in legacy_mappings.items():
+                    if key not in color_dict and value is not None:
+                        color_dict[key] = value
+            
+            self._theme_color_dict_cache = color_dict
+            logger.debug(f"Created cached theme color dictionary with {len(color_dict)} keys")
+        
+        return self._theme_color_dict_cache
+    
+    def _apply_theme_to_all_widgets(self):
+        """Apply current theme to all registered widgets."""
+        dead_refs = set()
+        
+        # Create a copy to avoid RuntimeError if widgets register during iteration
+        widgets_to_update = list(self._registered_widgets)
+        
+        for widget_ref in widgets_to_update:
+            widget = widget_ref()
+            if widget is None:
+                # Widget has been garbage collected
+                dead_refs.add(widget_ref)
+                continue
+                
+            update_method = self._widget_update_methods.get(widget_ref, "_on_theme_changed")
+            self._apply_theme_to_widget(widget, update_method)
+        
+        # Clean up dead references
+        for dead_ref in dead_refs:
+            self._registered_widgets.discard(dead_ref)
+            self._widget_update_methods.pop(dead_ref, None)
+        
+        if dead_refs:
+            logger.debug(f"Cleaned up {len(dead_refs)} dead widget references")
+    
     def set_theme(self, name: str) -> bool:
         """
         Set the current theme by name.
@@ -190,10 +370,35 @@ class ThemeManager(QObject):
         Returns:
             True if theme was set successfully, False otherwise
         """
+        # Debounce rapid theme changes to prevent notification spam
+        if self._is_switching_theme:
+            # Check if debounce timer is still running
+            if (self._theme_switch_debounce_timer is not None and 
+                self._theme_switch_debounce_timer.isActive()):
+                logger.debug(f"Theme switch debounced: {name} (already switching)")
+                return False
+            else:
+                # Timer finished but flag wasn't reset - reset it now
+                logger.debug(f"Resetting stuck debounce flag for theme: {name}")
+                self._is_switching_theme = False
+        
         theme = self.get_theme(name)
         if theme is None:
             logger.error(f"Theme '{name}' not found")
             return False
+        
+        # Set debounce flag to prevent rapid switching
+        self._is_switching_theme = True
+        
+        # Set global flag to prevent dialog/window creation during theme switching
+        app = QApplication.instance()
+        if app:
+            app.setProperty("theme_switching", True)
+        
+        # Clear any existing debounce timer
+        if self._theme_switch_debounce_timer:
+            self._theme_switch_debounce_timer.stop()
+            self._theme_switch_debounce_timer = None
         
         # Validate theme
         is_valid, issues = theme.validate()
@@ -210,6 +415,9 @@ class ThemeManager(QObject):
         self._current_theme = theme
         self._current_theme_name = name
         
+        # Invalidate cached color dictionary for performance optimization
+        self._theme_color_dict_cache = None
+        
         # Save to settings
         try:
             settings.set('ui.theme', name)
@@ -217,12 +425,54 @@ class ThemeManager(QObject):
         except Exception as e:
             logger.error(f"Failed to save theme setting: {e}")
         
+        # Temporarily reduce logging verbosity during theme switching
+        theme_loggers = [
+            logging.getLogger("ghostman.theme_manager"),
+            logging.getLogger("ghostman.repl_widget"),
+            logging.getLogger("ghostman.embedded_code_widget"),
+            logging.getLogger("ghostman.style_registry"),
+            logging.getLogger("ghostman.style_templates"),
+        ]
+        
+        # Store original levels and set to WARNING to reduce spam
+        original_levels = []
+        for theme_logger in theme_loggers:
+            original_levels.append(theme_logger.level)
+            if theme_logger.level < logging.WARNING:
+                theme_logger.setLevel(logging.WARNING)
+        
+        try:
+            # Apply theme to all registered widgets immediately
+            self._apply_theme_to_all_widgets()
+        finally:
+            # Restore original logging levels
+            for theme_logger, original_level in zip(theme_loggers, original_levels):
+                theme_logger.setLevel(original_level)
+        
         # Emit signals
         self.theme_changed.emit(theme)
         self.theme_loaded.emit(name)
         
-        logger.info(f"Theme changed to: {name}")
+        logger.info(f"Theme changed to: {name} - applied to {len(self._registered_widgets)} registered widgets")
+        
+        # Set up debounce timer to reset flag after theme switching is complete
+        self._theme_switch_debounce_timer = QTimer()
+        self._theme_switch_debounce_timer.setSingleShot(True)
+        self._theme_switch_debounce_timer.timeout.connect(self._reset_theme_switching_flag)
+        self._theme_switch_debounce_timer.start(200)  # 200ms debounce for more responsive switching
+        
         return True
+    
+    def _reset_theme_switching_flag(self):
+        """Reset the theme switching flag to allow new theme changes."""
+        self._is_switching_theme = False
+        
+        # Clear global flag to allow dialog/window creation again
+        app = QApplication.instance()
+        if app:
+            app.setProperty("theme_switching", False)
+        
+        logger.debug("Theme switching debounce flag reset")
     
     def set_custom_theme(self, color_system: ColorSystem, name: Optional[str] = None) -> bool:
         """
@@ -253,11 +503,38 @@ class ThemeManager(QObject):
             self._current_theme_name = name
         else:
             self._current_theme_name = "custom"
+            
+        # Invalidate cached color dictionary for performance optimization
+        self._theme_color_dict_cache = None
+        
+        # Temporarily reduce logging verbosity during theme switching
+        theme_loggers = [
+            logging.getLogger("ghostman.theme_manager"),
+            logging.getLogger("ghostman.repl_widget"),
+            logging.getLogger("ghostman.embedded_code_widget"),
+            logging.getLogger("ghostman.style_registry"),
+            logging.getLogger("ghostman.style_templates"),
+        ]
+        
+        # Store original levels and set to WARNING to reduce spam
+        original_levels = []
+        for theme_logger in theme_loggers:
+            original_levels.append(theme_logger.level)
+            if theme_logger.level < logging.WARNING:
+                theme_logger.setLevel(logging.WARNING)
+        
+        try:
+            # Apply theme to all registered widgets immediately
+            self._apply_theme_to_all_widgets()
+        finally:
+            # Restore original logging levels
+            for theme_logger, original_level in zip(theme_loggers, original_levels):
+                theme_logger.setLevel(original_level)
         
         # Emit signals
         self.theme_changed.emit(color_system)
         
-        logger.info(f"Custom theme applied: {self._current_theme_name}")
+        logger.info(f"Custom theme applied: {self._current_theme_name} - applied to {len(self._registered_widgets)} registered widgets")
         return True
     
     def save_custom_theme(self, name: str, color_system: Optional[ColorSystem] = None) -> bool:

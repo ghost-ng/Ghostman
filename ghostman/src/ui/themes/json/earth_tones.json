@@ -1,0 +1,33 @@
+{
+  "name": "earth_tones",
+  "display_name": "Earth Tones",
+  "description": "Built-in Earth Tones theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#bcaaa4",
+    "primary_hover": "#795548",
+    "secondary": "#a1887f",
+    "secondary_hover": "#8d6e63",
+    "background_primary": "#1c1611",
+    "background_secondary": "#2e2419",
+    "background_tertiary": "#4a3728",
+    "background_overlay": "#000000cc",
+    "text_primary": "#efebe9",
+    "text_secondary": "#d7ccc8",
+    "text_tertiary": "#bcaaa4",
+    "text_disabled": "#4a3728",
+    "interactive_normal": "#5d4037",
+    "interactive_hover": "#6d4c41",
+    "interactive_active": "#795548",
+    "interactive_disabled": "#3e2723",
+    "status_success": "#689f38",
+    "status_warning": "#f57c00",
+    "status_error": "#d32f2f",
+    "status_info": "#1976d2",
+    "border_primary": "#5d4037",
+    "border_secondary": "#4a3728",
+    "border_focus": "#8d6e63",
+    "separator": "#2e2419"
+  }
+}

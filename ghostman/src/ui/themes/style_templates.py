@@ -766,7 +766,7 @@ class StyleTemplates:
         #repl-root {{
             background-color: {panel_bg} !important;
             border-radius: 10px 10px 0px 0px;
-            border: 1px solid {border_color};
+            border: none;
         }}
         """
     
@@ -797,7 +797,7 @@ class StyleTemplates:
         return f"""
         QFrame {{
             background-color: {colors.background_tertiary};
-            border: 1px solid {colors.border_secondary};
+            border: none;
             border-radius: 4px;
             padding: 0px;
         }}
@@ -1356,7 +1356,7 @@ class StyleTemplates:
         }}
         QTabBar::tab {{
             background-color: {colors.background_tertiary};
-            color: {inactive_text_color};
+            color: {colors.text_secondary};
             border: 1px solid {colors.border_secondary};
             padding: 8px 16px;
             margin-right: 3px;
@@ -1367,7 +1367,7 @@ class StyleTemplates:
         }}
         QTabBar::tab:selected {{
             background-color: {colors.primary};
-            color: {selected_text_color};
+            color: {colors.background_primary};
             border-color: {colors.primary};
             font-weight: bold;
         }}
@@ -2098,3 +2098,267 @@ class StyleTemplates:
             background-color: {colors.border_primary};
         }}
         """
+    
+    @staticmethod
+    def get_code_snippet_widget_overlay_style(colors: ColorSystem) -> str:
+        """
+        New overlay button design for code snippet widgets.
+        
+        Creates a clean design with overlay buttons:
+        - No header banner - full code display area
+        - Small language button overlay on top-left
+        - Copy button overlay on top-right
+        - Theme-aware styling across 39 themes
+        - WCAG accessibility compliance
+        
+        Args:
+            colors: ColorSystem for theme-aware styling
+            
+        Returns:
+            CSS string for overlay button code snippet styling
+        """
+        
+        # Determine if this is a dark theme for smart defaults
+        is_dark_theme = StyleTemplates._is_dark_theme(colors)
+        
+        # Container styling - clean and minimal
+        container_bg = colors.background_primary
+        border_color = colors.border_primary
+        
+        # Code background - ensure good contrast for syntax highlighting
+        if is_dark_theme:
+            code_bg = colors.background_secondary
+            code_text = colors.text_primary
+        else:
+            code_bg = colors.background_primary
+            code_text = colors.text_primary
+        
+        return f"""
+        /* Clean container with no header */
+        QFrame#code-snippet-container {{
+            background-color: {container_bg};
+            border: 1px solid {border_color};
+            border-radius: 6px;
+            margin: 8px 0px;
+            position: relative;
+        }}
+        
+        /* Full-area code display */
+        QTextEdit#code-snippet-code-display {{
+            background-color: {code_bg};
+            color: {code_text};
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Droid Sans Mono', 'Source Code Pro', 'Courier New', monospace;
+            font-size: 14px;
+            font-weight: 400;
+            line-height: 1.45;
+            border: none;
+            border-radius: 6px;
+            padding: 40px 16px 16px 16px;  /* Extra top padding for overlay buttons */
+            margin: 0px;
+            selection-background-color: {StyleTemplates._adjust_color_opacity(colors.secondary, 0.3)};
+            selection-color: {code_text};
+        }}
+        
+        /* Theme-aware scrollbars */
+        QTextEdit#code-snippet-code-display QScrollBar:vertical {{
+            background-color: {colors.background_tertiary};
+            width: 12px;
+            border-radius: 6px;
+        }}
+        
+        QTextEdit#code-snippet-code-display QScrollBar::handle:vertical {{
+            background-color: {colors.border_primary};
+            border-radius: 6px;
+            min-height: 20px;
+        }}
+        
+        QTextEdit#code-snippet-code-display QScrollBar::handle:vertical:hover {{
+            background-color: {colors.interactive_hover};
+        }}
+        
+        QTextEdit#code-snippet-code-display QScrollBar:horizontal {{
+            background-color: {colors.background_tertiary};
+            height: 12px;
+            border-radius: 6px;
+        }}
+        
+        QTextEdit#code-snippet-code-display QScrollBar::handle:horizontal {{
+            background-color: {colors.border_primary};
+            border-radius: 6px;
+            min-width: 20px;
+        }}
+        
+        QTextEdit#code-snippet-code-display QScrollBar::handle:horizontal:hover {{
+            background-color: {colors.interactive_hover};
+        }}
+        
+        /* Remove scrollbar arrows */
+        QTextEdit#code-snippet-code-display QScrollBar::add-line,
+        QTextEdit#code-snippet-code-display QScrollBar::sub-line {{
+            border: none;
+            background: none;
+            width: 0px;
+            height: 0px;
+        }}
+        
+        /* Overlay buttons are styled directly in the widget code for theme responsiveness */
+        """
+        
+    @staticmethod 
+    def get_code_snippet_widget_style(colors: ColorSystem) -> str:
+        """
+        DEPRECATED: Legacy header-based design.
+        Use get_code_snippet_widget_overlay_style() instead.
+        """
+        logger.warning("get_code_snippet_widget_style is deprecated. Use get_code_snippet_widget_overlay_style instead.")
+        return StyleTemplates.get_code_snippet_widget_overlay_style(colors)
+    
+    @staticmethod
+    def _is_dark_theme(colors: ColorSystem) -> bool:
+        """Determine if the current theme is dark based on background color."""
+        try:
+            bg_color = colors.background_primary.lstrip('#')
+            # Convert hex to RGB and calculate luminance
+            r, g, b = int(bg_color[0:2], 16), int(bg_color[2:4], 16), int(bg_color[4:6], 16)
+            luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+            return luminance < 0.5
+        except:
+            return True  # Default to dark theme if calculation fails
+    
+    @staticmethod
+    def _adjust_color_opacity(hex_color: str, opacity: float) -> str:
+        """Convert hex color to rgba with specified opacity."""
+        try:
+            hex_color = hex_color.lstrip('#')
+            r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+            return f"rgba({r}, {g}, {b}, {opacity})"
+        except:
+            return f"rgba(100, 100, 100, {opacity})"  # Fallback
+    
+    @staticmethod
+    def _adjust_color_brightness(hex_color: str, factor: float) -> str:
+        """Adjust the brightness of a hex color by a factor."""
+        try:
+            hex_color = hex_color.lstrip('#')
+            r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+            
+            # Adjust brightness
+            r = max(0, min(255, int(r * factor)))
+            g = max(0, min(255, int(g * factor)))
+            b = max(0, min(255, int(b * factor)))
+            
+            return f"#{r:02x}{g:02x}{b:02x}"
+        except:
+            return hex_color  # Return original if adjustment fails
+            
+    @staticmethod
+    def get_theme_aware_language_button_style(colors: ColorSystem) -> dict:
+        """
+        Generate theme-aware styling for the language button across all 39 themes.
+        
+        This method provides intelligent color selection that works across both
+        light and dark themes while maintaining accessibility standards.
+        
+        Args:
+            colors: ColorSystem instance for theme colors
+            
+        Returns:
+            Dictionary containing color values for language button styling
+        """
+        
+        try:
+            # Import color utilities if available
+            from .color_system import ColorUtils
+            
+            # Calculate optimal colors for accessibility
+            lang_bg_base = colors.background_tertiary
+            lang_text_color, contrast_ratio = ColorUtils.get_high_contrast_text_color_for_background(
+                lang_bg_base, colors, min_ratio=4.5
+            )
+            
+            # Create semi-transparent background for subtlety
+            lang_bg_color = StyleTemplates._adjust_color_opacity(lang_bg_base, 0.4)
+            lang_hover_color = StyleTemplates._adjust_color_opacity(colors.background_secondary, 0.6)
+            
+            return {
+                'background': lang_bg_color,
+                'text': lang_text_color,
+                'hover_background': lang_hover_color, 
+                'border': colors.border_secondary,
+                'hover_border': colors.border_primary,
+                'active_background': colors.interactive_active,
+                'contrast_ratio': contrast_ratio
+            }
+            
+        except ImportError:
+            # Fallback colors when ColorUtils not available
+            is_dark = StyleTemplates._is_dark_theme(colors)
+            
+            if is_dark:
+                return {
+                    'background': 'rgba(255, 255, 255, 0.1)',
+                    'text': '#e0e0e0',
+                    'hover_background': 'rgba(255, 255, 255, 0.2)',
+                    'border': 'rgba(255, 255, 255, 0.3)',
+                    'hover_border': 'rgba(255, 255, 255, 0.5)',
+                    'active_background': 'rgba(255, 255, 255, 0.3)',
+                    'contrast_ratio': 7.0  # Estimated
+                }
+            else:
+                return {
+                    'background': 'rgba(0, 0, 0, 0.1)',
+                    'text': '#333333',
+                    'hover_background': 'rgba(0, 0, 0, 0.15)',
+                    'border': 'rgba(0, 0, 0, 0.2)',
+                    'hover_border': 'rgba(0, 0, 0, 0.3)',
+                    'active_background': 'rgba(0, 0, 0, 0.2)',
+                    'contrast_ratio': 7.0  # Estimated
+                }
+                
+    @staticmethod
+    def get_theme_aware_copy_button_style(colors: ColorSystem) -> dict:
+        """
+        Generate theme-aware styling for the copy button across all 39 themes.
+        
+        Args:
+            colors: ColorSystem instance for theme colors
+            
+        Returns:
+            Dictionary containing color values for copy button styling
+        """
+        
+        try:
+            # Import color utilities if available
+            from .color_system import ColorUtils
+            
+            # Use interactive colors for copy button
+            copy_bg = colors.interactive_normal
+            copy_text_color, contrast_ratio = ColorUtils.get_high_contrast_text_color_for_background(
+                copy_bg, colors, min_ratio=4.5
+            )
+            
+            return {
+                'background': copy_bg,
+                'text': copy_text_color,
+                'hover_background': colors.interactive_hover,
+                'border': colors.border_primary,
+                'hover_border': colors.border_focus,
+                'active_background': colors.interactive_active,
+                'disabled_background': colors.interactive_disabled,
+                'disabled_text': colors.text_disabled,
+                'contrast_ratio': contrast_ratio
+            }
+            
+        except ImportError:
+            # Fallback colors
+            return {
+                'background': colors.interactive_normal if hasattr(colors, 'interactive_normal') else '#f0f0f0',
+                'text': colors.text_primary if hasattr(colors, 'text_primary') else '#333333',
+                'hover_background': colors.interactive_hover if hasattr(colors, 'interactive_hover') else '#e0e0e0',
+                'border': colors.border_primary if hasattr(colors, 'border_primary') else '#cccccc',
+                'hover_border': colors.border_focus if hasattr(colors, 'border_focus') else '#999999',
+                'active_background': colors.interactive_active if hasattr(colors, 'interactive_active') else '#d0d0d0',
+                'disabled_background': colors.interactive_disabled if hasattr(colors, 'interactive_disabled') else '#f5f5f5',
+                'disabled_text': colors.text_disabled if hasattr(colors, 'text_disabled') else '#999999',
+                'contrast_ratio': 4.5  # Estimated minimum
+            }

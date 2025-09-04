@@ -1,0 +1,33 @@
+{
+  "name": "openai_like",
+  "display_name": "Openai Like",
+  "description": "Built-in Openai Like theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#0d8a68",
+    "primary_hover": "#0a6b52",
+    "secondary": "#4a5568",
+    "secondary_hover": "#2d3748",
+    "background_primary": "#ffffff",
+    "background_secondary": "#f7f7f8",
+    "background_tertiary": "#ececf1",
+    "background_overlay": "#00000020",
+    "text_primary": "#1a202c",
+    "text_secondary": "#2d3748",
+    "text_tertiary": "#4a5568",
+    "text_disabled": "#a0aec0",
+    "interactive_normal": "#f7fafc",
+    "interactive_hover": "#edf2f7",
+    "interactive_active": "#cbd5e0",
+    "interactive_disabled": "#f7fafc",
+    "status_success": "#198754",
+    "status_warning": "#d97706",
+    "status_error": "#dc3545",
+    "status_info": "#0d6efd",
+    "border_primary": "#d1d5db",
+    "border_secondary": "#e5e7eb",
+    "border_focus": "#0d8a68",
+    "separator": "#e5e7eb"
+  }
+}

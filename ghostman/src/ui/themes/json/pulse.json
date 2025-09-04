@@ -1,0 +1,33 @@
+{
+  "name": "pulse",
+  "display_name": "Pulse",
+  "description": "Built-in Pulse theme",
+  "author": "Ghostman Team",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#8B5CF6",
+    "primary_hover": "#7C3AED",
+    "secondary": "#EC4899",
+    "secondary_hover": "#DB2777",
+    "background_primary": "#0F0B1A",
+    "background_secondary": "#1E1B3A",
+    "background_tertiary": "#2D2A4A",
+    "background_overlay": "#000000cc",
+    "text_primary": "#F8F4FF",
+    "text_secondary": "#E0D9FF",
+    "text_tertiary": "#C8B9FF",
+    "text_disabled": "#5A5570",
+    "interactive_normal": "rgba(139, 92, 246, 0.15)",
+    "interactive_hover": "rgba(139, 92, 246, 0.25)",
+    "interactive_active": "rgba(236, 72, 153, 0.3)",
+    "interactive_disabled": "#1E1B3A",
+    "status_success": "#10B981",
+    "status_warning": "#F59E0B",
+    "status_error": "#EF4444",
+    "status_info": "#3B82F6",
+    "border_primary": "#5A5570",
+    "border_secondary": "#4A4468",
+    "border_focus": "#8B5CF6",
+    "separator": "#2D2A4A"
+  }
+}
