@@ -1397,18 +1397,34 @@ class StyleTemplates:
         from .color_system import ColorUtils
         
         if active:
-            # For active tabs, ensure high contrast
-            text_color, contrast_ratio = ColorUtils.get_high_contrast_text_color_for_background(
-                colors.primary, colors, min_ratio=4.5
-            )
+            # For active tabs, use tab colors with fallback to primary colors
+            bg_color = getattr(colors, 'tab_background_color', colors.primary)
+            text_color = getattr(colors, 'tab_text_color', colors.text_primary)
             
-            # Use primary_hover for pressed state since primary_active doesn't exist in ColorSystem
+            # Ensure high contrast for active tabs
+            if hasattr(colors, 'tab_text_color') and hasattr(colors, 'tab_background_color'):
+                # Use theme-defined tab colors
+                verified_text_color, contrast_ratio = ColorUtils.get_high_contrast_text_color_for_background(
+                    bg_color, colors, min_ratio=4.5
+                )
+                # If theme tab text color provides adequate contrast, use it; otherwise use calculated color
+                theme_contrast = ColorUtils.get_high_contrast_text_color_for_background(bg_color, colors, min_ratio=4.5)[1]
+                if theme_contrast >= 4.5:
+                    verified_text_color = text_color
+            else:
+                # Fallback to primary colors for backward compatibility
+                bg_color = colors.primary
+                verified_text_color, contrast_ratio = ColorUtils.get_high_contrast_text_color_for_background(
+                    bg_color, colors, min_ratio=4.5
+                )
+            
+            # Use primary_hover for pressed state
             pressed_color = colors.primary_hover
             
             return f"""
             QPushButton {{
-                background-color: {colors.primary} !important;
-                color: {text_color} !important;
+                background-color: {bg_color} !important;
+                color: {verified_text_color} !important;
                 border: none !important;
                 border-radius: 4px;
                 padding: 8px 10px;
@@ -1427,7 +1443,7 @@ class StyleTemplates:
             }}
             QPushButton:hover {{
                 background-color: {colors.primary_hover} !important;
-                color: {text_color} !important;
+                color: {verified_text_color} !important;
                 border: none !important;
                 height: 36px !important;
                 cursor: pointer !important;
@@ -1445,15 +1461,38 @@ class StyleTemplates:
             }}
             """
         else:
-            # For inactive tabs, ensure readable contrast
-            inactive_text_color, contrast_ratio = ColorUtils.get_high_contrast_text_color_for_background(
-                colors.background_tertiary, colors, min_ratio=4.5
-            )
+            # For inactive tabs, use tab colors with fallback to background colors
+            if hasattr(colors, 'tab_text_color') and hasattr(colors, 'tab_background_color'):
+                # Use theme-defined tab colors for inactive tabs (typically a muted version)
+                inactive_bg_color = getattr(colors, 'tab_background_color', colors.background_tertiary)
+                inactive_text_color = getattr(colors, 'tab_text_color', colors.text_secondary)
+                
+                # Ensure adequate contrast for inactive tabs
+                verified_inactive_text_color, contrast_ratio = ColorUtils.get_high_contrast_text_color_for_background(
+                    inactive_bg_color, colors, min_ratio=4.5
+                )
+                
+                # Check if theme tab text color provides adequate contrast
+                theme_contrast_ratio = ColorUtils.get_high_contrast_text_color_for_background(
+                    inactive_bg_color, colors, min_ratio=4.5
+                )[1]
+                
+                # Use theme color if it meets contrast requirements, otherwise use calculated color
+                if theme_contrast_ratio >= 4.0:  # Slightly lower contrast acceptable for inactive tabs
+                    final_text_color = inactive_text_color
+                else:
+                    final_text_color = verified_inactive_text_color
+            else:
+                # Fallback to background colors for backward compatibility
+                inactive_bg_color = colors.background_tertiary
+                final_text_color, contrast_ratio = ColorUtils.get_high_contrast_text_color_for_background(
+                    inactive_bg_color, colors, min_ratio=4.5
+                )
             
             return f"""
             QPushButton {{
-                background-color: {colors.background_tertiary} !important;
-                color: {inactive_text_color} !important;
+                background-color: {inactive_bg_color} !important;
+                color: {final_text_color} !important;
                 border: none !important;
                 border-radius: 4px;
                 padding: 8px 10px;

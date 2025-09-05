@@ -28,6 +28,23 @@
     "border_primary": "#6b4423",
     "border_secondary": "#5d3317",
     "border_focus": "#f16a1f",
-    "separator": "#4a2f1c"
+    "separator": "#4a2f1c",
+    "tab_text_color": "#ffe0b2",
+    "tab_background_color": "#2e1b0f"
+  },
+  "mode": "dark",
+  "default_fonts": {
+    "default_ai_font": {
+      "family": "Segoe UI",
+      "size": 12,
+      "weight": "normal",
+      "style": "normal"
+    },
+    "default_user_font": {
+      "family": "Segoe UI",
+      "size": 11,
+      "weight": "normal",
+      "style": "normal"
+    }
   }
 }

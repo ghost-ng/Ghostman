@@ -1,22 +1,18 @@
 # Ghostman
 
-A beautiful AI chat application featuring Spector, your friendly desktop AI assistant. Chat with multiple AI providers through an elegant floating interface with extensive customization options and professional tabbed conversation management.
+A beautiful AI chat application featuring Spector, your friendly desktop AI assistant. Chat with multiple AI providers through an elegant floating interface.
 
-## Key Features
+## What It Does
 
-- **Advanced REPL Interface** - Enhanced multiline input with Shift+Enter, dynamic field expansion, and stop button functionality
-- **Floating Chat Interface** - Moveable avatar window that opens into a full chat interface
-- **Multiple AI Providers** - Support for OpenAI, Anthropic, Google, and local models
-- **26 Built-in Themes** - From Matrix green to Arctic white, cyberpunk to steampunk
-- **Enhanced Save Functionality** - Dedicated title bar save button for quick access
-- **Conversation Management** - Save, load, and browse all conversations with organization features
-- **Smart Icon System** - Automatic theme-aware icon selection for consistent visibility
-- **Enterprise Security** - PKI authentication for secure environments
-- **System Tray Integration** - Always accessible, minimize to tray
-- **Professional Features** - Settings profiles, advanced logging, SSL support
+- **Chat with AI**: Works with OpenAI (ChatGPT), Anthropic (Claude), Google, and local AI models
+- **Floating Assistant**: Spector's avatar sits on your desktop, ready to help anytime
+- **Multiple Conversations**: Keep different chats organized in tabs
+- **39 Beautiful Themes**: Choose a look that suits your style
+- **Save Your Chats**: Never lose important conversations
 
-## Quick Installation
+## Quick Start
 
+### Installation
 **Requirements**: Python 3.12+ and Windows 10/11, macOS, or Linux
 
 ```bash
@@ -28,83 +24,63 @@ pip install -r requirements.txt
 python -m ghostman
 ```
 
-**Get Your API Key**: Visit [OpenAI Platform](https://platform.openai.com/), [Anthropic Console](https://console.anthropic.com/), or [Google AI Studio](https://makersuite.google.com/) to obtain your API key.
+### Get Your API Key
+Visit one of these to get started:
+- **OpenAI (ChatGPT)**: [platform.openai.com](https://platform.openai.com/)
+- **Anthropic (Claude)**: [console.anthropic.com](https://console.anthropic.com/)
+- **Google**: [makersuite.google.com](https://makersuite.google.com/)
 
-## Getting Started
+### First Time Setup
+1. Click the gear icon ⚙️ to open settings
+2. Go to "AI Model" tab and paste your API key
+3. Pick a theme you like in the "Interface" tab
+4. Click on Spector (the floating ghost) to start chatting!
 
-1. **Configure AI Model**: Click the gear icon, enter your API key in the AI Model tab
-2. **Choose Theme**: Pick from 26 beautiful themes in the Interface tab  
-3. **Start Chatting**: Click on Spector (the avatar) to open the chat window
+## How to Use
 
-## Usage Basics
-
-### Enhanced Chat Interface
-
-#### Advanced Input Features
-- **Multiline Support**: Press `Shift+Enter` to create new lines without sending your message
-- **Dynamic Field Expansion**: Input field automatically grows as you type longer messages
-- **Smart Text Wrapping**: Long lines wrap automatically and expand the field height
-- **Stop Functionality**: Cancel AI queries in progress with the stop button
-- **Perfect Alignment**: Input field maintains consistent visual alignment
-
-#### Sending Messages
-- **Send**: Type your message and press `Ctrl+Enter` or click the send button
-- **Multiline Composition**: Use `Shift+Enter` for complex messages with multiple paragraphs
-- **Cancel Queries**: Click the red "Stop" button to cancel active AI responses
+### Chatting
+- **Send a message**: Type and press `Ctrl+Enter`
+- **New line**: Press `Shift+Enter` 
+- **Stop AI response**: Click the red Stop button
+- **Save conversation**: Click the save button 💾
 
 ### Window Controls
-- **Move Around**: Drag Spector's avatar anywhere on your screen
-- **Always on Top**: Keep the chat window above other applications
-- **Adjust Opacity**: Make windows semi-transparent
-- **Minimize to Tray**: Hide completely but keep running in the background
+- **Move Spector**: Drag the avatar anywhere on your screen
+- **Keep on top**: Right-click Spector and select "Always on Top"
+- **Hide to tray**: Click minimize to hide (still running in background)
 
-### Themes
+### Useful Commands
+Type these in the chat:
+- `help` - See available commands
+- `clear` - Clear the chat window
+- `history` - See your recent messages
+- `resend` - Try sending the last message again
+- `exit` - Minimize to system tray
 
-Choose from 26 professionally designed themes:
+## What's New
+- **39 Beautiful Themes**: Each with perfectly matched colors and fonts
+- **Smart Font System**: Fonts that look great with each theme
+- **Better Conversations**: Improved tab colors and organization
+- **Cleaner Interface**: Simple commands for everyone
 
-**Dark Themes**: Dark Matrix, Midnight Blue, Forest Green, Sunset Orange, Royal Purple, Cyberpunk, Earth Tones, Ocean Deep, Lilac, Forest, Firefly, Mintly, Ocean, Pulse, Solarized Dark, Dracula, OpenWebUI-like, Moonlight, Fireswamp, Cyber, Steampunk
+## Help & Documentation
 
-**Light Themes**: Arctic White, Sunburst, Solarized Light, OpenAI-like, OpenUI-like
+📖 **[User Guide](USER_GUIDE.md)** - Complete guide with screenshots and tips
 
-Each theme is carefully designed for different moods and environments - from professional work to creative projects.
+🔧 **[Technical Documentation](TECHNICAL.md)** - For developers and advanced users
 
-## Recent Enhancements
+💬 **[Built-in Help](ghostman/assets/help/index.html)** - Detailed help within the app
 
-### REPL Interface Improvements
-The latest update includes comprehensive enhancements to the chat interface:
-
-- **Multiline Input Support**: Full Shift+Enter functionality with dynamic field expansion
-- **Enhanced Markdown Rendering**: Migrated to mistune v3 for 2-3x better performance
-- **Stop Button Functionality**: Cancel active AI queries with proper thread management
-- **Perfect UI Alignment**: Fixed height and alignment issues for a polished experience
-- **Smart Input Behavior**: Field expands with both manual line breaks and text wrapping
-
-For detailed technical documentation, see [REPL Enhancements Guide](docs/guides/REPL_ENHANCEMENTS_GUIDE.md).
-
-## Documentation
-
-- **Complete User Guide**: [docs/help.md](docs/help.md) - Comprehensive help covering all features including the new REPL enhancements
-- **Technical Implementation**: [docs/guides/REPL_ENHANCEMENTS_GUIDE.md](docs/guides/REPL_ENHANCEMENTS_GUIDE.md) - Detailed technical documentation for developers
-- **GitHub Repository**: [https://github.com/ghost-ng/Ghostman/](https://github.com/ghost-ng/Ghostman/)
-
-📖 **[Complete User Guide](USER_GUIDE.md)** - Comprehensive documentation covering all features, shortcuts, themes, troubleshooting, and best practices
-
-### Developer Documentation
-
-- **[Styling System Guide](docs/guides/STYLING_SYSTEM_GUIDE.md)** - Theme integration and customization
-- **[Tabbed Conversation Guide](docs/guides/TABBED_CONVERSATION_GUIDE.md)** - Technical implementation details
-- **Built-in Help**: [ghostman/assets/help/index.html](ghostman/assets/help/index.html)
-
+## Keyboard Shortcuts
 - `Ctrl+Enter` - Send message
-- `Shift+Enter` - New line in message (multiline support)
+- `Shift+Enter` - New line in message
 - `Ctrl+N` - New conversation
 - `Ctrl+,` - Open settings
-- `Alt+H` - Toggle always on top
+- `Alt+H` - Keep window on top
 
-We welcome contributions! Please see our contributing guidelines and development setup instructions in the [GitHub repository](https://github.com/ghost-ng/Ghostman/).
-
-Having trouble? Check the [complete help guide](docs/help.md) for detailed instructions on every feature, troubleshooting tips, and advanced configuration options including the new REPL interface capabilities.
+## Having Issues?
+Check the [User Guide](USER_GUIDE.md) or [Help Documentation](docs/help.md) for troubleshooting tips.
 
 ---
 
-**Meet Spector, your AI companion for desktop productivity and creativity with professional tabbed conversation management.**
+**Meet Spector, your friendly AI companion for desktop productivity!** 👻

@@ -569,6 +569,14 @@ class MarkdownRenderer:
                 
                 def _generate_highlighted_code(self, code, language, colors):
                     """Generate syntax-highlighted code content."""
+                    # Get code font from font service
+                    try:
+                        from ...application.font_service import font_service
+                        code_font_css = font_service.get_css_font_style('code_snippets')
+                    except Exception:
+                        # Fallback to default monospace fonts
+                        code_font_css = "font-family: 'Consolas', 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace; font-size: 14px"
+                    
                     if language:
                         try:
                             # Get lexer for the specified language
@@ -592,8 +600,7 @@ class MarkdownRenderer:
                                 background-color: {colors['bg_tertiary']};
                                 padding: 16px;
                                 overflow-x: auto;
-                                font-family: 'Consolas', 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
-                                font-size: 14px;
+                                {code_font_css};
                                 line-height: 1.5;
                                 color: {colors['text_primary']};
                                 border-radius: 0 0 7px 7px;
@@ -932,12 +939,15 @@ class MarkdownRenderer:
         font_type = 'user_input' if style == 'input' else 'ai_response'
         font_css = font_service.get_css_font_style(font_type)
         
+        # Get code font from font service
+        code_font_css = font_service.get_css_font_style('code_snippets')
+        
         # Wrap entire content with base color and font configuration - explicitly remove backgrounds
         styled_html = f'<div style="color: {base_color}; line-height: {{\'1.4\'}}; {font_css}; background: none !important;">{html_content}</div>'
         
         # Apply specific styling to elements - remove backgrounds to prevent line coloring
         replacements = {
-            '<code>': f'<code style="padding: {{\'2px\'}} {{\'4px\'}}; border-radius: {{\'3px\'}}; color: {style_colors["code"]}; font-family: Consolas, Monaco, monospace; background: none !important;">',
+            '<code>': f'<code style="padding: {{\'2px\'}} {{\'4px\'}}; border-radius: {{\'3px\'}}; color: {style_colors["code"]}; {code_font_css}; background: none !important;">',
             # Skip pre tag replacement to avoid overriding code snippet solid backgrounds
             '<em>': f'<em style="color: {style_colors["em"]}; font-style: italic; background: none !important;">',
             '<strong>': f'<strong style="color: {style_colors["strong"]}; font-weight: bold; background: none !important;">',
@@ -1577,6 +1587,11 @@ class REPLWidget(QWidget):
             # Update stop button styling
             if hasattr(self, 'stop_button'):
                 self._style_stop_button()
+            
+            # Update save button icon for theme changes
+            if hasattr(self, 'title_save_btn'):
+                self._load_save_icon(self.title_save_btn)
+                logger.debug("Save button icon updated for theme change")
             
             # Update search elements if they exist - use high-contrast styling
             if hasattr(self, 'search_status_label'):
@@ -3955,18 +3970,26 @@ class REPLWidget(QWidget):
     def _load_save_icon(self, button):
         """Load theme-appropriate save icon for a given button."""
         try:
-            # Determine if theme is dark or light  
-            icon_variant = self._get_icon_variant()
+            # Use the enhanced theme manager's icon suffix
+            if self.theme_manager and hasattr(self.theme_manager, 'current_icon_suffix'):
+                icon_suffix = self.theme_manager.current_icon_suffix
+                current_theme_name = getattr(self.theme_manager, '_current_theme_name', 'unknown')
+                theme_mode = self.theme_manager.current_theme_mode if hasattr(self.theme_manager, 'current_theme_mode') else 'unknown'
+                logger.debug(f"Theme info - Name: {current_theme_name}, Mode: {theme_mode}, Icon suffix: {icon_suffix}")
+            else:
+                # Fallback to old method if theme manager not available
+                icon_suffix = f"_{self._get_icon_variant()}"
+                logger.debug(f"Using fallback icon variant: {icon_suffix}")
             
             save_icon_path = os.path.join(
                 os.path.dirname(__file__), "..", "..", "..", 
-                "assets", "icons", f"save_{icon_variant}.png"
+                "assets", "icons", f"save{icon_suffix}.png"
             )
             
             if os.path.exists(save_icon_path):
                 save_icon = QIcon(save_icon_path)
                 button.setIcon(save_icon)
-                logger.debug(f"Loaded save icon: save_{icon_variant}.png")
+                logger.info(f"✓ Loaded save icon: save{icon_suffix}.png")
             else:
                 # Fallback to Unicode symbol
                 button.setText("💾")
@@ -4539,31 +4562,48 @@ class REPLWidget(QWidget):
     def refresh_fonts(self):
         """Refresh fonts from font service when settings change."""
         try:
+            logger.info("🔤 REPL: Starting font refresh from settings...")
+            
             # Clear font service cache to get latest settings
             font_service.clear_cache()
+            logger.debug("  ✓ Font service cache cleared")
             
-            # MixedContentDisplay handles fonts internally through theme colors
-            # No need to set font directly
+            # Debug: Check what fonts we're getting from settings
+            try:
+                ai_font_config = font_service.get_font_config('ai_response')
+                user_font_config = font_service.get_font_config('user_input')
+                code_font_config = font_service.get_font_config('code_snippets')
+                logger.info(f"  📝 AI Response font: {ai_font_config}")
+                logger.info(f"  📝 User Input font: {user_font_config}")  
+                logger.info(f"  📝 Code Snippets font: {code_font_config}")
+            except Exception as e:
+                logger.warning(f"  ⚠️  Could not get font configs for debugging: {e}")
             
             # Update input font (user input font)
             input_font = font_service.create_qfont('user_input')
             self.command_input.setFont(input_font)
+            logger.debug("  ✓ Input font updated")
             
             # Clear markdown renderer cache so it uses new fonts and update theme
             if hasattr(self, '_markdown_renderer'):
                 self._markdown_renderer.clear_cache()
                 self._markdown_renderer.update_theme()
+                logger.debug("  ✓ Markdown renderer cache cleared and theme updated")
             
             # Re-apply output display styling to ensure font colors are correct
             self._style_output_display()
+            logger.debug("  ✓ Output display styling reapplied")
             
             # Re-render existing content with new fonts
             self._refresh_existing_output()
+            logger.debug("  ✓ Existing output re-rendered")
             
-            logger.info("✓ Fonts refreshed from settings")
+            logger.info("🔤 ✓ Fonts refreshed from settings - ALL STEPS COMPLETED")
             
         except Exception as e:
             logger.error(f"Failed to refresh fonts: {e}")
+            import traceback
+            logger.error(f"Font refresh error details: {traceback.format_exc()}")
     
     def _refresh_existing_output(self):
         """Re-render all existing output with current theme colors - preserves content."""
@@ -5141,22 +5181,48 @@ class REPLWidget(QWidget):
         # Emit signal for external processing
         self.command_entered.emit(command)
     
+    def _is_debug_mode_enabled(self) -> bool:
+        """Check if debug mode is enabled in advanced settings."""
+        try:
+            if _global_settings:
+                # Check new debug commands setting first
+                debug_commands_enabled = _global_settings.get("advanced.enable_debug_commands", False)
+                if debug_commands_enabled:
+                    return True
+                
+                # Fallback to log level for backward compatibility
+                log_mode = _global_settings.get("advanced.log_level", "Standard")
+                return (log_mode == "Detailed")
+        except Exception:
+            pass
+        return False
+
     def _process_command(self, command: str):
         """Process built-in commands."""
         command_lower = command.lower()
         
         if command_lower == "help":
+            debug_enabled = self._is_debug_mode_enabled()
+            
             self.append_output("Available commands:", "info")
+            
+            # Basic commands (always shown)
             self.append_output("  help     - Show this help message", "info")
             self.append_output("  clear    - Clear the output display", "info")
             self.append_output("  history  - Show command history", "info")
             self.append_output("  resend   - Resend the last failed message", "info")
             self.append_output("  exit     - Minimize to system tray", "info")
-            self.append_output("  quit     - Exit the application", "info")
-            self.append_output("  context  - Show AI context status (debug)", "info")
-            self.append_output("  render_stats - Show markdown rendering statistics", "info")
-            self.append_output("  test_markdown - Test markdown rendering with examples", "info")
-            self.append_output("  test_themes - Test all theme switching and rendering", "info")
+            
+            # Debug commands (only shown when debug mode enabled)
+            if debug_enabled:
+                self.append_output("", "info")  # Empty line separator
+                self.append_output("Debug commands:", "info")
+                self.append_output("  quit     - Exit the application", "info")
+                self.append_output("  context  - Show AI context status (debug)", "info")
+                self.append_output("  render_stats - Show markdown rendering statistics", "info")
+                self.append_output("  test_markdown - Test markdown rendering with examples", "info")
+                self.append_output("  test_themes - Test all theme switching and rendering", "info")
+            
             self.append_output("\nAny other input will be sent to the AI assistant.", "info")
         
         elif command_lower == "clear":
@@ -5175,29 +5241,44 @@ class REPLWidget(QWidget):
             self.minimize_requested.emit()
         
         elif command_lower == "quit":
-            # Would need to connect to app quit
-            self.append_output("Use system tray menu to quit application", "warning")
+            if self._is_debug_mode_enabled():
+                # Would need to connect to app quit
+                self.append_output("Use system tray menu to quit application", "warning")
+            else:
+                self.append_output("❌ Unknown command. Type 'help' to see available commands.", "warning")
         
         elif command_lower == "context":
-            # Debug command to show AI context status
-            self._show_context_status()
+            if self._is_debug_mode_enabled():
+                # Debug command to show AI context status
+                self._show_context_status()
+            else:
+                self.append_output("❌ Unknown command. Type 'help' to see available commands.", "warning")
         
         elif command_lower == "render_stats":
-            # Debug command to show render statistics
-            self._show_render_stats()
+            if self._is_debug_mode_enabled():
+                # Debug command to show render statistics
+                self._show_render_stats()
+            else:
+                self.append_output("❌ Unknown command. Type 'help' to see available commands.", "warning")
         
         elif command_lower == "test_markdown":
-            # Debug command to test markdown rendering
-            self._test_markdown_rendering()
+            if self._is_debug_mode_enabled():
+                # Debug command to test markdown rendering
+                self._test_markdown_rendering()
+            else:
+                self.append_output("❌ Unknown command. Type 'help' to see available commands.", "warning")
         
         elif command_lower == "test_themes":
-            # Debug command to test all theme switching
-            # Prevent recursive theme switching during automated theme changes
-            app = QApplication.instance()
-            if app and app.property("theme_switching"):
-                self.append_output("⚠ Theme testing disabled during theme switching to prevent recursion", "warning")
-                return
-            self._test_all_themes()
+            if self._is_debug_mode_enabled():
+                # Debug command to test all theme switching
+                # Prevent recursive theme switching during automated theme changes
+                app = QApplication.instance()
+                if app and app.property("theme_switching"):
+                    self.append_output("⚠ Theme testing disabled during theme switching to prevent recursion", "warning")
+                    return
+                self._test_all_themes()
+            else:
+                self.append_output("❌ Unknown command. Type 'help' to see available commands.", "warning")
         
         elif command_lower == "resend":
             # Resend the last failed message

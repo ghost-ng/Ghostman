@@ -28,6 +28,23 @@
     "border_primary": "#004d66",
     "border_secondary": "#1a2332",
     "border_focus": "#00d4ff",
-    "separator": "#1a2332"
+    "separator": "#1a2332",
+    "tab_text_color": "#b3f0ff",
+    "tab_background_color": "#141420"
+  },
+  "mode": "dark",
+  "default_fonts": {
+    "default_ai_font": {
+      "family": "Consolas",
+      "size": 11,
+      "weight": "normal",
+      "style": "normal"
+    },
+    "default_user_font": {
+      "family": "Consolas",
+      "size": 10,
+      "weight": "normal",
+      "style": "normal"
+    }
   }
 }

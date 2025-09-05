@@ -228,6 +228,45 @@ def get_resource_resolver() -> ResourceResolver:
     return _resolver
 
 
+def resolve_themed_icon(icon_name: str) -> Optional[Path]:
+    """
+    Convenience function to resolve icon with automatic theme-aware suffix selection.
+    
+    This function integrates with the theme system to automatically choose the
+    appropriate icon variant based on the current theme mode.
+    
+    Args:
+        icon_name: Base name of the icon (without suffix/extension)
+        
+    Returns:
+        Path to the appropriate themed icon file, or None if not found
+    """
+    try:
+        # Import here to avoid circular imports
+        from ..ui.themes.theme_manager import get_theme_manager
+        
+        theme_manager = get_theme_manager()
+        suffix = theme_manager.current_icon_suffix
+        
+        # Try themed icon first
+        icon_path = _resolver.resolve_icon(icon_name, suffix)
+        if icon_path and icon_path.exists():
+            return icon_path
+        
+        # Fallback to opposite theme
+        fallback_suffix = '_dark' if suffix == '_lite' else '_lite'
+        fallback_path = _resolver.resolve_icon(icon_name, fallback_suffix)
+        if fallback_path and fallback_path.exists():
+            return fallback_path
+        
+        # Final fallback to generic
+        return _resolver.resolve_icon(icon_name, "")
+        
+    except ImportError:
+        # Theme system not available, use generic icon
+        return _resolver.resolve_icon(icon_name, "")
+
+
 # For backward compatibility and migration
 def get_help_path(filename: str = "index.html") -> Optional[Path]:
     """Legacy function name for help path resolution."""

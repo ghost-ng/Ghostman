@@ -425,6 +425,12 @@ class SettingsDialog(QDialog):
         self.ai_font_style_combo = QComboBox()
         self.ai_font_style_combo.addItems(["normal", "italic"])
         ai_font_layout.addRow("Font Style:", self.ai_font_style_combo)
+        
+        # AI Response Font Reset Button
+        self.ai_font_reset_btn = QPushButton("Reset to Theme Default")
+        self.ai_font_reset_btn.setToolTip("Reset AI Response font to the current theme's default settings")
+        self.ai_font_reset_btn.clicked.connect(self._reset_ai_font_to_theme_default)
+        ai_font_layout.addRow("", self.ai_font_reset_btn)
 
         layout.addWidget(ai_font_group)
 
@@ -473,6 +479,12 @@ class SettingsDialog(QDialog):
         self.user_font_style_combo = QComboBox()
         self.user_font_style_combo.addItems(["normal", "italic"])
         user_font_layout.addRow("Font Style:", self.user_font_style_combo)
+        
+        # User Input Font Reset Button
+        self.user_font_reset_btn = QPushButton("Reset to Theme Default")
+        self.user_font_reset_btn.setToolTip("Reset User Input font to the current theme's default settings")
+        self.user_font_reset_btn.clicked.connect(self._reset_user_font_to_theme_default)
+        user_font_layout.addRow("", self.user_font_reset_btn)
 
         layout.addWidget(user_font_group)
 
@@ -560,6 +572,135 @@ class SettingsDialog(QDialog):
         self.user_font_size_spin.setValue(new_size)
         # Immediately apply the font change
         self._apply_font_changes_immediately()
+    
+    def _reset_ai_font_to_theme_default(self):
+        """Reset AI Response font to theme default."""
+        try:
+            # Get current theme from settings manager or theme manager
+            if hasattr(self, 'settings_manager') and self.settings_manager:
+                current_theme_name = self.settings_manager.get('ui.theme', 'openai_like')
+            else:
+                current_theme_name = 'openai_like'  # fallback
+            
+            # Load theme data to get default fonts
+            theme_data = self._get_theme_default_fonts(current_theme_name)
+            if theme_data and 'default_ai_font' in theme_data:
+                ai_font = theme_data['default_ai_font']
+                
+                # Apply theme defaults to UI controls
+                if 'family' in ai_font:
+                    index = self.ai_font_family_combo.findText(ai_font['family'])
+                    if index >= 0:
+                        self.ai_font_family_combo.setCurrentIndex(index)
+                
+                if 'size' in ai_font:
+                    self.ai_font_size_spin.setValue(ai_font['size'])
+                
+                if 'weight' in ai_font:
+                    weight_index = self.ai_font_weight_combo.findText(ai_font['weight'])
+                    if weight_index >= 0:
+                        self.ai_font_weight_combo.setCurrentIndex(weight_index)
+                
+                if 'style' in ai_font:
+                    style_index = self.ai_font_style_combo.findText(ai_font['style'])
+                    if style_index >= 0:
+                        self.ai_font_style_combo.setCurrentIndex(style_index)
+                
+                # Apply changes immediately
+                self._apply_font_changes_immediately()
+                logger.info(f"Reset AI font to theme default: {ai_font}")
+            else:
+                # Fallback to reasonable defaults
+                self.ai_font_family_combo.setCurrentText("Segoe UI")
+                self.ai_font_size_spin.setValue(12)
+                self.ai_font_weight_combo.setCurrentText("normal")
+                self.ai_font_style_combo.setCurrentText("normal")
+                self._apply_font_changes_immediately()
+                logger.info("Reset AI font to fallback defaults")
+                
+        except Exception as e:
+            logger.error(f"Failed to reset AI font to theme default: {e}")
+            # Fallback to reasonable defaults
+            self.ai_font_family_combo.setCurrentText("Segoe UI")
+            self.ai_font_size_spin.setValue(12)
+            self.ai_font_weight_combo.setCurrentText("normal")
+            self.ai_font_style_combo.setCurrentText("normal")
+            self._apply_font_changes_immediately()
+    
+    def _reset_user_font_to_theme_default(self):
+        """Reset User Input font to theme default."""
+        try:
+            # Get current theme from settings manager or theme manager
+            if hasattr(self, 'settings_manager') and self.settings_manager:
+                current_theme_name = self.settings_manager.get('ui.theme', 'openai_like')
+            else:
+                current_theme_name = 'openai_like'  # fallback
+            
+            # Load theme data to get default fonts
+            theme_data = self._get_theme_default_fonts(current_theme_name)
+            if theme_data and 'default_user_font' in theme_data:
+                user_font = theme_data['default_user_font']
+                
+                # Apply theme defaults to UI controls
+                if 'family' in user_font:
+                    index = self.user_font_family_combo.findText(user_font['family'])
+                    if index >= 0:
+                        self.user_font_family_combo.setCurrentIndex(index)
+                
+                if 'size' in user_font:
+                    self.user_font_size_spin.setValue(user_font['size'])
+                
+                if 'weight' in user_font:
+                    weight_index = self.user_font_weight_combo.findText(user_font['weight'])
+                    if weight_index >= 0:
+                        self.user_font_weight_combo.setCurrentIndex(weight_index)
+                
+                if 'style' in user_font:
+                    style_index = self.user_font_style_combo.findText(user_font['style'])
+                    if style_index >= 0:
+                        self.user_font_style_combo.setCurrentIndex(style_index)
+                
+                # Apply changes immediately
+                self._apply_font_changes_immediately()
+                logger.info(f"Reset User font to theme default: {user_font}")
+            else:
+                # Fallback to reasonable defaults
+                self.user_font_family_combo.setCurrentText("Segoe UI")
+                self.user_font_size_spin.setValue(11)
+                self.user_font_weight_combo.setCurrentText("normal")
+                self.user_font_style_combo.setCurrentText("normal")
+                self._apply_font_changes_immediately()
+                logger.info("Reset User font to fallback defaults")
+                
+        except Exception as e:
+            logger.error(f"Failed to reset User font to theme default: {e}")
+            # Fallback to reasonable defaults
+            self.user_font_family_combo.setCurrentText("Segoe UI")
+            self.user_font_size_spin.setValue(11)
+            self.user_font_weight_combo.setCurrentText("normal")
+            self.user_font_style_combo.setCurrentText("normal")
+            self._apply_font_changes_immediately()
+    
+    def _get_theme_default_fonts(self, theme_name: str) -> dict:
+        """Get default fonts from theme JSON file."""
+        try:
+            import json
+            from pathlib import Path
+            
+            # Construct path to theme JSON file
+            theme_json_path = Path(__file__).parent.parent.parent / "ui" / "themes" / "json" / f"{theme_name}.json"
+            
+            if theme_json_path.exists():
+                with open(theme_json_path, 'r', encoding='utf-8') as f:
+                    theme_data = json.load(f)
+                    return theme_data.get('default_fonts', {})
+            else:
+                logger.warning(f"Theme file not found: {theme_json_path}")
+                return {}
+                
+        except Exception as e:
+            logger.error(f"Failed to load theme default fonts for {theme_name}: {e}")
+            return {}
     
     def _adjust_opacity(self, delta):
         """Adjust panel opacity by the given delta."""
@@ -918,6 +1059,16 @@ class SettingsDialog(QDialog):
             "Disabling can improve performance with large code blocks."
         )
         code_display_layout.addRow("", self.enable_code_lexing_check)
+        
+        # Debug commands checkbox
+        self.enable_debug_commands_check = QCheckBox("Enable Debug Commands")
+        self.enable_debug_commands_check.setChecked(False)  # Default to unchecked
+        self.enable_debug_commands_check.setToolTip(
+            "When enabled, debug commands are shown in the REPL help menu. "
+            "When disabled, only basic commands (help, clear, history, resend, exit) are shown. "
+            "Debug commands provide additional diagnostic and development features."
+        )
+        code_display_layout.addRow("", self.enable_debug_commands_check)
         
         layout.addWidget(code_display_group)
         
@@ -2038,7 +2189,8 @@ class SettingsDialog(QDialog):
                 "log_retention_days": self.log_retention_spin.value(),
                 "ignore_ssl_verification": self.ignore_ssl_check.isChecked(),
                 "auto_detect_code_language": self.auto_detect_code_language_check.isChecked(),
-                "enable_code_lexing": self.enable_code_lexing_check.isChecked()
+                "enable_code_lexing": self.enable_code_lexing_check.isChecked(),
+                "enable_debug_commands": self.enable_debug_commands_check.isChecked()
             }
         }
     
@@ -2191,6 +2343,9 @@ class SettingsDialog(QDialog):
         
         if "enable_code_lexing" in advanced_config:
             self.enable_code_lexing_check.setChecked(bool(advanced_config["enable_code_lexing"]))
+        
+        if "enable_debug_commands" in advanced_config:
+            self.enable_debug_commands_check.setChecked(bool(advanced_config["enable_debug_commands"]))
     
     def _load_current_settings(self):
         """Load current settings from settings manager."""

@@ -189,6 +189,18 @@ def setup_logging(debug: bool = False, log_dir: str | None = None, retention_day
     logging.getLogger("PyQt6").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     
+    # Suppress Qt internal warnings unless in debug mode
+    if not debug:
+        try:
+            from PyQt6.QtCore import QLoggingCategory
+            # Suppress Qt CSS parser warnings about unknown properties
+            QLoggingCategory.setFilterRules("qt.css.debug=false")
+            QLoggingCategory.setFilterRules("qt.css.warning=false") 
+            QLoggingCategory.setFilterRules("*.debug=false")
+        except ImportError:
+            # PyQt6 not available or older version
+            pass
+    
     # Log startup message
     logger = logging.getLogger("ghostman.logging")
     logger.info(f"Logging initialized - Debug: {debug}, Log dir: {log_dir}")

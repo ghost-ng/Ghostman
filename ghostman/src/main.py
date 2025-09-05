@@ -50,6 +50,9 @@ class GhostmanApplication:
         app.setOrganizationName("Ghostman")
         app.setQuitOnLastWindowClosed(False)  # Keep running when main window closes
         
+        # Set up Qt message handling to suppress CSS warnings unless in debug mode
+        self._setup_qt_message_handler()
+        
         # Set application icon (if available)
         try:
             # Try avatar first, then icon
@@ -65,6 +68,55 @@ class GhostmanApplication:
         
         logger.info("Qt application configured")
         return app
+    
+    def _setup_qt_message_handler(self):
+        """Setup Qt message handler to suppress CSS warnings unless in debug mode."""
+        try:
+            from PyQt6.QtCore import qInstallMessageHandler, QtMsgType
+            
+            # Check if we're in debug mode
+            debug_mode = False
+            try:
+                from ghostman.src.infrastructure.storage.settings_manager import settings
+                log_mode = settings.get("advanced.log_level", "Standard")
+                debug_mode = (log_mode == "Detailed")
+            except Exception:
+                # If we can't check settings, assume not debug
+                pass
+            
+            def qt_message_handler(msg_type, context, message):
+                """Custom Qt message handler to filter CSS warnings."""
+                # Suppress CSS property warnings unless in debug mode
+                if not debug_mode and "Unknown property" in message and "cursor" in message:
+                    return  # Suppress this message
+                
+                # Suppress other common Qt warnings that aren't useful in production
+                if not debug_mode:
+                    suppress_keywords = ["Unknown property", "QPixmap::scaled", "Qt::AA_EnableHighDpiScaling"]
+                    if any(keyword in message for keyword in suppress_keywords):
+                        return
+                
+                # Convert Qt message type to Python logging
+                if msg_type == QtMsgType.QtDebugMsg:
+                    if debug_mode:
+                        logger.debug(f"Qt: {message}")
+                elif msg_type == QtMsgType.QtInfoMsg:
+                    logger.info(f"Qt: {message}")  
+                elif msg_type == QtMsgType.QtWarningMsg:
+                    if debug_mode:
+                        logger.warning(f"Qt: {message}")
+                elif msg_type == QtMsgType.QtCriticalMsg:
+                    logger.error(f"Qt Critical: {message}")
+                elif msg_type == QtMsgType.QtFatalMsg:
+                    logger.critical(f"Qt Fatal: {message}")
+            
+            qInstallMessageHandler(qt_message_handler)
+            logger.debug("Qt message handler installed")
+            
+        except ImportError:
+            logger.debug("Could not install Qt message handler - PyQt6 not available")
+        except Exception as e:
+            logger.debug(f"Failed to install Qt message handler: {e}")
     
     def initialize_coordinator(self) -> bool:
         """Initialize the application coordinator."""

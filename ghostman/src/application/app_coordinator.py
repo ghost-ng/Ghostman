@@ -715,21 +715,30 @@ class AppCoordinator(QObject):
             logger.info(f"⚠  Log retention changes require application restart to take full effect")
             settings_processed += 1
         
-        # Apply SSL verification settings
-        if "ignore_ssl_verification" in advanced_config:
-            ignore_ssl = advanced_config["ignore_ssl_verification"]
-            logger.info(f"🔒 SSL verification: {'DISABLED' if ignore_ssl else 'ENABLED'}")
+        # Apply SSL verification settings using unified SSL service
+        try:
+            from ..infrastructure.ssl.ssl_service import ssl_service
             
-            # Apply to session manager
-            try:
-                from ..infrastructure.ai.session_manager import session_manager
-                # Configure session with SSL verification setting
-                session_manager.configure_session(
-                    disable_ssl_verification=ignore_ssl
-                )
-                logger.info(f"✓ SSL verification setting applied to session manager")
-            except Exception as e:
-                logger.error(f"Failed to apply SSL verification setting: {e}")
+            # Configure SSL service from settings (includes both ignore_ssl and PKI integration)
+            if ssl_service.configure_from_settings(settings.get_all_settings()):
+                logger.info("✓ SSL verification configured through unified SSL service")
+            else:
+                logger.error("✗ Failed to configure SSL verification through unified service")
+            settings_processed += 1
+            
+        except Exception as e:
+            logger.error(f"Failed to apply SSL verification settings: {e}")
+            # Fallback to old behavior for backward compatibility
+            if "ignore_ssl_verification" in advanced_config:
+                ignore_ssl = advanced_config["ignore_ssl_verification"]
+                logger.info(f"🔒 SSL verification (fallback): {'DISABLED' if ignore_ssl else 'ENABLED'}")
+                
+                try:
+                    from ..infrastructure.ai.session_manager import session_manager
+                    session_manager.configure_session(disable_ssl_verification=ignore_ssl)
+                    logger.info(f"✓ SSL verification setting applied to session manager (fallback)")
+                except Exception as fallback_e:
+                    logger.error(f"Failed to apply SSL verification setting (fallback): {fallback_e}")
             settings_processed += 1
         
         # Log any additional advanced settings

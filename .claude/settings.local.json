@@ -1,15 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git add:*)",
-      "Bash(git fetch:*)",
-      "Bash(grep:*)",
-      "Bash(git checkout:*)",
-      "Bash(git cherry-pick:*)",
-      "Bash(git push:*)",
-      "Bash(gh pr checkout:*)",
-      "Bash(git merge:*)",
-      "Bash(git commit:*)"
+      "Bash(find:*)",
+      "Bash(for file in CLEAN_ICON_STYLING_IMPLEMENTATION.md CODE_FONT_PRESERVATION_FIX.md CODE_SNIPPET_ENHANCEMENT_SUMMARY.md IMPLEMENTATION_GUIDE.md)",
+      "Bash(do mv \"$file\" docs/)",
+      "Bash(echo:*)"
     ],
     "deny": [],
     "ask": [],

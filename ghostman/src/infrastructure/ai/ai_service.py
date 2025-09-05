@@ -197,7 +197,7 @@ class AIService:
             from ..pki.pki_service import pki_service
             
             if pki_service.cert_manager.is_pki_enabled():
-                cert_info = pki_service.cert_manager.get_certificate_files()
+                cert_info = pki_service.cert_manager.get_client_cert_files()
                 ca_bundle_path = pki_service.cert_manager.get_ca_chain_file()
                 
                 if cert_info:

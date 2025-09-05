@@ -60,6 +60,10 @@ class ColorSystem:
     border_focus: str = "#4CAF50"      # Focus indicators
     separator: str = "#2a2a2a"         # Separators and dividers
     
+    # Tab colors
+    tab_text_color: str = "#cccccc"     # Tab text color
+    tab_background_color: str = "#3a3a3a"   # Tab background color
+    
     def to_dict(self) -> Dict[str, str]:
         """Convert color system to dictionary for serialization."""
         return {
@@ -87,6 +91,8 @@ class ColorSystem:
             'border_secondary': self.border_secondary,
             'border_focus': self.border_focus,
             'separator': self.separator,
+            'tab_text_color': self.tab_text_color,
+            'tab_background_color': self.tab_background_color,
         }
     
     @classmethod

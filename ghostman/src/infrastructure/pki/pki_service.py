@@ -101,6 +101,13 @@ class PKIService:
             if not self._apply_pki_to_session():
                 return False, "Failed to configure session with PKI"
             
+            # Update SSL service with new PKI configuration
+            try:
+                from ..ssl.ssl_service import ssl_service
+                ssl_service.configure_from_pki_service()
+            except Exception as e:
+                logger.warning(f"Failed to update SSL service with PKI configuration: {e}")
+            
             # Reset initialization state to apply new configuration
             self.reset_initialization()
             
@@ -127,6 +134,13 @@ class PKIService:
             
             # Disable in session manager
             session_manager.disable_pki()
+            
+            # Update SSL service to remove PKI configuration
+            try:
+                from ..ssl.ssl_service import ssl_service
+                ssl_service.configure_from_pki_service()  # This will clear the CA path
+            except Exception as e:
+                logger.warning(f"Failed to update SSL service after disabling PKI: {e}")
             
             # Reset initialization state after disabling
             self.reset_initialization()

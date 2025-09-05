@@ -115,18 +115,20 @@ class ThemeManager(QObject):
                 # Create ColorSystem from colors data
                 color_system = ColorSystem.from_dict(theme_data.get('colors', {}))
                 
-                # Store additional metadata if available
-                if hasattr(color_system, '_metadata'):
-                    color_system._metadata = {
-                        'display_name': theme_data.get('display_name', theme_name),
-                        'description': theme_data.get('description', ''),
-                        'author': theme_data.get('author', 'Unknown'),
-                        'version': theme_data.get('version', '1.0.0')
-                    }
+                # Store additional metadata including theme mode
+                if not hasattr(color_system, '_metadata'):
+                    color_system._metadata = {}
+                color_system._metadata.update({
+                    'display_name': theme_data.get('display_name', theme_name),
+                    'description': theme_data.get('description', ''),
+                    'author': theme_data.get('author', 'Unknown'),
+                    'version': theme_data.get('version', '1.0.0'),
+                    'mode': theme_data.get('mode', 'light')  # Store theme mode
+                })
                 
                 # Add to preset themes
                 self._preset_themes[theme_name] = color_system
-                logger.debug(f"Loaded built-in theme: {theme_name}")
+                logger.debug(f"Loaded built-in theme: {theme_name} (mode: {theme_data.get('mode', 'light')})")
                     
             except Exception as e:
                 logger.error(f"Failed to load built-in theme {theme_file}: {e}")
@@ -151,14 +153,16 @@ class ThemeManager(QObject):
                 # Create ColorSystem from colors data
                 color_system = ColorSystem.from_dict(theme_data.get('colors', {}))
                 
-                # Store additional metadata if available
-                if hasattr(color_system, '_metadata'):
-                    color_system._metadata = {
-                        'display_name': theme_data.get('display_name', theme_name),
-                        'description': theme_data.get('description', ''),
-                        'author': theme_data.get('author', 'Unknown'),
-                        'version': theme_data.get('version', '1.0.0')
-                    }
+                # Store additional metadata including theme mode
+                if not hasattr(color_system, '_metadata'):
+                    color_system._metadata = {}
+                color_system._metadata.update({
+                    'display_name': theme_data.get('display_name', theme_name),
+                    'description': theme_data.get('description', ''),
+                    'author': theme_data.get('author', 'Unknown'),
+                    'version': theme_data.get('version', '1.0.0'),
+                    'mode': theme_data.get('mode', 'light')  # Store theme mode
+                })
                 
                 # Validate theme (but allow loading with warnings for custom themes)
                 is_valid, issues = color_system.validate()
@@ -734,6 +738,59 @@ class ThemeManager(QObject):
     def get_color(self, name: str) -> str:
         """Get a color from the current theme."""
         return self.current_theme.get_color(name)
+    
+    @property
+    def current_theme_mode(self) -> str:
+        """
+        Get the current theme's mode (light or dark).
+        
+        Returns:
+            'light' or 'dark' based on the current theme's mode property.
+            Defaults to 'light' if mode is not specified.
+        """
+        if self._current_theme and hasattr(self._current_theme, '_metadata'):
+            return self._current_theme._metadata.get('mode', 'light')
+        return 'light'
+    
+    def get_theme_mode(self, theme_name: str) -> str:
+        """
+        Get the mode of a specific theme.
+        
+        Args:
+            theme_name: Name of the theme to check
+            
+        Returns:
+            'light' or 'dark' based on the theme's mode property.
+            Defaults to 'light' if mode is not specified or theme not found.
+        """
+        theme = self.get_theme(theme_name)
+        if theme and hasattr(theme, '_metadata'):
+            return theme._metadata.get('mode', 'light')
+        return 'light'
+    
+    def get_icon_suffix_for_theme(self, theme_name: Optional[str] = None) -> str:
+        """
+        Get the appropriate icon suffix for a theme.
+        
+        Args:
+            theme_name: Name of the theme to check (uses current theme if None)
+            
+        Returns:
+            '_lite' for dark themes (light icons on dark backgrounds)
+            '_dark' for light themes (dark icons on light backgrounds)
+        """
+        if theme_name is None:
+            theme_mode = self.current_theme_mode
+        else:
+            theme_mode = self.get_theme_mode(theme_name)
+        
+        # Use light icons for dark themes, dark icons for light themes
+        return '_lite' if theme_mode == 'dark' else '_dark'
+    
+    @property 
+    def current_icon_suffix(self) -> str:
+        """Get the appropriate icon suffix for the current theme."""
+        return self.get_icon_suffix_for_theme()
     
     def apply_theme_to_widget(self, widget, style_template: str = None):
         """

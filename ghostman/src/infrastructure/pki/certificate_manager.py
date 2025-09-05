@@ -10,7 +10,7 @@ import json
 import logging
 import hashlib
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass, asdict
 
@@ -230,7 +230,7 @@ class CertificateManager:
                 client_key_path=str(key_path),
                 ca_chain_path=str(chain_path) if chain_path else None,
                 p12_file_hash=file_hash,
-                last_validation=datetime.now(),
+                last_validation=datetime.now(timezone.utc),
                 certificate_info=cert_info
             )
             
@@ -275,8 +275,16 @@ class CertificateManager:
             except x509.ExtensionNotFound:
                 pass
             
-            # Check validity
-            now = datetime.now()
+            # Check validity - ensure we handle timezone-aware comparisons properly
+            now = datetime.now(timezone.utc)
+            
+            # Certificate times are typically UTC but might be naive
+            # Convert certificate times to UTC if they're naive
+            if not_valid_before.tzinfo is None:
+                not_valid_before = not_valid_before.replace(tzinfo=timezone.utc)
+            if not_valid_after.tzinfo is None:
+                not_valid_after = not_valid_after.replace(tzinfo=timezone.utc)
+            
             is_valid = not_valid_before <= now <= not_valid_after
             days_until_expiry = (not_valid_after - now).days
             
@@ -295,6 +303,100 @@ class CertificateManager:
         except Exception as e:
             logger.error(f"Failed to extract certificate info: {e}")
             raise CertificateValidationError(f"Failed to extract certificate information: {e}")
+    
+    def _parse_ca_chain_file(self, ca_data: bytes) -> bytes:
+        """
+        Parse CA chain file in various formats and return as PEM.
+        
+        Supports:
+        - Single or multiple PEM certificates
+        - Single or multiple DER certificates (common in .crt/.cer files)
+        - Mixed format chains
+        
+        Args:
+            ca_data: Raw certificate data
+            
+        Returns:
+            bytes: PEM formatted certificate chain
+        """
+        try:
+            # Check if it's already PEM format (most common)
+            if b'-----BEGIN CERTIFICATE-----' in ca_data:
+                # Handle PEM format - could contain multiple certificates
+                logger.debug("Processing PEM format CA chain")
+                return ca_data
+            
+            # Try to parse as DER format (binary certificate files)
+            logger.debug("Attempting to parse as DER format")
+            
+            # For DER format, try to parse as a single certificate first
+            try:
+                certificate = x509.load_der_x509_certificate(ca_data)
+                pem_data = certificate.public_bytes(serialization.Encoding.PEM)
+                logger.debug("Successfully converted single DER certificate to PEM")
+                return pem_data
+            except Exception:
+                # If single certificate fails, the file might contain multiple DER certificates
+                # or be in an unsupported format
+                logger.debug("Single DER certificate parsing failed, trying alternative approaches")
+            
+            # Try to split the data and parse multiple potential DER certificates
+            # This handles the case where multiple DER certificates are concatenated
+            certificates_pem = b""
+            offset = 0
+            cert_count = 0
+            
+            while offset < len(ca_data):
+                # DER certificates typically start with 0x30 (SEQUENCE tag)
+                # followed by length encoding
+                if offset + 2 >= len(ca_data):
+                    break
+                    
+                if ca_data[offset] != 0x30:
+                    # Not a DER certificate start, skip this byte
+                    offset += 1
+                    continue
+                
+                # Try to parse certificate starting at this offset
+                remaining_data = ca_data[offset:]
+                try:
+                    certificate = x509.load_der_x509_certificate(remaining_data)
+                    cert_pem = certificate.public_bytes(serialization.Encoding.PEM)
+                    certificates_pem += cert_pem
+                    cert_count += 1
+                    
+                    # Calculate the actual certificate size to move offset correctly
+                    # For simplicity, we'll try to encode it back and measure
+                    der_bytes = certificate.public_bytes(serialization.Encoding.DER)
+                    offset += len(der_bytes)
+                    logger.debug(f"Successfully parsed DER certificate {cert_count}")
+                    
+                except Exception:
+                    # Couldn't parse at this position, move to next byte
+                    offset += 1
+                    continue
+            
+            if cert_count > 0:
+                logger.debug(f"Successfully converted {cert_count} DER certificate(s) to PEM")
+                return certificates_pem
+            
+            # If we get here, we couldn't parse the data
+            # Try one more approach: check if it might be base64 encoded
+            try:
+                import base64
+                decoded_data = base64.b64decode(ca_data)
+                # Recursively try to parse the decoded data
+                return self._parse_ca_chain_file(decoded_data)
+            except Exception:
+                pass
+            
+            raise PKIError("Unable to parse certificate data in any known format (PEM, DER, or Base64)")
+            
+        except PKIError:
+            # Re-raise PKI errors as-is
+            raise
+        except Exception as e:
+            raise PKIError(f"Unexpected error parsing CA chain file: {e}")
     
     def validate_certificates(self) -> bool:
         """
@@ -322,23 +424,33 @@ class CertificateManager:
                 cert_pem = f.read()
             certificate = x509.load_pem_x509_certificate(cert_pem)
             
-            # Check expiration
-            now = datetime.now()
-            if certificate.not_valid_after <= now:
+            # Check expiration - use timezone-aware datetime
+            now = datetime.now(timezone.utc)
+            
+            # Certificate times are typically UTC but might be naive
+            not_valid_before = certificate.not_valid_before
+            not_valid_after = certificate.not_valid_after
+            
+            if not_valid_before.tzinfo is None:
+                not_valid_before = not_valid_before.replace(tzinfo=timezone.utc)
+            if not_valid_after.tzinfo is None:
+                not_valid_after = not_valid_after.replace(tzinfo=timezone.utc)
+            
+            if not_valid_after <= now:
                 logger.error("Certificate has expired")
                 return False
             
-            if certificate.not_valid_before > now:
+            if not_valid_before > now:
                 logger.error("Certificate is not yet valid")
                 return False
             
             # Update certificate info
             self._config.certificate_info = self._extract_certificate_info(certificate)
-            self._config.last_validation = datetime.now()
+            self._config.last_validation = datetime.now(timezone.utc)
             self.save_config()
             
             # Check if expiring soon (30 days)
-            days_until_expiry = (certificate.not_valid_after - now).days
+            days_until_expiry = (not_valid_after - now).days
             if days_until_expiry <= 30:
                 logger.warning(f"Certificate expires in {days_until_expiry} days")
             
@@ -408,27 +520,22 @@ class CertificateManager:
             with open(ca_chain_path, 'rb') as f:
                 ca_data = f.read()
             
-            # Try to parse as PEM first
+            # Parse and validate the CA chain file
             try:
-                # Check if it's already PEM format
-                if b'-----BEGIN CERTIFICATE-----' in ca_data:
-                    # Already PEM format
-                    chain_pem = ca_data
-                else:
-                    # Try to load as DER (CRT/CER format) and convert to PEM
-                    certificate = x509.load_der_x509_certificate(ca_data)
-                    chain_pem = certificate.public_bytes(serialization.Encoding.PEM)
-                    
-                # Validate the certificate(s)
-                if b'-----BEGIN CERTIFICATE-----' in chain_pem:
-                    # Parse to ensure it's valid
-                    from cryptography.hazmat.primitives.serialization import load_pem_x509_certificates
-                    certificates = load_pem_x509_certificates(chain_pem)
-                    if not certificates:
-                        raise PKIError("No valid certificates found in CA chain file")
-                    logger.info(f"Loaded {len(certificates)} certificate(s) from CA chain")
-                else:
-                    raise PKIError("Invalid certificate format")
+                chain_pem = self._parse_ca_chain_file(ca_data)
+                
+                # Validate the certificate(s) in PEM format
+                from cryptography.hazmat.primitives.serialization import load_pem_x509_certificates
+                certificates = load_pem_x509_certificates(chain_pem)
+                if not certificates:
+                    raise PKIError("No valid certificates found in CA chain file")
+                
+                logger.info(f"Successfully loaded {len(certificates)} certificate(s) from CA chain")
+                
+                # Log certificate details for debugging
+                for i, cert in enumerate(certificates, 1):
+                    subject = cert.subject.rfc4514_string()
+                    logger.debug(f"Certificate {i}: {subject}")
                     
             except Exception as e:
                 raise PKIError(f"Failed to parse CA chain file: {e}")

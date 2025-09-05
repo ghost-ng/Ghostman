@@ -271,23 +271,31 @@ class APITestService(QObject):
         return final_result
     
     def _configure_session_for_testing(self, config: APITestConfig):
-        """Configure session manager for API testing with proper PKI and ignore_ssl handling."""
+        """Configure session manager for API testing using unified SSL service."""
         try:
-            # Check if PKI is configured and get CA bundle path
-            from ..pki.pki_service import pki_service
-            ca_bundle_path = None
+            # Use the unified SSL service to get proper SSL verification settings
+            from ..ssl.ssl_service import ssl_service
             
-            # Always respect the ignore_ssl setting from config first
+            # Override SSL settings based on test configuration
             if config.disable_ssl_verification:
-                logger.info("SSL verification disabled by ignore_ssl setting")
-            elif pki_service.cert_manager.is_pki_enabled():
-                ca_bundle_path = pki_service.cert_manager.get_ca_chain_file()
-                if ca_bundle_path:
-                    logger.info(f"PKI is enabled, using CA bundle for verification: {ca_bundle_path}")
-                    # Only use PKI CA verification if ignore_ssl is not set
-                    config.disable_ssl_verification = False
-                else:
-                    logger.warning("PKI is enabled but no CA chain file found")
+                logger.info("SSL verification disabled by test configuration")
+                # Temporarily configure SSL service to ignore SSL for this test
+                ssl_service.configure(ignore_ssl=True, custom_ca_path=None)
+            else:
+                # Use current SSL service configuration or apply from settings
+                ssl_status = ssl_service.get_status()
+                if not ssl_status['initialized']:
+                    # Initialize SSL service from settings if not done yet
+                    try:
+                        from ...application.settings import settings
+                        ssl_service.configure_from_settings(settings.get_all_settings())
+                    except Exception as e:
+                        logger.warning(f"Could not initialize SSL service from settings: {e}")
+                
+                logger.info(f"SSL verification configured: ignore={ssl_service._ignore_ssl}, custom_ca={bool(ssl_service._custom_ca_path)}")
+            
+            # Apply SSL configuration to session manager
+            ssl_service.configure_session_manager()
             
             # Configure session with NO retries - we handle all retries at the service level
             self.session_manager.configure_session(
@@ -297,13 +305,7 @@ class APITestService(QObject):
                 disable_ssl_verification=config.disable_ssl_verification
             )
             
-            # If we have a CA bundle path and SSL verification is enabled, configure the session to use it
-            if ca_bundle_path and not config.disable_ssl_verification:
-                with self.session_manager.get_session() as session:
-                    session.verify = ca_bundle_path
-                logger.info(f"Session configured to use CA bundle: {ca_bundle_path}")
-            elif config.disable_ssl_verification:
-                logger.info("SSL verification disabled for API testing")
+            logger.info("Session configured for API testing with unified SSL settings")
             
         except Exception as e:
             logger.error(f"Failed to configure session for testing: {e}")
