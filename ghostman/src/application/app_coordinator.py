@@ -329,33 +329,20 @@ class AppCoordinator(QObject):
             logger.error(f"✗ Error during cleanup operations: {e}")
     
     def _restore_current_conversation_state(self):
-        """Restore the last active conversation from settings."""
+        """Start with fresh conversation - user must explicitly load conversations."""
         try:
-            logger.debug("🔄 Attempting to restore conversation state...")
-            last_active_id = settings.get('conversation.last_active_id')
+            logger.debug("🆕 Starting with fresh conversation (no auto-restore)")
+            # User requested that both new tabs and app start should begin with fresh conversations
+            # The user must explicitly load conversations through the conversation dialog
             
-            if last_active_id:
-                logger.info(f"📋 Found saved conversation ID: {last_active_id}")
-                
-                if (self._main_window and 
-                    hasattr(self._main_window, 'floating_repl') and
-                    self._main_window.floating_repl and
-                    hasattr(self._main_window.floating_repl, 'repl_widget') and
-                    self._main_window.floating_repl.repl_widget):
-                    
-                    # Restore the conversation in the REPL widget
-                    if hasattr(self._main_window.floating_repl.repl_widget, 'restore_conversation'):
-                        self._main_window.floating_repl.repl_widget.restore_conversation(last_active_id)
-                        logger.info(f"🔄 Restored active conversation: {last_active_id}")
-                    else:
-                        logger.debug("REPL widget doesn't support conversation restoration yet")
-                else:
-                    logger.debug("REPL widget not available for conversation restoration")
-            else:
-                logger.debug("✗ No previous conversation to restore")
+            # Clear any saved conversation ID to ensure fresh start
+            settings.delete('conversation.last_active_id')
+            
+            # The REPL widget will initialize with a fresh conversation by default
+            logger.info("✨ App initialized with fresh conversation - user must load conversations explicitly")
                     
         except Exception as e:
-            logger.error(f"✗ Failed to restore conversation state: {e}", exc_info=True)
+            logger.error(f"✗ Failed to initialize fresh conversation: {e}", exc_info=True)
     
     def _on_state_changed(self, event: StateChangeEvent):
         """Handle state change events from the state machine."""

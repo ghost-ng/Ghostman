@@ -30,7 +30,9 @@
     "border_focus": "#268BD2",
     "separator": "#073642",
     "tab_text_color": "#c5d7d9",
-    "tab_background_color": "#073642"
+    "tab_background_color": "#073642",
+    "tab_active_background_color": "#42a5f5",
+    "tab_active_text_color": "#000000"
   },
   "mode": "dark",
   "default_fonts": {

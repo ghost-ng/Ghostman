@@ -1397,12 +1397,12 @@ class StyleTemplates:
         from .color_system import ColorUtils
         
         if active:
-            # For active tabs, use tab colors with fallback to primary colors
-            bg_color = getattr(colors, 'tab_background_color', colors.primary)
-            text_color = getattr(colors, 'tab_text_color', colors.text_primary)
+            # For active tabs, use dedicated active tab colors with fallback to primary colors
+            bg_color = getattr(colors, 'tab_active_background_color', colors.primary)
+            text_color = getattr(colors, 'tab_active_text_color', colors.text_primary)
             
             # Ensure high contrast for active tabs
-            if hasattr(colors, 'tab_text_color') and hasattr(colors, 'tab_background_color'):
+            if hasattr(colors, 'tab_active_text_color') and hasattr(colors, 'tab_active_background_color'):
                 # Use theme-defined tab colors
                 verified_text_color, contrast_ratio = ColorUtils.get_high_contrast_text_color_for_background(
                     bg_color, colors, min_ratio=4.5

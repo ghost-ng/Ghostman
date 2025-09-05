@@ -32,7 +32,7 @@ from PyQt6.QtWidgets import (
 from .mixed_content_display import MixedContentDisplay
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread, QObject, QSize, pyqtSlot, QPropertyAnimation, QEasingCurve, QUrl, QPoint
 import weakref
-from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QTextCharFormat, QColor, QPalette, QIcon, QPixmap, QAction, QTextOption, QFontMetrics
+from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QTextCharFormat, QColor, QPalette, QIcon, QAction, QTextOption, QFontMetrics
 
 # Import startup service for preamble
 from ...application.startup_service import startup_service
@@ -4994,7 +4994,7 @@ class REPLWidget(QWidget):
             # Check current conversation
             if self.current_conversation and self.current_conversation.id == conversation_id:
                 # Skip if no messages
-                if self.current_conversation.message_count == 0:
+                if self.current_conversation.get_message_count() == 0:
                     logger.debug(f"⏭️ Skipping summarization for {conversation_id}: No messages")
                     return
                 
@@ -5007,8 +5007,8 @@ class REPLWidget(QWidget):
                 
                 # Track messages since last summary
                 MIN_MESSAGES_FOR_SUMMARY = 2  # Minimum messages needed for a summary
-                if self.current_conversation.message_count < MIN_MESSAGES_FOR_SUMMARY:
-                    logger.debug(f"⏭️ Skipping summarization for {conversation_id}: Only {self.current_conversation.message_count} messages (min: {MIN_MESSAGES_FOR_SUMMARY})")
+                if self.current_conversation.get_message_count() < MIN_MESSAGES_FOR_SUMMARY:
+                    logger.debug(f"⏭️ Skipping summarization for {conversation_id}: Only {self.current_conversation.get_message_count()} messages (min: {MIN_MESSAGES_FOR_SUMMARY})")
                     return
                     
         except Exception as e:
@@ -5614,14 +5614,13 @@ def test_theme():
             logger.info("🆕 Auto-creating conversation for AI interaction")
             self._create_new_conversation_for_message(message)
             
-            # If using tabs and current tab has no conversation, associate it
+            # User requested that tabs remain fresh - no automatic conversation association
+            # Conversations are only loaded when explicitly requested through conversation dialog
             if TAB_SYSTEM_AVAILABLE and hasattr(self, 'tab_manager') and self.tab_manager:
                 active_tab = self.tab_manager.get_active_tab()
-                if active_tab and not active_tab.conversation_id and self.current_conversation:
-                    active_tab.conversation_id = self.current_conversation.id
-                    # Update tab title to match conversation
-                    self.tab_manager.update_tab_title(active_tab.tab_id, self.current_conversation.title or "Conversation")
-                    logger.debug(f"Associated conversation {self.current_conversation.id} with tab {active_tab.tab_id}")
+                if active_tab:
+                    # Keep tab title as "New Conversation" - don't associate with created conversations
+                    logger.debug(f"Tab {active_tab.tab_id} remains fresh - no conversation association")
             
         # Ensure AI service has the correct conversation context
         if self.current_conversation and self.conversation_manager and self.conversation_manager.has_ai_service():
@@ -5997,7 +5996,7 @@ def test_theme():
         # Don't return ID for empty conversations
         if self.current_conversation:
             # Check if conversation has any messages
-            if hasattr(self.current_conversation, 'message_count') and self.current_conversation.message_count > 0:
+            if hasattr(self.current_conversation, 'get_message_count') and self.current_conversation.get_message_count() > 0:
                 return self.current_conversation.id
             elif hasattr(self.current_conversation, 'messages') and len(self.current_conversation.messages) > 0:
                 return self.current_conversation.id
@@ -6828,9 +6827,9 @@ def test_theme():
                     if hasattr(conversation, 'messages') and conversation.messages:
                         has_messages = True
                         message_count = len(conversation.messages)
-                    elif hasattr(conversation, 'message_count') and conversation.message_count > 0:
+                    elif hasattr(conversation, 'get_message_count') and conversation.get_message_count() > 0:
                         has_messages = True
-                        message_count = conversation.message_count
+                        message_count = conversation.get_message_count()
                     
                     if not has_messages:
                         # Final check: see if there are unsent messages in the UI
@@ -7676,12 +7675,9 @@ def test_theme():
             first_tab_id = self.tab_manager.create_tab(title=current_tab_title, activate=False)
             first_tab = self.tab_manager.tabs.get(first_tab_id)
             if first_tab:
-                if self.current_conversation:
-                    first_tab.conversation_id = self.current_conversation.id
-                    logger.info(f"Associated Tab 1 with current conversation: {self.current_conversation.id}")
-                else:
-                    first_tab.conversation_id = None
-                    logger.info("Tab 1 created without conversation (empty start)")
+                # User requested all tabs start fresh - no conversation association
+                first_tab.conversation_id = None
+                logger.info("Tab 1 created without conversation (fresh start as requested)")
             
             # Create Tab 2 as new empty tab
             new_tab_id = self.tab_manager.create_tab(title="Conversation", activate=True)
@@ -7695,7 +7691,7 @@ def test_theme():
     # --- Tab Event Handlers ---
     
     def _on_tab_switched(self, tab_id: str):
-        """Handle tab switching to switch conversation context."""
+        """Handle tab switching - always start fresh as requested by user."""
         if not self.tab_manager:
             logger.warning("Tab manager not available for tab switching")
             return
@@ -7705,19 +7701,19 @@ def test_theme():
             logger.warning(f"Tab not found for switching: {tab_id}")
             return
             
-        logger.info(f"Switching to tab: {tab_id} (conversation: {tab.conversation_id})")
+        logger.info(f"Switching to tab: {tab_id} - starting fresh conversation")
         
-        # If tab has a conversation associated, load it
-        if tab.conversation_id and self.conversation_manager:
-            # Use QTimer to handle async operation properly from UI thread
-            QTimer.singleShot(0, lambda: self._load_tab_conversation(tab_id, tab.conversation_id))
-        else:
-            # Clear current conversation and output for empty tab
-            self.current_conversation = None
-            self.clear_output()
-            self.append_output("💬 Start typing to begin a new conversation", "info")
-            # Reset focus to input
-            self.command_input.setFocus()
+        # User requested that ALL tabs start fresh - no auto-loading of conversations
+        # User must explicitly load conversations through the conversation dialog
+        self.current_conversation = None
+        self.clear_output()
+        self.append_output("💬 Start typing to begin a new conversation", "info")
+        
+        # Clear the tab's conversation association to keep it fresh
+        tab.conversation_id = None
+        
+        # Reset focus to input
+        self.command_input.setFocus()
     
     def _on_tab_created(self, tab_id: str):
         """Handle new tab creation."""

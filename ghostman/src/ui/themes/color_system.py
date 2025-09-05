@@ -61,8 +61,10 @@ class ColorSystem:
     separator: str = "#2a2a2a"         # Separators and dividers
     
     # Tab colors
-    tab_text_color: str = "#cccccc"     # Tab text color
-    tab_background_color: str = "#3a3a3a"   # Tab background color
+    tab_text_color: str = "#cccccc"     # Inactive tab text color
+    tab_background_color: str = "#3a3a3a"   # Inactive tab background color
+    tab_active_text_color: str = "#ffffff"  # Active tab text color
+    tab_active_background_color: str = "#4CAF50"  # Active tab background color
     
     def to_dict(self) -> Dict[str, str]:
         """Convert color system to dictionary for serialization."""
@@ -93,6 +95,8 @@ class ColorSystem:
             'separator': self.separator,
             'tab_text_color': self.tab_text_color,
             'tab_background_color': self.tab_background_color,
+            'tab_active_text_color': self.tab_active_text_color,
+            'tab_active_background_color': self.tab_active_background_color,
         }
     
     @classmethod
