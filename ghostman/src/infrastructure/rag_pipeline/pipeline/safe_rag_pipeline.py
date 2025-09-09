@@ -2,7 +2,7 @@
 Safe RAG Pipeline with Segfault Protection
 
 Enhanced RAG pipeline that prevents ChromaDB segmentation faults:
-- Uses SafeChromaDBClient for thread-safe vector storage
+- Uses FAISSClient for thread-safe vector storage
 - Implements multiple fallback strategies
 - Provides graceful degradation when ChromaDB fails
 - Includes in-memory vector storage fallback
@@ -25,7 +25,7 @@ from ..config.rag_config import RAGPipelineConfig, get_config, validate_config
 from ..document_loaders.loader_factory import DocumentLoaderFactory, load_document
 from ..document_loaders.base_loader import Document
 from ..text_processing.text_splitter import TextSplitterFactory, TextChunk
-from ..vector_store.safe_chromadb_client import SafeChromaDBClient, SearchResult, SafeChromaDBError
+from ..vector_store.faiss_client import FaissClient, SearchResult
 from ..services.embedding_service import EmbeddingService
 from ...ai.session_manager import session_manager
 from .rag_pipeline import RAGQuery, RAGResponse
@@ -158,7 +158,7 @@ class SafeRAGPipeline:
         )
         
         # Initialize vector stores (primary and fallback)
-        self.primary_vector_store = SafeChromaDBClient(self.config.vector_store)
+        self.primary_vector_store = FaissClient(self.config.vector_store)
         self.fallback_vector_store = InMemoryVectorStore()
         self.using_fallback = False
         

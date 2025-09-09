@@ -18,7 +18,7 @@ from ..config.rag_config import RAGPipelineConfig, EmbeddingConfig, LLMConfig, V
 from ..pipeline.rag_pipeline import RAGPipeline, RAGQuery
 from ..document_loaders.loader_factory import DocumentLoaderFactory
 from ..text_processing.text_splitter import TextSplitterFactory, TextProcessingConfig
-from ..vector_store.chromadb_client import ChromaDBClient
+from ..vector_store.faiss_client import FaissClient
 
 
 class TestRAGPipeline:

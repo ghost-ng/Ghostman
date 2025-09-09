@@ -31,7 +31,16 @@ import numpy as np
 from ..config.rag_config import VectorStoreConfig
 from ..document_loaders.base_loader import Document, DocumentMetadata
 from ..text_processing.text_splitter import TextChunk
-from .chromadb_client import SearchResult
+# Define SearchResult locally (previously from chromadb_client)
+from dataclasses import dataclass
+
+@dataclass
+class SearchResult:
+    """Search result from vector store."""
+    content: str
+    metadata: Dict[str, Any]
+    score: float
+    chunk_id: str
 
 logger = logging.getLogger("ghostman.faiss_client")
 

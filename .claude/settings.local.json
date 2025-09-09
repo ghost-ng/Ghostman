@@ -38,7 +38,8 @@
       "WebFetch(domain:cookbook.chromadb.dev)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": [],
