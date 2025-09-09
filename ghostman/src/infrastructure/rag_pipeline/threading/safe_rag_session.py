@@ -90,11 +90,19 @@ class SafeRAGSession:
             self.logger.info(f"🔄 Ingesting document (thread-safe): {file_path}")
             start_time = time.time()
             
-            # Process document through FAISS pipeline
-            document_id = self._pipeline.ingest_document(
-                file_path=file_path,
-                metadata_override=metadata_override
-            )
+            # Process document through FAISS pipeline (async)
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                document_id = loop.run_until_complete(
+                    self._pipeline.ingest_document(
+                        source=file_path,
+                        metadata_override=metadata_override
+                    )
+                )
+            finally:
+                loop.close()
             
             processing_time = time.time() - start_time
             
@@ -135,11 +143,34 @@ class SafeRAGSession:
             self.logger.info(f"🔍 Querying RAG pipeline (thread-safe): {query_text[:50]}...")
             start_time = time.time()
             
-            # Query through FAISS pipeline
-            result = self._pipeline.query(
-                query_text=query_text,
-                top_k=top_k
+            # Query through FAISS pipeline (async)
+            from ..pipeline.rag_pipeline import RAGQuery
+            import asyncio
+            
+            query_obj = RAGQuery(
+                text=query_text,
+                top_k=top_k,
+                filters=filters
             )
+            
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                response = loop.run_until_complete(
+                    self._pipeline.query(query_obj)
+                )
+                # Convert RAGResponse to dict format expected by caller
+                result = {
+                    'sources': [
+                        {
+                            'content': source.content,
+                            'metadata': source.metadata,
+                            'score': source.score
+                        } for source in response.sources
+                    ] if hasattr(response, 'sources') and response.sources else []
+                }
+            finally:
+                loop.close()
             
             processing_time = time.time() - start_time
             
@@ -213,7 +244,8 @@ class SafeRAGSession:
         try:
             self.logger.info(f"Closing safe RAG session: {self._session_id}")
             if self._pipeline:
-                self._pipeline.cleanup()
+                # SafeRAGPipeline doesn't have cleanup method
+                pass
             self._is_ready = False
             
         except Exception as e:
