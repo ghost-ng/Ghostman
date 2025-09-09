@@ -1,8 +1,8 @@
 """
 Thread-Safe RAG Session
 
-Provides a thread-safe interface to the RAG pipeline using the ChromaDB worker thread.
-This replaces direct RAG pipeline usage in Qt applications to prevent segfaults.
+Provides a thread-safe interface to the FAISS-based RAG pipeline.
+This replaces ChromaDB-based solutions to prevent segfaults in Qt applications.
 """
 
 import logging
@@ -10,18 +10,18 @@ import time
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Union
 
-from .chromadb_worker import get_chromadb_worker, ChromaDBWorker
 from ..config.rag_config import get_config, RAGPipelineConfig
+from ..pipeline.safe_rag_pipeline import SafeRAGPipeline
 
 logger = logging.getLogger("ghostman.safe_rag_session")
 
 
 class SafeRAGSession:
     """
-    Thread-safe RAG session that routes operations through the ChromaDB worker.
+    Thread-safe RAG session using FAISS vector store.
     
-    This class provides the same interface as the RAG pipeline but ensures
-    all ChromaDB operations happen in a dedicated thread to prevent Qt crashes.
+    This class provides a safe interface to the RAG pipeline without
+    the threading issues that occurred with ChromaDB.
     """
     
     def __init__(self, config: Optional[RAGPipelineConfig] = None):
@@ -34,8 +34,8 @@ class SafeRAGSession:
         self.config = config or get_config()
         self.logger = logging.getLogger("ghostman.safe_rag_session.SafeRAGSession")
         
-        # Get the global ChromaDB worker
-        self._worker: ChromaDBWorker = get_chromadb_worker(self.config)
+        # Initialize FAISS-based pipeline
+        self._pipeline: Optional[SafeRAGPipeline] = None
         
         # Session state
         self._session_id = f"rag_session_{int(time.time())}"
@@ -49,12 +49,14 @@ class SafeRAGSession:
         try:
             self.logger.info(f"Initializing safe RAG session: {self._session_id}")
             
-            # Check worker health
-            if self._worker.health_check(timeout=5.0):
+            # Create FAISS-based pipeline
+            self._pipeline = SafeRAGPipeline(self.config)
+            
+            if self._pipeline.is_ready():
                 self._is_ready = True
                 self.logger.info("✅ Safe RAG session ready")
             else:
-                self.logger.error("❌ ChromaDB worker not healthy")
+                self.logger.error("❌ FAISS pipeline not ready")
                 self._is_ready = False
                 
         except Exception as e:
@@ -64,7 +66,7 @@ class SafeRAGSession:
     @property
     def is_ready(self) -> bool:
         """Check if the RAG session is ready."""
-        return self._is_ready
+        return self._is_ready and self._pipeline is not None
     
     def ingest_document(self, file_path: Union[str, Path], 
                        metadata_override: Optional[Dict[str, Any]] = None,
@@ -75,12 +77,12 @@ class SafeRAGSession:
         Args:
             file_path: Path to document file
             metadata_override: Optional metadata overrides
-            timeout: Operation timeout in seconds
+            timeout: Operation timeout in seconds (unused with FAISS)
             
         Returns:
             Document ID if successful, None if failed
         """
-        if not self._is_ready:
+        if not self.is_ready:
             self.logger.error("RAG session not ready")
             return None
         
@@ -88,11 +90,10 @@ class SafeRAGSession:
             self.logger.info(f"🔄 Ingesting document (thread-safe): {file_path}")
             start_time = time.time()
             
-            # Route through worker thread
-            document_id = self._worker.ingest_document(
+            # Process document through FAISS pipeline
+            document_id = self._pipeline.ingest_document(
                 file_path=file_path,
-                metadata_override=metadata_override,
-                timeout=timeout
+                metadata_override=metadata_override
             )
             
             processing_time = time.time() - start_time
@@ -120,13 +121,13 @@ class SafeRAGSession:
         Args:
             query_text: Query text
             top_k: Number of results to return
-            filters: Optional metadata filters
-            timeout: Operation timeout in seconds
+            filters: Optional metadata filters (unused with current FAISS impl)
+            timeout: Operation timeout in seconds (unused with FAISS)
             
         Returns:
             Query response if successful, None if failed
         """
-        if not self._is_ready:
+        if not self.is_ready:
             self.logger.error("RAG session not ready")
             return None
         
@@ -134,12 +135,10 @@ class SafeRAGSession:
             self.logger.info(f"🔍 Querying RAG pipeline (thread-safe): {query_text[:50]}...")
             start_time = time.time()
             
-            # Route through worker thread
-            result = self._worker.query(
+            # Query through FAISS pipeline
+            result = self._pipeline.query(
                 query_text=query_text,
-                top_k=top_k,
-                filters=filters,
-                timeout=timeout
+                top_k=top_k
             )
             
             processing_time = time.time() - start_time
@@ -161,32 +160,32 @@ class SafeRAGSession:
         Get RAG pipeline statistics (thread-safe).
         
         Args:
-            timeout: Operation timeout in seconds
+            timeout: Operation timeout in seconds (unused with FAISS)
             
         Returns:
             Statistics if successful, None if failed
         """
-        if not self._is_ready:
+        if not self.is_ready:
             return {
                 'session_ready': False,
                 'error': 'RAG session not ready'
             }
         
         try:
-            # Get stats from worker
-            stats = self._worker.get_stats(timeout=timeout)
+            # Get stats from pipeline
+            stats = self._pipeline.get_stats() if self._pipeline else {}
             
-            if stats:
-                # Add session info
-                stats['session'] = {
-                    'session_id': self._session_id,
-                    'ready': self._is_ready,
-                    'config': {
-                        'embedding_model': self.config.embedding.model,
-                        'llm_model': self.config.llm.model,
-                        'collection_name': self.config.vector_store.collection_name
-                    }
+            # Add session info
+            stats['session'] = {
+                'session_id': self._session_id,
+                'ready': self._is_ready,
+                'vector_store': 'faiss',
+                'config': {
+                    'embedding_model': self.config.embedding.model,
+                    'llm_model': self.config.llm.model,
+                    'collection_name': self.config.vector_store.collection_name
                 }
+            }
             
             return stats
             
@@ -199,29 +198,23 @@ class SafeRAGSession:
     
     def health_check(self, timeout: float = 5.0) -> bool:
         """
-        Check if the RAG session and worker are healthy.
+        Check if the RAG session is healthy.
         
         Args:
-            timeout: Check timeout in seconds
+            timeout: Check timeout in seconds (unused with FAISS)
             
         Returns:
             True if healthy, False otherwise
         """
-        if not self._is_ready:
-            return False
-        
-        try:
-            return self._worker.health_check(timeout=timeout)
-        except Exception as e:
-            self.logger.error(f"Health check error: {e}")
-            return False
+        return self.is_ready and self._pipeline.is_ready() if self._pipeline else False
     
     def close(self):
         """Close the RAG session (cleanup)."""
         try:
             self.logger.info(f"Closing safe RAG session: {self._session_id}")
+            if self._pipeline:
+                self._pipeline.cleanup()
             self._is_ready = False
-            # Note: We don't stop the global worker as other sessions might be using it
             
         except Exception as e:
             self.logger.error(f"Error closing RAG session: {e}")

@@ -40,7 +40,7 @@ class REPLLangChainIntegration(QObject):
     def __init__(
         self,
         conversation_service: ConversationService,
-        persist_directory: str = "./chroma_langchain_db",
+        persist_directory: str = "./faiss_langchain_db",
         openai_api_key: Optional[str] = None
     ):
         """Initialize REPL-LangChain integration."""

@@ -73,7 +73,7 @@ class LangChainIntegrationService(QObject if PYQT_AVAILABLE else object):
     def __init__(
         self,
         conversation_service: ConversationService,
-        persist_directory: str = "./chroma_langchain_db",
+        persist_directory: str = "./faiss_langchain_db",
         openai_api_key: Optional[str] = None,
         model_name: str = "gpt-4",
         embedding_model: str = "text-embedding-3-large"

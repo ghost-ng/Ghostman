@@ -3,7 +3,7 @@ LangChain-based RAG Pipeline with Conversation History
 
 Proper implementation using LangChain components:
 - OpenAIEmbeddings for vector embeddings
-- Chroma for vector storage
+- FAISS for vector storage
 - ConversationalRetrievalChain for chat with history
 - Document loaders and text splitters
 """
@@ -16,7 +16,7 @@ from datetime import datetime
 
 # LangChain imports
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain_chroma import Chroma
+from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import (
     TextLoader,
@@ -69,7 +69,7 @@ class LangChainRAGPipeline:
     
     def __init__(
         self,
-        persist_directory: str = "./chroma_langchain_db",
+        persist_directory: str = "./faiss_langchain_db",
         collection_name: str = "ghostman_documents",
         openai_api_key: Optional[str] = None,
         model_name: str = "gpt-4",

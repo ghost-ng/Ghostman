@@ -37,7 +37,8 @@
       "WebFetch(domain:docs.trychroma.com)",
       "WebFetch(domain:cookbook.chromadb.dev)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": [],

@@ -327,7 +327,7 @@ class UnifiedSessionLangChainRAGPipeline:
     
     def __init__(
         self,
-        persist_directory: str = "./chroma_langchain_db",
+        persist_directory: str = "./faiss_langchain_db",
         collection_name: str = "ghostman_documents",
         model_name: str = "gpt-3.5-turbo",
         embedding_model: str = "text-embedding-3-small",
@@ -354,7 +354,7 @@ class UnifiedSessionLangChainRAGPipeline:
         )
         
         # Initialize Chroma Vector Store
-        from langchain_chroma import Chroma
+        from langchain_community.vectorstores import FAISS
         logger.info(f"Initializing Chroma vector store at {persist_directory}")
         self.vector_store = Chroma(
             collection_name=collection_name,
