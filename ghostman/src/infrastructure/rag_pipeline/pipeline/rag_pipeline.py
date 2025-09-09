@@ -25,7 +25,8 @@ from ..config.rag_config import RAGPipelineConfig, get_config, validate_config, 
 from ..document_loaders.loader_factory import DocumentLoaderFactory, load_document
 from ..document_loaders.base_loader import Document
 from ..text_processing.text_splitter import TextSplitterFactory, TextChunk
-from ..vector_store.faiss_client import FaissClient, SearchResult
+from ..vector_store.chromadb_client import ChromaDBClient, SearchResult
+from ..vector_store.faiss_client import FaissClient
 from ..services.embedding_service import EmbeddingService
 from ...ai.session_manager import session_manager
 
@@ -108,13 +109,13 @@ class RAGPipeline:
             try:
                 self.vector_store = FaissClient(self.config.vector_store)
                 self.logger.info("✅ Using FAISS vector store (no SQLite dependencies)")
-            except FaissError as e:
+            except Exception as e:
                 self.logger.error(f"❌ FAISS initialization failed: {e}")
                 self.logger.warning("🔄 Falling back to ChromaDB vector store")
-                self.vector_store = FaissClient(self.config.vector_store)
+                self.vector_store = ChromaDBClient(self.config.vector_store)
         else:
             self.vector_store = ChromaDBClient(self.config.vector_store)
-            self.logger.info("⚠️ Using ChromaDB vector store (may cause segfaults)")
+            self.logger.info("✅ Using ChromaDB vector store (thread-safe worker)")
         
         # Validate configuration and initialize components
         validate_config(self.config)

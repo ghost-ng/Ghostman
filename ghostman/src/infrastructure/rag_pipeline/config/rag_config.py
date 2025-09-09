@@ -43,6 +43,7 @@ class LLMProvider(Enum):
 
 class VectorStoreType(Enum):
     """Supported vector store types."""
+    CHROMADB = "chromadb"
     FAISS = "faiss"
 
 
@@ -128,18 +129,18 @@ class LLMConfig:
 @dataclass
 class VectorStoreConfig:
     """Configuration for vector store."""
-    type: VectorStoreType = VectorStoreType.FAISS  # Default to FAISS to avoid ChromaDB segfaults
+    type: VectorStoreType = VectorStoreType.FAISS  # FAISS is stable, ChromaDB causes segfaults
     
     # Common settings
     persist_directory: Optional[str] = None
     collection_name: str = "ghostman_documents"
     distance_function: str = "cosine"  # cosine, l2, ip
     
-    # Legacy ChromaDB settings (no longer used)
-    # host: str = "localhost"
-    # port: int = 8000
-    # ssl: bool = False
-    # headers: Dict[str, str] = field(default_factory=dict)
+    # ChromaDB client settings
+    host: str = "localhost"
+    port: int = 8000
+    ssl: bool = False
+    headers: Dict[str, str] = field(default_factory=dict)
     
     # Performance settings
     max_batch_size: int = 100
@@ -164,9 +165,9 @@ class VectorStoreConfig:
             # Ensure the directory exists
             os.makedirs(data_dir, exist_ok=True)
             
-            # Set FAISS persist directory
-            self.persist_directory = os.path.join(data_dir, "faiss_index")
-            logger.info(f"FAISS persist directory set to: {self.persist_directory}")
+            # Set ChromaDB persist directory
+            self.persist_directory = os.path.join(data_dir, "chromadb")
+            logger.info(f"ChromaDB persist directory set to: {self.persist_directory}")
 
 
 @dataclass
@@ -341,7 +342,7 @@ class RAGPipelineConfig:
             except ValueError:
                 logger.warning("Invalid RAG_TOP_K environment variable; must be an integer.")
         
-        val = os.getenv("RAG_FAISS_PATH")
+        val = os.getenv("RAG_CHROMADB_PATH")
         if val is not None:
             config.vector_store.persist_directory = val
         
