@@ -116,35 +116,27 @@ class SimpleFAISSSession:
                 self.logger.error(f"Failed to load document: {file_path}")
                 return None
             
-            # Split into chunks
-            text_chunks = self.text_splitter.split_text(document.content)
-            if not text_chunks:
+            # Split into chunks (already returns TextChunk objects)
+            chunks = self.text_splitter.split_text(document.content)
+            if not chunks:
                 self.logger.error(f"No chunks created from document: {file_path}")
                 return None
             
-            # Create TextChunk objects
-            from ..text_processing.text_splitter import TextChunk
-            chunks = []
-            for i, text in enumerate(text_chunks):
-                chunk = TextChunk(
-                    content=text,
-                    chunk_index=i,
-                    start_char=0,  # Could calculate actual positions if needed
-                    end_char=len(text),
-                    token_count=None,
-                    metadata={
-                        'source': str(file_path),
-                        'chunk_id': f"{document.id}_{i}",
-                        **(metadata_override or {})
-                    }
-                )
-                chunks.append(chunk)
+            # Add metadata to chunks
+            import uuid
+            document_id = str(uuid.uuid4())
+            for chunk in chunks:
+                chunk.metadata.update({
+                    'source': str(file_path),
+                    'document_id': document_id,
+                    **(metadata_override or {})
+                })
             
             self.logger.info(f"Split document into {len(chunks)} chunks")
             
             # Generate embeddings for chunks
             texts = [chunk.content for chunk in chunks]
-            embeddings = self.embedding_service.generate_embeddings(texts)
+            embeddings = self.embedding_service.create_batch_embeddings(texts)
             
             if not embeddings or len(embeddings) != len(chunks):
                 self.logger.error(f"Failed to generate embeddings for {len(chunks)} chunks")
@@ -152,11 +144,24 @@ class SimpleFAISSSession:
             
             self.logger.info(f"Generated embeddings for {len(chunks)} chunks")
             
-            # Store in FAISS
-            document_id = self.faiss_client.store_document(
-                chunks=chunks,
-                embeddings=embeddings
-            )
+            # Store in FAISS (handle async)
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                chunk_ids = loop.run_until_complete(
+                    self.faiss_client.store_document(
+                        document=document,
+                        chunks=chunks,
+                        embeddings=embeddings
+                    )
+                )
+            finally:
+                loop.close()
+            
+            if not chunk_ids:
+                self.logger.error("Failed to store document in FAISS")
+                return None
             
             processing_time = time.time() - start_time
             self.logger.info(f"✅ Document ingested successfully: {document_id} ({processing_time:.2f}s)")
@@ -191,14 +196,14 @@ class SimpleFAISSSession:
             start_time = time.time()
             
             # Generate query embedding
-            query_embeddings = self.embedding_service.generate_embeddings([query_text])
-            if not query_embeddings or len(query_embeddings) != 1:
+            query_embedding = self.embedding_service.create_embedding(query_text)
+            if not query_embedding:
                 self.logger.error("Failed to generate query embedding")
                 return None
             
             # Search FAISS
             results = self.faiss_client.search(
-                query_embedding=query_embeddings[0],
+                query_embedding=query_embedding,
                 top_k=top_k
             )
             
