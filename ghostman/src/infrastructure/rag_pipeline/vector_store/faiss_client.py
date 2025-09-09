@@ -41,8 +41,66 @@ class SearchResult:
     metadata: Dict[str, Any]
     score: float
     chunk_id: str
+    document_id: Optional[str] = None
+    embedding: Optional[np.ndarray] = None
 
 logger = logging.getLogger("ghostman.faiss_client")
+
+# Debug logger specifically for array comparison issues
+debug_logger = logging.getLogger("ghostman.faiss_client.array_debug")
+debug_logger.setLevel(logging.DEBUG)
+
+
+def safe_array_comparison(metadata_value: Any, filter_value: Any, filter_key: str) -> bool:
+    """
+    Safely compare values that might be numpy arrays.
+    
+    This function handles the "truth value of an array with more than one element is ambiguous" error
+    by properly handling numpy arrays, scalars, and regular Python types.
+    
+    Args:
+        metadata_value: Value from metadata
+        filter_value: Value to compare against
+        filter_key: Key name for debugging
+        
+    Returns:
+        True if values are equal, False otherwise
+    """
+    try:
+        # Handle numpy scalars and arrays
+        if hasattr(metadata_value, 'item'):  # numpy scalar
+            metadata_value = metadata_value.item()
+            
+        if hasattr(filter_value, 'item'):  # numpy scalar  
+            filter_value = filter_value.item()
+        
+        # Handle numpy arrays specifically
+        if isinstance(metadata_value, np.ndarray) or isinstance(filter_value, np.ndarray):
+            # Convert both to arrays for comparison
+            if not isinstance(metadata_value, np.ndarray):
+                metadata_value = np.array(metadata_value)
+            if not isinstance(filter_value, np.ndarray):
+                filter_value = np.array(filter_value)
+            
+            # Check shapes first
+            if metadata_value.shape != filter_value.shape:
+                return False
+            
+            # For arrays, use array_equal for element-wise comparison
+            try:
+                result = np.array_equal(metadata_value, filter_value)
+                return bool(result)  # Ensure we return a Python bool
+            except Exception:
+                return False
+        
+        # Regular comparison for non-array types
+        result = metadata_value == filter_value
+        return result
+        
+    except Exception as e:
+        debug_logger.error(f"Safe array comparison failed for '{filter_key}': {e}")
+        return False
+
 
 # Try to import FAISS
 try:
@@ -338,24 +396,39 @@ class FaissClient:
                     else:
                         query_vector = np.array(query_embedding, dtype=np.float32)
                     
+                    # Ensure query_vector is 1D
+                    if query_vector.ndim > 1:
+                        query_vector = query_vector.flatten()
+                    
                     norm = np.linalg.norm(query_vector)
                     if norm > 0:
                         query_vector = query_vector / norm
+                    
+                    # Validate dimensions
+                    if query_vector.shape[0] != self._dimension:
+                        raise FaissError(f"Query vector dimension {query_vector.shape[0]} doesn't match index dimension {self._dimension}")
                     
                     # Reshape for FAISS
                     query_vector = query_vector.reshape(1, -1)
                     
                     # Search in FAISS
                     search_k = min(top_k * 2, self._index.ntotal)  # Get more results for filtering
-                    similarities, indices = self._index.search(query_vector, search_k)
+                    try:
+                        similarities, indices = self._index.search(query_vector, search_k)
+                    except Exception as search_error:
+                        self.logger.error(f"FAISS search failed: {search_error}")
+                        self.logger.error(f"Query vector shape: {query_vector.shape}, dtype: {query_vector.dtype}")
+                        self.logger.error(f"Index total: {self._index.ntotal}, dimension: {self._dimension}")
+                        raise FaissError(f"FAISS search failed: {search_error}")
                     
                     # Convert to SearchResult objects
                     results = []
                     for i in range(len(indices[0])):
-                        if indices[0][i] == -1:  # FAISS returns -1 for invalid results
+                        index_value = int(indices[0][i])
+                        if index_value == -1:  # FAISS returns -1 for invalid results
                             continue
                         
-                        doc_idx = indices[0][i]
+                        doc_idx = index_value
                         similarity_score = float(similarities[0][i])
                         
                         # Get document info
@@ -364,25 +437,35 @@ class FaissClient:
                             
                             # Apply metadata filters if provided
                             if filters:
-                                skip = False
-                                for filter_key, filter_value in filters.items():
-                                    if filter_key not in metadata:
-                                        skip = True
-                                        break
-                                    if metadata[filter_key] != filter_value:
-                                        skip = True
-                                        break
-                                
-                                if skip:
+                                skip = False                                
+                                try:
+                                    for filter_key, filter_value in filters.items():
+                                        if filter_key not in metadata:
+                                            skip = True
+                                            break
+                                        
+                                        metadata_value = metadata[filter_key]
+                                        
+                                        # Use safe array comparison method
+                                        if not safe_array_comparison(metadata_value, filter_value, filter_key):
+                                            skip = True
+                                            break
+                                    
+                                    if skip:
+                                        continue
+                                        
+                                except Exception as filter_error:
+                                    self.logger.warning(f"Error during metadata filtering: {filter_error}")
+                                    # Skip this result to be safe
                                     continue
                             
                             # Create search result
                             result = SearchResult(
-                                document_id=metadata.get("document_id", ""),
-                                chunk_id=chunk_id,
                                 content=content,
-                                score=similarity_score,
                                 metadata=metadata,
+                                score=similarity_score,
+                                chunk_id=chunk_id,
+                                document_id=metadata.get("document_id", ""),
                                 embedding=None  # FAISS doesn't return embeddings by default
                             )
                             results.append(result)
@@ -405,7 +488,22 @@ class FaissClient:
             return search_results
             
         except Exception as e:
-            raise FaissError(f"FAISS search failed: {e}")
+            # Specific handling for numpy array truth value error
+            error_msg = str(e)
+            if "truth value of an array" in error_msg.lower():
+                debug_logger.error("❌ NUMPY ARRAY TRUTH VALUE ERROR DETECTED")
+                debug_logger.error(f"Error: {error_msg}")
+                debug_logger.error(f"Query embedding type: {type(query_embedding)}")
+                debug_logger.error(f"Query embedding shape: {getattr(query_embedding, 'shape', 'N/A')}")
+                debug_logger.error(f"Filters provided: {filters}")
+                debug_logger.error("This error was caught and wrapped by the error isolation system")
+                
+                # Return empty results instead of crashing
+                self.logger.error("FAISS search failed due to numpy array comparison issue - returning empty results")
+                return []
+            else:
+                debug_logger.error(f"General FAISS search error: {error_msg}")
+                raise FaissError(f"FAISS search failed: {e}")
     
     async def delete_document(self, document_id: str) -> int:
         """

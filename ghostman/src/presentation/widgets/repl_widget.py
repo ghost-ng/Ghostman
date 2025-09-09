@@ -3336,22 +3336,20 @@ class REPLWidget(QWidget):
                             })
                             return
                         
-                        # Import thread-safe RAG session
+                        # Use the existing RAG session passed to the processor
                         try:
-                            from ...infrastructure.rag_pipeline.threading.safe_rag_session import create_safe_rag_session
-                            
-                            # Create thread-safe RAG session (routes through ChromaDB worker)
-                            logger.info(f"🔒 Creating thread-safe RAG session for {self.filename}")
-                            safe_rag = create_safe_rag_session()
+                            # Use the shared RAG session instead of creating a new one
+                            logger.info(f"🔄 Using existing RAG session for {self.filename} (ID: {getattr(self.rag_session, '_session_id', 'unknown')})")
+                            safe_rag = self.rag_session
                             
                             if not safe_rag.is_ready:
-                                logger.error(f"❌ Safe RAG session not ready for {self.filename}")
+                                logger.error(f"❌ Existing RAG session not ready for {self.filename}")
                                 self.finished.emit(self.file_path, self.filename, False, {
                                     'tokens': 0,
                                     'chunks': 0,
                                     'file_id': self.filename,
                                     'already_processed': False,
-                                    'error': 'Safe RAG session not ready'
+                                    'error': 'Existing RAG session not ready'
                                 })
                                 return
                             
@@ -3402,8 +3400,8 @@ class REPLWidget(QWidget):
                                     'error': 'Document ingestion returned None'
                                 })
                             
-                            # Clean up safe session
-                            safe_rag.close()
+                            # Don't close the shared session - it's managed by the parent widget
+                            logger.info(f"✅ Document ingestion complete for {self.filename}, keeping shared session alive")
                             
                         except ImportError as import_error:
                             logger.error(f"❌ Failed to import safe RAG session: {import_error}")
@@ -6714,10 +6712,19 @@ def test_theme():
                     # Create a SafeRAGSession for context retrieval
                     logger.info("🔍 Retrieving relevant context from SafeRAG pipeline")
                     
-                    # Import and create SafeRAGSession
-                    from ...infrastructure.rag_pipeline.threading.safe_rag_session import create_safe_rag_session
+                    # Reuse existing RAG session if available, otherwise create new one
+                    safe_rag = None
+                    is_new_session = False
+                    if hasattr(self, 'rag_session') and self.rag_session and self.rag_session.is_ready:
+                        safe_rag = self.rag_session
+                        logger.info("♻️ Reusing existing RAG session for context retrieval")
+                    else:
+                        # Import and create SafeRAGSession as fallback
+                        from ...infrastructure.rag_pipeline.threading.safe_rag_session import create_safe_rag_session
+                        safe_rag = create_safe_rag_session()
+                        is_new_session = True
+                        logger.info("🆕 Created new RAG session for context retrieval")
                     
-                    safe_rag = create_safe_rag_session()
                     if not safe_rag or not safe_rag.is_ready:
                         logger.warning("⚠️ SafeRAG session not available for context retrieval")
                         return message
@@ -6735,11 +6742,13 @@ def test_theme():
                         
                         if docs_processed == 0:
                             logger.warning("⚠️ RAG pipeline has no documents - no context to retrieve")
-                            safe_rag.close()
+                            if is_new_session:
+                                safe_rag.close()
                             return message
                     except Exception as stats_error:
                         logger.warning(f"Failed to check RAG pipeline stats: {stats_error}")
-                        safe_rag.close()
+                        if is_new_session:
+                            safe_rag.close()
                         return message
                     
                     # Use SafeRAG query to get relevant context (thread-safe)
@@ -6776,7 +6785,8 @@ def test_theme():
                                     enhanced_message = f"Context from uploaded files:\n{context}\n\nUser question: {message}"
                                     
                                     logger.info(f"✅ Enhanced message with {len(context_parts)} context sources")
-                                    safe_rag.close()
+                                    if is_new_session:
+                                        safe_rag.close()
                                     return enhanced_message
                         else:
                             logger.warning("⚠️ SafeRAG query returned no response")
@@ -6786,12 +6796,13 @@ def test_theme():
                         logger.error(f"SafeRAG query traceback: {traceback.format_exc()}")
                     
                     # Close SafeRAG session and return original message
-                    safe_rag.close()
+                    if is_new_session:
+                        safe_rag.close()
                     return message
                     
                 except Exception as e:
                     logger.error(f"Failed to enhance message with file context: {e}")
-                    if 'safe_rag' in locals():
+                    if 'safe_rag' in locals() and is_new_session:
                         safe_rag.close()
                     return message
             

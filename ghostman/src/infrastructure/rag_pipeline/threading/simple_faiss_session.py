@@ -197,26 +197,39 @@ class SimpleFAISSSession:
             
             # Generate query embedding
             query_embedding = self.embedding_service.create_embedding(query_text)
-            if not query_embedding:
+            if query_embedding is None or (hasattr(query_embedding, 'size') and query_embedding.size == 0):
                 self.logger.error("Failed to generate query embedding")
                 return None
             
             # Search FAISS
-            results = self.faiss_client.search(
-                query_embedding=query_embedding,
-                top_k=top_k
-            )
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                results = loop.run_until_complete(
+                    self.faiss_client.similarity_search(
+                        query_embedding=query_embedding,
+                        top_k=top_k,
+                        filters=filters
+                    )
+                )
+            finally:
+                loop.close()
             
             processing_time = time.time() - start_time
             
-            if results:
+            if results is not None and len(results) > 0:
                 sources = []
                 for result in results:
-                    sources.append({
-                        'content': result.content,
-                        'metadata': result.metadata,
-                        'score': result.score
-                    })
+                    try:
+                        sources.append({
+                            'content': result.content,
+                            'metadata': result.metadata,
+                            'score': result.score
+                        })
+                    except Exception as result_error:
+                        self.logger.warning(f"Error processing result: {result_error}")
+                        continue
                 
                 self.logger.info(f"✅ Query completed: {len(sources)} sources found ({processing_time:.2f}s)")
                 return {'sources': sources}
@@ -237,12 +250,31 @@ class SimpleFAISSSession:
             }
         
         try:
+            # Get stats from FAISS client with defensive programming
+            faiss_stats = {}
+            if hasattr(self.faiss_client, 'get_stats'):
+                try:
+                    client_stats = self.faiss_client.get_stats()
+                    # Ensure we have a dictionary, not some other object
+                    if isinstance(client_stats, dict):
+                        faiss_stats = client_stats
+                    else:
+                        self.logger.warning(f"FAISS client get_stats returned non-dict: {type(client_stats)}")
+                        faiss_stats = {}
+                except Exception as stats_error:
+                    self.logger.warning(f"FAISS client get_stats failed: {stats_error}")
+                    faiss_stats = {}
+            
             stats = {
                 'session_ready': True,
                 'session_id': self._session_id,
                 'vector_store': 'faiss',
-                'document_count': getattr(self.faiss_client, 'document_count', 0),
-                'chunk_count': getattr(self.faiss_client, '_index', {}).get('vectors_count', 0) if hasattr(self.faiss_client, '_index') else 0
+                'rag_pipeline': {
+                    'documents_processed': faiss_stats.get('documents_stored', 0) if isinstance(faiss_stats, dict) else 0,
+                    'vector_store': {
+                        'chunks_stored': faiss_stats.get('chunks_stored', 0) if isinstance(faiss_stats, dict) else 0
+                    }
+                }
             }
             return stats
         except Exception as e:
