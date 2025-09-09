@@ -14,6 +14,8 @@ from PyQt6.QtWidgets import QApplication, QSystemTrayIcon
 from ..domain.models.app_state import AppState, StateChangeEvent
 from ..domain.services.state_machine import TwoStateMachine
 from ..infrastructure.storage.settings_manager import settings
+from .single_instance import SingleInstanceDetector, SingleInstanceError
+from ..infrastructure.rag_coordinator import initialize_rag_coordinator, cleanup_rag_coordinator, get_rag_coordinator
 # UI imports - will be available after implementation
 # from ..presentation.ui.main_window import MainWindow
 # from ..presentation.ui.system_tray import EnhancedSystemTray
@@ -44,6 +46,8 @@ class AppCoordinator(QObject):
         self._system_tray = None  # Will be EnhancedSystemTray instance
         self._settings_dialog = None  # Keep reference to prevent garbage collection
         self._initialized = False
+        self._single_instance: Optional[SingleInstanceDetector] = None
+        self._rag_coordinator = None  # RAG coordinator instance
         
         logger.info("AppCoordinator created")
     
@@ -57,6 +61,27 @@ class AppCoordinator(QObject):
         try:
             logger.info("Initializing Ghostman application...")
             
+            # Initialize single instance detection first
+            self._single_instance = SingleInstanceDetector(app_name="Ghostman")
+            
+            # Check if another instance is already running
+            logger.info("Checking for existing instances...")
+            try:
+                detection_result = self._single_instance.detect_running_instance()
+                if detection_result.is_running:
+                    logger.error(f"Another instance of Ghostman is already running (detected via {detection_result.detection_method})")
+                    return False
+                logger.info("No existing instance detected")
+                
+                # Acquire instance lock
+                if not self._single_instance.acquire_instance_lock():
+                    logger.error("Failed to acquire single instance lock")
+                    return False
+                logger.info("Single instance lock acquired successfully")
+            except Exception as e:
+                logger.warning(f"Single instance detection failed: {e} - continuing anyway")
+                self._single_instance = None
+            
             # Get current QApplication instance
             self._app = QApplication.instance()
             if not self._app:
@@ -69,6 +94,9 @@ class AppCoordinator(QObject):
             
             # Initialize UI components (will be implemented)
             self._initialize_ui_components()
+            
+            # Initialize RAG coordinator
+            self._initialize_rag_system()
             
             # Apply interface settings (opacity, always on top) immediately
             try:
@@ -155,6 +183,54 @@ class AppCoordinator(QObject):
             self._system_tray = None
             self._main_window = None
     
+    def _initialize_rag_system(self):
+        """Initialize RAG system integration."""
+        try:
+            # Import conversation service
+            from ..infrastructure.conversation_management.services.conversation_service import ConversationService
+            from ..infrastructure.conversation_management.repositories.conversation_repository import ConversationRepository
+            
+            # Initialize conversation service (if not already available)
+            if not hasattr(self, '_conversation_service'):
+                repo = ConversationRepository()
+                self._conversation_service = ConversationService(repo)
+            
+            # Initialize RAG coordinator
+            self._rag_coordinator = initialize_rag_coordinator(self._conversation_service)
+            
+            if self._rag_coordinator.is_enabled():
+                logger.info("RAG system initialized successfully")
+                
+                # Enhance main window REPL if available
+                self._enhance_main_window_rag()
+            else:
+                status = self._rag_coordinator.get_status()
+                logger.info(f"RAG system disabled: {status.get('error', 'Unknown reason')}")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize RAG system: {e}")
+    
+    def _enhance_main_window_rag(self):
+        """Enhance main window REPL with RAG capabilities."""
+        if not self._main_window or not self._rag_coordinator:
+            return
+        
+        try:
+            # Check if main window has REPL widget
+            if hasattr(self._main_window, 'repl_widget'):
+                success = self._rag_coordinator.enhance_repl_widget(
+                    self._main_window.repl_widget,
+                    widget_id="main_window_repl"
+                )
+                
+                if success:
+                    logger.info("Main window REPL enhanced with RAG capabilities")
+                else:
+                    logger.warning("Failed to enhance main window REPL with RAG")
+            
+        except Exception as e:
+            logger.error(f"Failed to enhance main window RAG: {e}")
+    
     def start_in_tray_mode(self):
         """Start the application in tray mode."""
         if not self._initialized:
@@ -183,6 +259,14 @@ class AppCoordinator(QObject):
         # Save final state
         if self._state_machine:
             settings.set('app.current_state', self._state_machine.current_state.value)
+        
+        # Final emergency cleanup for single instance lock 
+        try:
+            if self._single_instance:
+                self._single_instance.release_instance_lock()
+                logger.debug("Emergency single instance lock cleanup completed")
+        except Exception as e:
+            logger.debug(f"Emergency single instance lock cleanup failed: {e}")
         
         logger.info("Ghostman application shutdown complete")
     
@@ -280,6 +364,12 @@ class AppCoordinator(QObject):
         logger.info("🧹 Running comprehensive cleanup operations...")
         
         try:
+            # Cleanup RAG system first
+            if self._rag_coordinator:
+                cleanup_rag_coordinator()
+                logger.info("RAG system cleaned up")
+            
+            # Continue with other cleanup operations
             # 1. Save current conversation with any unsaved messages
             self._save_current_conversation_state()
             
@@ -322,6 +412,14 @@ class AppCoordinator(QObject):
                     logger.debug(f"✓ Cleaned up {len(ghostman_temp_files)} temporary files")
             except Exception as e:
                 logger.debug(f"Temp file cleanup failed: {e}")
+            
+            # 4. Release single instance lock
+            try:
+                if self._single_instance:
+                    self._single_instance.release_instance_lock()
+                    logger.info("✓ Single instance lock released")
+            except Exception as e:
+                logger.error(f"✗ Failed to release single instance lock: {e}")
             
             logger.info("✓ Cleanup operations completed successfully")
             

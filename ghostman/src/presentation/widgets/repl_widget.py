@@ -1280,6 +1280,9 @@ class REPLWidget(QWidget):
         self.history_index = -1
         self.current_input = ""
         
+        # Thread management for file processing
+        self._processing_threads = []  # Track active processing threads
+        
         # Panel (frame) opacity (only background, not text/content). 0.0 - 1.0
         # Initialize with default 90% opacity
         self._panel_opacity = 0.90
@@ -1303,6 +1306,13 @@ class REPLWidget(QWidget):
         # Background summarization state
         self.summarization_queue: List[str] = []  # conversation IDs
         self.is_summarizing = False
+        
+        # Unified RAG session
+        self.rag_session = None
+        self._rag_session_initializing = False
+        self._rag_session_ready = False
+        self._pending_files_queue = []  # Queue for files waiting for RAG initialization
+        self._init_rag_session()
         
         # Startup task control
         self._startup_tasks_completed = False
@@ -1328,6 +1338,9 @@ class REPLWidget(QWidget):
         
         # Set transparent background like in working minimal test
         self.setStyleSheet("REPLWidget { background-color: transparent; }")
+
+        # Enable drag and drop
+        self.setAcceptDrops(True)
 
         self._init_ui()
         self._apply_styles()
@@ -1745,7 +1758,8 @@ class REPLWidget(QWidget):
             
             # Pass opacity-adjusted colors to MixedContentDisplay
             # This won't cause duplication since we fixed set_theme_colors to not re-render
-            self.output_display.set_theme_colors(theme_colors)
+            if hasattr(self, 'output_display') and self.output_display:
+                self.output_display.set_theme_colors(theme_colors)
             
             logger.debug(f"Applied MixedContentDisplay theme colors with opacity: {alpha:.3f}")
         except Exception as e:
@@ -1871,6 +1885,9 @@ class REPLWidget(QWidget):
             if hasattr(self, 'attach_btn'):
                 self._load_chain_icon()
             
+            if hasattr(self, 'upload_btn'):
+                self._load_upload_icon()
+            
             if hasattr(self, 'move_btn'):
                 self._load_move_icon(self.move_btn)
             
@@ -1903,6 +1920,7 @@ class REPLWidget(QWidget):
             if hasattr(self, 'search_btn'):
                 self._load_search_icon()
             self._load_chain_icon()
+            self._load_upload_icon()
             self._load_chat_icon()
             if hasattr(self, 'title_settings_btn'):
                 self._load_gear_icon(self.title_settings_btn)
@@ -2686,6 +2704,14 @@ class REPLWidget(QWidget):
         self.attach_btn.clicked.connect(self._on_attach_toggle_clicked)
         title_layout.addWidget(self.attach_btn)
         
+        # Upload/File context button
+        self.upload_btn = QToolButton()
+        self._load_upload_icon()
+        self.upload_btn.setToolTip("Upload files for context")
+        self._style_title_button(self.upload_btn)
+        self.upload_btn.clicked.connect(self._on_upload_clicked)
+        title_layout.addWidget(self.upload_btn)
+        
         # Search button
         self.search_btn = QToolButton()
         # Load search icon (theme-specific)
@@ -2999,6 +3025,151 @@ class REPLWidget(QWidget):
         except Exception as e:
             logger.warning(f"Failed to re-apply search button sizing: {e}")
     
+    def _init_file_browser_bar(self, parent_layout):
+        """Initialize file browser bar for file context management."""
+        try:
+            # Debug: Check Python path and file existence
+            import sys
+            import os
+            logger.debug(f"Python path: {sys.path[:3]}...")  # Show first 3 paths
+            
+            # Try to import FileBrowserBar
+            try:
+                from ghostman.src.presentation.widgets.file_browser_bar import FileBrowserBar
+                logger.debug("✅ FileBrowserBar imported successfully")
+            except ImportError as e:
+                logger.error(f"❌ FileBrowserBar import failed: {e}")
+                
+                # Check if file exists
+                widget_dir = os.path.dirname(__file__)
+                bar_path = os.path.join(widget_dir, "file_browser_bar.py")
+                logger.debug(f"Looking for FileBrowserBar at: {bar_path}")
+                logger.debug(f"File exists: {os.path.exists(bar_path)}")
+                
+                # Try alternative import approaches
+                if os.path.exists(bar_path):
+                    try:
+                        import importlib.util
+                        spec = importlib.util.spec_from_file_location("file_browser_bar", bar_path)
+                        module = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(module)
+                        FileBrowserBar = module.FileBrowserBar
+                        logger.info("✅ FileBrowserBar loaded via importlib")
+                    except Exception as load_e:
+                        logger.error(f"❌ importlib load failed: {load_e}")
+                        raise ImportError("Could not load FileBrowserBar") from e
+                else:
+                    raise ImportError("FileBrowserBar file not found") from e
+            
+            # DISABLED: FileBrowserBar completely disabled to prevent segmentation faults
+            # The entire FileBrowserBar widget causes crashes during status updates
+            self.file_browser_bar = None  # Completely disable to prevent crashes
+            logger.info("🚫 File browser bar DISABLED - preventing segmentation faults")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize file browser bar: {e}")
+            self.file_browser_bar = None
+    
+    def _on_file_removed(self, file_id):
+        """Handle file removal from browser bar."""
+        try:
+            logger.info(f"📄 File removed: {file_id}")
+            # TODO: Remove from file context service
+        except Exception as e:
+            logger.error(f"Failed to handle file removal: {e}")
+    
+    def _on_clear_all_files(self):
+        """Handle clear all files request."""
+        try:
+            logger.info("📄 Clearing all files from context")
+            # TODO: Clear from file context service
+            if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                self.file_browser_bar.hide()
+        except Exception as e:
+            logger.error(f"Failed to clear all files: {e}")
+    
+    def _init_rag_session(self):
+        """Initialize the unified RAG session using SafeRAGSession (no segfaults)."""
+        logger.info("🚀 Starting unified RAG session initialization")
+        
+        if self._rag_session_initializing:
+            return
+            
+        try:
+            # Check if already initialized
+            if self.rag_session:
+                logger.debug("RAG session already exists, skipping initialization")
+                self._rag_session_ready = True
+                return
+                
+            self.rag_session = None
+            self._rag_session_ready = False
+            self._rag_session_initializing = True
+            
+            # Get API configuration from settings ONLY (no environment variables)
+            from ...infrastructure.storage.settings_manager import settings
+            api_key = settings.get('ai_model.api_key')
+            
+            if not api_key:
+                logger.warning("No API key configured in settings - RAG functionality will be limited")
+            
+            # Check if RAG coordinator is available and enabled
+            try:
+                from ...infrastructure.rag_coordinator import get_rag_coordinator
+                rag_coordinator = get_rag_coordinator()
+                
+                if rag_coordinator and rag_coordinator.is_enabled():
+                    # Use unified session through coordinator
+                    self.rag_session = "unified_session"  # Placeholder indicating unified session
+                    self._rag_session_ready = True
+                    self._rag_session_initializing = False
+                    logger.info("✅ Unified RAG session initialized through coordinator")
+                    return
+            except ImportError:
+                logger.debug("RAG coordinator not available, using direct session")
+            
+            # Fallback: Create direct SafeRAGSession for this widget
+            try:
+                from ...infrastructure.rag_pipeline.threading.safe_rag_session import create_safe_rag_session
+                
+                logger.info("🔄 Creating direct SafeRAGSession (fallback)")
+                self.rag_session = create_safe_rag_session()
+                
+                if self.rag_session and self.rag_session.is_ready:
+                    self._rag_session_ready = True
+                    logger.info("✅ Direct SafeRAGSession initialized successfully")
+                else:
+                    logger.error("SafeRAGSession not ready")
+                    self.rag_session = None
+                    self._rag_session_ready = False
+                    
+            except ImportError as import_error:
+                logger.error(f"Could not import SafeRAGSession: {import_error}")
+                self.rag_session = None
+                self._rag_session_ready = False
+            
+            self._rag_session_initializing = False
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize RAG session: {e}")
+            self.rag_session = None
+            self._rag_session_initializing = False
+            self._rag_session_ready = False
+    
+    
+    def _on_file_processing_started(self, file_id, filename):
+        """Handle file processing started signal."""
+        logger.info(f"📄 File processing started: {filename}")
+    
+    def _on_file_processing_completed(self, file_id, result_data):
+        """Handle file processing completed signal."""
+        filename = result_data.get('filename', 'unknown')
+        logger.info(f"✅ File processing completed: {filename}")
+    
+    def _on_file_processing_failed(self, file_id, error_message):
+        """Handle file processing failed signal."""
+        logger.error(f"❌ File processing failed: {error_message}")
+    
     def _on_attach_toggle_clicked(self):
         """Emit attach toggle request with current state and update tooltip/icon."""
         attached = self.attach_btn.isChecked()
@@ -3031,6 +3202,703 @@ class REPLWidget(QWidget):
             
             # Update visual state
             self._update_attach_button_state()
+    
+    def _on_upload_clicked(self):
+        """Handle upload button click - open file dialog or show file browser."""
+        try:
+            from PyQt6.QtWidgets import QFileDialog
+            
+            logger.info("📁 Upload button clicked")
+            
+            # Show file dialog
+            file_paths, _ = QFileDialog.getOpenFileNames(
+                self,
+                "Select files to upload for context",
+                "",
+                "All supported files (*.txt *.py *.js *.json *.md *.csv *.html *.css *.xml *.yaml *.yml);;All files (*.*)"
+            )
+            
+            if file_paths:
+                logger.info(f"📁 Selected {len(file_paths)} files for upload")
+                self._process_uploaded_files(file_paths)
+            else:
+                logger.debug("📁 No files selected")
+                
+        except Exception as e:
+            logger.error(f"Failed to handle upload click: {e}")
+    
+    def _process_uploaded_files(self, file_paths):
+        """Process the uploaded files for context with immediate embeddings processing."""
+        try:
+            # Show file browser bar immediately when files are selected
+            if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                self.file_browser_bar.show()
+                logger.info("📄 File browser bar shown")
+            else:
+                logger.warning("📄 File browser bar not available")
+            
+            # Add files to browser bar immediately and start processing
+            for file_path in file_paths:
+                import os
+                filename = os.path.basename(file_path)
+                file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+                
+                # Detect file type
+                file_ext = os.path.splitext(filename)[1].lower().lstrip('.')
+                
+                if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                    # Add to UI immediately as "queued"
+                    self.file_browser_bar.add_file(
+                        file_path, filename, 
+                        file_size=file_size, 
+                        file_type=file_ext, 
+                        status="queued"
+                    )
+                    logger.info(f"📄 Added to browser bar: {filename}")
+                
+                # ALWAYS start embeddings processing - independent of browser bar
+                self._start_immediate_embeddings_processing(file_path, filename)
+            
+            logger.info(f"🚀 Started immediate processing for {len(file_paths)} files")
+                    
+        except Exception as e:
+            logger.error(f"Failed to process uploaded files: {e}")
+    
+    def _start_immediate_embeddings_processing(self, file_path: str, filename: str):
+        """Start immediate embeddings processing for a single file."""
+        try:
+            logger.info(f"🔍 DEBUG: _start_immediate_embeddings_processing called for: {filename}")
+            
+            # Debug RAG session state
+            logger.info(f"🔍 DEBUG: hasattr rag_session: {hasattr(self, 'rag_session')}")
+            if hasattr(self, 'rag_session'):
+                logger.info(f"🔍 DEBUG: rag_session is not None: {self.rag_session is not None}")
+            logger.info(f"🔍 DEBUG: _rag_session_ready: {getattr(self, '_rag_session_ready', 'NOT_SET')}")
+            logger.info(f"🔍 DEBUG: _rag_session_initializing: {getattr(self, '_rag_session_initializing', 'NOT_SET')}")
+            
+            # Ensure we have a valid and ready RAG session
+            if not hasattr(self, 'rag_session') or not self.rag_session or not getattr(self, '_rag_session_ready', False):
+                # Check if RAG session is currently initializing
+                if hasattr(self, '_rag_session_initializing') and self._rag_session_initializing:
+                    logger.info(f"⏳ RAG session is initializing - queuing {filename} for processing")
+                    # Add to queue for processing after initialization
+                    if hasattr(self, '_pending_files_queue'):
+                        self._pending_files_queue.append((file_path, filename))
+                        logger.info(f"📋 Added {filename} to queue (total queued: {len(self._pending_files_queue)})")
+                    return
+                
+                logger.warning(f"❌ No RAG session - attempting to initialize for {filename}")
+                # Try to reinitialize the session
+                if hasattr(self, '_init_rag_session'):
+                    logger.info(f"Attempting to reinitialize RAG session for {filename}")
+                    self._init_rag_session()
+                    # Add to queue since initialization is async
+                    if hasattr(self, '_pending_files_queue'):
+                        self._pending_files_queue.append((file_path, filename))
+                        logger.info(f"📋 Added {filename} to queue after reinit attempt")
+                    return
+                
+                logger.error(f"❌ Failed to initialize RAG session for {filename}")
+                return
+            
+            # Display processing started status in chat
+            logger.info(f"🔍 DEBUG: About to call _display_processing_started_in_chat for: {filename}")
+            self._display_processing_started_in_chat(filename)
+            logger.info(f"🔄 Started processing: {filename}")
+            
+            # Use thread-safe RAG processing (NO MORE SEGFAULTS!)
+            from PyQt6.QtCore import QThread, QObject, pyqtSignal
+            
+            class SafeEmbeddingsProcessor(QObject):
+                """Thread-safe embeddings processor using the ChromaDB worker thread."""
+                finished = pyqtSignal(str, str, bool, dict)  # file_path, filename, success, result
+                
+                def __init__(self, rag_session, file_path, filename):
+                    super().__init__()
+                    self.rag_session = rag_session
+                    self.file_path = file_path
+                    self.filename = filename
+                
+                def process(self):
+                    """Process file using thread-safe RAG session (no asyncio/threading issues)."""
+                    try:
+                        logger.info(f"🚀 Processing embeddings for {self.filename} with SAFE RAG pipeline")
+                        
+                        # Check if RAG session is available
+                        if not self.rag_session:
+                            logger.error(f"❌ No RAG session available for {self.filename}")
+                            self.finished.emit(self.file_path, self.filename, False, {
+                                'tokens': 0,
+                                'chunks': 0,
+                                'file_id': self.filename,
+                                'already_processed': False,
+                                'error': 'No RAG session'
+                            })
+                            return
+                        
+                        # Import thread-safe RAG session
+                        try:
+                            from ...infrastructure.rag_pipeline.threading.safe_rag_session import create_safe_rag_session
+                            
+                            # Create thread-safe RAG session (routes through ChromaDB worker)
+                            logger.info(f"🔒 Creating thread-safe RAG session for {self.filename}")
+                            safe_rag = create_safe_rag_session()
+                            
+                            if not safe_rag.is_ready:
+                                logger.error(f"❌ Safe RAG session not ready for {self.filename}")
+                                self.finished.emit(self.file_path, self.filename, False, {
+                                    'tokens': 0,
+                                    'chunks': 0,
+                                    'file_id': self.filename,
+                                    'already_processed': False,
+                                    'error': 'Safe RAG session not ready'
+                                })
+                                return
+                            
+                            # Process document through thread-safe interface (NO ASYNCIO IN QT THREAD!)
+                            logger.info(f"📄 Ingesting document through safe interface: {self.filename}")
+                            document_id = safe_rag.ingest_document(
+                                file_path=self.file_path,
+                                timeout=120.0  # 2 minute timeout
+                            )
+                            
+                            if document_id:
+                                # Get stats safely
+                                stats = safe_rag.get_stats(timeout=10.0) or {}
+                                rag_stats = stats.get('rag_pipeline', {})
+                                
+                                # Estimate tokens from file content
+                                try:
+                                    with open(self.file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                                        content = f.read()
+                                        token_count = len(content.split())
+                                except Exception as token_error:
+                                    logger.warning(f"⚠️ Token counting failed for {self.filename}: {token_error}")
+                                    token_count = 100  # Default estimate
+                                
+                                success_result = {
+                                    'tokens': token_count,
+                                    'chunks': rag_stats.get('chunks_created', 1),
+                                    'file_id': self.filename,
+                                    'already_processed': False,
+                                    'document_id': document_id
+                                }
+                                
+                                if document_id.startswith("skipped_"):
+                                    logger.warning(f"⚠️ Document processing skipped: {document_id}")
+                                    success_result['skipped'] = True
+                                    success_result['skip_reason'] = 'API key issue'
+                                else:
+                                    logger.info(f"✅ Successfully processed {self.filename} - {token_count} tokens")
+                                
+                                self.finished.emit(self.file_path, self.filename, True, success_result)
+                            else:
+                                logger.error(f"❌ Document ingestion failed for {self.filename}")
+                                self.finished.emit(self.file_path, self.filename, False, {
+                                    'tokens': 0,
+                                    'chunks': 0,
+                                    'file_id': self.filename,
+                                    'already_processed': False,
+                                    'error': 'Document ingestion returned None'
+                                })
+                            
+                            # Clean up safe session
+                            safe_rag.close()
+                            
+                        except ImportError as import_error:
+                            logger.error(f"❌ Failed to import safe RAG session: {import_error}")
+                            self.finished.emit(self.file_path, self.filename, False, {
+                                'tokens': 0,
+                                'chunks': 0,
+                                'file_id': self.filename,
+                                'already_processed': False,
+                                'error': f'Safe RAG import failed: {import_error}'
+                            })
+                        
+                    except Exception as e:
+                        logger.error(f"❌ Safe embeddings processing error for {self.filename}: {e}")
+                        import traceback
+                        logger.error(f"❌ Full traceback: {traceback.format_exc()}")
+                        
+                        # Report the failure properly
+                        self.finished.emit(self.file_path, self.filename, False, {
+                            'tokens': 0,
+                            'chunks': 0,
+                            'file_id': self.filename,
+                            'already_processed': False,
+                            'error': str(e)
+                        })
+            
+            # Create and start SAFE thread (ChromaDB worker prevents segfaults)
+            thread = QThread()
+            processor = SafeEmbeddingsProcessor(self.rag_session, file_path, filename)
+            processor.moveToThread(thread)
+            
+            # Store thread reference to prevent early deletion
+            if not hasattr(self, '_processing_threads'):
+                self._processing_threads = []
+            self._processing_threads.append((thread, processor))
+            
+            # Set up timeout mechanism (30 seconds max per file)
+            from PyQt6.QtCore import QTimer
+            timeout_timer = QTimer()
+            timeout_timer.setSingleShot(True)
+            timeout_timer.timeout.connect(lambda: self._handle_processing_timeout(file_path, filename, thread, processor))
+            
+            # Connect signals with proper cleanup
+            thread.started.connect(processor.process)
+            thread.started.connect(lambda: timeout_timer.start(30000))  # 30 second timeout
+            processor.finished.connect(self._on_embeddings_complete)
+            processor.finished.connect(timeout_timer.stop)
+            processor.finished.connect(thread.quit)
+            processor.finished.connect(processor.deleteLater)
+            
+            # Clean up thread reference when finished
+            def cleanup_thread_ref():
+                try:
+                    timeout_timer.stop()
+                    timeout_timer.deleteLater()
+                    self._processing_threads = [(t, p) for t, p in self._processing_threads 
+                                              if t != thread]
+                    # Give thread time to finish naturally
+                    if thread.isRunning():
+                        thread.wait(2000)  # Wait up to 2 seconds
+                    thread.deleteLater()
+                except Exception as e:
+                    logger.error(f"Error cleaning up thread reference: {e}")
+            
+            thread.finished.connect(cleanup_thread_ref)
+            
+            # Start the processing thread (re-enabled after fixing QPropertyAnimation issue)
+            thread.start()
+            logger.info(f"🧵 Started embeddings processing thread for {filename}")
+            
+        except Exception as e:
+            logger.error(f"Failed to start embeddings processing for {filename}: {e}")
+            # Update UI to failed status
+            if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                self.file_browser_bar.update_file_status(file_path, "failed")
+    
+    def _on_embeddings_complete(self, file_path: str, filename: str, success: bool, result: dict):
+        """Handle completion of embeddings processing."""
+        try:
+            if success:
+                already_processed = result.get('already_processed', False)
+                
+                if already_processed:
+                    logger.info(f"📋 File {filename} already processed - using existing embeddings")
+                    status_message = f"📊 File {filename} already processed: {result.get('chunks', 0)} chunks, {result.get('tokens', 0)} tokens (existing)"
+                else:
+                    logger.info(f"🎉 Embeddings complete for {filename}")
+                    status_message = f"📊 File {filename} processed: {result.get('chunks', 0)} chunks, {result.get('tokens', 0)} tokens (new)"
+                
+                # Display file processing status in chat instead of separate widget
+                self._display_file_status_in_chat(filename, result, "completed")
+                
+                logger.info(status_message)
+                logger.info("🔍 DEBUG: About to finish processing completion handler")
+                
+            else:
+                # Import enhanced error handler
+                try:
+                    from ghostman.src.infrastructure.error_handling.enhanced_file_error_handler import get_enhanced_error_message
+                    from pathlib import Path
+                    file_path = Path(result.get('file_path', filename)) if result.get('file_path') else None
+                    enhanced_error = get_enhanced_error_message(result, file_path)
+                    logger.error(f"💥 Embeddings failed for {filename}: {enhanced_error}")
+                except ImportError:
+                    logger.error(f"💥 Embeddings failed for {filename}: {result.get('error', 'Unknown error')}")
+                # Display file processing failure in chat instead of separate widget
+                self._display_file_status_in_chat(filename, result, "failed")
+                logger.info("🔍 DEBUG: Finished handling failed processing")
+                    
+        except Exception as e:
+            logger.error(f"Error handling embeddings completion: {e}")
+            logger.error(f"🔍 DEBUG: Exception in embeddings completion handler: {e}")
+        finally:
+            logger.info("🔍 DEBUG: Exiting _on_embeddings_complete method")
+    
+    def _schedule_ui_update(self, file_path: str, result: dict, status: str):
+        """Schedule UI updates to run in the main thread using QTimer."""
+        try:
+            from PyQt6.QtCore import QTimer
+            
+            logger.info("🔍 DEBUG: Creating QTimer for UI update")
+            
+            def perform_ui_update():
+                """Perform the actual UI update in the main thread."""
+                try:
+                    logger.info("🔍 DEBUG: Executing deferred UI update")
+                    
+                    # Check if file browser bar is still available
+                    if (hasattr(self, 'file_browser_bar') and 
+                        self.file_browser_bar and 
+                        not hasattr(self.file_browser_bar, '__deleted__')):
+                        
+                        logger.info(f"🔍 DEBUG: Updating file browser bar status to {status}")
+                        
+                        # Update status
+                        if hasattr(self.file_browser_bar, 'update_file_status'):
+                            self.file_browser_bar.update_file_status(file_path, status)
+                            logger.info("🔍 DEBUG: Status updated successfully")
+                        
+                        # Update usage info if successful and tokens available
+                        if (status == "completed" and 'tokens' in result and 
+                            hasattr(self.file_browser_bar, 'update_file_usage')):
+                            self.file_browser_bar.update_file_usage(
+                                file_path, 
+                                result['tokens'], 
+                                1.0  # Full relevance since it's processed/available
+                            )
+                            logger.info("🔍 DEBUG: Usage info updated successfully")
+                    else:
+                        logger.info("🔍 DEBUG: File browser bar not available for deferred update")
+                        
+                    logger.info("🔍 DEBUG: Deferred UI update completed")
+                    
+                except Exception as ui_error:
+                    logger.error(f"🔍 DEBUG: Error in deferred UI update: {ui_error}")
+                    import traceback
+                    traceback.print_exc()
+            
+            # Schedule the update to run in the next event loop cycle
+            QTimer.singleShot(0, perform_ui_update)
+            logger.info("🔍 DEBUG: UI update scheduled successfully")
+            
+        except Exception as e:
+            logger.error(f"🔍 DEBUG: Error scheduling UI update: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _display_file_status_in_chat(self, filename: str, result: dict, status: str):
+        """Display file processing status directly in the chat conversation using stable MixedContentDisplay."""
+        try:
+            logger.info(f"🔍 DEBUG: _display_file_status_in_chat called for: {filename}, status: {status}")
+            logger.info(f"🔍 DEBUG: Result data: {result}")
+            
+            # Create appropriate status message based on result
+            if status == "completed":
+                # Check if processing was successful - either explicit success flag or presence of processing data
+                has_success_flag = result.get('success', False)
+                has_processing_data = 'tokens' in result and 'chunks' in result
+                is_successful = has_success_flag or has_processing_data
+                
+                if is_successful:
+                    chunks = result.get('chunks', 0)
+                    tokens = result.get('tokens', 0)
+                    already_processed = result.get('already_processed', False)
+                    
+                    if already_processed:
+                        status_icon = "📋"
+                        status_text = f"File <strong>{filename}</strong> was already processed"
+                        detail_text = f"Using existing: {chunks} chunks, {tokens} tokens"
+                        style = "info"
+                    else:
+                        status_icon = "✅"  
+                        status_text = f"File <strong>{filename}</strong> processed successfully"
+                        detail_text = f"Created: {chunks} chunks, {tokens} tokens"
+                        style = "info"
+                    
+                    # Create HTML message with consistent styling
+                    message_html = f"""
+                    <div style="background-color: rgba(34, 139, 34, 0.1); border-left: 3px solid #228B22; padding: 8px; margin: 4px 0; border-radius: 4px;">
+                        <div style="font-weight: bold; color: #228B22;">{status_icon} {status_text}</div>
+                        <div style="font-size: 0.9em; color: #666; margin-top: 2px;">{detail_text}</div>
+                    </div>
+                    """
+                else:
+                    # Handle the case where success is False but status is completed
+                    # Use enhanced error handler for better error messages
+                    try:
+                        from ghostman.src.infrastructure.error_handling.enhanced_file_error_handler import get_enhanced_error_message
+                        from pathlib import Path
+                        file_path = Path(result.get('file_path', filename)) if result.get('file_path') else None
+                        error_msg = get_enhanced_error_message(result, file_path)
+                    except ImportError:
+                        error_msg = result.get('error', 'Unknown error')
+                    message_html = f"""
+                    <div style="background-color: rgba(220, 20, 60, 0.1); border-left: 3px solid #DC143C; padding: 8px; margin: 4px 0; border-radius: 4px;">
+                        <div style="font-weight: bold; color: #DC143C;">❌ File <strong>{filename}</strong> processing failed</div>
+                        <div style="font-size: 0.9em; color: #666; margin-top: 2px;">Error: {error_msg}</div>
+                    </div>
+                    """
+                    style = "error"
+            
+            elif status == "failed":
+                # Use enhanced error handler for better error messages
+                try:
+                    from ghostman.src.infrastructure.error_handling.enhanced_file_error_handler import get_enhanced_error_message
+                    from pathlib import Path
+                    file_path = Path(result.get('file_path', filename)) if result.get('file_path') else None
+                    error_msg = get_enhanced_error_message(result, file_path)
+                except ImportError:
+                    error_msg = result.get('error', 'Unknown error')
+                message_html = f"""
+                <div style="background-color: rgba(220, 20, 60, 0.1); border-left: 3px solid #DC143C; padding: 8px; margin: 4px 0; border-radius: 4px;">
+                    <div style="font-weight: bold; color: #DC143C;">❌ File <strong>{filename}</strong> processing failed</div>
+                    <div style="font-size: 0.9em; color: #666; margin-top: 2px;">Error: {error_msg}</div>
+                </div>
+                """
+                style = "error"
+            
+            else:
+                # Fallback for unknown status
+                message_html = f"""
+                <div style="background-color: rgba(255, 165, 0, 0.1); border-left: 3px solid #FFA500; padding: 8px; margin: 4px 0; border-radius: 4px;">
+                    <div style="font-weight: bold; color: #FFA500;">ℹ️ File <strong>{filename}</strong> status: {status}</div>
+                </div>
+                """
+                style = "info"
+            
+            logger.info(f"🔍 DEBUG: Created message HTML for {filename}, about to check output_display")
+            logger.info(f"🔍 DEBUG: hasattr output_display: {hasattr(self, 'output_display')}")
+            
+            # Add the message to chat using the proven stable MixedContentDisplay
+            if hasattr(self, 'output_display') and self.output_display:
+                logger.info(f"🔍 DEBUG: About to add HTML content to chat for file status: {filename} - {status}")
+                self.output_display.add_html_content(message_html, style)
+                logger.info(f"📢 File status displayed in chat: {filename} - {status}")
+            else:
+                logger.warning(f"❌ MixedContentDisplay not available for file status - hasattr: {hasattr(self, 'output_display')}")
+                if hasattr(self, 'output_display'):
+                    logger.warning(f"❌ output_display is None: {self.output_display is None}")
+                
+        except Exception as e:
+            logger.error(f"Error displaying file status in chat: {e}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            # Fallback: at least log the status
+            logger.info(f"File {filename} {status}: {result}")
+    
+    def _display_processing_started_in_chat(self, filename: str):
+        """Display file processing started message in chat."""
+        try:
+            logger.info(f"🔍 DEBUG: _display_processing_started_in_chat called for: {filename}")
+            
+            # Check if MixedContentDisplay is available
+            logger.info(f"🔍 DEBUG: hasattr output_display: {hasattr(self, 'output_display')}")
+            if hasattr(self, 'mixed_content_display'):
+                logger.info(f"🔍 DEBUG: output_display is not None: {self.output_display is not None}")
+            
+            message_html = f"""
+            <div style="background-color: rgba(30, 144, 255, 0.1); border-left: 3px solid #1E90FF; padding: 8px; margin: 4px 0; border-radius: 4px;">
+                <div style="font-weight: bold; color: #1E90FF;">🔄 Processing file <strong>{filename}</strong>...</div>
+                <div style="font-size: 0.9em; color: #666; margin-top: 2px;">Creating embeddings for file context</div>
+            </div>
+            """
+            
+            if hasattr(self, 'output_display') and self.output_display:
+                logger.info(f"🔍 DEBUG: About to add HTML content to chat for: {filename}")
+                self.output_display.add_html_content(message_html, "info")
+                logger.info(f"📢 Processing started message displayed in chat: {filename}")
+            else:
+                logger.warning(f"❌ MixedContentDisplay not available for processing status - hasattr: {hasattr(self, 'output_display')}")
+                if hasattr(self, 'output_display'):
+                    logger.warning(f"❌ output_display is None: {self.output_display is None}")
+                
+        except Exception as e:
+            logger.error(f"Error displaying processing start in chat: {e}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+    
+    def _schedule_safe_ui_update(self, file_path: str, result: dict, status: str):
+        """Schedule SAFE UI updates that skip the problematic update_file_usage method."""
+        try:
+            from PyQt6.QtCore import QTimer
+            
+            logger.info("🔍 DEBUG: Creating QTimer for SAFE UI update")
+            
+            def perform_safe_ui_update():
+                """Perform only SAFE UI updates (status only, no usage)."""
+                try:
+                    logger.info("🔍 DEBUG: Executing SAFE deferred UI update")
+                    
+                    # Check if file browser bar is still available
+                    if (hasattr(self, 'file_browser_bar') and 
+                        self.file_browser_bar and 
+                        not hasattr(self.file_browser_bar, '__deleted__')):
+                        
+                        logger.info(f"🔍 DEBUG: Updating file browser bar status to {status}")
+                        
+                        # SAFE: Update status only (this method works correctly)
+                        if hasattr(self.file_browser_bar, 'update_file_status'):
+                            self.file_browser_bar.update_file_status(file_path, status)
+                            logger.info("🔍 DEBUG: Status updated successfully")
+                        
+                        # SKIP: update_file_usage is the method causing segmentation faults
+                        # Do not call self.file_browser_bar.update_file_usage() - it causes crashes
+                        logger.info("🔍 DEBUG: Skipping usage update (causes segfaults)")
+                    else:
+                        logger.info("🔍 DEBUG: File browser bar not available for safe deferred update")
+                        
+                    logger.info("🔍 DEBUG: Safe deferred UI update completed")
+                    
+                except Exception as ui_error:
+                    logger.error(f"🔍 DEBUG: Error in safe deferred UI update: {ui_error}")
+                    import traceback
+                    traceback.print_exc()
+            
+            # Schedule the safe update to run in the next event loop cycle
+            QTimer.singleShot(0, perform_safe_ui_update)
+            logger.info("🔍 DEBUG: Safe UI update scheduled successfully")
+            
+        except Exception as e:
+            logger.error(f"🔍 DEBUG: Error scheduling safe UI update: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _handle_processing_timeout(self, file_path: str, filename: str, thread, processor):
+        """Handle processing timeout for a file."""
+        try:
+            logger.warning(f"⏰ Processing timeout for {filename} (30s)")
+            
+            # Force stop the thread
+            if thread.isRunning():
+                thread.quit()
+                if not thread.wait(2000):  # Wait 2 more seconds
+                    thread.terminate()
+                    logger.warning(f"🚫 Force terminated thread for {filename}")
+            
+            # Update UI to failed status
+            if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                self.file_browser_bar.update_file_status(file_path, "failed")
+                
+            logger.error(f"💥 Processing timeout for {filename} after 30 seconds")
+            
+        except Exception as e:
+            logger.error(f"Error handling processing timeout: {e}")
+    
+    def _start_async_processing(self, file_paths):
+        """Start async processing using QThread."""
+        try:
+            from PyQt6.QtCore import QThread, QObject, pyqtSignal
+            
+            class FileProcessor(QObject):
+                finished = pyqtSignal()
+                progress = pyqtSignal(str, str, str)  # file_path, filename, status
+                
+                def __init__(self, service, file_paths):
+                    super().__init__()
+                    self.service = service  
+                    self.file_paths = file_paths
+                
+                def process(self):
+                    import asyncio
+                    asyncio.run(self._process_files())
+                
+                async def _process_files(self):
+                    try:
+                        if hasattr(self.service, 'initialize'):
+                            await self.service.initialize()
+                        
+                        for file_path in self.file_paths:
+                            try:
+                                import os
+                                filename = os.path.basename(file_path)
+                                
+                                self.progress.emit(file_path, filename, "processing")
+                                result = await self.service.process_file(file_path)
+                                
+                                if result.success:
+                                    self.progress.emit(file_path, filename, "completed")
+                                else:
+                                    self.progress.emit(file_path, filename, "failed")
+                                    
+                            except Exception as e:
+                                logger.error(f"Error processing {file_path}: {e}")
+                                self.progress.emit(file_path, filename, "failed")
+                        
+                        self.finished.emit()
+                    except Exception as e:
+                        logger.error(f"Error in async processing: {e}")
+                        self.finished.emit()
+            
+            # Create and start processing thread
+            self.processing_thread = QThread()
+            self.file_processor = FileProcessor(self.rag_session, file_paths)
+            self.file_processor.moveToThread(self.processing_thread)
+            
+            # Connect signals
+            self.processing_thread.started.connect(self.file_processor.process)
+            self.file_processor.progress.connect(self._on_file_progress)
+            self.file_processor.finished.connect(self.processing_thread.quit)
+            self.file_processor.finished.connect(self.file_processor.deleteLater)
+            self.processing_thread.finished.connect(self.processing_thread.deleteLater)
+            
+            # Start processing
+            self.processing_thread.start()
+            
+        except Exception as e:
+            logger.error(f"Failed to start async processing: {e}")
+            # Fallback
+            self._process_files_sync(file_paths)
+    
+    def _on_file_progress(self, file_path, filename, status):
+        """Handle file processing progress updates."""
+        try:
+            if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                self.file_browser_bar.update_file_status(file_path, status)
+                logger.info(f"📄 Updated {filename} status: {status}")
+        except Exception as e:
+            logger.error(f"Failed to update file progress: {e}")
+    
+    async def _process_files_async(self, file_paths):
+        """Asynchronously process files using file context service."""
+        try:
+            if not self.rag_session:
+                logger.warning("RAG session not available")
+                return
+            
+            # Initialize service if not already done
+            if hasattr(self.rag_session, 'initialize'):
+                await self.rag_session.initialize()
+            
+            # Process each file
+            for file_path in file_paths:
+                try:
+                    import os
+                    filename = os.path.basename(file_path)
+                    
+                    # Add to browser bar with processing status
+                    if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                        self.file_browser_bar.add_file(file_path, filename, status="processing")
+                    
+                    logger.info(f"📄 Processing file with embeddings: {filename}")
+                    
+                    # Process file with RAG pipeline
+                    success = await self.rag_session.ingest_document(file_path)
+                    
+                    # Update browser bar based on result
+                    if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                        if success:
+                            self.file_browser_bar.update_file_status(file_path, "completed")
+                            logger.info(f"✅ Successfully processed: {filename}")
+                        else:
+                            self.file_browser_bar.update_file_status(file_path, "failed")
+                            logger.error(f"❌ Failed to process: {filename} - {result.error_message}")
+                            
+                except Exception as file_error:
+                    logger.error(f"Error processing file {file_path}: {file_error}")
+                    if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                        self.file_browser_bar.update_file_status(file_path, "failed")
+        
+        except Exception as e:
+            logger.error(f"Error in async file processing: {e}")
+    
+    def _process_files_sync(self, file_paths):
+        """Synchronously process files (fallback)."""
+        try:
+            for file_path in file_paths:
+                import os
+                filename = os.path.basename(file_path)
+                
+                # Add to browser bar
+                if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                    self.file_browser_bar.add_file(file_path, filename, status="pending")
+                    logger.info(f"📄 Added to context (sync): {filename}")
+                    
+        except Exception as e:
+            logger.error(f"Error in sync file processing: {e}")
     
     def _init_conversation_toolbar(self, parent_layout):
         """Initialize conversation management toolbar."""
@@ -3769,6 +4637,11 @@ class REPLWidget(QWidget):
     def _load_chain_icon(self):
         """Load theme-appropriate chain icon."""
         try:
+            # Check if attach_btn exists first
+            if not hasattr(self, 'attach_btn') or not self.attach_btn:
+                logger.debug("attach_btn not yet created, skipping chain icon loading")
+                return
+                
             # Determine if theme is dark or light  
             icon_variant = self._get_icon_variant()
             
@@ -3788,7 +4661,38 @@ class REPLWidget(QWidget):
                 
         except Exception as e:
             logger.error(f"Failed to load chain icon: {e}")
-            self.attach_btn.setText("⚲")  # Fallback
+            if hasattr(self, 'attach_btn') and self.attach_btn:
+                self.attach_btn.setText("⚲")  # Fallback
+    
+    def _load_upload_icon(self):
+        """Load theme-appropriate upload icon."""
+        try:
+            # Check if upload_btn exists first
+            if not hasattr(self, 'upload_btn') or not self.upload_btn:
+                logger.debug("upload_btn not yet created, skipping upload icon loading")
+                return
+                
+            # Determine if theme is dark or light  
+            icon_variant = self._get_icon_variant()
+            
+            upload_icon_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", 
+                "assets", "icons", f"upload_{icon_variant}.png"
+            )
+            
+            if os.path.exists(upload_icon_path):
+                upload_icon = QIcon(upload_icon_path)
+                self.upload_btn.setIcon(upload_icon)
+                logger.debug(f"Loaded upload icon: upload_{icon_variant}.png")
+            else:
+                # Fallback to Unicode symbol
+                self.upload_btn.setText("📁")
+                logger.warning(f"Upload icon not found: {upload_icon_path}")
+                
+        except Exception as e:
+            logger.error(f"Failed to load upload icon: {e}")
+            if hasattr(self, 'upload_btn') and self.upload_btn:
+                self.upload_btn.setText("📁")  # Fallback
     
     def _load_chat_icon(self):
         """Load theme-appropriate chat icon."""
@@ -4260,6 +5164,9 @@ class REPLWidget(QWidget):
         
         # In-conversation search bar (initially hidden)
         self._init_search_bar(layout)
+        
+        # File browser bar (initially hidden)
+        self._init_file_browser_bar(layout)
         
         # Input area with background styling for prompt
         input_layout = QHBoxLayout()
@@ -4769,6 +5676,73 @@ class REPLWidget(QWidget):
             return
         
         super().keyPressEvent(event)
+    
+    def dragEnterEvent(self, event):
+        """Handle drag enter events for file drops."""
+        try:
+            if event.mimeData().hasUrls():
+                # Check if any URLs point to files
+                valid_files = []
+                for url in event.mimeData().urls():
+                    if url.isLocalFile():
+                        file_path = url.toLocalFile()
+                        import os
+                        if os.path.isfile(file_path):
+                            valid_files.append(file_path)
+                
+                if valid_files:
+                    event.acceptProposedAction()
+                    logger.debug(f"Drag enter accepted for {len(valid_files)} files")
+                    return
+            
+            event.ignore()
+        except Exception as e:
+            logger.error(f"Error in dragEnterEvent: {e}")
+            event.ignore()
+    
+    def dragMoveEvent(self, event):
+        """Handle drag move events."""
+        try:
+            if event.mimeData().hasUrls():
+                event.acceptProposedAction()
+            else:
+                event.ignore()
+        except Exception as e:
+            logger.error(f"Error in dragMoveEvent: {e}")
+            event.ignore()
+    
+    def dropEvent(self, event):
+        """Handle file drop events."""
+        try:
+            if not event.mimeData().hasUrls():
+                event.ignore()
+                return
+            
+            # Extract file paths
+            file_paths = []
+            for url in event.mimeData().urls():
+                if url.isLocalFile():
+                    file_path = url.toLocalFile()
+                    import os
+                    if os.path.isfile(file_path):
+                        file_paths.append(file_path)
+            
+            if file_paths:
+                logger.info(f"📁 Files dropped: {len(file_paths)} files")
+                
+                # Show file browser bar if hidden
+                if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                    self.file_browser_bar.show()
+                
+                # Process dropped files
+                self._process_uploaded_files(file_paths)
+                event.acceptProposedAction()
+            else:
+                event.ignore()
+                
+        except Exception as e:
+            logger.error(f"Error in dropEvent: {e}")
+            event.ignore()
     
     def _navigate_history(self, direction: int):
         """Navigate through command history."""
@@ -5647,14 +6621,18 @@ def test_theme():
         class EnhancedAIWorker(QObject):
             response_received = pyqtSignal(str, bool)  # response, success
             
-            def __init__(self, message, conversation_manager, current_conversation):
+            def __init__(self, message, conversation_manager, current_conversation, rag_session=None):
                 super().__init__()
                 self.message = message
                 self.conversation_manager = conversation_manager
                 self.current_conversation = current_conversation
+                self.rag_session = rag_session
             
             def run(self):
                 try:
+                    # Enhance message with file context if available
+                    enhanced_message = self._enhance_message_with_file_context(self.message)
+                    
                     # ALWAYS prefer conversation-aware AI service for context persistence
                     ai_service = None
                     if self.conversation_manager:
@@ -5669,8 +6647,8 @@ def test_theme():
                                 logger.debug(f"Setting AI service conversation context to: {self.current_conversation.id}")
                                 ai_service.set_current_conversation(self.current_conversation.id)
                             
-                            # Send message with full conversation context
-                            result = ai_service.send_message(self.message, save_conversation=True)
+                            # Send message with full conversation context and file context
+                            result = ai_service.send_message(enhanced_message, save_conversation=True)
                             
                             if result.get('success', False):
                                 response_content = result['response']
@@ -5701,8 +6679,8 @@ def test_theme():
                         return
                     
                     # Send message to basic AI service (without conversation context)
-                    logger.debug("Sent Message: %s", self.message)
-                    result = ai_service.send_message(self.message)
+                    logger.debug("Sent Message: %s", enhanced_message)
+                    result = ai_service.send_message(enhanced_message)
                     
                     if result.get('success', False):
                         response_content = result['response']
@@ -5722,6 +6700,161 @@ def test_theme():
                     logger.error(f"Enhanced AI worker error: {e}")
                     friendly_error = self._get_user_friendly_error(str(e))
                     self.response_received.emit(friendly_error, False)
+            
+            def _enhance_message_with_file_context(self, message: str) -> str:
+                """Enhance message with file context using SafeRAG pipeline."""
+                logger.info(f"🔍 DEBUG: _enhance_message_with_file_context called with message: '{message[:50]}...'")
+                logger.info(f"🔍 DEBUG: rag_session present: {self.rag_session is not None}")
+                
+                if not self.rag_session:
+                    logger.info("🔍 DEBUG: No RAG session available, returning original message")
+                    return message
+                
+                try:
+                    # Create a SafeRAGSession for context retrieval
+                    logger.info("🔍 Retrieving relevant context from SafeRAG pipeline")
+                    
+                    # Import and create SafeRAGSession
+                    from ...infrastructure.rag_pipeline.threading.safe_rag_session import create_safe_rag_session
+                    
+                    safe_rag = create_safe_rag_session()
+                    if not safe_rag or not safe_rag.is_ready:
+                        logger.warning("⚠️ SafeRAG session not available for context retrieval")
+                        return message
+                    
+                    # First, check if we have any documents in the pipeline
+                    try:
+                        stats = safe_rag.get_stats(timeout=5.0)
+                        logger.info(f"📊 RAG pipeline stats before query: {stats}")
+                        
+                        # Check if there are any documents
+                        rag_stats = stats.get('rag_pipeline', {}) if stats else {}
+                        docs_processed = rag_stats.get('documents_processed', 0)
+                        chunks_stored = rag_stats.get('vector_store', {}).get('chunks_stored', 0)
+                        logger.info(f"📊 Documents processed: {docs_processed}, Chunks stored: {chunks_stored}")
+                        
+                        if docs_processed == 0:
+                            logger.warning("⚠️ RAG pipeline has no documents - no context to retrieve")
+                            safe_rag.close()
+                            return message
+                    except Exception as stats_error:
+                        logger.warning(f"Failed to check RAG pipeline stats: {stats_error}")
+                        safe_rag.close()
+                        return message
+                    
+                    # Use SafeRAG query to get relevant context (thread-safe)
+                    logger.info(f"Querying SafeRAG pipeline with: '{message[:100]}...'")
+                    
+                    try:
+                        # Query using SafeRAGSession (no async needed)
+                        response = safe_rag.query(
+                            query_text=message,
+                            top_k=3,
+                            timeout=10.0
+                        )
+                        
+                        if response:
+                            sources = response.get('sources', [])
+                            logger.info(f"🔍 SafeRAG query returned {len(sources)} sources")
+                            
+                            if sources:
+                                for i, source in enumerate(sources):
+                                    content_preview = source.get('content', '')[:100] if isinstance(source, dict) else str(source)[:100]
+                                    logger.info(f"  Source {i+1}: {content_preview}...")
+                                
+                                # Build context from sources
+                                context_parts = []
+                                for source in sources:
+                                    if isinstance(source, dict):
+                                        content = source.get('content', '')
+                                        metadata = source.get('metadata', {})
+                                        if content:
+                                            context_parts.append(f"[From {metadata.get('source', 'document')}]: {content}")
+                                
+                                if context_parts:
+                                    context = "\n\n".join(context_parts)
+                                    enhanced_message = f"Context from uploaded files:\n{context}\n\nUser question: {message}"
+                                    
+                                    logger.info(f"✅ Enhanced message with {len(context_parts)} context sources")
+                                    safe_rag.close()
+                                    return enhanced_message
+                        else:
+                            logger.warning("⚠️ SafeRAG query returned no response")
+                            
+                    except Exception as e:
+                        logger.error(f"SafeRAG query failed: {e}")
+                        logger.error(f"SafeRAG query traceback: {traceback.format_exc()}")
+                    
+                    # Close SafeRAG session and return original message
+                    safe_rag.close()
+                    return message
+                    
+                except Exception as e:
+                    logger.error(f"Failed to enhance message with file context: {e}")
+                    if 'safe_rag' in locals():
+                        safe_rag.close()
+                    return message
+            
+            def _get_relevant_file_contexts(self, user_message: str, max_contexts: int = 3) -> list:
+                """Get the most relevant file contexts using vector similarity."""
+                try:
+                    if not self.rag_session or not self.rag_session.is_ready():
+                        return []
+                    
+                    # Use the file context service's intelligent retrieval
+                    import asyncio
+                    
+                    def run_async_retrieval():
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            logger.info(f"🔍 DEBUG: Starting context retrieval for query: '{user_message[:50]}...'")
+                            
+                            # Get relevant contexts using RAG session
+                            if hasattr(self.rag_session, 'query'):
+                                # Use RAG pipeline query method
+                                logger.info(f"🔍 DEBUG: Querying RAG pipeline with: '{user_message[:50]}...'")
+                                rag_response = loop.run_until_complete(
+                                    self.rag_session.query(user_message)
+                                )
+                                
+                                logger.info(f"🔍 DEBUG: RAG response: {type(rag_response)}")
+                                
+                                if rag_response and hasattr(rag_response, 'sources') and rag_response.sources:
+                                    logger.info(f"🔍 DEBUG: Processing {len(rag_response.sources)} RAG sources")
+                                    contexts = []
+                                    for i, source in enumerate(rag_response.sources):
+                                        logger.info(f"🔍 DEBUG: Source {i}: {type(source)}")
+                                        context = {
+                                            'filename': getattr(source, 'metadata', {}).get('filename', f'Document_{i}'),
+                                            'file_type': getattr(source, 'metadata', {}).get('file_type', 'unknown'),
+                                            'content': source.content[:2000] if hasattr(source, 'content') else str(source)[:2000],
+                                            'similarity_score': getattr(source, 'similarity_score', 0.8),
+                                            'chunk_id': getattr(source, 'document_id', f'chunk_{i}')
+                                        }
+                                        contexts.append(context)
+                                    
+                                    logger.info(f"🔍 DEBUG: Successfully processed {len(contexts)} RAG contexts")
+                                    return contexts
+                                else:
+                                    logger.warning("No relevant contexts found from RAG pipeline")
+                                    return []
+                            else:
+                                # Fallback - no context available
+                                logger.warning("RAG pipeline query method not available")
+                                return []
+                                
+                        except Exception as e:
+                            logger.error(f"Error in async context retrieval: {e}")
+                            return []
+                        finally:
+                            loop.close()
+                    
+                    return run_async_retrieval()
+                    
+                except Exception as e:
+                    logger.error(f"Failed to get relevant file contexts: {e}")
+                    return []
             
             def _get_user_friendly_error(self, error_message: str) -> str:
                 """Convert technical error messages to user-friendly ones."""
@@ -5753,7 +6886,7 @@ def test_theme():
         
         # Create and start worker thread
         self.ai_thread = QThread()
-        self.ai_worker = EnhancedAIWorker(message, self.conversation_manager, self.current_conversation)
+        self.ai_worker = EnhancedAIWorker(message, self.conversation_manager, self.current_conversation, self.rag_session)
         self.ai_worker.moveToThread(self.ai_thread)
         
         # Store references for cancellation
@@ -6421,8 +7554,20 @@ def test_theme():
                     self.current_conversation = temp_conversation
                     logger.info(f"⚡ Created temporary conversation for immediate use: {conversation_id}")
                     
-                    # Schedule proper database creation and activation in background
-                    asyncio.create_task(self._save_temp_conversation_to_db(temp_conversation, message))
+                    # Save to database synchronously to avoid async issues in Qt thread
+                    try:
+                        if self.conversation_service:
+                            # Use the synchronous version of save
+                            saved_conversation = self.conversation_service.create_conversation(
+                                title=temp_conversation.title,
+                                model=temp_conversation.model,
+                                system_prompt=temp_conversation.system_prompt
+                            )
+                            if saved_conversation:
+                                temp_conversation.id = saved_conversation.id
+                                logger.info(f"✓ Saved temp conversation to database: {saved_conversation.id}")
+                    except Exception as save_error:
+                        logger.warning(f"Could not save temp conversation to DB: {save_error}")
                     
                     # Set as active using proper uniqueness enforcement
                     if self.conversation_manager:
@@ -6437,60 +7582,6 @@ def test_theme():
         except Exception as e:
             logger.error(f"✗ Failed to auto-create conversation: {e}", exc_info=True)
     
-    async def _create_conversation_async(self, title: str, initial_message: str):
-        """Create conversation asynchronously."""
-        try:
-            conversation = await self.conversation_manager.create_conversation(
-                title=title,
-                initial_message=initial_message
-            )
-            
-            if conversation:
-                # Update current conversation if this was called synchronously
-                self.current_conversation = conversation
-                # Add to conversations list
-                if conversation not in self.conversations_list:
-                    self.conversations_list.insert(0, conversation)
-                logger.info(f"✓ Created conversation: {conversation.title}")
-                return conversation
-            
-        except Exception as e:
-            logger.error(f"✗ Failed to create conversation async: {e}")
-        
-        return None
-    
-    async def _save_temp_conversation_to_db(self, temp_conversation, initial_message: str):
-        """Save temporary conversation to database in background."""
-        try:
-            logger.debug(f"💾 Saving temporary conversation to database: {temp_conversation.id}")
-            
-            # Create proper conversation in database
-            db_conversation = await self.conversation_manager.create_conversation(
-                title=temp_conversation.title,
-                initial_message=initial_message
-            )
-            
-            if db_conversation:
-                logger.info(f"✓ Saved temporary conversation to database: {db_conversation.id}")
-                
-                # Update the current conversation reference to use the database version
-                self.current_conversation = db_conversation
-                
-                # Update conversations list
-                if db_conversation not in self.conversations_list:
-                    self.conversations_list.insert(0, db_conversation)
-                    
-                # Sync with AI service if available
-                if self.conversation_manager.has_ai_service():
-                    ai_service = self.conversation_manager.get_ai_service()
-                    if ai_service:
-                        ai_service.set_current_conversation(db_conversation.id)
-                        logger.debug(f"🔄 Synced AI service to database conversation: {db_conversation.id}")
-            else:
-                logger.error(f"✗ Failed to save temporary conversation to database")
-                
-        except Exception as e:
-            logger.error(f"✗ Failed to save temporary conversation to database: {e}", exc_info=True)
     
     def refresh_conversations(self):
         """Refresh the conversations list from the database."""
@@ -6499,12 +7590,13 @@ def test_theme():
         
         try:
             logger.debug("Refreshing conversations list...")
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.create_task(self._load_conversations())
-            else:
-                loop.run_until_complete(self._load_conversations())
-            logger.debug("Conversation refresh initiated successfully")
+            # Use synchronous conversation loading to avoid async issues in Qt threads
+            if hasattr(self.conversation_manager, 'get_conversations'):
+                conversations = self.conversation_manager.get_conversations()
+                if conversations:
+                    self.conversations_list = conversations
+                    logger.debug(f"✓ Loaded {len(conversations)} conversations")
+            logger.debug("Conversation refresh completed successfully")
         except Exception as e:
             logger.error(f"✗ Failed to refresh conversations: {e}", exc_info=True)
     
@@ -7782,6 +8874,21 @@ def test_theme():
             if hasattr(self, 'ai_thread') and self.ai_thread.isRunning():
                 self.ai_thread.quit()
                 self.ai_thread.wait(3000)  # Wait up to 3 seconds
+            
+            # Stop and cleanup processing threads
+            if hasattr(self, '_processing_threads'):
+                logger.info(f"Cleaning up {len(self._processing_threads)} processing threads...")
+                for thread, processor in self._processing_threads:
+                    try:
+                        if thread.isRunning():
+                            thread.quit()
+                            thread.wait(2000)  # Wait up to 2 seconds
+                        thread.deleteLater()
+                        processor.deleteLater()
+                    except Exception as e:
+                        logger.error(f"Error cleaning up processing thread: {e}")
+                self._processing_threads.clear()
+                logger.info("Processing threads cleanup completed")
             
             # Clear summarization queue
             self.summarization_queue.clear()

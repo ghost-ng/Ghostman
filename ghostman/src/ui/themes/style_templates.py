@@ -2401,3 +2401,237 @@ class StyleTemplates:
                 'disabled_text': colors.text_disabled if hasattr(colors, 'text_disabled') else '#999999',
                 'contrast_ratio': 4.5  # Estimated minimum
             }
+    
+    # File Context Component Styles
+    @staticmethod
+    def get_file_browser_bar_style(colors: ColorSystem) -> str:
+        """
+        Style template for the file browser bar component.
+        
+        This provides consistent styling for the file browser bar that matches
+        the search bar pattern while maintaining its own identity.
+        
+        Args:
+            colors: ColorSystem for theme colors
+            
+        Returns:
+            CSS string for file browser bar styling
+        """
+        return f"""
+        QFrame#file_browser_bar {{
+            background-color: {colors.background_secondary};
+            border: none;
+            border-radius: 4px;
+            margin: 2px;
+        }}
+        QLabel {{
+            color: {colors.text_primary};
+            background: transparent;
+            border: none;
+        }}
+        QPushButton {{
+            background-color: {colors.border_secondary};
+            color: {colors.text_primary};
+            border: none;
+            border-radius: 3px;
+            padding: 4px 8px;
+            font-size: 10px;
+            font-weight: 500;
+        }}
+        QPushButton:hover {{
+            background-color: {colors.text_primary};
+            color: {colors.background_secondary};
+        }}
+        QPushButton:pressed {{
+            background-color: {colors.primary};
+            color: #ffffff;
+        }}
+        QScrollArea {{
+            background: transparent;
+            border: none;
+        }}
+        QScrollBar:vertical {{
+            background: {colors.border_secondary};
+            width: 8px;
+            border-radius: 4px;
+        }}
+        QScrollBar::handle:vertical {{
+            background: {colors.text_secondary};
+            border-radius: 4px;
+            min-height: 20px;
+        }}
+        QScrollBar::handle:vertical:hover {{
+            background: {colors.text_primary};
+        }}
+        """
+    
+    @staticmethod
+    def get_file_item_widget_style(colors: ColorSystem) -> str:
+        """
+        Style template for individual file item widgets within the browser bar.
+        
+        Args:
+            colors: ColorSystem for theme colors
+            
+        Returns:
+            CSS string for file item widget styling
+        """
+        return f"""
+        QFrame {{
+            background-color: {colors.background_tertiary};
+            border: 1px solid {colors.border_secondary};
+            border-radius: 4px;
+            margin: 1px;
+        }}
+        QFrame:hover {{
+            background-color: {colors.interactive_hover};
+        }}
+        QLabel {{
+            color: {colors.text_primary};
+            background: transparent;
+            border: none;
+        }}
+        QToolButton {{
+            background-color: transparent;
+            color: {colors.text_secondary};
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: bold;
+        }}
+        QToolButton:hover {{
+            background-color: {colors.status_error};
+            color: #ffffff;
+        }}
+        QProgressBar {{
+            border: none;
+            background-color: {colors.border_secondary};
+            border-radius: 3px;
+        }}
+        QProgressBar::chunk {{
+            background-color: {colors.primary};
+            border-radius: 3px;
+        }}
+        """
+    
+    @staticmethod
+    def get_drag_drop_overlay_style(colors: ColorSystem) -> str:
+        """
+        Style template for the drag and drop overlay.
+        
+        Args:
+            colors: ColorSystem for theme colors
+            
+        Returns:
+            CSS string for drag drop overlay styling
+        """
+        return f"""
+        QFrame {{
+            background-color: {colors.background_overlay};
+            border: 3px dashed {colors.primary};
+            border-radius: 12px;
+        }}
+        QLabel {{
+            color: {colors.text_primary};
+            background: transparent;
+            border: none;
+        }}
+        """
+    
+    @staticmethod
+    def get_file_status_indicator_style(colors: ColorSystem, status: str = "normal") -> str:
+        """
+        Style template for file status indicators.
+        
+        Args:
+            colors: ColorSystem for theme colors
+            status: Status type ("normal", "success", "error", "processing")
+            
+        Returns:
+            CSS string for status indicator styling
+        """
+        if status == "success":
+            bg_color = colors.status_success
+            border_color = colors.status_success
+            text_color = "#ffffff"
+        elif status == "error":
+            bg_color = colors.status_error
+            border_color = colors.status_error
+            text_color = "#ffffff"
+        elif status == "processing":
+            bg_color = colors.background_secondary
+            border_color = colors.primary
+            text_color = colors.text_primary
+        else:  # normal
+            bg_color = colors.background_secondary
+            border_color = colors.border_secondary
+            text_color = colors.text_primary
+        
+        return f"""
+        QFrame {{
+            background-color: {bg_color};
+            border: 1px solid {border_color};
+            border-radius: 4px;
+        }}
+        QLabel {{
+            color: {text_color};
+            background: transparent;
+            border: none;
+            font-weight: 500;
+        }}
+        """
+    
+    @staticmethod
+    def get_context_indicator_style(colors: ColorSystem) -> str:
+        """
+        Style template for context indicator badges.
+        
+        Args:
+            colors: ColorSystem for theme colors
+            
+        Returns:
+            CSS string for context indicator styling
+        """
+        return f"""
+        QLabel {{
+            background-color: {colors.primary};
+            color: #ffffff;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px;
+        }}
+        """
+    
+    @staticmethod
+    def get_file_upload_button_style(colors: ColorSystem) -> str:
+        """
+        Style template for the file upload toolbar button.
+        
+        Args:
+            colors: ColorSystem for theme colors
+            
+        Returns:
+            CSS string for upload button styling
+        """
+        return f"""
+        QToolButton {{
+            background-color: {colors.interactive_normal};
+            border: 1px solid {colors.border_primary};
+            border-radius: 4px;
+            padding: 6px;
+            font-size: 12px;
+        }}
+        QToolButton:hover {{
+            background-color: {colors.interactive_hover};
+            border-color: {colors.border_focus};
+        }}
+        QToolButton:pressed {{
+            background-color: {colors.interactive_active};
+        }}
+        QToolButton:disabled {{
+            background-color: {colors.interactive_disabled};
+            color: {colors.text_disabled};
+            border-color: {colors.border_secondary};
+        }}
+        """

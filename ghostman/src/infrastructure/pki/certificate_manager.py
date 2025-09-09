@@ -128,7 +128,7 @@ class CertificateManager:
             return Path(appdata) / "Ghostman" / "pki"
         else:  # Linux/Mac
             home = os.path.expanduser("~")
-            return Path(home) / ".ghostman" / "pki"
+            return Path(home) / ".Ghostman" / "pki"
     
     def load_config(self) -> PKIConfig:
         """Load PKI configuration from file."""
