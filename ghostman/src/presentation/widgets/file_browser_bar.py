@@ -142,6 +142,7 @@ class FileContextItem(QFrame):
     
     remove_requested = pyqtSignal(str)  # file_id
     view_requested = pyqtSignal(str)    # file_id
+    toggle_requested = pyqtSignal(str, bool)  # file_id, enabled
     
     def __init__(self, file_id: str, filename: str, file_size: int = 0, file_type: str = "", theme_manager=None):
         super().__init__()
@@ -154,10 +155,12 @@ class FileContextItem(QFrame):
         self.progress = 0.0
         self.tokens_used = 0
         self.relevance_score = 0.0
+        self.is_enabled = True  # Whether file is included in context
         
         self._init_ui()
         self._apply_styling()
         self._setup_context_menu()
+        self._setup_toggle_functionality()
     
     def _init_ui(self):
         """Initialize pill-style UI components."""
@@ -270,7 +273,19 @@ class FileContextItem(QFrame):
                 "hover_text": "#fff"
             }
         }
-        return status_styles.get(self.processing_status, status_styles["queued"])
+        
+        base_style = status_styles.get(self.processing_status, status_styles["queued"])
+        
+        # Modify styling if disabled
+        if not self.is_enabled:
+            base_style = {
+                "bg_color": "#e9ecef",  # Bootstrap light gray
+                "hover_bg": "#dee2e6",  # Bootstrap light gray hover
+                "text_color": "#6c757d",  # Bootstrap secondary text
+                "hover_text": "#6c757d"
+            }
+        
+        return base_style
     
     def _format_file_size(self, size_bytes: int) -> str:
         """Format file size for display."""
@@ -282,41 +297,84 @@ class FileContextItem(QFrame):
             return f"{size_bytes / (1024 * 1024):.1f} MB"
     
     def _apply_styling(self):
-        """Apply modern pill-style theme-aware styling."""
+        """Apply modern rounded pill-style theme-aware styling."""
         if self.theme_manager and hasattr(self.theme_manager, 'current_theme'):
             colors = self.theme_manager.current_theme
-            base_bg = colors.background_primary
-            text_color = colors.text_primary
+            bg_primary = colors.background_primary
+            bg_secondary = colors.background_secondary
+            text_primary = colors.text_primary
+            text_secondary = colors.text_secondary
+            border_color = getattr(colors, 'border_primary', colors.text_secondary)
+            success_color = getattr(colors, 'success', "#28a745")
+            secondary_color = getattr(colors, 'secondary', "#6c757d")
             accent_color = colors.primary
         else:
-            # Fallback colors
-            base_bg = "#1a1a1a"
-            text_color = "#ffffff"
-            accent_color = "#4CAF50"
+            # Fallback colors with enhanced theme support
+            bg_primary = "#1a1a1a"
+            bg_secondary = "#2c2c2c"
+            text_primary = "#ffffff"
+            text_secondary = "#b0b0b0"
+            border_color = "#4a4a4a"
+            success_color = "#28a745"
+            secondary_color = "#6c757d"
+            accent_color = "#007bff"
         
-        # Get status-based styling
-        status_style = self._get_status_styling()
+        # Enhanced theme-aware status styling
+        if self.is_enabled:
+            if self.processing_status == "completed":
+                pill_bg = success_color
+                pill_text = "#ffffff"
+                pill_border = success_color
+                opacity = "1.0"
+            elif self.processing_status == "processing":
+                pill_bg = accent_color
+                pill_text = "#ffffff"
+                pill_border = accent_color
+                opacity = "0.9"
+            elif self.processing_status == "failed":
+                error_color = getattr(colors, 'error', "#dc3545") if self.theme_manager else "#dc3545"
+                pill_bg = error_color
+                pill_text = "#ffffff"
+                pill_border = error_color
+                opacity = "1.0"
+            else:  # queued
+                pill_bg = bg_secondary
+                pill_text = text_primary
+                pill_border = border_color
+                opacity = "0.8"
+        else:
+            # Disabled state - muted appearance
+            pill_bg = secondary_color
+            pill_text = "#ffffff"
+            pill_border = secondary_color
+            opacity = "0.6"
         
-        # True Bootstrap CSS pill badge styling
+        # Calculate hover states using the existing ColorUtils import
+        hover_bg = ColorUtils.lighten(pill_bg, 0.15)
+        hover_border = ColorUtils.lighten(pill_border, 0.2)
+        
+        # Enhanced rounded pill styling with theme awareness
         self.setStyleSheet(f"""
             FileContextItem {{
-                background-color: {status_style['bg_color']};
-                color: {status_style['text_color']};
-                border: none;
-                border-radius: 50rem;  /* Bootstrap's pill rounding */
-                padding: 0.25rem 0.5rem;  /* Bootstrap badge padding */
-                font-size: 0.75rem;  /* Bootstrap badge font size */
-                font-weight: 700;  /* Bootstrap badge font weight */
-                line-height: 1;
-                text-align: center;
-                white-space: nowrap;
-                vertical-align: baseline;
-                margin: 0.125rem;
+                background-color: {pill_bg};
+                color: {pill_text};
+                border: 2px solid {pill_border};
+                border-radius: 20px;  /* Fully rounded pill shape */
+                padding: 4px 8px;
+                margin: 2px 3px;
+                opacity: {opacity};
+                font-size: 11px;
+                font-weight: 600;
+                min-height: 24px;
+                max-height: 28px;
+                transition: all 0.2s ease-in-out;
+                cursor: pointer;
             }}
             FileContextItem:hover {{
-                background-color: {status_style['hover_bg']};
-                color: {status_style['hover_text']};
-                opacity: 0.85;  /* Bootstrap hover effect */
+                background-color: {hover_bg};
+                border-color: {hover_border};
+                opacity: 1.0;
+                transform: scale(1.02);
             }}
             QLabel {{
                 color: inherit;
@@ -433,7 +491,10 @@ class FileContextItem(QFrame):
             f"📄 {self.filename}",
             f"📊 {size_text}",
             f"🔧 {self.file_type.upper() if self.file_type else 'Unknown'}",
-            status_text
+            status_text,
+            f"🎯 {'Enabled' if self.is_enabled else 'Disabled'} for context",
+            "",
+            "💡 Click to toggle inclusion in context"
         ]
         
         if self.tokens_used > 0:
@@ -450,6 +511,35 @@ class FileContextItem(QFrame):
         # The animation creates Qt C++ objects that can cause crashes during cleanup
         # Keep method for future non-geometry animations if needed
         pass
+    
+    def _setup_toggle_functionality(self):
+        """Setup click-to-toggle functionality."""
+        # Make the pill clickable (except for the remove button)
+        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        
+    def toggle_enabled(self):
+        """Toggle the enabled state of this file."""
+        self.is_enabled = not self.is_enabled
+        self._apply_styling()
+        self._update_tooltip()
+        self.toggle_requested.emit(self.file_id, self.is_enabled)
+    
+    def set_enabled(self, enabled: bool):
+        """Set the enabled state of this file."""
+        if self.is_enabled != enabled:
+            self.is_enabled = enabled
+            self._apply_styling()
+            self._update_tooltip()
+    
+    def mousePressEvent(self, event):
+        """Handle mouse press events for toggling."""
+        # Only toggle on left click and not on the remove button
+        if event.button() == Qt.MouseButton.LeftButton:
+            # Check if click was on the remove button area
+            remove_btn_rect = self.remove_btn.geometry()
+            if not remove_btn_rect.contains(event.position().toPoint()):
+                self.toggle_enabled()
+        super().mousePressEvent(event)
 
 
 class FileBrowserBar(QFrame):
@@ -468,6 +558,7 @@ class FileBrowserBar(QFrame):
     # Signals
     file_removed = pyqtSignal(str)  # file_id
     file_viewed = pyqtSignal(str)   # file_id
+    file_toggled = pyqtSignal(str, bool)  # file_id, enabled
     clear_all_requested = pyqtSignal()
     files_reordered = pyqtSignal(list)  # list of file_ids in new order
     
@@ -599,9 +690,10 @@ class FileBrowserBar(QFrame):
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1, 
                     stop:0 {bg_color}, stop:1 {ColorUtils.darken(bg_color, 0.1)});
                 border: 1px solid {ColorUtils.lighten(border_color, 0.2)};
-                border-radius: 12px;
+                border-radius: 16px;  /* More rounded */
                 margin: 4px;
-                padding: 6px;
+                padding: 8px 12px;  /* Better spacing for pills */
+                min-height: 36px;  /* Ensure space for pills */
             }}
             QFrame {{
                 background-color: transparent;
@@ -755,6 +847,7 @@ class FileBrowserBar(QFrame):
         # Connect signals
         item.remove_requested.connect(self._on_file_remove_requested)
         item.view_requested.connect(self.file_viewed.emit)
+        item.toggle_requested.connect(self.file_toggled.emit)
         
         # Add to grid layout
         if not self.current_row_layout or self.pills_in_current_row >= self.max_pills_per_row:
@@ -851,6 +944,32 @@ class FileBrowserBar(QFrame):
             self.remove_file(file_id)
         self.setVisible(False)
         logger.debug("Cleared all file items")
+    
+    def set_file_enabled(self, file_id: str, enabled: bool):
+        """Set the enabled state of a specific file."""
+        try:
+            if file_id in self.file_items:
+                file_item = self.file_items[file_id]
+                file_item.is_enabled = enabled
+                file_item._apply_styling()
+                file_item._update_tooltip()
+                logger.debug(f"Updated file {file_id} enabled state to {enabled}")
+                return True
+            else:
+                logger.warning(f"File {file_id} not found in browser bar for enabled state update")
+                return False
+            
+        except Exception as e:
+            logger.error(f"Failed to set file enabled state: {e}")
+            return False
+    
+    def get_file_count(self) -> int:
+        """Get the number of files currently displayed."""
+        return len(self.file_items)
+    
+    def append_file(self, file_path: str, filename: str, **kwargs):
+        """Add a file to the existing files (append mode)."""
+        return self.add_file(file_path, filename, **kwargs)
     
     def _update_status_display(self):
         """Update the status display."""

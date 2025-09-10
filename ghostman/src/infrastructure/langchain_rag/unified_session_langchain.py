@@ -514,6 +514,55 @@ class UnifiedSessionLangChainRAGPipeline:
                 "error": str(e)
             }
     
+    def remove_documents_by_ids(self, document_ids: List[str]) -> bool:
+        """Remove documents from the vector store by their IDs."""
+        try:
+            if not document_ids:
+                logger.warning("No document IDs provided for removal")
+                return False
+            
+            # Delete documents from Chroma vector store
+            self.vector_store.delete(ids=document_ids)
+            
+            logger.info(f"Successfully removed {len(document_ids)} documents from vector store")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to remove documents {document_ids}: {e}")
+            return False
+    
+    def remove_documents_by_metadata(self, metadata_filter: Dict[str, Any]) -> List[str]:
+        """Remove documents by metadata filter and return removed IDs."""
+        try:
+            # Get all documents to filter by metadata
+            collection_data = self.vector_store._collection.get()
+            
+            ids_to_remove = []
+            for idx, metadata in enumerate(collection_data['metadatas']):
+                # Check if metadata matches filter
+                match = True
+                for key, value in metadata_filter.items():
+                    if metadata.get(key) != value:
+                        match = False
+                        break
+                
+                if match:
+                    ids_to_remove.append(collection_data['ids'][idx])
+            
+            if ids_to_remove:
+                success = self.remove_documents_by_ids(ids_to_remove)
+                if success:
+                    logger.info(f"Removed {len(ids_to_remove)} documents matching metadata filter")
+                    return ids_to_remove
+            else:
+                logger.info("No documents found matching metadata filter")
+            
+            return []
+            
+        except Exception as e:
+            logger.error(f"Failed to remove documents by metadata {metadata_filter}: {e}")
+            return []
+    
     def get_collection_stats(self) -> Dict[str, Any]:
         """Get collection statistics."""
         try:

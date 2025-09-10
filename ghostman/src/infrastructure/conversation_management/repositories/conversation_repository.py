@@ -18,7 +18,8 @@ from ..models.enums import ConversationStatus, MessageRole, SortOrder, SearchSco
 from ..models.search import SearchQuery, SearchResult, SearchResults
 from ..models.database_models import (
     ConversationModel, MessageModel, TagModel, ConversationTagModel,
-    MessageFTSModel, ConversationSummaryModel, sanitize_text, sanitize_html
+    MessageFTSModel, ConversationSummaryModel, ConversationFileModel,
+    sanitize_text, sanitize_html
 )
 from .database import DatabaseManager
 
@@ -52,9 +53,10 @@ class ConversationRepository:
                     status=conversation.status.value,
                     created_at=conversation.created_at,
                     updated_at=conversation.updated_at,
-                    message_count=len(conversation.messages),
-                    metadata=conversation.metadata.to_dict()
+                    message_count=len(conversation.messages)
                 )
+                # Set metadata using the proper property
+                conv_model.conversation_metadata = conversation.metadata.to_dict()
                 session.add(conv_model)
                 
                 # Add messages
@@ -751,3 +753,23 @@ class ConversationRepository:
         except SQLAlchemyError as e:
             logger.error(f"✗ Failed to update all conversations status: {e}")
             return False
+    
+    async def _execute_with_session(self, func):
+        """
+        Execute a function with a database session.
+        
+        Args:
+            func: Function that takes a session as parameter and returns a result
+            
+        Returns:
+            The result of the function, or None if an error occurred
+        """
+        try:
+            with self.db.get_session() as session:
+                result = func(session)
+                session.commit()
+                return result
+                
+        except SQLAlchemyError as e:
+            logger.error(f"✗ Database operation failed: {e}")
+            return None

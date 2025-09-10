@@ -365,6 +365,52 @@ class LangChainIntegrationService(QObject if PYQT_AVAILABLE else object):
             question=question
         )
     
+    def remove_document(self, file_id: str, conversation_id: Optional[str] = None) -> bool:
+        """
+        Remove a specific document from the RAG pipeline.
+        
+        Args:
+            file_id: The file ID to remove
+            conversation_id: Optional conversation ID to update tracking
+            
+        Returns:
+            True if removal was successful
+        """
+        try:
+            # Try to remove by file_id metadata first
+            removed_ids = self.rag_pipeline.remove_documents_by_metadata({"file_id": file_id})
+            
+            if not removed_ids:
+                # Try alternative metadata patterns
+                removed_ids = self.rag_pipeline.remove_documents_by_metadata({"source": file_id})
+            
+            if not removed_ids:
+                # Try filename-based removal
+                removed_ids = self.rag_pipeline.remove_documents_by_metadata({"filename": file_id})
+            
+            # Update conversation document tracking
+            conv_id = conversation_id or self._current_conversation_id
+            if conv_id and conv_id in self.conversation_documents:
+                # Remove any document IDs that match this file
+                original_count = len(self.conversation_documents[conv_id])
+                self.conversation_documents[conv_id] = [
+                    doc_id for doc_id in self.conversation_documents[conv_id] 
+                    if doc_id not in removed_ids
+                ]
+                new_count = len(self.conversation_documents[conv_id])
+                logger.info(f"Updated document tracking: {original_count} -> {new_count}")
+            
+            if removed_ids:
+                logger.info(f"Successfully removed document {file_id} ({len(removed_ids)} chunks)")
+                return True
+            else:
+                logger.warning(f"No documents found for file_id: {file_id}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Failed to remove document {file_id}: {e}")
+            return False
+    
     def clear_conversation_context(self, conversation_id: str):
         """Clear the context for a conversation."""
         # Clear from RAG pipeline

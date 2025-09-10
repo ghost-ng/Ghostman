@@ -84,10 +84,26 @@ class ConversationService:
                 metadata=metadata
             )
             
-            # Save to repository
-            success = await self.repository.create_conversation(conversation)
-            if not success:
-                raise ConversationServiceError("Failed to create conversation in database")
+            # Save to repository with better error handling
+            try:
+                success = await self.repository.create_conversation(conversation)
+                if not success:
+                    # Try to get more detailed error information
+                    logger.error("Database save returned False - attempting to diagnose issue")
+                    
+                    # Check if database is accessible
+                    try:
+                        test_conversations = await self.repository.list_conversations(limit=1)
+                        logger.info(f"Database is accessible - can list {len(test_conversations)} conversations")
+                    except Exception as db_test_error:
+                        logger.error(f"Database accessibility test failed: {db_test_error}")
+                        raise ConversationServiceError(f"Database is not accessible: {db_test_error}")
+                    
+                    raise ConversationServiceError("Failed to create conversation in database - reason unknown")
+                    
+            except Exception as repo_error:
+                logger.error(f"Repository create_conversation failed: {repo_error}")
+                raise ConversationServiceError(f"Repository error: {repo_error}")
             
             # Set as active conversation
             self._active_conversation_id = conversation.id
@@ -567,6 +583,252 @@ class ConversationService:
         except Exception as e:
             logger.error(f"✗ Cleanup failed: {e}")
             return {'error': str(e)}
+    
+    # --- Conversation-File Association Management ---
+    
+    async def add_file_to_conversation(
+        self,
+        conversation_id: str,
+        file_id: str,
+        filename: str,
+        file_path: Optional[str] = None,
+        file_size: int = 0,
+        file_type: Optional[str] = None,
+        chunk_count: int = 0,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """
+        Add a file association to a conversation.
+        
+        Args:
+            conversation_id: The conversation ID
+            file_id: Unique file identifier (used in RAG pipeline)
+            filename: Original filename
+            file_path: Original file path
+            file_size: File size in bytes
+            file_type: File type/extension
+            chunk_count: Number of chunks created in RAG
+            metadata: Additional file metadata
+            
+        Returns:
+            True if successfully added
+        """
+        try:
+            from ..models.database_models import ConversationFileModel
+            from uuid import uuid4
+            
+            # Create file association record
+            file_record = ConversationFileModel(
+                id=str(uuid4()),
+                conversation_id=conversation_id,
+                file_id=file_id,
+                filename=filename,
+                file_path=file_path,
+                file_size=file_size,
+                file_type=file_type,
+                processing_status='queued',
+                chunk_count=chunk_count,
+                is_enabled=True,
+                file_metadata=metadata or {}
+            )
+            
+            # Save to database
+            await self.repository._execute_with_session(
+                lambda session: session.add(file_record)
+            )
+            
+            logger.info(f"✓ Added file {filename} to conversation {conversation_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"✗ Failed to add file to conversation: {e}")
+            return False
+    
+    async def update_file_processing_status(
+        self,
+        file_id: str,
+        status: str,
+        chunk_count: Optional[int] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """
+        Update file processing status.
+        
+        Args:
+            file_id: The file ID
+            status: New processing status (queued, processing, completed, failed)
+            chunk_count: Number of chunks created
+            metadata: Additional metadata
+            
+        Returns:
+            True if successfully updated
+        """
+        try:
+            from ..models.database_models import ConversationFileModel
+            
+            def update_file(session):
+                file_record = session.query(ConversationFileModel).filter_by(file_id=file_id).first()
+                if file_record:
+                    file_record.processing_status = status
+                    if chunk_count is not None:
+                        file_record.chunk_count = chunk_count
+                    if metadata:
+                        current_metadata = file_record.file_metadata
+                        current_metadata.update(metadata)
+                        file_record.file_metadata = current_metadata
+                    return True
+                return False
+            
+            success = await self.repository._execute_with_session(update_file)
+            
+            if success:
+                logger.info(f"✓ Updated file {file_id} status to {status}")
+            else:
+                logger.warning(f"⚠ File {file_id} not found for status update")
+                
+            return success
+            
+        except Exception as e:
+            logger.error(f"✗ Failed to update file status: {e}")
+            return False
+    
+    async def toggle_file_enabled_status(self, file_id: str, enabled: bool) -> bool:
+        """
+        Toggle whether a file is enabled for context inclusion.
+        
+        Args:
+            file_id: The file ID
+            enabled: Whether file should be enabled
+            
+        Returns:
+            True if successfully toggled
+        """
+        try:
+            from ..models.database_models import ConversationFileModel
+            
+            def toggle_file(session):
+                file_record = session.query(ConversationFileModel).filter_by(file_id=file_id).first()
+                if file_record:
+                    file_record.is_enabled = enabled
+                    return True
+                return False
+            
+            success = await self.repository._execute_with_session(toggle_file)
+            
+            if success:
+                logger.info(f"✓ File {file_id} {'enabled' if enabled else 'disabled'} for context")
+            else:
+                logger.warning(f"⚠ File {file_id} not found for toggle")
+                
+            return success
+            
+        except Exception as e:
+            logger.error(f"✗ Failed to toggle file status: {e}")
+            return False
+    
+    async def remove_file_from_conversation(self, file_id: str) -> bool:
+        """
+        Remove a file association from a conversation.
+        
+        Args:
+            file_id: The file ID to remove
+            
+        Returns:
+            True if successfully removed
+        """
+        try:
+            from ..models.database_models import ConversationFileModel
+            
+            def remove_file(session):
+                file_record = session.query(ConversationFileModel).filter_by(file_id=file_id).first()
+                if file_record:
+                    session.delete(file_record)
+                    return True
+                return False
+            
+            success = await self.repository._execute_with_session(remove_file)
+            
+            if success:
+                logger.info(f"✓ Removed file {file_id} from conversation")
+            else:
+                logger.warning(f"⚠ File {file_id} not found for removal")
+                
+            return success
+            
+        except Exception as e:
+            logger.error(f"✗ Failed to remove file from conversation: {e}")
+            return False
+    
+    async def get_conversation_files(self, conversation_id: str, enabled_only: bool = False) -> List[Dict[str, Any]]:
+        """
+        Get all files associated with a conversation.
+        
+        Args:
+            conversation_id: The conversation ID
+            enabled_only: If True, only return enabled files
+            
+        Returns:
+            List of file information dictionaries
+        """
+        try:
+            from ..models.database_models import ConversationFileModel
+            
+            def get_files(session):
+                query = session.query(ConversationFileModel).filter_by(conversation_id=conversation_id)
+                if enabled_only:
+                    query = query.filter_by(is_enabled=True)
+                
+                files = query.order_by(ConversationFileModel.upload_timestamp).all()
+                
+                return [
+                    {
+                        'id': f.id,
+                        'file_id': f.file_id,
+                        'filename': f.filename,
+                        'file_path': f.file_path,
+                        'file_size': f.file_size,
+                        'file_type': f.file_type,
+                        'upload_timestamp': f.upload_timestamp,
+                        'processing_status': f.processing_status,
+                        'chunk_count': f.chunk_count,
+                        'is_enabled': f.is_enabled,
+                        'metadata': f.file_metadata
+                    }
+                    for f in files
+                ]
+            
+            files = await self.repository._execute_with_session(get_files)
+            logger.info(f"✓ Retrieved {len(files)} files for conversation {conversation_id}")
+            return files
+            
+        except Exception as e:
+            logger.error(f"✗ Failed to get conversation files: {e}")
+            return []
+    
+    async def clear_conversation_files(self, conversation_id: str) -> bool:
+        """
+        Clear all file associations for a conversation.
+        
+        Args:
+            conversation_id: The conversation ID
+            
+        Returns:
+            True if successfully cleared
+        """
+        try:
+            from ..models.database_models import ConversationFileModel
+            
+            def clear_files(session):
+                deleted_count = session.query(ConversationFileModel).filter_by(conversation_id=conversation_id).delete()
+                return deleted_count
+            
+            deleted_count = await self.repository._execute_with_session(clear_files)
+            logger.info(f"✓ Cleared {deleted_count} files from conversation {conversation_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"✗ Failed to clear conversation files: {e}")
+            return False
     
     async def shutdown(self):
         """Shutdown the conversation service."""

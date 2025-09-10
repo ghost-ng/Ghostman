@@ -367,6 +367,73 @@ class ConversationSummaryModel(Base):
         )
 
 
+class ConversationFileModel(Base):
+    """SQLAlchemy model for conversation-file associations."""
+    
+    __tablename__ = 'conversation_files'
+    
+    id = Column(String(36), primary_key=True)
+    conversation_id = Column(String(36), ForeignKey('conversations.id', ondelete='CASCADE'), nullable=False, index=True)
+    file_id = Column(String(500), nullable=False, index=True)  # File identifier used in RAG pipeline
+    filename = Column(String(500), nullable=False)
+    file_path = Column(String(1000))  # Original file path
+    file_size = Column(Integer, default=0)
+    file_type = Column(String(100))
+    upload_timestamp = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    processing_status = Column(String(20), default='queued', index=True)  # queued, processing, completed, failed
+    chunk_count = Column(Integer, default=0)  # Number of chunks created in RAG
+    is_enabled = Column(Boolean, default=True, index=True)  # Whether file is enabled for context
+    metadata_json = Column(Text, default='{}')
+    
+    # Relationships
+    conversation = relationship("ConversationModel", backref="conversation_files")
+    
+    # Constraints
+    __table_args__ = (
+        CheckConstraint("processing_status IN ('queued', 'processing', 'completed', 'failed')", name='check_processing_status'),
+        Index('idx_conversation_files_conv_status', 'conversation_id', 'processing_status'),
+        Index('idx_conversation_files_conv_enabled', 'conversation_id', 'is_enabled'),
+        Index('idx_conversation_files_file_id', 'file_id'),  # For efficient file lookups
+    )
+    
+    @validates('filename')
+    def validate_filename(self, key, value):
+        """Validate and sanitize filename."""
+        if not value or not value.strip():
+            raise ValueError("Filename cannot be empty")
+        return sanitize_text(value)[:500]
+    
+    @validates('file_path')
+    def validate_file_path(self, key, value):
+        """Validate and sanitize file path."""
+        if value:
+            return sanitize_text(value)[:1000]
+        return value
+    
+    @validates('processing_status')
+    def validate_processing_status(self, key, value):
+        """Validate processing status."""
+        if value not in ['queued', 'processing', 'completed', 'failed']:
+            raise ValueError(f"Invalid processing status: {value}")
+        return value
+    
+    @hybrid_property
+    def file_metadata(self) -> Dict[str, Any]:
+        """Get file metadata as dictionary."""
+        try:
+            return json.loads(self.metadata_json or '{}')
+        except (json.JSONDecodeError, TypeError):
+            return {}
+    
+    @file_metadata.setter
+    def file_metadata(self, value: Dict[str, Any]):
+        """Set file metadata from dictionary."""
+        if value:
+            self.metadata_json = json.dumps(value)
+        else:
+            self.metadata_json = '{}'
+
+
 class SchemaVersionModel(Base):
     """SQLAlchemy model for schema version tracking."""
     

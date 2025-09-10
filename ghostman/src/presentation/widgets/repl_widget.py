@@ -2248,6 +2248,9 @@ class REPLWidget(QWidget):
             
             logger.info(f"Startup tasks completed - first_run: {startup_result.get('first_run')}, api_status: {api_status}")
             
+            # Auto-create a new conversation on startup
+            self._auto_create_startup_conversation()
+            
             # Mark startup tasks as completed to prevent re-execution during theme switching
             self._startup_tasks_completed = True
             
@@ -2258,6 +2261,39 @@ class REPLWidget(QWidget):
             
             # Mark startup tasks as completed even on failure to prevent retry loops
             self._startup_tasks_completed = True
+    
+    def _auto_create_startup_conversation(self):
+        """Automatically create a new conversation on startup."""
+        try:
+            logger.info("🆕 Auto-creating new conversation on startup...")
+            
+            # Check if we already have a current conversation
+            if hasattr(self, 'current_conversation') and self.current_conversation:
+                logger.info("Current conversation already exists - skipping auto-creation")
+                return
+            
+            # Verify we have conversation management available
+            if not self.conversation_manager:
+                logger.debug("No conversation manager available - skipping auto-creation")
+                return
+            
+            # Get AI service for conversation integration
+            ai_service = None
+            if self.conversation_manager:
+                ai_service = self.conversation_manager.get_ai_service()
+            
+            if not ai_service or not hasattr(ai_service, 'conversation_service'):
+                logger.debug("AI service doesn't support conversation management - skipping auto-creation")
+                return
+            
+            # Use the working _start_new_conversation approach but without saving current
+            # Since this is startup, there should be no current conversation to save
+            self._start_new_conversation(save_current=False)
+            logger.info("✓ Auto-creation initiated using _start_new_conversation")
+            
+        except Exception as e:
+            logger.error(f"Failed to auto-create startup conversation: {e}")
+            # Don't show error to user - this is a nice-to-have feature
     
     def _load_conversations_deferred(self):
         """Load conversations after UI is fully initialized."""
@@ -3061,32 +3097,329 @@ class REPLWidget(QWidget):
                 else:
                     raise ImportError("FileBrowserBar file not found") from e
             
-            # DISABLED: FileBrowserBar completely disabled to prevent segmentation faults
-            # The entire FileBrowserBar widget causes crashes during status updates
-            self.file_browser_bar = None  # Completely disable to prevent crashes
-            logger.info("🚫 File browser bar DISABLED - preventing segmentation faults")
+            # Create FileBrowserBar with segfault prevention
+            self.file_browser_bar = FileBrowserBar(theme_manager=getattr(self, 'theme_manager', None))
+            self.file_browser_bar.setVisible(False)  # Initially hidden
+            
+            # Connect signals with error handling to prevent segfaults
+            try:
+                self.file_browser_bar.file_removed.connect(self._on_file_removed_safe)
+                self.file_browser_bar.clear_all_requested.connect(self._on_clear_all_files_safe)
+                self.file_browser_bar.file_viewed.connect(self._on_file_viewed)
+                self.file_browser_bar.file_toggled.connect(self._on_file_toggled)
+                logger.info("✅ FileBrowserBar signals connected safely")
+            except Exception as signal_error:
+                logger.error(f"⚠️ Failed to connect FileBrowserBar signals: {signal_error}")
+            
+            # Add to layout
+            parent_layout.addWidget(self.file_browser_bar)
+            logger.info("✅ File browser bar enabled with segfault prevention")
             
         except Exception as e:
             logger.error(f"❌ Failed to initialize file browser bar: {e}")
             self.file_browser_bar = None
     
-    def _on_file_removed(self, file_id):
-        """Handle file removal from browser bar."""
+    def _on_file_removed_safe(self, file_id):
+        """Safely handle file removal from browser bar with RAG cleanup."""
         try:
-            logger.info(f"📄 File removed: {file_id}")
-            # TODO: Remove from file context service
+            logger.info(f"📄 File removed from browser: {file_id}")
+            
+            # Remove from RAG session if available
+            removal_success = False
+            if hasattr(self, 'rag_session') and self.rag_session:
+                try:
+                    # Check if using unified session (coordinator-based)
+                    if self.rag_session == "unified_session":
+                        # Get RAG coordinator and try to find integration service
+                        try:
+                            from ...infrastructure.rag_coordinator import get_rag_coordinator
+                            rag_coordinator = get_rag_coordinator()
+                            
+                            if rag_coordinator and hasattr(rag_coordinator, 'enhanced_widgets'):
+                                # Find the integration service for this widget
+                                widget_id = f"repl_{id(self)}"
+                                if widget_id in rag_coordinator.enhanced_widgets:
+                                    enhancer = rag_coordinator.enhanced_widgets[widget_id]
+                                    if hasattr(enhancer, 'integration_service'):
+                                        integration_service = enhancer.integration_service
+                                        removal_success = integration_service.remove_document(
+                                            file_id, 
+                                            conversation_id=getattr(self, '_current_conversation_id', None)
+                                        )
+                                        logger.info(f"🗑️ Removed {file_id} via coordinator: {removal_success}")
+                        except Exception as coord_error:
+                            logger.warning(f"Coordinator removal failed: {coord_error}")
+                    
+                    # Fallback: Try direct removal if RAG session has remove method
+                    if not removal_success and hasattr(self.rag_session, 'remove_document'):
+                        removal_success = self.rag_session.remove_document(file_id)
+                        logger.info(f"🗑️ Removed {file_id} via direct session: {removal_success}")
+                    
+                    # Last resort: Try metadata-based removal
+                    if not removal_success and hasattr(self.rag_session, 'remove_documents_by_metadata'):
+                        removed_ids = self.rag_session.remove_documents_by_metadata({"file_id": file_id})
+                        removal_success = bool(removed_ids)
+                        logger.info(f"🗑️ Removed {file_id} via metadata: {removal_success}")
+                        
+                except Exception as rag_error:
+                    logger.error(f"Failed to remove {file_id} from RAG: {rag_error}")
+            
+            # Update file tracking
+            if hasattr(self, '_uploaded_files'):
+                self._uploaded_files.discard(file_id)
+            
+            # Remove from database
+            if hasattr(self, 'conversation_manager'):
+                try:
+                    conv_service = self.conversation_manager.conversation_service
+                    if conv_service:
+                        import asyncio
+                        
+                        def remove_file_sync():
+                            try:
+                                loop = asyncio.get_event_loop()
+                            except RuntimeError:
+                                loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(loop)
+                            
+                            return loop.run_until_complete(
+                                conv_service.remove_file_from_conversation(file_id)
+                            )
+                        
+                        db_success = remove_file_sync()
+                        if db_success:
+                            logger.info(f"✅ Removed file {file_id} from conversation database")
+                        else:
+                            logger.warning(f"⚠️ Failed to remove file {file_id} from database")
+                            
+                except Exception as db_error:
+                    logger.error(f"Failed to remove file from database: {db_error}")
+            
+            # Remove from enabled files tracking
+            if hasattr(self, '_enabled_files'):
+                self._enabled_files.discard(file_id)
+            
+            # Log removal result
+            if removal_success:
+                logger.info(f"✅ Successfully removed {file_id} from RAG pipeline and tracking")
+            else:
+                logger.warning(f"⚠️ File {file_id} removed from UI but may still exist in RAG pipeline")
+                
         except Exception as e:
             logger.error(f"Failed to handle file removal: {e}")
     
-    def _on_clear_all_files(self):
-        """Handle clear all files request."""
+    def _on_clear_all_files_safe(self):
+        """Safely handle clear all files request with RAG cleanup."""
         try:
             logger.info("📄 Clearing all files from context")
-            # TODO: Clear from file context service
+            
+            # Clear from RAG session if available
+            clear_success = False
+            if hasattr(self, 'rag_session') and self.rag_session:
+                try:
+                    # Check if using unified session (coordinator-based)
+                    if self.rag_session == "unified_session":
+                        # Get RAG coordinator and try to clear via integration service
+                        try:
+                            from ...infrastructure.rag_coordinator import get_rag_coordinator
+                            rag_coordinator = get_rag_coordinator()
+                            
+                            if rag_coordinator and hasattr(rag_coordinator, 'enhanced_widgets'):
+                                # Find the integration service for this widget
+                                widget_id = f"repl_{id(self)}"
+                                if widget_id in rag_coordinator.enhanced_widgets:
+                                    enhancer = rag_coordinator.enhanced_widgets[widget_id]
+                                    if hasattr(enhancer, 'integration_service'):
+                                        integration_service = enhancer.integration_service
+                                        conv_id = getattr(self, '_current_conversation_id', None)
+                                        if conv_id:
+                                            integration_service.clear_conversation_context(conv_id)
+                                            clear_success = True
+                                            logger.info(f"🗑️ Cleared conversation context via coordinator")
+                        except Exception as coord_error:
+                            logger.warning(f"Coordinator clear failed: {coord_error}")
+                    
+                    # Fallback: Try direct clear if RAG session has clear method  
+                    if not clear_success and hasattr(self.rag_session, 'clear_all_documents'):
+                        self.rag_session.clear_all_documents()
+                        clear_success = True
+                        logger.info("🗑️ Cleared via direct session clear_all_documents")
+                    
+                    # Alternative: Clear by conversation if available
+                    if not clear_success and hasattr(self.rag_session, 'clear_conversation_context'):
+                        conv_id = getattr(self, '_current_conversation_id', None)
+                        if conv_id:
+                            self.rag_session.clear_conversation_context(conv_id)
+                            clear_success = True
+                            logger.info(f"🗑️ Cleared conversation {conv_id} via session")
+                        
+                except Exception as rag_error:
+                    logger.error(f"Failed to clear RAG pipeline: {rag_error}")
+            
+            # Clear file tracking
+            if hasattr(self, '_uploaded_files'):
+                self._uploaded_files.clear()
+                
+            # Clear enabled files tracking
+            if hasattr(self, '_enabled_files'):
+                self._enabled_files.clear()
+            
+            # Hide browser bar
             if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
-                self.file_browser_bar.hide()
+                self.file_browser_bar.setVisible(False)
+            
+            # Log clear result
+            if clear_success:
+                logger.info("✅ Successfully cleared all files from RAG pipeline and tracking")
+            else:
+                logger.warning("⚠️ Files cleared from UI but may still exist in RAG pipeline")
+                
         except Exception as e:
             logger.error(f"Failed to clear all files: {e}")
+    
+    def _on_file_viewed(self, file_id):
+        """Handle file view request."""
+        try:
+            logger.info(f"📄 View requested for file: {file_id}")
+            # TODO: Implement file content viewing
+        except Exception as e:
+            logger.error(f"Failed to handle file view: {e}")
+    
+    def _on_file_toggled(self, file_id, enabled):
+        """Handle file context toggle (enable/disable for context inclusion)."""
+        try:
+            logger.info(f"📄 File {'enabled' if enabled else 'disabled'} for context: {file_id}")
+            
+            # Update database enabled state
+            if hasattr(self, 'conversation_manager'):
+                try:
+                    conv_service = self.conversation_manager.conversation_service
+                    if conv_service:
+                        import asyncio
+                        
+                        def toggle_file_sync():
+                            try:
+                                loop = asyncio.get_event_loop()
+                            except RuntimeError:
+                                loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(loop)
+                            
+                            return loop.run_until_complete(
+                                conv_service.toggle_file_enabled_status(file_id, enabled)
+                            )
+                        
+                        success = toggle_file_sync()
+                        if success:
+                            logger.info(f"✅ Updated file {file_id} enabled state in database")
+                        else:
+                            logger.warning(f"⚠️ Failed to update file {file_id} enabled state in database")
+                            
+                except Exception as db_error:
+                    logger.error(f"Failed to update file enabled state in database: {db_error}")
+            
+            # Track enabled files for context retrieval
+            if not hasattr(self, '_enabled_files'):
+                self._enabled_files = set()
+            
+            if enabled:
+                self._enabled_files.add(file_id)
+            else:
+                self._enabled_files.discard(file_id)
+                
+            logger.info(f"📊 Total enabled files: {len(self._enabled_files)}")
+            
+        except Exception as e:
+            logger.error(f"Failed to handle file toggle: {e}")
+    
+    def _load_conversation_files(self, conversation_id: str):
+        """Load and display files associated with a conversation."""
+        try:
+            logger.info(f"📁 Loading files for conversation: {conversation_id}")
+            
+            # Run async file loading in sync context
+            import asyncio
+            
+            def load_files_sync():
+                try:
+                    # Create new event loop if needed
+                    try:
+                        loop = asyncio.get_event_loop()
+                    except RuntimeError:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                    
+                    # Get conversation service
+                    if not hasattr(self, 'conversation_manager') or not self.conversation_manager:
+                        logger.warning("No conversation manager available for file loading")
+                        return []
+                    
+                    conv_service = self.conversation_manager.conversation_service
+                    if not conv_service:
+                        logger.warning("No conversation service available for file loading")
+                        return []
+                    
+                    # Load files from database
+                    files = loop.run_until_complete(conv_service.get_conversation_files(conversation_id))
+                    return files
+                    
+                except Exception as e:
+                    logger.error(f"Failed to load files sync: {e}")
+                    return []
+            
+            files = load_files_sync()
+            
+            # Clear existing files from browser bar
+            if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                self.file_browser_bar.clear_all_files()
+            
+            # Update current conversation ID for file operations
+            self._current_conversation_id = conversation_id
+            
+            # Update enabled files tracking
+            if not hasattr(self, '_enabled_files'):
+                self._enabled_files = set()
+            self._enabled_files.clear()
+            
+            # Add files to browser bar
+            if files:
+                logger.info(f"📄 Found {len(files)} files for conversation")
+                
+                for file_info in files:
+                    if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                        # Add file to browser bar with current status
+                        self.file_browser_bar.add_file(
+                            file_id=file_info['file_id'],
+                            filename=file_info['filename'],
+                            file_size=file_info.get('file_size', 0),
+                            file_type=file_info.get('file_type', ''),
+                            status=file_info['processing_status']
+                        )
+                        
+                        # Update enabled state
+                        if file_info.get('is_enabled', True):
+                            self._enabled_files.add(file_info['file_id'])
+                        
+                        # Update pill enabled state in browser bar
+                        try:
+                            self.file_browser_bar.set_file_enabled(
+                                file_info['file_id'], 
+                                file_info.get('is_enabled', True)
+                            )
+                        except AttributeError:
+                            # Method doesn't exist yet, will be added
+                            pass
+                
+                # Show browser bar if files exist
+                self.file_browser_bar.setVisible(True)
+                logger.info(f"✅ Loaded {len(files)} files into browser bar")
+            else:
+                # Hide browser bar if no files
+                if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                    self.file_browser_bar.setVisible(False)
+                logger.info("📁 No files found for conversation")
+                
+        except Exception as e:
+            logger.error(f"Failed to load conversation files: {e}")
     
     def _init_rag_session(self):
         """Initialize the unified RAG session using SafeRAGSession (no segfaults)."""
@@ -3230,41 +3563,102 @@ class REPLWidget(QWidget):
     def _process_uploaded_files(self, file_paths):
         """Process the uploaded files for context with immediate embeddings processing."""
         try:
+            # Get current conversation ID for file linking
+            current_conversation_id = getattr(self, '_current_conversation_id', None)
+            if not current_conversation_id:
+                logger.info("No current conversation - files will not be linked to conversation")
+                # Note: A conversation should be auto-created on startup
+            
             # Show file browser bar immediately when files are selected
             if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
-                self.file_browser_bar.show()
+                self.file_browser_bar.setVisible(True)
                 logger.info("📄 File browser bar shown")
             else:
                 logger.warning("📄 File browser bar not available")
             
-            # Add files to browser bar immediately and start processing
+            # Process each file and link to conversation
             for file_path in file_paths:
                 import os
+                from pathlib import Path
+                from datetime import datetime
+                
                 filename = os.path.basename(file_path)
                 file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
                 
                 # Detect file type
                 file_ext = os.path.splitext(filename)[1].lower().lstrip('.')
                 
+                # Generate unique file_id for RAG pipeline
+                path_obj = Path(file_path)
+                timestamp = datetime.now().timestamp()
+                file_id = f"file_{path_obj.stem}_{int(timestamp)}"
+                
+                # Save file association to database if we have a conversation
+                if current_conversation_id and hasattr(self, 'conversation_manager'):
+                    try:
+                        conv_service = self.conversation_manager.conversation_service
+                        if conv_service:
+                            # Add file to conversation in database
+                            import asyncio
+                            
+                            def save_file_sync():
+                                try:
+                                    loop = asyncio.get_event_loop()
+                                except RuntimeError:
+                                    loop = asyncio.new_event_loop()
+                                    asyncio.set_event_loop(loop)
+                                
+                                return loop.run_until_complete(
+                                    conv_service.add_file_to_conversation(
+                                        conversation_id=current_conversation_id,
+                                        file_id=file_id,
+                                        filename=filename,
+                                        file_path=file_path,
+                                        file_size=file_size,
+                                        file_type=file_ext,
+                                        metadata={'upload_timestamp': datetime.now().isoformat()}
+                                    )
+                                )
+                            
+                            success = save_file_sync()
+                            if success:
+                                logger.info(f"✅ Saved file {filename} to conversation database")
+                            else:
+                                logger.warning(f"⚠️ Failed to save file {filename} to database")
+                                
+                    except Exception as db_error:
+                        logger.error(f"Failed to save file to database: {db_error}")
+                
+                # Add to UI with generated file_id
                 if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
-                    # Add to UI immediately as "queued"
                     self.file_browser_bar.add_file(
-                        file_path, filename, 
+                        file_id=file_id,  # Use generated file_id as first parameter
+                        filename=filename, 
                         file_size=file_size, 
                         file_type=file_ext, 
                         status="queued"
                     )
-                    logger.info(f"📄 Added to browser bar: {filename}")
+                    logger.info(f"📄 Added to browser bar: {filename} (ID: {file_id})")
                 
-                # ALWAYS start embeddings processing - independent of browser bar
-                self._start_immediate_embeddings_processing(file_path, filename)
+                # Track uploaded files with file_id
+                if not hasattr(self, '_uploaded_files'):
+                    self._uploaded_files = set()
+                self._uploaded_files.add(file_id)
+                
+                # Track enabled files (all files are enabled by default)
+                if not hasattr(self, '_enabled_files'):
+                    self._enabled_files = set()
+                self._enabled_files.add(file_id)
+                
+                # Start embeddings processing with file_id
+                self._start_immediate_embeddings_processing(file_path, filename, file_id)
             
             logger.info(f"🚀 Started immediate processing for {len(file_paths)} files")
                     
         except Exception as e:
             logger.error(f"Failed to process uploaded files: {e}")
     
-    def _start_immediate_embeddings_processing(self, file_path: str, filename: str):
+    def _start_immediate_embeddings_processing(self, file_path: str, filename: str, file_id: str = None):
         """Start immediate embeddings processing for a single file."""
         try:
             logger.info(f"🔍 DEBUG: _start_immediate_embeddings_processing called for: {filename}")
@@ -3493,6 +3887,17 @@ class REPLWidget(QWidget):
                 # Display file processing status in chat instead of separate widget
                 self._display_file_status_in_chat(filename, result, "completed")
                 
+                # Update file browser bar status to "completed"
+                if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                    try:
+                        tokens_used = result.get('tokens', 0)
+                        chunks = result.get('chunks', 0)
+                        self.file_browser_bar.update_file_status(filename, "completed")
+                        self.file_browser_bar.update_file_usage(filename, tokens_used, 1.0)  # Default relevance
+                        logger.info(f"📄 Updated browser bar status to 'completed' for: {filename}")
+                    except Exception as bar_error:
+                        logger.error(f"Failed to update browser bar status: {bar_error}")
+                
                 logger.info(status_message)
                 logger.info("🔍 DEBUG: About to finish processing completion handler")
                 
@@ -3508,6 +3913,15 @@ class REPLWidget(QWidget):
                     logger.error(f"💥 Embeddings failed for {filename}: {result.get('error', 'Unknown error')}")
                 # Display file processing failure in chat instead of separate widget
                 self._display_file_status_in_chat(filename, result, "failed")
+                
+                # Update file browser bar status to "failed"
+                if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                    try:
+                        self.file_browser_bar.update_file_status(filename, "failed")
+                        logger.info(f"📄 Updated browser bar status to 'failed' for: {filename}")
+                    except Exception as bar_error:
+                        logger.error(f"Failed to update browser bar status: {bar_error}")
+                
                 logger.info("🔍 DEBUG: Finished handling failed processing")
                     
         except Exception as e:
@@ -3693,6 +4107,16 @@ class REPLWidget(QWidget):
                 logger.warning(f"❌ MixedContentDisplay not available for processing status - hasattr: {hasattr(self, 'output_display')}")
                 if hasattr(self, 'output_display'):
                     logger.warning(f"❌ output_display is None: {self.output_display is None}")
+            
+            # Update file browser bar status to "processing"
+            if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                try:
+                    # Find the file by filename since we don't have file_path here
+                    # This is a limitation - ideally we'd pass file_path too
+                    self.file_browser_bar.update_file_status(filename, "processing")
+                    logger.info(f"📄 Updated browser bar status to 'processing' for: {filename}")
+                except Exception as bar_error:
+                    logger.error(f"Failed to update browser bar status: {bar_error}")
                 
         except Exception as e:
             logger.error(f"Error displaying processing start in chat: {e}")
@@ -5770,6 +6194,11 @@ class REPLWidget(QWidget):
     @pyqtSlot(str)
     def _on_conversation_selected(self, display_name: str):
         """Handle conversation selection from dropdown."""
+        # Check if conversation selector exists (it may not be implemented yet)
+        if not hasattr(self, 'conversation_selector'):
+            logger.debug("Conversation selector not available - ignoring selection")
+            return
+            
         current_index = self.conversation_selector.currentIndex()
         if current_index < 0:
             return
@@ -5777,7 +6206,8 @@ class REPLWidget(QWidget):
         conversation_id = self.conversation_selector.itemData(current_index)
         
         if not conversation_id:  # New conversation selected
-            self._create_new_conversation()
+            # Use the working _start_new_conversation approach instead of broken _create_new_conversation
+            self._start_new_conversation(save_current=False)
             return
         
         # Find conversation in list
@@ -5871,10 +6301,11 @@ class REPLWidget(QWidget):
                     # Add to conversations list
                     self.conversations_list.insert(0, conversation)
                     
-                    # Update selector
-                    display_name = f"{self._get_status_icon(conversation)} {conversation.title}"
-                    self.conversation_selector.insertItem(0, display_name, conversation.id)
-                    self.conversation_selector.setCurrentIndex(0)
+                    # Update selector only if it exists
+                    if hasattr(self, 'conversation_selector'):
+                        display_name = f"{self._get_status_icon(conversation)} {conversation.title}"
+                        self.conversation_selector.insertItem(0, display_name, conversation.id)
+                        self.conversation_selector.setCurrentIndex(0)
                     
                     # Switch to new conversation
                     self._switch_to_conversation(conversation)
@@ -5909,6 +6340,9 @@ class REPLWidget(QWidget):
                 logger.debug("Applied theme colors before loading conversation messages")
             except Exception as e:
                 logger.warning(f"Failed to apply theme colors before loading conversation: {e}")
+        
+        # Load conversation files and update file browser bar
+        self._load_conversation_files(conversation.id)
         
         self.append_output(f"💬 Conversation: {conversation.title}", "system")
         
@@ -7625,12 +8059,14 @@ def test_theme():
                 )
                 
                 if conversation:
-                    # Add to conversations list and update UI
+                    # Add to conversations list
                     self.conversations_list.insert(0, conversation)
                     
-                    display_name = f"{self._get_status_icon(conversation)} {conversation.title}"
-                    self.conversation_selector.insertItem(0, display_name, conversation.id)
-                    self.conversation_selector.setCurrentIndex(0)
+                    # Update UI only if conversation selector exists
+                    if hasattr(self, 'conversation_selector'):
+                        display_name = f"{self._get_status_icon(conversation)} {conversation.title}"
+                        self.conversation_selector.insertItem(0, display_name, conversation.id)
+                        self.conversation_selector.setCurrentIndex(0)
                     
                     # Switch to new conversation
                     self._switch_to_conversation(conversation)
