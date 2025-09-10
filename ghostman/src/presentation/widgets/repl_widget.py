@@ -3375,6 +3375,16 @@ class REPLWidget(QWidget):
             # Update current conversation ID for file operations
             self._current_conversation_id = conversation_id
             
+            # Update LangChain integration if available
+            try:
+                from ...infrastructure.rag_coordinator import get_rag_coordinator
+                rag_coordinator = get_rag_coordinator()
+                if rag_coordinator and hasattr(rag_coordinator, 'langchain_service'):
+                    rag_coordinator.langchain_service.set_current_conversation(conversation_id)
+                    logger.info(f"✓ Updated LangChain service with conversation: {conversation_id}")
+            except (ImportError, AttributeError) as e:
+                logger.debug(f"LangChain service update skipped: {e}")
+            
             # Update enabled files tracking
             if not hasattr(self, '_enabled_files'):
                 self._enabled_files = set()

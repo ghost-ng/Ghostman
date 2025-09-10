@@ -5,6 +5,7 @@ Clean, uncluttered interface for browsing, restoring, and exporting conversation
 """
 
 import logging
+import asyncio
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from PyQt6.QtWidgets import (
@@ -318,17 +319,19 @@ class SimpleConversationBrowser(QDialog):
         
         # Conversations table
         self.conversations_table = QTableWidget()
-        self.conversations_table.setColumnCount(4)
+        self.conversations_table.setColumnCount(6)
         self.conversations_table.setHorizontalHeaderLabels([
-            "Title", "Status", "Messages", "Updated"
+            "☑", "Title", "Status", "Messages", "Attachments", "Updated"
         ])
         
         # Configure table
         header = self.conversations_table.horizontalHeader()
         header.setStretchLastSection(True)
-        header.resizeSection(0, 300)  # Title column
-        header.resizeSection(1, 80)   # Status column  
-        header.resizeSection(2, 80)   # Messages column
+        header.resizeSection(0, 40)   # Checkbox column
+        header.resizeSection(1, 280)  # Title column
+        header.resizeSection(2, 80)   # Status column  
+        header.resizeSection(3, 80)   # Messages column
+        header.resizeSection(4, 90)   # Attachments column
         
         self.conversations_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.conversations_table.setAlternatingRowColors(True)
@@ -393,6 +396,56 @@ class SimpleConversationBrowser(QDialog):
         """)
         button_layout.addWidget(self.delete_btn)
         
+        # Mass delete button
+        self.mass_delete_btn = QPushButton("Delete Selected")
+        self.mass_delete_btn.clicked.connect(self._on_mass_delete_clicked)
+        self.mass_delete_btn.setEnabled(False)
+        self.mass_delete_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #d32f2f;
+                color: #ffffff;
+                border: 1px solid #b71c1c;
+                padding: 6px 12px;
+                border-radius: 4px;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: #f44336;
+                border-color: #c62828;
+            }
+            QPushButton:pressed {
+                background-color: #b71c1c;
+            }
+            QPushButton:disabled {
+                background-color: #2a2a2a;
+                color: #666666;
+                border-color: #444444;
+            }
+        """)
+        button_layout.addWidget(self.mass_delete_btn)
+        
+        # Select all button
+        self.select_all_btn = QPushButton("Select All")
+        self.select_all_btn.clicked.connect(self._on_select_all_clicked)
+        self.select_all_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: #ffffff;
+                border: 1px solid #45a049;
+                padding: 6px 12px;
+                border-radius: 4px;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+                border-color: #3d8b40;
+            }
+            QPushButton:pressed {
+                background-color: #3d8b40;
+            }
+        """)
+        button_layout.addWidget(self.select_all_btn)
+        
         button_layout.addStretch()
         
         # Close button
@@ -406,6 +459,24 @@ class SimpleConversationBrowser(QDialog):
         self.conversations_table.selectionModel().selectionChanged.connect(
             self._on_selection_changed
         )
+    
+    def _safe_run_async(self, coro):
+        """Safely run an async operation, handling event loop issues."""
+        try:
+            # Try to get the current event loop
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_closed():
+                    raise RuntimeError("Event loop is closed")
+            except RuntimeError:
+                # Create a new event loop if needed
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            return loop.run_until_complete(coro)
+        except Exception as e:
+            logger.debug(f"Safe async run failed: {e}")
+            return None
     
     def _init_conversation_manager(self):
         """Initialize conversation management."""
@@ -484,7 +555,12 @@ class SimpleConversationBrowser(QDialog):
         self.conversations_table.setRowCount(len(self.conversations))
         
         for row, conversation in enumerate(self.conversations):
-            # Title (with current indicator and search highlighting)
+            # Checkbox column (column 0)
+            checkbox = QCheckBox()
+            checkbox.stateChanged.connect(self._on_checkbox_changed)
+            self.conversations_table.setCellWidget(row, 0, checkbox)
+            
+            # Title (with current indicator and search highlighting) - column 1
             title = conversation.title
             if self._is_current_conversation(conversation):
                 title = f"⭐ {title}"
@@ -501,21 +577,27 @@ class SimpleConversationBrowser(QDialog):
             if self.current_search_query:
                 title_item.setToolTip(f"Search result for: {self.current_search_query}")
             
-            self.conversations_table.setItem(row, 0, title_item)
+            self.conversations_table.setItem(row, 1, title_item)
             
-            # Status
+            # Status - column 2
             status_text = self._get_status_text(conversation.status)
             status_item = QTableWidgetItem(status_text)
-            self.conversations_table.setItem(row, 1, status_item)
+            self.conversations_table.setItem(row, 2, status_item)
             
-            # Message count
+            # Message count - column 3
             count_item = QTableWidgetItem(str(conversation.get_message_count()))
-            self.conversations_table.setItem(row, 2, count_item)
+            self.conversations_table.setItem(row, 3, count_item)
             
-            # Updated time
+            # Attachments count - column 4
+            attachments_text = self._get_attachments_text(conversation.id)
+            attachments_item = QTableWidgetItem(attachments_text)
+            attachments_item.setToolTip(f"Files attached to this conversation")
+            self.conversations_table.setItem(row, 4, attachments_item)
+            
+            # Updated time - column 5
             updated_text = self._format_datetime(conversation.updated_at)
             updated_item = QTableWidgetItem(updated_text)
-            self.conversations_table.setItem(row, 3, updated_item)
+            self.conversations_table.setItem(row, 5, updated_item)
     
     def _is_current_conversation(self, conversation: Conversation) -> bool:
         """Check if this is the current active conversation."""
@@ -525,36 +607,142 @@ class SimpleConversationBrowser(QDialog):
         # For now, no specific current conversation highlighting
         return False
     
+    def _get_attachments_text(self, conversation_id: str) -> str:
+        """Get attachments count text for a conversation."""
+        try:
+            if not self.conversation_manager:
+                return "—"
+            
+            # Get conversation service
+            conv_service = self.conversation_manager.conversation_service
+            if not conv_service:
+                return "—"
+            
+            # Safely get files count for this conversation
+            files = self._safe_run_async(conv_service.get_conversation_files(conversation_id))
+            
+            if files is None:
+                return "—"
+            
+            file_count = len(files)
+            if file_count == 0:
+                return "—"
+            elif file_count == 1:
+                return "1 file"
+            else:
+                return f"{file_count} files"
+                
+        except Exception as e:
+            logger.debug(f"Error getting attachments for {conversation_id}: {e}")
+            return "—"
+    
     def _get_status_text(self, status) -> str:
         """Get human-readable status text."""
         if not ConversationStatus:
             return str(status)
         
         status_map = {
-            ConversationStatus.ACTIVE: "🔥 Active",
-            ConversationStatus.PINNED: "⭐ Pinned", 
-            ConversationStatus.ARCHIVED: "📦 Archived",
-            ConversationStatus.DELETED: "🗑️ Deleted"
+            ConversationStatus.ACTIVE: "Active",
+            ConversationStatus.PINNED: "Saved", 
+            ConversationStatus.ARCHIVED: "Saved",
+            ConversationStatus.DELETED: "Deleted"
         }
         return status_map.get(status, str(status))
     
     def _format_datetime(self, dt: datetime) -> str:
-        """Format datetime for display."""
+        """Format datetime for display - always show full date and time."""
         if not isinstance(dt, datetime):
             return str(dt)
         
-        now = datetime.now()
-        diff = now - dt
-        
-        if diff.days == 0:
-            return dt.strftime("%H:%M")
-        elif diff.days == 1:
-            return "Yesterday"
-        elif diff.days < 7:
-            return dt.strftime("%a %H:%M")
-        else:
-            return dt.strftime("%m/%d/%y")
+        # Always show full date and time as requested
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
     
+    def _on_checkbox_changed(self):
+        """Handle checkbox state change."""
+        selected_conversations = self._get_selected_conversations()
+        has_selected = len(selected_conversations) > 0
+        self.mass_delete_btn.setEnabled(has_selected)
+    
+    def _get_selected_conversations(self) -> List[Conversation]:
+        """Get list of conversations that are checked."""
+        selected = []
+        for row in range(self.conversations_table.rowCount()):
+            checkbox = self.conversations_table.cellWidget(row, 0)
+            if checkbox and checkbox.isChecked():
+                if row < len(self.conversations):
+                    selected.append(self.conversations[row])
+        return selected
+    
+    def _on_mass_delete_clicked(self):
+        """Handle mass delete button click."""
+        selected_conversations = self._get_selected_conversations()
+        if not selected_conversations:
+            return
+        
+        # Confirm mass deletion
+        count = len(selected_conversations)
+        reply = QMessageBox.question(
+            self,
+            "Delete Multiple Conversations",
+            f"Delete {count} selected conversation{'s' if count > 1 else ''}?\n\n"
+            "This action cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            # Delete conversations using safe async approach
+            failed_deletions = []
+            
+            for conversation in selected_conversations:
+                try:
+                    success = self._safe_run_async(
+                        self.conversation_manager.conversation_service.delete_conversation(
+                            conversation.id, permanent=True
+                        )
+                    )
+                    if not success:
+                        failed_deletions.append(conversation.title)
+                except Exception as e:
+                    logger.error(f"Failed to delete conversation {conversation.id}: {e}")
+                    failed_deletions.append(conversation.title)
+            
+            # Show results
+            if failed_deletions:
+                QMessageBox.warning(
+                    self,
+                    "Deletion Incomplete",
+                    f"Failed to delete {len(failed_deletions)} conversation(s):\n" +
+                    "\n".join(failed_deletions[:5]) +
+                    ("..." if len(failed_deletions) > 5 else "")
+                )
+            
+            # Refresh the table
+            self._load_conversations()
+    
+    def _on_select_all_clicked(self):
+        """Handle select all button click - toggles between select all and select none."""
+        if not self.conversations_table.rowCount():
+            return
+        
+        # Check if any checkboxes are currently checked
+        any_checked = False
+        for row in range(self.conversations_table.rowCount()):
+            checkbox = self.conversations_table.cellWidget(row, 0)
+            if checkbox and checkbox.isChecked():
+                any_checked = True
+                break
+        
+        # If any are checked, uncheck all; otherwise check all
+        new_state = not any_checked
+        for row in range(self.conversations_table.rowCount()):
+            checkbox = self.conversations_table.cellWidget(row, 0)
+            if checkbox:
+                checkbox.setChecked(new_state)
+        
+        # Update button text
+        self.select_all_btn.setText("Select None" if new_state else "Select All")
+
     def _on_selection_changed(self):
         """Handle table selection change."""
         selected_rows = self.conversations_table.selectionModel().selectedRows()
@@ -563,6 +751,10 @@ class SimpleConversationBrowser(QDialog):
         self.restore_btn.setEnabled(has_selection)
         self.export_btn.setEnabled(has_selection)
         self.delete_btn.setEnabled(has_selection)
+        
+        # Also update mass delete button based on checkbox states
+        selected_conversations = self._get_selected_conversations()
+        self.mass_delete_btn.setEnabled(len(selected_conversations) > 0)
     
     def _on_restore_clicked(self):
         """Handle restore button click."""
@@ -624,15 +816,8 @@ class SimpleConversationBrowser(QDialog):
         try:
             self.status_label.setText(f"Deleting conversation...")
             
-            # Delete conversation using async properly
-            import asyncio
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            
-            success = loop.run_until_complete(
+            # Delete conversation using safe async approach
+            success = self._safe_run_async(
                 self.conversation_manager.conversation_service.delete_conversation(conversation.id, permanent=True)
             )
             

@@ -206,8 +206,20 @@ class LangChainIntegrationService(QObject if PYQT_AVAILABLE else object):
         conversation_id = task['conversation_id']
         
         start_time = datetime.now()
+        path = Path(file_path)
         
         try:
+            # First, create file association record in database
+            asyncio.run(self._create_file_association(
+                conversation_id=conversation_id,
+                file_id=file_id,
+                filename=path.name,
+                file_path=file_path,
+                file_size=path.stat().st_size if path.exists() else 0,
+                file_type=path.suffix.lstrip('.').lower() if path.suffix else '',
+                status='processing'
+            ))
+            
             # Emit progress
             if PYQT_AVAILABLE and hasattr(self, 'file_processing_progress'):
                 self.file_processing_progress.emit(file_id, 0.3)
@@ -226,6 +238,14 @@ class LangChainIntegrationService(QObject if PYQT_AVAILABLE else object):
             # Emit progress
             if PYQT_AVAILABLE and hasattr(self, 'file_processing_progress'):
                 self.file_processing_progress.emit(file_id, 0.8)
+            
+            # Update file association with completion status
+            asyncio.run(self._update_file_association_status(
+                file_id=file_id,
+                status='completed',
+                chunk_count=len(doc_ids),
+                metadata={'document_ids': doc_ids}
+            ))
             
             # Calculate processing time
             processing_time = (datetime.now() - start_time).total_seconds()
@@ -266,6 +286,16 @@ class LangChainIntegrationService(QObject if PYQT_AVAILABLE else object):
             
         except Exception as e:
             logger.error(f"Failed to process file {file_id}: {e}")
+            
+            # Update file association with failed status
+            try:
+                asyncio.run(self._update_file_association_status(
+                    file_id=file_id,
+                    status='failed',
+                    metadata={'error': str(e)}
+                ))
+            except Exception as update_error:
+                logger.error(f"Failed to update file status to failed: {update_error}")
             
             # Emit failure
             if PYQT_AVAILABLE and hasattr(self, 'file_processing_failed'):
@@ -446,3 +476,120 @@ class LangChainIntegrationService(QObject if PYQT_AVAILABLE else object):
             }
             for doc in docs
         ]
+    
+    async def _create_file_association(
+        self,
+        conversation_id: str,
+        file_id: str,
+        filename: str,
+        file_path: str,
+        file_size: int,
+        file_type: str,
+        status: str = 'queued'
+    ):
+        """Create file association record in database."""
+        try:
+            success = await self.conversation_service.add_file_to_conversation(
+                conversation_id=conversation_id,
+                file_id=file_id,
+                filename=filename,
+                file_path=file_path,
+                file_size=file_size,
+                file_type=file_type,
+                chunk_count=0,
+                metadata={'processing_status': status}
+            )
+            
+            if success:
+                logger.info(f"✓ Created file association: {filename} -> {conversation_id}")
+            else:
+                logger.error(f"✗ Failed to create file association: {filename}")
+                
+            return success
+            
+        except Exception as e:
+            logger.error(f"✗ Error creating file association: {e}")
+            return False
+    
+    async def _update_file_association_status(
+        self,
+        file_id: str,
+        status: str,
+        chunk_count: Optional[int] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ):
+        """Update file association status in database."""
+        try:
+            success = await self.conversation_service.update_file_processing_status(
+                file_id=file_id,
+                status=status,
+                chunk_count=chunk_count,
+                metadata=metadata
+            )
+            
+            if success:
+                logger.info(f"✓ Updated file status: {file_id} -> {status}")
+            else:
+                logger.warning(f"⚠ Failed to update file status: {file_id}")
+                
+            return success
+            
+        except Exception as e:
+            logger.error(f"✗ Error updating file status: {e}")
+            return False
+    
+    async def load_conversation_files(self, conversation_id: str) -> List[Dict[str, Any]]:
+        """Load files associated with a conversation."""
+        try:
+            files = await self.conversation_service.get_conversation_files(
+                conversation_id=conversation_id,
+                enabled_only=False
+            )
+            
+            logger.info(f"✓ Loaded {len(files)} files for conversation {conversation_id}")
+            return files
+            
+        except Exception as e:
+            logger.error(f"✗ Failed to load conversation files: {e}")
+            return []
+    
+    async def remove_file_association(self, file_id: str) -> bool:
+        """Remove file association and RAG documents."""
+        try:
+            # Remove from RAG pipeline
+            rag_success = self.remove_document(file_id)
+            
+            # Remove from database
+            db_success = await self.conversation_service.remove_file_from_conversation(file_id)
+            
+            success = rag_success or db_success  # Consider success if either worked
+            
+            if success:
+                logger.info(f"✓ Removed file association: {file_id}")
+            else:
+                logger.warning(f"⚠ Failed to remove file association: {file_id}")
+                
+            return success
+            
+        except Exception as e:
+            logger.error(f"✗ Error removing file association: {e}")
+            return False
+    
+    async def toggle_file_enabled(self, file_id: str, enabled: bool) -> bool:
+        """Toggle file enabled status."""
+        try:
+            success = await self.conversation_service.toggle_file_enabled_status(
+                file_id=file_id,
+                enabled=enabled
+            )
+            
+            if success:
+                logger.info(f"✓ Toggled file enabled: {file_id} -> {enabled}")
+            else:
+                logger.warning(f"⚠ Failed to toggle file enabled: {file_id}")
+                
+            return success
+            
+        except Exception as e:
+            logger.error(f"✗ Error toggling file enabled: {e}")
+            return False
