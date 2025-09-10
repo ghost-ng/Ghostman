@@ -165,9 +165,9 @@ class VectorStoreConfig:
             # Ensure the directory exists
             os.makedirs(data_dir, exist_ok=True)
             
-            # Set ChromaDB persist directory
-            self.persist_directory = os.path.join(data_dir, "chromadb")
-            logger.info(f"ChromaDB persist directory set to: {self.persist_directory}")
+            # Set FAISS database persist directory
+            self.persist_directory = os.path.join(data_dir, "faiss_db")
+            logger.info(f"FAISS database persist directory set to: {self.persist_directory}")
 
 
 @dataclass
