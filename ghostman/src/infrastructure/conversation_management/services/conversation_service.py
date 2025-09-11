@@ -341,6 +341,14 @@ class ConversationService:
             logger.error(f"✗ Failed to get conversations file info: {e}")
             return {}
     
+    async def reassign_orphaned_files_to_conversation(self, target_conversation_id: str) -> int:
+        """Reassign files from deleted conversations to a target conversation."""
+        try:
+            return await self.repository.reassign_orphaned_files(target_conversation_id)
+        except Exception as e:
+            logger.error(f"✗ Failed to reassign orphaned files: {e}")
+            return 0
+    
     async def search_conversations(self, query: SearchQuery) -> SearchResults:
         """Search conversations using full-text search and filters."""
         try:

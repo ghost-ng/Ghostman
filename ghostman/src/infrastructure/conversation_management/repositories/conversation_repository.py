@@ -306,6 +306,32 @@ class ConversationRepository:
             logger.error(f"✗ Failed to batch load file info: {e}")
             return {}
     
+    async def reassign_orphaned_files(self, target_conversation_id: str) -> int:
+        """Reassign files from deleted conversations to target conversation."""
+        try:
+            with self.db.get_session() as session:
+                # Find files belonging to deleted conversations
+                deleted_conversations = session.query(ConversationModel.id).filter(
+                    ConversationModel.status == ConversationStatus.DELETED.value
+                ).subquery()
+                
+                # Update files to point to target conversation
+                update_count = session.query(ConversationFileModel).filter(
+                    ConversationFileModel.conversation_id.in_(
+                        session.query(deleted_conversations.c.id)
+                    )
+                ).update(
+                    {ConversationFileModel.conversation_id: target_conversation_id},
+                    synchronize_session='fetch'
+                )
+                
+                logger.info(f"✅ Reassigned {update_count} orphaned files to conversation {target_conversation_id[:8]}...")
+                return update_count
+                
+        except SQLAlchemyError as e:
+            logger.error(f"✗ Failed to reassign orphaned files: {e}")
+            return 0
+    
     # --- Message Operations ---
     
     async def add_message(self, message: Message) -> bool:

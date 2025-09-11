@@ -3644,11 +3644,13 @@ class REPLWidget(QWidget):
     def _process_uploaded_files(self, file_paths):
         """Process the uploaded files for context with immediate embeddings processing."""
         try:
-            # Get current conversation ID for file linking
-            current_conversation_id = getattr(self, '_current_conversation_id', None)
+            # Get current conversation ID for file linking - use robust method
+            current_conversation_id = self._get_safe_conversation_id()
             if not current_conversation_id:
-                logger.info("No current conversation - files will not be linked to conversation")
-                # Note: A conversation should be auto-created on startup
+                logger.warning("No current conversation found - creating one for file upload")
+                current_conversation_id = self._ensure_active_conversation_for_files()
+            
+            logger.info(f"📎 Linking files to conversation: {current_conversation_id[:8] if current_conversation_id else 'None'}...")
             
             # Show file browser bar immediately when files are selected
             if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
@@ -3767,6 +3769,70 @@ class REPLWidget(QWidget):
                     
         except Exception as e:
             logger.error(f"Failed to process uploaded files: {e}")
+    
+    def _get_safe_conversation_id(self) -> Optional[str]:
+        """Get the current conversation ID using multiple fallback methods."""
+        # Method 1: Direct reference
+        if hasattr(self, '_current_conversation_id') and self._current_conversation_id:
+            return self._current_conversation_id
+        
+        # Method 2: Current conversation object
+        if hasattr(self, 'current_conversation') and self.current_conversation:
+            self._current_conversation_id = self.current_conversation.id
+            return self.current_conversation.id
+        
+        # Method 3: Via conversation manager AI service
+        if hasattr(self, 'conversation_manager') and self.conversation_manager:
+            if self.conversation_manager.has_ai_service():
+                ai_service = self.conversation_manager.get_ai_service()
+                if ai_service:
+                    conv_id = ai_service.get_current_conversation_id()
+                    if conv_id:
+                        self._current_conversation_id = conv_id
+                        return conv_id
+        
+        return None
+    
+    def _ensure_active_conversation_for_files(self) -> Optional[str]:
+        """Ensure there's an active conversation for file uploads, creating one if needed."""
+        try:
+            if not hasattr(self, 'conversation_manager') or not self.conversation_manager:
+                logger.error("No conversation manager available to create conversation")
+                return None
+            
+            # Create a new conversation specifically for file uploads
+            import asyncio
+            loop = asyncio.new_event_loop() 
+            asyncio.set_event_loop(loop)
+            try:
+                conv_service = self.conversation_manager.conversation_service
+                new_conv_id = loop.run_until_complete(
+                    conv_service.create_conversation("New Conversation")
+                )
+                
+                if new_conv_id:
+                    # Set as active conversation
+                    success = self.conversation_manager.set_conversation_active_simple(new_conv_id)
+                    if success:
+                        # Update AI service context
+                        if self.conversation_manager.has_ai_service():
+                            ai_service = self.conversation_manager.get_ai_service()
+                            if ai_service:
+                                ai_service.set_current_conversation(new_conv_id)
+                        
+                        # Update our internal references
+                        self._current_conversation_id = new_conv_id
+                        
+                        logger.info(f"✅ Created new conversation for file upload: {new_conv_id[:8]}...")
+                        return new_conv_id
+                    
+            finally:
+                loop.close()
+                
+        except Exception as e:
+            logger.error(f"Failed to ensure active conversation for files: {e}")
+        
+        return None
     
     def _start_immediate_embeddings_processing(self, file_path: str, filename: str, file_id: str = None):
         """Start immediate embeddings processing for a single file."""
