@@ -69,14 +69,16 @@ class ConversationLoader(QObject):
             asyncio.set_event_loop(loop)
             
             try:
-                # Get all conversations from database (like REPL widget does)
+                # Get all conversations from database (exactly like REPL widget does)
                 recent = loop.run_until_complete(
                     self.conversation_manager.list_conversations(limit=100)
                 )
+                
+                # Use the same logic as REPL widget - no additional filtering
+                # The conversation service should already filter out deleted conversations
                 conversations.extend(recent)
                 
-                # Just display conversations as they are in the database
-                logger.debug(f"Loaded conversations with database statuses")
+                logger.debug(f"Loaded {len(recent)} conversations (same as REPL widget)")
                 
                 self.conversations_loaded.emit(conversations)
                 
@@ -461,19 +463,43 @@ class SimpleConversationBrowser(QDialog):
         )
     
     def _safe_run_async(self, coro):
-        """Safely run an async operation, handling event loop issues."""
+        """Safely run an async operation using async manager pattern."""
         try:
-            # Try to get the current event loop
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_closed():
-                    raise RuntimeError("Event loop is closed")
-            except RuntimeError:
-                # Create a new event loop if needed
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+            # Use the same pattern as the fixed REPL widget
+            import threading
+            import queue
             
-            return loop.run_until_complete(coro)
+            result_queue = queue.Queue()
+            
+            def run_async_task():
+                try:
+                    # Create new event loop for this thread
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    try:
+                        result = new_loop.run_until_complete(coro)
+                        result_queue.put(('success', result))
+                    finally:
+                        new_loop.close()
+                except Exception as e:
+                    result_queue.put(('error', str(e)))
+            
+            # Run in separate thread to avoid event loop conflicts
+            thread = threading.Thread(target=run_async_task, daemon=True)
+            thread.start()
+            thread.join(timeout=10.0)  # 10 second timeout
+            
+            if not result_queue.empty():
+                status, result = result_queue.get()
+                if status == 'success':
+                    return result
+                else:
+                    logger.debug(f"Async operation failed: {result}")
+                    return None
+            else:
+                logger.debug("Async operation timed out")
+                return None
+                
         except Exception as e:
             logger.debug(f"Safe async run failed: {e}")
             return None

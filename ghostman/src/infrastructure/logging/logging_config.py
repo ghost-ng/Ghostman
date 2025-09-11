@@ -161,7 +161,9 @@ def setup_logging(debug: bool = False, log_dir: str | None = None, retention_day
         encoding='utf-8'
     )
     file_handler.suffix = '-%Y-%m-%d.log'  # Format: ghostman-YYYY-MM-DD.log
-    file_handler.extMatch = None  # Disable default extension matching
+    # Set proper extension matching pattern for the suffix format
+    import re
+    file_handler.extMatch = re.compile(r"^\-\d{4}\-\d{2}\-\d{2}\.log$", re.ASCII)
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(JSONFormatter())
     root_logger.addHandler(file_handler)
@@ -176,7 +178,8 @@ def setup_logging(debug: bool = False, log_dir: str | None = None, retention_day
         encoding='utf-8'
     )
     error_handler.suffix = '-%Y-%m-%d.log'  # Format: ghostman-errors-YYYY-MM-DD.log
-    error_handler.extMatch = None  # Disable default extension matching
+    # Set proper extension matching pattern for the suffix format
+    error_handler.extMatch = re.compile(r"^\-\d{4}\-\d{2}\-\d{2}\.log$", re.ASCII)
     error_handler.setLevel(logging.ERROR)
     error_handler.setFormatter(JSONFormatter())
     root_logger.addHandler(error_handler)

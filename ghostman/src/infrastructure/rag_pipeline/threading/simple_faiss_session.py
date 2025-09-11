@@ -103,14 +103,35 @@ class SimpleFAISSSession:
             self.logger.info(f"🔄 Ingesting document: {file_path}")
             start_time = time.time()
             
-            # Load document (handle async)
+            # Load document using thread-safe pattern
             import asyncio
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                document = loop.run_until_complete(load_document(str(file_path)))
-            finally:
-                loop.close()
+            import threading
+            import queue
+            
+            doc_queue = queue.Queue()
+            
+            def load_doc():
+                try:
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    try:
+                        doc = new_loop.run_until_complete(load_document(str(file_path)))
+                        doc_queue.put(doc)
+                    finally:
+                        new_loop.close()
+                except Exception as e:
+                    self.logger.error(f"Document load error: {e}")
+                    doc_queue.put(None)
+            
+            thread = threading.Thread(target=load_doc, daemon=True)
+            thread.start()
+            thread.join(timeout=30.0)
+            
+            if doc_queue.empty():
+                self.logger.error("Document load timed out")
+                document = None
+            else:
+                document = doc_queue.get()
                 
             if not document:
                 self.logger.error(f"Failed to load document: {file_path}")
@@ -144,20 +165,37 @@ class SimpleFAISSSession:
             
             self.logger.info(f"Generated embeddings for {len(chunks)} chunks")
             
-            # Store in FAISS (handle async)
-            import asyncio
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                chunk_ids = loop.run_until_complete(
-                    self.faiss_client.store_document(
-                        document=document,
-                        chunks=chunks,
-                        embeddings=embeddings
-                    )
-                )
-            finally:
-                loop.close()
+            # Store in FAISS using thread-safe pattern
+            store_queue = queue.Queue()
+            
+            def store_doc():
+                try:
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    try:
+                        ids = new_loop.run_until_complete(
+                            self.faiss_client.store_document(
+                                document=document,
+                                chunks=chunks,
+                                embeddings=embeddings
+                            )
+                        )
+                        store_queue.put(ids)
+                    finally:
+                        new_loop.close()
+                except Exception as e:
+                    self.logger.error(f"Document store error: {e}")
+                    store_queue.put(None)
+            
+            thread = threading.Thread(target=store_doc, daemon=True)
+            thread.start()
+            thread.join(timeout=30.0)
+            
+            if store_queue.empty():
+                self.logger.error("Document store timed out")
+                chunk_ids = None
+            else:
+                chunk_ids = store_queue.get()
             
             if not chunk_ids:
                 self.logger.error("Failed to store document in FAISS")
@@ -201,20 +239,41 @@ class SimpleFAISSSession:
                 self.logger.error("Failed to generate query embedding")
                 return None
             
-            # Search FAISS
+            # Search FAISS using thread-safe pattern
             import asyncio
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                results = loop.run_until_complete(
-                    self.faiss_client.similarity_search(
-                        query_embedding=query_embedding,
-                        top_k=top_k,
-                        filters=filters
-                    )
-                )
-            finally:
-                loop.close()
+            import threading
+            import queue
+            
+            result_queue = queue.Queue()
+            
+            def run_search():
+                try:
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    try:
+                        search_results = new_loop.run_until_complete(
+                            self.faiss_client.similarity_search(
+                                query_embedding=query_embedding,
+                                top_k=top_k,
+                                filters=filters
+                            )
+                        )
+                        result_queue.put(search_results)
+                    finally:
+                        new_loop.close()
+                except Exception as e:
+                    self.logger.error(f"Search thread error: {e}")
+                    result_queue.put(None)
+            
+            thread = threading.Thread(target=run_search, daemon=True)
+            thread.start()
+            thread.join(timeout=10.0)
+            
+            if result_queue.empty():
+                self.logger.warning("Search timed out")
+                results = None
+            else:
+                results = result_queue.get()
             
             processing_time = time.time() - start_time
             

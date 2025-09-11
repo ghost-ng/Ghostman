@@ -1,8 +1,8 @@
 """
 RAG Coordinator
 
-Manages the integration of LangChain RAG capabilities with the Ghostman application.
-Handles initialization, configuration, and lifecycle management of RAG components.
+Manages the FAISS-only RAG capabilities with the Ghostman application.
+Handles initialization, configuration, and lifecycle management of FAISS RAG components.
 """
 
 import os
@@ -11,20 +11,20 @@ from typing import Optional, Dict, Any
 
 from ..infrastructure.storage.settings_manager import settings
 from ..infrastructure.conversation_management.services.conversation_service import ConversationService
-from ..presentation.widgets.repl_langchain_enhancer import enhance_repl_with_langchain
+# FAISS-only imports - no LangChain dependencies
 
 logger = logging.getLogger("ghostman.rag_coordinator")
 
 
 class RAGCoordinator:
     """
-    Coordinates RAG functionality across the Ghostman application.
+    Coordinates FAISS-only RAG functionality across the Ghostman application.
     
     Responsibilities:
-    - Initialize LangChain RAG components
-    - Enhance REPL widgets with RAG capabilities
-    - Manage RAG configuration and lifecycle
+    - Initialize FAISS RAG components
     - Provide RAG status and statistics
+    - Manage FAISS configuration and lifecycle
+    - Support conversation-specific file isolation
     """
     
     def __init__(self, conversation_service: ConversationService):
@@ -55,13 +55,12 @@ class RAGCoordinator:
                 logger.info("RAG disabled: No OpenAI API key")
                 return
             
-            # Check for required packages
+            # Check for required packages (FAISS-only)
             try:
-                import langchain_openai
-                import langchain_chroma
-                import chromadb
+                import faiss
+                import numpy as np
             except ImportError as e:
-                self._initialization_error = f"Missing required packages: {e}"
+                self._initialization_error = f"Missing required packages for FAISS: {e}"
                 logger.error(f"RAG disabled: {self._initialization_error}")
                 return
             
@@ -71,12 +70,43 @@ class RAGCoordinator:
                 logger.info("RAG disabled by user settings")
                 return
             
+            # Validate FAISS database initialization
+            try:
+                self._validate_faiss_initialization()
+            except Exception as faiss_error:
+                logger.warning(f"FAISS validation warning: {faiss_error}")
+                # Don't disable RAG for FAISS issues, just log the warning
+            
             self._rag_enabled = True
             logger.info("RAG functionality available")
             
         except Exception as e:
             self._initialization_error = f"RAG availability check failed: {e}"
             logger.error(self._initialization_error)
+    
+    def _validate_faiss_initialization(self):
+        """Validate FAISS database can be initialized properly."""
+        try:
+            from ..rag_pipeline.config.rag_config import get_config
+            from ..rag_pipeline.threading.simple_faiss_session import create_simple_faiss_session
+            
+            # Get RAG configuration (this will create directories)
+            config = get_config()
+            logger.info(f"FAISS persist directory: {config.vector_store.persist_directory}")
+            
+            # Test FAISS session creation
+            test_session = create_simple_faiss_session(config)
+            if test_session.is_ready:
+                stats = test_session.get_stats()
+                logger.info(f"FAISS validation successful: {stats}")
+                test_session.close()
+            else:
+                logger.warning("FAISS session not ready after initialization")
+                
+        except Exception as e:
+            logger.warning(f"FAISS validation failed: {e}")
+            # Continue anyway - FAISS issues shouldn't prevent app startup
+            raise e
     
     def is_enabled(self) -> bool:
         """Check if RAG is enabled."""
@@ -93,13 +123,13 @@ class RAGCoordinator:
         }
     
     def _get_persist_directory(self) -> str:
-        """Get the directory for RAG data persistence."""
+        """Get the directory for FAISS data persistence."""
         data_dir = settings.get('paths.data_dir', os.path.expanduser('~/.Ghostman'))
-        return os.path.join(data_dir, 'rag', 'chroma_db')
+        return os.path.join(data_dir, 'rag', 'faiss_db')
     
     def enhance_repl_widget(self, repl_widget, widget_id: str = None) -> bool:
         """
-        Enhance a REPL widget with RAG capabilities.
+        Enhance a REPL widget with FAISS RAG capabilities.
         
         Args:
             repl_widget: The REPL widget to enhance
@@ -109,7 +139,7 @@ class RAGCoordinator:
             True if enhancement was successful
         """
         if not self._rag_enabled:
-            logger.debug(f"RAG enhancement skipped: {self._initialization_error}")
+            logger.debug(f"FAISS RAG enhancement skipped: {self._initialization_error}")
             return False
         
         try:
@@ -117,23 +147,14 @@ class RAGCoordinator:
             
             # Check if already enhanced
             if widget_id in self.enhanced_widgets:
-                logger.debug(f"REPL widget {widget_id} already enhanced")
+                logger.debug(f"REPL widget {widget_id} already enhanced with FAISS")
                 return True
             
-            # Apply enhancement
-            enhancer = enhance_repl_with_langchain(
-                repl_widget=repl_widget,
-                conversation_service=self.conversation_service,
-                openai_api_key=self._get_api_key()
-            )
-            
-            if enhancer:
-                self.enhanced_widgets[widget_id] = enhancer
-                logger.info(f"Enhanced REPL widget {widget_id} with RAG")
-                return True
-            else:
-                logger.error(f"Failed to enhance REPL widget {widget_id}")
-                return False
+            # FAISS enhancement is now handled directly by the REPL widget
+            # The REPL widget manages its own FAISS session
+            logger.info(f"FAISS RAG enabled for widget {widget_id}")
+            self.enhanced_widgets[widget_id] = {"type": "faiss", "enabled": True}
+            return True
                 
         except Exception as e:
             logger.error(f"Failed to enhance REPL widget: {e}")

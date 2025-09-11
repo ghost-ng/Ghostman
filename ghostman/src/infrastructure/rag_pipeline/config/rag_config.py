@@ -162,12 +162,28 @@ class VectorStoreConfig:
             else:  # Unix/Mac - use consistent capitalization
                 data_dir = os.path.expanduser("~/.Ghostman/db")
             
-            # Ensure the directory exists
-            os.makedirs(data_dir, exist_ok=True)
-            
             # Set FAISS database persist directory
             self.persist_directory = os.path.join(data_dir, "faiss_db")
-            logger.info(f"FAISS database persist directory set to: {self.persist_directory}")
+        
+        # Ensure the FAISS database directory exists (create full path)
+        try:
+            os.makedirs(self.persist_directory, exist_ok=True)
+            logger.info(f"FAISS database persist directory initialized: {self.persist_directory}")
+        except Exception as e:
+            logger.error(f"Failed to create FAISS persist directory {self.persist_directory}: {e}")
+            # Try fallback location
+            fallback_dir = os.path.join(os.path.expanduser("~"), ".ghostman_faiss_db")
+            try:
+                os.makedirs(fallback_dir, exist_ok=True)
+                self.persist_directory = fallback_dir
+                logger.warning(f"Using fallback FAISS directory: {fallback_dir}")
+            except Exception as fallback_error:
+                logger.error(f"Failed to create fallback directory: {fallback_error}")
+                # Use temp directory as last resort
+                import tempfile
+                self.persist_directory = os.path.join(tempfile.gettempdir(), "ghostman_faiss_temp")
+                os.makedirs(self.persist_directory, exist_ok=True)
+                logger.warning(f"Using temporary FAISS directory: {self.persist_directory}")
 
 
 @dataclass

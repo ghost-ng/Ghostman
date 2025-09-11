@@ -271,49 +271,42 @@ class ConversationAIService(AIService):
             # Immediate save to ensure persistence
             if save_conversation and self._auto_save_conversations:
                 try:
-                    logger.debug("💾 Starting immediate conversation save...")
+                    logger.debug("💾 Starting conversation save using async manager...")
                     
-                    def save_conversation_immediate():
-                        try:
-                            import asyncio
-                            
-                            # Try to use existing event loop if available
-                            try:
-                                loop = asyncio.get_event_loop()
-                                if loop.is_running():
-                                    # If loop is running, create a task
-                                    asyncio.create_task(self._save_current_conversation())
-                                    logger.debug("💾 Scheduled save as async task")
-                                else:
-                                    # Loop exists but not running, run until complete
-                                    loop.run_until_complete(self._save_current_conversation())
-                                    logger.debug("💾 Completed immediate save")
-                            except RuntimeError:
-                                # No event loop, create new one
-                                loop = asyncio.new_event_loop()
-                                asyncio.set_event_loop(loop)
-                                try:
-                                    loop.run_until_complete(self._save_current_conversation())
-                                    logger.debug("💾 Completed save with new loop")
-                                finally:
-                                    loop.close()
-                                    
-                        except Exception as e:
-                            logger.error(f"✗ Failed to save conversation immediately: {e}", exc_info=True)
+                    # Import the async manager
+                    from ...async_manager import run_async_task_safe
                     
-                    # Try immediate save first
-                    save_conversation_immediate()
+                    def on_save_complete(result, error):
+                        if error:
+                            logger.error(f"✗ Failed to save conversation: {error}")
+                        else:
+                            logger.debug("💾 Conversation saved successfully")
+                    
+                    # Use the async manager to handle the save operation safely
+                    run_async_task_safe(
+                        self._save_current_conversation(),
+                        callback=on_save_complete,
+                        timeout=10.0  # 10 second timeout
+                    )
                     
                     # Also schedule a backup save with delay for safety
                     try:
                         from PyQt6.QtCore import QTimer
-                        QTimer.singleShot(500, save_conversation_immediate)
+                        
+                        def backup_save():
+                            run_async_task_safe(
+                                self._save_current_conversation(),
+                                callback=lambda r, e: logger.debug("💾 Backup save completed") if not e else logger.debug(f"💾 Backup save failed: {e}"),
+                                timeout=10.0
+                            )
+                        
+                        QTimer.singleShot(500, backup_save)
                         logger.debug("💾 Scheduled backup save in 500ms")
                     except Exception as e:
                         logger.debug(f"Could not schedule backup save: {e}")
                         
                 except Exception as e:
-                    logger.error(f"✗ Failed to save conversation: {e}", exc_info=True)
+                    logger.error(f"✗ Failed to schedule conversation save: {e}", exc_info=True)
         else:
             logger.error(f"✗ Message send failed: {result.get('error', 'Unknown error')}")
         

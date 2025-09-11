@@ -296,88 +296,141 @@ class FileContextItem(QFrame):
         else:
             return f"{size_bytes / (1024 * 1024):.1f} MB"
     
-    def _apply_styling(self):
-        """Apply modern rounded pill-style theme-aware styling."""
+    def _calculate_badge_colors(self) -> Dict[str, str]:
+        """Calculate theme-aware badge colors with proper contrast."""
         if self.theme_manager and hasattr(self.theme_manager, 'current_theme'):
             colors = self.theme_manager.current_theme
+            
+            # Extract theme colors
             bg_primary = colors.background_primary
             bg_secondary = colors.background_secondary
             text_primary = colors.text_primary
             text_secondary = colors.text_secondary
-            border_color = getattr(colors, 'border_primary', colors.text_secondary)
-            success_color = getattr(colors, 'success', "#28a745")
-            secondary_color = getattr(colors, 'secondary', "#6c757d")
             accent_color = colors.primary
+            success_color = getattr(colors, 'success', '#28a745')
+            error_color = getattr(colors, 'error', '#dc3545')
+            warning_color = getattr(colors, 'warning', '#ffc107')
+            
+            # Determine if theme is dark
+            is_dark = self._is_dark_color(bg_primary)
+            
+            # Calculate badge colors based on status and theme
+            if self.is_enabled:
+                if self.processing_status == "completed":
+                    base_color = success_color
+                    text_color = '#ffffff' if self._is_dark_color(success_color) else '#000000'
+                elif self.processing_status == "processing":
+                    base_color = accent_color
+                    text_color = '#ffffff' if self._is_dark_color(accent_color) else '#000000'
+                elif self.processing_status == "failed":
+                    base_color = error_color
+                    text_color = '#ffffff'
+                else:  # queued
+                    base_color = ColorUtils.lighten(bg_secondary, 0.1) if is_dark else ColorUtils.darken(bg_secondary, 0.1)
+                    text_color = text_primary
+                
+                opacity = "1.0" if self.processing_status in ["completed", "failed"] else "0.95"
+            else:
+                # Disabled state
+                base_color = ColorUtils.lighten(bg_secondary, 0.2) if is_dark else ColorUtils.darken(bg_secondary, 0.2)
+                text_color = text_secondary
+                opacity = "0.6"
+            
+            # Calculate hover states
+            hover_bg = ColorUtils.lighten(base_color, 0.1)
+            hover_border = ColorUtils.lighten(base_color, 0.15)
+            
+            return {
+                'background': base_color,
+                'text': text_color,
+                'border': ColorUtils.darken(base_color, 0.1),
+                'hover_bg': hover_bg,
+                'hover_border': hover_border,
+                'opacity': opacity
+            }
         else:
-            # Fallback colors with enhanced theme support
-            bg_primary = "#1a1a1a"
-            bg_secondary = "#2c2c2c"
-            text_primary = "#ffffff"
-            text_secondary = "#b0b0b0"
-            border_color = "#4a4a4a"
-            success_color = "#28a745"
-            secondary_color = "#6c757d"
-            accent_color = "#007bff"
+            # Fallback colors
+            return self._get_fallback_badge_colors()
+    
+    def _get_fallback_badge_colors(self) -> Dict[str, str]:
+        """Get fallback badge colors when theme manager is not available."""
+        status_colors = {
+            "completed": ("#28a745", "#ffffff"),
+            "processing": ("#007bff", "#ffffff"),
+            "failed": ("#dc3545", "#ffffff"),
+            "queued": ("#6c757d", "#ffffff")
+        }
         
-        # Enhanced theme-aware status styling
         if self.is_enabled:
-            if self.processing_status == "completed":
-                pill_bg = success_color
-                pill_text = "#ffffff"
-                pill_border = success_color
-                opacity = "1.0"
-            elif self.processing_status == "processing":
-                pill_bg = accent_color
-                pill_text = "#ffffff"
-                pill_border = accent_color
-                opacity = "0.9"
-            elif self.processing_status == "failed":
-                error_color = getattr(colors, 'error', "#dc3545") if self.theme_manager else "#dc3545"
-                pill_bg = error_color
-                pill_text = "#ffffff"
-                pill_border = error_color
-                opacity = "1.0"
-            else:  # queued
-                pill_bg = bg_secondary
-                pill_text = text_primary
-                pill_border = border_color
-                opacity = "0.8"
+            base_color, text_color = status_colors.get(self.processing_status, ("#6c757d", "#ffffff"))
+            opacity = "1.0"
         else:
-            # Disabled state - muted appearance
-            pill_bg = secondary_color
-            pill_text = "#ffffff"
-            pill_border = secondary_color
+            base_color, text_color = ("#e9ecef", "#6c757d")
             opacity = "0.6"
         
-        # Calculate hover states using the existing ColorUtils import
-        hover_bg = ColorUtils.lighten(pill_bg, 0.15)
-        hover_border = ColorUtils.lighten(pill_border, 0.2)
+        return {
+            'background': base_color,
+            'text': text_color,
+            'border': ColorUtils.darken(base_color, 0.1),
+            'hover_bg': ColorUtils.lighten(base_color, 0.1),
+            'hover_border': ColorUtils.lighten(base_color, 0.15),
+            'opacity': opacity
+        }
+    
+    def _is_dark_color(self, color_str: str) -> bool:
+        """Check if a color is dark based on luminance."""
+        try:
+            # Remove # if present
+            color = color_str.lstrip('#')
+            # Convert to RGB
+            r = int(color[0:2], 16)
+            g = int(color[2:4], 16)
+            b = int(color[4:6], 16)
+            # Calculate relative luminance
+            luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+            return luminance < 0.5
+        except:
+            return True  # Default to dark
+    
+    def _apply_styling(self):
+        """Apply modern rounded pill-style theme-aware styling with improved design."""
+        # Get badge colors with theme awareness
+        badge_colors = self._calculate_badge_colors()
         
-        # Enhanced rounded pill styling with theme awareness
+        pill_bg = badge_colors['background']
+        pill_text = badge_colors['text']
+        pill_border = badge_colors['border']
+        hover_bg = badge_colors['hover_bg']
+        hover_border = badge_colors['hover_border']
+        opacity = badge_colors['opacity']
+        
+        # Modern smooth design with interface designer recommendations
         self.setStyleSheet(f"""
             FileContextItem {{
-                background-color: {pill_bg};
+                background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                    stop: 0 {pill_bg},
+                    stop: 1 {ColorUtils.darken(pill_bg, 0.05)});
                 color: {pill_text};
-                border: 2px solid {pill_border};
-                border-radius: 20px;  /* Fully rounded pill shape */
-                padding: 4px 8px;
-                margin: 2px 3px;
+                border: 1px solid {pill_border};
+                border-radius: 10px;  /* Smooth rounded corners (not too round) */
+                padding: 6px 10px;
+                margin: 3px 4px;
                 opacity: {opacity};
                 font-size: 11px;
-                font-weight: 600;
-                min-height: 24px;
-                max-height: 28px;
-                transition: all 0.2s ease-in-out;
-                cursor: pointer;
+                font-weight: 500;
+                min-height: 26px;
+                max-height: 30px;
             }}
             FileContextItem:hover {{
-                background-color: {hover_bg};
+                background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                    stop: 0 {hover_bg},
+                    stop: 1 {ColorUtils.darken(hover_bg, 0.05)});
                 border-color: {hover_border};
                 opacity: 1.0;
-                transform: scale(1.02);
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             }}
             QLabel {{
-                color: inherit;
+                color: {pill_text};
                 background: transparent;
                 border: none;
                 font-weight: inherit;
@@ -386,21 +439,22 @@ class FileContextItem(QFrame):
                 padding: 0;
             }}
             QToolButton {{
-                background-color: rgba(255,255,255,0.2);
-                border: none;
-                color: inherit;
-                font-size: 0.6rem;
+                background-color: transparent;
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                color: {pill_text};
+                font-size: 10px;
                 font-weight: bold;
-                border-radius: 50%;
-                width: 14px;
-                height: 14px;
-                margin-left: 0.25rem;
+                border-radius: 8px;  /* Circular close button */
+                width: 16px;
+                height: 16px;
+                margin-left: 4px;
             }}
             QToolButton:hover {{
-                background-color: rgba(255,255,255,0.35);
+                background-color: rgba(220, 53, 69, 0.8);  /* Red on hover */
+                border-color: rgba(220, 53, 69, 1.0);
+                color: white;
             }}
-        """)
-    
+        """)    
     def _setup_context_menu(self):
         """Setup context menu for the file item."""
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -1041,6 +1095,39 @@ class FileBrowserBar(QFrame):
         return [
             file_id for file_id, item in self.file_items.items()
             if item.processing_status == "completed"
+        ]
+    
+    def get_all_files_info(self) -> List[Dict[str, any]]:
+        """Get detailed information about all files in the browser."""
+        file_info_list = []
+        for file_id, item in self.file_items.items():
+            file_info_list.append({
+                'file_id': file_id,
+                'filename': item.filename,
+                'file_size': item.file_size,
+                'file_type': item.file_type,
+                'processing_status': item.processing_status,
+                'is_enabled': item.is_enabled,
+                'tokens_used': item.tokens_used,
+                'relevance_score': item.relevance_score
+            })
+        return file_info_list
+    
+    def get_enabled_files_info(self) -> List[Dict[str, any]]:
+        """Get detailed information about only enabled files in the browser."""
+        return [
+            {
+                'file_id': file_id,
+                'filename': item.filename,
+                'file_size': item.file_size,
+                'file_type': item.file_type,
+                'processing_status': item.processing_status,
+                'is_enabled': item.is_enabled,
+                'tokens_used': item.tokens_used,
+                'relevance_score': item.relevance_score
+            }
+            for file_id, item in self.file_items.items()
+            if item.is_enabled
         ]
     
     def _rebuild_grid_layout(self):

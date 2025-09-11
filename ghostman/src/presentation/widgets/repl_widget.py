@@ -3173,20 +3173,18 @@ class REPLWidget(QWidget):
                 try:
                     conv_service = self.conversation_manager.conversation_service
                     if conv_service:
-                        import asyncio
+                        # Use thread-safe async pattern
+                        from ....infrastructure.async_manager import get_async_manager
                         
-                        def remove_file_sync():
-                            try:
-                                loop = asyncio.get_event_loop()
-                            except RuntimeError:
-                                loop = asyncio.new_event_loop()
-                                asyncio.set_event_loop(loop)
-                            
-                            return loop.run_until_complete(
-                                conv_service.remove_file_from_conversation(file_id)
+                        async_manager = get_async_manager()
+                        if async_manager:
+                            db_success = async_manager.run_async_task_safe(
+                                conv_service.remove_file_from_conversation(file_id),
+                                timeout=10.0
                             )
-                        
-                        db_success = remove_file_sync()
+                        else:
+                            logger.warning("No async manager available for file removal")
+                            db_success = False
                         if db_success:
                             logger.info(f"✅ Removed file {file_id} from conversation database")
                         else:
@@ -3198,6 +3196,10 @@ class REPLWidget(QWidget):
             # Remove from enabled files tracking
             if hasattr(self, '_enabled_files'):
                 self._enabled_files.discard(file_id)
+            
+            # Remove from file path mapping
+            if hasattr(self, '_file_id_to_path_map'):
+                self._file_id_to_path_map.pop(file_id, None)
             
             # Log removal result
             if removal_success:
@@ -3290,34 +3292,7 @@ class REPLWidget(QWidget):
         try:
             logger.info(f"📄 File {'enabled' if enabled else 'disabled'} for context: {file_id}")
             
-            # Update database enabled state
-            if hasattr(self, 'conversation_manager'):
-                try:
-                    conv_service = self.conversation_manager.conversation_service
-                    if conv_service:
-                        import asyncio
-                        
-                        def toggle_file_sync():
-                            try:
-                                loop = asyncio.get_event_loop()
-                            except RuntimeError:
-                                loop = asyncio.new_event_loop()
-                                asyncio.set_event_loop(loop)
-                            
-                            return loop.run_until_complete(
-                                conv_service.toggle_file_enabled_status(file_id, enabled)
-                            )
-                        
-                        success = toggle_file_sync()
-                        if success:
-                            logger.info(f"✅ Updated file {file_id} enabled state in database")
-                        else:
-                            logger.warning(f"⚠️ Failed to update file {file_id} enabled state in database")
-                            
-                except Exception as db_error:
-                    logger.error(f"Failed to update file enabled state in database: {db_error}")
-            
-            # Track enabled files for context retrieval
+            # Track enabled files for context retrieval immediately
             if not hasattr(self, '_enabled_files'):
                 self._enabled_files = set()
             
@@ -3328,6 +3303,46 @@ class REPLWidget(QWidget):
                 
             logger.info(f"📊 Total enabled files: {len(self._enabled_files)}")
             
+            # Update database enabled state using async manager
+            if hasattr(self, 'conversation_manager'):
+                try:
+                    conv_service = self.conversation_manager.conversation_service
+                    if conv_service:
+                        from ...infrastructure.async_manager import run_async_task_safe
+                        
+                        def on_toggle_complete(result, error):
+                            if error:
+                                logger.error(f"Failed to update file enabled state in database: {error}")
+                                # Revert the local change if database update failed
+                                if enabled:
+                                    self._enabled_files.discard(file_id)
+                                else:
+                                    self._enabled_files.add(file_id)
+                            elif result:
+                                logger.info(f"✅ Updated file {file_id} enabled state in database")
+                            else:
+                                logger.warning(f"⚠️ Failed to update file {file_id} enabled state in database")
+                                # Revert the local change if database update failed
+                                if enabled:
+                                    self._enabled_files.discard(file_id)
+                                else:
+                                    self._enabled_files.add(file_id)
+                        
+                        # Run the async operation safely
+                        run_async_task_safe(
+                            conv_service.toggle_file_enabled_status(file_id, enabled),
+                            callback=on_toggle_complete,
+                            timeout=10.0  # 10 second timeout
+                        )
+                        
+                except Exception as db_error:
+                    logger.error(f"Failed to schedule file enabled state update: {db_error}")
+                    # Revert the local change
+                    if enabled:
+                        self._enabled_files.discard(file_id)
+                    else:
+                        self._enabled_files.add(file_id)
+            
         except Exception as e:
             logger.error(f"Failed to handle file toggle: {e}")
     
@@ -3336,59 +3351,59 @@ class REPLWidget(QWidget):
         try:
             logger.info(f"📁 Loading files for conversation: {conversation_id}")
             
-            # Run async file loading in sync context
-            import asyncio
-            
-            def load_files_sync():
-                try:
-                    # Create new event loop if needed
-                    try:
-                        loop = asyncio.get_event_loop()
-                    except RuntimeError:
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                    
-                    # Get conversation service
-                    if not hasattr(self, 'conversation_manager') or not self.conversation_manager:
-                        logger.warning("No conversation manager available for file loading")
-                        return []
-                    
-                    conv_service = self.conversation_manager.conversation_service
-                    if not conv_service:
-                        logger.warning("No conversation service available for file loading")
-                        return []
-                    
-                    # Load files from database
-                    files = loop.run_until_complete(conv_service.get_conversation_files(conversation_id))
-                    return files
-                    
-                except Exception as e:
-                    logger.error(f"Failed to load files sync: {e}")
-                    return []
-            
-            files = load_files_sync()
-            
-            # Clear existing files from browser bar
+            # Clear existing files from browser bar immediately
             if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
                 self.file_browser_bar.clear_all_files()
             
             # Update current conversation ID for file operations
             self._current_conversation_id = conversation_id
             
-            # Update LangChain integration if available
-            try:
-                from ...infrastructure.rag_coordinator import get_rag_coordinator
-                rag_coordinator = get_rag_coordinator()
-                if rag_coordinator and hasattr(rag_coordinator, 'langchain_service'):
-                    rag_coordinator.langchain_service.set_current_conversation(conversation_id)
-                    logger.info(f"✓ Updated LangChain service with conversation: {conversation_id}")
-            except (ImportError, AttributeError) as e:
-                logger.debug(f"LangChain service update skipped: {e}")
-            
             # Update enabled files tracking
             if not hasattr(self, '_enabled_files'):
                 self._enabled_files = set()
             self._enabled_files.clear()
+            
+            # Get conversation service
+            if not hasattr(self, 'conversation_manager') or not self.conversation_manager:
+                logger.warning("No conversation manager available for file loading")
+                if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                    self.file_browser_bar.setVisible(False)
+                return
+            
+            conv_service = self.conversation_manager.conversation_service
+            if not conv_service:
+                logger.warning("No conversation service available for file loading")
+                if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                    self.file_browser_bar.setVisible(False)
+                return
+            
+            # Load files from database using async manager
+            from ...infrastructure.async_manager import run_async_task_safe
+            
+            def on_files_loaded(files, error):
+                if error:
+                    logger.error(f"Failed to load conversation files: {error}")
+                    if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                        self.file_browser_bar.setVisible(False)
+                    return
+                
+                self._process_loaded_files(files)
+            
+            # Run the async operation safely
+            run_async_task_safe(
+                conv_service.get_conversation_files(conversation_id),
+                callback=on_files_loaded,
+                timeout=15.0  # 15 second timeout
+            )
+                
+        except Exception as e:
+            logger.error(f"Failed to load conversation files: {e}")
+    
+    def _process_loaded_files(self, files):
+        """Process the loaded files and update the UI."""
+        try:
+            # RAG integration is now handled by FAISS-only system
+            # No additional setup needed as FAISS uses conversation metadata directly
             
             # Add files to browser bar
             if files:
@@ -3420,7 +3435,8 @@ class REPLWidget(QWidget):
                             pass
                 
                 # Show browser bar if files exist
-                self.file_browser_bar.setVisible(True)
+                if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                    self.file_browser_bar.setVisible(True)
                 logger.info(f"✅ Loaded {len(files)} files into browser bar")
             else:
                 # Hide browser bar if no files
@@ -3429,7 +3445,7 @@ class REPLWidget(QWidget):
                 logger.info("📁 No files found for conversation")
                 
         except Exception as e:
-            logger.error(f"Failed to load conversation files: {e}")
+            logger.error(f"Failed to process loaded files: {e}")
     
     def _init_rag_session(self):
         """Initialize the unified RAG session using SafeRAGSession (no segfaults)."""
@@ -3618,9 +3634,32 @@ class REPLWidget(QWidget):
                                     loop = asyncio.new_event_loop()
                                     asyncio.set_event_loop(loop)
                                 
-                                return loop.run_until_complete(
-                                    conv_service.add_file_to_conversation(
-                                        conversation_id=current_conversation_id,
+                                async def save_with_fallback():
+                                    # Check if conversation exists first
+                                    conversation = await conv_service.get_conversation(current_conversation_id)
+                                    active_conversation_id = current_conversation_id
+                                    
+                                    if not conversation:
+                                        logger.warning(f"Conversation {current_conversation_id} not found, creating new one for file upload")
+                                        # Create a new conversation for the file
+                                        new_conversation_id = await conv_service.create_conversation("New Conversation")
+                                        if new_conversation_id:
+                                            active_conversation_id = new_conversation_id
+                                            logger.info(f"Created new conversation {active_conversation_id} for file upload")
+                                            # Update current conversation reference
+                                            if hasattr(self, 'conversation_manager') and self.conversation_manager.has_ai_service():
+                                                ai_service = self.conversation_manager.get_ai_service()
+                                                if ai_service:
+                                                    ai_service.set_current_conversation(active_conversation_id)
+                                            # Update our internal reference
+                                            self._current_conversation_id = active_conversation_id
+                                        else:
+                                            logger.error("Failed to create new conversation for file upload")
+                                            return False
+                                    
+                                    # Now add the file to the conversation
+                                    return await conv_service.add_file_to_conversation(
+                                        conversation_id=active_conversation_id,
                                         file_id=file_id,
                                         filename=filename,
                                         file_path=file_path,
@@ -3628,7 +3667,8 @@ class REPLWidget(QWidget):
                                         file_type=file_ext,
                                         metadata={'upload_timestamp': datetime.now().isoformat()}
                                     )
-                                )
+                                
+                                return loop.run_until_complete(save_with_fallback())
                             
                             success = save_file_sync()
                             if success:
@@ -3659,6 +3699,11 @@ class REPLWidget(QWidget):
                 if not hasattr(self, '_enabled_files'):
                     self._enabled_files = set()
                 self._enabled_files.add(file_id)
+                
+                # Track file ID to path mapping for save functionality
+                if not hasattr(self, '_file_id_to_path_map'):
+                    self._file_id_to_path_map = {}
+                self._file_id_to_path_map[file_id] = file_path
                 
                 # Start embeddings processing with file_id
                 self._start_immediate_embeddings_processing(file_path, filename, file_id)
@@ -3707,8 +3752,10 @@ class REPLWidget(QWidget):
             
             # Display processing started status in chat
             logger.info(f"🔍 DEBUG: About to call _display_processing_started_in_chat for: {filename}")
+            # Store the file_id for later use in status updates
+            self._current_processing_file_id = file_id
             self._display_processing_started_in_chat(filename)
-            logger.info(f"🔄 Started processing: {filename}")
+            logger.info(f"🔄 Started processing: {filename} (ID: {file_id})")
             
             # Use thread-safe RAG processing (NO MORE SEGFAULTS!)
             from PyQt6.QtCore import QThread, QObject, pyqtSignal
@@ -3717,11 +3764,12 @@ class REPLWidget(QWidget):
                 """Thread-safe embeddings processor using the ChromaDB worker thread."""
                 finished = pyqtSignal(str, str, bool, dict)  # file_path, filename, success, result
                 
-                def __init__(self, rag_session, file_path, filename):
+                def __init__(self, rag_session, file_path, filename, parent_repl=None):
                     super().__init__()
                     self.rag_session = rag_session
                     self.file_path = file_path
                     self.filename = filename
+                    self.parent_repl = parent_repl
                 
                 def process(self):
                     """Process file using thread-safe RAG session (no asyncio/threading issues)."""
@@ -3759,8 +3807,27 @@ class REPLWidget(QWidget):
                             
                             # Process document through thread-safe interface (NO ASYNCIO IN QT THREAD!)
                             logger.info(f"📄 Ingesting document through safe interface: {self.filename}")
+                            # Get current conversation ID for document association
+                            conversation_id = None
+                            if hasattr(self.parent_repl, 'current_conversation') and self.parent_repl.current_conversation:
+                                conversation_id = self.parent_repl.current_conversation.id
+                            elif hasattr(self.parent_repl, 'conversation_manager') and self.parent_repl.conversation_manager:
+                                if self.parent_repl.conversation_manager.has_ai_service():
+                                    ai_service = self.parent_repl.conversation_manager.get_ai_service()
+                                    if ai_service:
+                                        conversation_id = ai_service.get_current_conversation_id()
+                            
+                            # Prepare metadata with conversation association
+                            metadata_override = {}
+                            if conversation_id:
+                                metadata_override['conversation_id'] = conversation_id
+                                logger.info(f"📎 Associating document with conversation: {conversation_id}")
+                            else:
+                                logger.warning("⚠️ No current conversation ID found - document will be global")
+                            
                             document_id = safe_rag.ingest_document(
                                 file_path=self.file_path,
+                                metadata_override=metadata_override,
                                 timeout=120.0  # 2 minute timeout
                             )
                             
@@ -3833,7 +3900,7 @@ class REPLWidget(QWidget):
             
             # Create and start SAFE thread (ChromaDB worker prevents segfaults)
             thread = QThread()
-            processor = SafeEmbeddingsProcessor(self.rag_session, file_path, filename)
+            processor = SafeEmbeddingsProcessor(self.rag_session, file_path, filename, parent_repl=self)
             processor.moveToThread(thread)
             
             # Store thread reference to prevent early deletion
@@ -3902,9 +3969,10 @@ class REPLWidget(QWidget):
                     try:
                         tokens_used = result.get('tokens', 0)
                         chunks = result.get('chunks', 0)
-                        self.file_browser_bar.update_file_status(filename, "completed")
-                        self.file_browser_bar.update_file_usage(filename, tokens_used, 1.0)  # Default relevance
-                        logger.info(f"📄 Updated browser bar status to 'completed' for: {filename}")
+                        file_id = result.get('file_id', filename)  # Use file_id from result if available
+                        self.file_browser_bar.update_file_status(file_id, "completed")
+                        self.file_browser_bar.update_file_usage(file_id, tokens_used, 1.0)  # Default relevance
+                        logger.info(f"📄 Updated browser bar status to 'completed' for: {filename} (ID: {file_id})")
                     except Exception as bar_error:
                         logger.error(f"Failed to update browser bar status: {bar_error}")
                 
@@ -4121,10 +4189,10 @@ class REPLWidget(QWidget):
             # Update file browser bar status to "processing"
             if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
                 try:
-                    # Find the file by filename since we don't have file_path here
-                    # This is a limitation - ideally we'd pass file_path too
-                    self.file_browser_bar.update_file_status(filename, "processing")
-                    logger.info(f"📄 Updated browser bar status to 'processing' for: {filename}")
+                    # Use the file_id passed from the calling function
+                    file_id = getattr(self, '_current_processing_file_id', filename)
+                    self.file_browser_bar.update_file_status(file_id, "processing")
+                    logger.info(f"📄 Updated browser bar status to 'processing' for: {filename} (ID: {file_id})")
                 except Exception as bar_error:
                     logger.error(f"Failed to update browser bar status: {bar_error}")
                 
@@ -4297,8 +4365,26 @@ class REPLWidget(QWidget):
                     
                     logger.info(f"📄 Processing file with embeddings: {filename}")
                     
+                    # Get current conversation ID for document association
+                    conversation_id = None
+                    if hasattr(self, 'current_conversation') and self.current_conversation:
+                        conversation_id = self.current_conversation.id
+                    elif hasattr(self, 'conversation_manager') and self.conversation_manager:
+                        if self.conversation_manager.has_ai_service():
+                            ai_service = self.conversation_manager.get_ai_service()
+                            if ai_service:
+                                conversation_id = ai_service.get_current_conversation_id()
+                    
+                    # Prepare metadata with conversation association
+                    metadata_override = {}
+                    if conversation_id:
+                        metadata_override['conversation_id'] = conversation_id
+                        logger.info(f"📎 Associating document with conversation: {conversation_id}")
+                    else:
+                        logger.warning("⚠️ No current conversation ID found - document will be global")
+                    
                     # Process file with RAG pipeline
-                    success = await self.rag_session.ingest_document(file_path)
+                    success = await self.rag_session.ingest_document(file_path, metadata_override)
                     
                     # Update browser bar based on result
                     if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
@@ -7199,10 +7285,30 @@ def test_theme():
                     logger.info(f"Querying SafeRAG pipeline with: '{message[:100]}...'")
                     
                     try:
-                        # Query using SafeRAGSession (no async needed)
+                        # Get current conversation ID for filtering
+                        current_conversation_id = None
+                        if hasattr(self, 'conversation_manager') and self.conversation_manager:
+                            # Get AI service and use its current conversation ID
+                            if self.conversation_manager.has_ai_service():
+                                ai_service = self.conversation_manager.get_ai_service()
+                                if ai_service:
+                                    current_conversation_id = ai_service.get_current_conversation_id()
+                            # Fallback to REPL's current conversation
+                            if not current_conversation_id and hasattr(self, 'current_conversation') and self.current_conversation:
+                                current_conversation_id = self.current_conversation.id
+                        
+                        # Query using SafeRAGSession with conversation filter
+                        filters = {}
+                        if current_conversation_id:
+                            filters['conversation_id'] = current_conversation_id
+                            logger.info(f"🔍 Filtering RAG results by conversation: {current_conversation_id}")
+                        else:
+                            logger.warning("⚠️ No current conversation ID - using global RAG results")
+                        
                         response = safe_rag.query(
                             query_text=message,
                             top_k=3,
+                            filters=filters if filters else None,
                             timeout=10.0
                         )
                         
@@ -7237,6 +7343,7 @@ def test_theme():
                             
                     except Exception as e:
                         logger.error(f"SafeRAG query failed: {e}")
+                        import traceback
                         logger.error(f"SafeRAG query traceback: {traceback.format_exc()}")
                     
                     # Close SafeRAG session and return original message
@@ -7599,15 +7706,25 @@ def test_theme():
         try:
             logger.debug(f"Attempting to restore conversation: {conversation_id}")
             
-            # Create async task to load the conversation
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.create_task(self._restore_conversation_async(conversation_id))
-            else:
-                loop.run_until_complete(self._restore_conversation_async(conversation_id))
+            # Use async manager to handle the restore operation safely
+            from ...infrastructure.async_manager import run_async_task_safe
+            
+            def on_restore_complete(result, error):
+                if error:
+                    logger.error(f"✗ Failed to restore conversation {conversation_id}: {error}")
+                    self.append_output(f"✗ Failed to restore conversation: {error}", "error")
+                else:
+                    logger.debug(f"✓ Successfully restored conversation: {conversation_id}")
+            
+            # Run the async operation safely
+            run_async_task_safe(
+                self._restore_conversation_async(conversation_id),
+                callback=on_restore_complete,
+                timeout=30.0  # 30 second timeout for conversation restoration
+            )
                 
         except Exception as e:
-            logger.error(f"✗ Failed to restore conversation {conversation_id}: {e}", exc_info=True)
+            logger.error(f"✗ Failed to schedule conversation restore {conversation_id}: {e}", exc_info=True)
     
     async def _restore_conversation_async(self, conversation_id: str):
         """Restore conversation asynchronously."""
@@ -8393,6 +8510,9 @@ def test_theme():
                     
                     logger.debug(f"Proceeding with save for conversation {current_id} with {message_count} messages")
                     
+                    # Ensure any files currently in browser are linked to this conversation
+                    await self._ensure_files_linked_to_conversation(current_id, ai_service.conversation_service)
+                    
                     # Generate title if needed
                     if len(conversation.messages) >= 2:
                         if conversation.title in ["New Conversation", "Untitled Conversation"] or not conversation.title.strip():
@@ -8436,6 +8556,100 @@ def test_theme():
         except Exception as e:
             logger.error(f"Save conversation failed: {e}")
             self.append_output(f"✗ Error: {e}", "error")
+    
+    async def _ensure_files_linked_to_conversation(self, conversation_id: str, conversation_service):
+        """Ensure any files currently in the file browser are linked to the conversation."""
+        try:
+            if not hasattr(self, 'file_browser_bar') or not self.file_browser_bar:
+                logger.debug("No file browser bar available")
+                return
+            
+            # Get all files currently in the browser
+            all_files = self.file_browser_bar.get_all_files_info()
+            if not all_files:
+                logger.debug("No files in browser to link")
+                return
+            
+            # Check if conversation exists, create new one if not
+            try:
+                conversation = await conversation_service.get_conversation(conversation_id)
+                if not conversation:
+                    logger.warning(f"Conversation {conversation_id} not found, creating new one")
+                    # Create a new conversation to link files to
+                    new_conversation_id = await conversation_service.create_conversation("New Conversation")
+                    if new_conversation_id:
+                        conversation_id = new_conversation_id
+                        logger.info(f"Created new conversation {conversation_id} for file linking")
+                        # Update current conversation reference
+                        if hasattr(self, 'conversation_manager') and self.conversation_manager.has_ai_service():
+                            ai_service = self.conversation_manager.get_ai_service()
+                            if ai_service:
+                                ai_service.set_current_conversation(conversation_id)
+                    else:
+                        logger.error("Failed to create new conversation for file linking")
+                        return
+            except Exception as conv_check_error:
+                logger.error(f"Error checking conversation existence: {conv_check_error}")
+                return
+            
+            # Get existing files for this conversation to avoid duplicates
+            existing_files = await conversation_service.get_conversation_files(conversation_id)
+            existing_file_ids = {f.file_id for f in existing_files} if existing_files else set()
+            
+            files_linked = 0
+            for file_info in all_files:
+                file_id = file_info['file_id']
+                
+                # Skip if already linked to conversation
+                if file_id in existing_file_ids:
+                    logger.debug(f"File {file_id} already linked to conversation")
+                    continue
+                
+                # For files in browser that aren't yet linked, we need the file path
+                # Check if we have this in our uploaded files tracking
+                file_path = None
+                if hasattr(self, '_file_id_to_path_map') and file_id in self._file_id_to_path_map:
+                    file_path = self._file_id_to_path_map[file_id]
+                elif hasattr(self, '_uploaded_files_paths'):
+                    # Try to find by filename match (fallback)
+                    for path in self._uploaded_files_paths:
+                        import os
+                        if os.path.basename(path) == file_info['filename']:
+                            file_path = path
+                            break
+                
+                if not file_path:
+                    logger.warning(f"Could not find file path for {file_id} ({file_info['filename']})")
+                    continue
+                
+                # Add file to conversation
+                from datetime import datetime
+                success = await conversation_service.add_file_to_conversation(
+                    conversation_id=conversation_id,
+                    file_id=file_id,
+                    filename=file_info['filename'],
+                    file_path=file_path,
+                    file_size=file_info['file_size'],
+                    file_type=file_info['file_type'],
+                    metadata={
+                        'save_timestamp': datetime.now().isoformat(),
+                        'processing_status': file_info['processing_status'],
+                        'is_enabled': file_info['is_enabled'],
+                        'tokens_used': file_info['tokens_used']
+                    }
+                )
+                
+                if success:
+                    files_linked += 1
+                    logger.info(f"✅ Linked file {file_info['filename']} to conversation on save")
+                else:
+                    logger.warning(f"⚠️ Failed to link file {file_info['filename']} to conversation")
+            
+            if files_linked > 0:
+                logger.info(f"📎 Linked {files_linked} files to conversation {conversation_id} during save")
+                
+        except Exception as e:
+            logger.error(f"Failed to ensure files linked to conversation: {e}")
     
     def _start_new_conversation(self, save_current: bool = False):
         """Start a new conversation with optional saving of current."""

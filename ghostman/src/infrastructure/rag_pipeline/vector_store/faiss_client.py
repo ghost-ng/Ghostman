@@ -174,8 +174,32 @@ class FaissClient:
     def _initialize(self):
         """Initialize FAISS index and load existing data."""
         try:
-            # Ensure persistence directory exists
-            Path(self.config.persist_directory).mkdir(parents=True, exist_ok=True)
+            # Ensure persistence directory exists with robust error handling
+            persist_path = Path(self.config.persist_directory)
+            try:
+                persist_path.mkdir(parents=True, exist_ok=True)
+                self.logger.info(f"FAISS persistence directory ready: {persist_path}")
+            except Exception as dir_error:
+                self.logger.error(f"Failed to create FAISS directory {persist_path}: {dir_error}")
+                # Try to use a temporary directory as fallback
+                import tempfile
+                temp_dir = Path(tempfile.gettempdir()) / "ghostman_faiss_emergency"
+                temp_dir.mkdir(parents=True, exist_ok=True)
+                self.config.persist_directory = str(temp_dir)
+                self._index_path = temp_dir / "faiss_index.bin"
+                self._metadata_path = temp_dir / "metadata.json"
+                self._documents_path = temp_dir / "documents.pkl"
+                self.logger.warning(f"Using emergency temp directory for FAISS: {temp_dir}")
+            
+            # Verify we can write to the directory
+            try:
+                test_file = persist_path / ".write_test"
+                test_file.write_text("test")
+                test_file.unlink()
+                self.logger.debug("FAISS directory write test passed")
+            except Exception as write_error:
+                self.logger.error(f"Cannot write to FAISS directory {persist_path}: {write_error}")
+                raise FaissError(f"FAISS directory not writable: {persist_path}")
             
             # Load existing index and data
             self._load_from_disk()
@@ -199,25 +223,93 @@ class FaissClient:
     def _load_from_disk(self):
         """Load existing FAISS index and metadata from disk."""
         try:
+            # Check if required files exist
             if self._index_path.exists() and self._documents_path.exists():
-                # Load FAISS index
-                self._index = faiss.read_index(str(self._index_path))
-                self._dimension = self._index.d
-                
-                # Load documents and metadata
-                with open(self._documents_path, 'rb') as f:
-                    data = pickle.load(f)
-                    self._documents = data.get('documents', [])
-                    self._id_to_index = data.get('id_to_index', {})
-                
-                self._stats['index_size'] = self._index.ntotal
-                self.logger.info(f"Loaded FAISS index: {self._index.ntotal} vectors, {len(self._documents)} documents")
+                try:
+                    # Load FAISS index with validation
+                    self._index = faiss.read_index(str(self._index_path))
+                    self._dimension = self._index.d
+                    self.logger.debug(f"Loaded FAISS index from {self._index_path}")
+                    
+                    # Validate index
+                    if self._index.ntotal < 0:
+                        raise ValueError("Invalid FAISS index: negative vector count")
+                    
+                    # Load documents and metadata with validation
+                    with open(self._documents_path, 'rb') as f:
+                        data = pickle.load(f)
+                        self._documents = data.get('documents', [])
+                        self._id_to_index = data.get('id_to_index', {})
+                    
+                    # Validate loaded data consistency
+                    if len(self._documents) > 0 and self._index.ntotal != len(self._documents):
+                        self.logger.warning(f"Inconsistent data: {self._index.ntotal} vectors but {len(self._documents)} documents")
+                        # Try to fix by rebuilding document list
+                        if self._index.ntotal < len(self._documents):
+                            self._documents = self._documents[:self._index.ntotal]
+                            self.logger.info("Truncated document list to match index size")
+                    
+                    self._stats['index_size'] = self._index.ntotal
+                    self.logger.info(f"Loaded FAISS index: {self._index.ntotal} vectors, {len(self._documents)} documents")
+                    
+                except Exception as load_error:
+                    self.logger.error(f"Failed to load FAISS data files: {load_error}")
+                    # Try to salvage what we can
+                    self._try_salvage_index()
             else:
-                self.logger.info("No existing FAISS index found, creating new one")
+                missing_files = []
+                if not self._index_path.exists():
+                    missing_files.append(str(self._index_path))
+                if not self._documents_path.exists():
+                    missing_files.append(str(self._documents_path))
+                
+                self.logger.info(f"FAISS files missing: {missing_files}. Creating new index.")
                 self._create_empty_index()
                 
         except Exception as e:
-            self.logger.error(f"Failed to load FAISS index from disk: {e}")
+            self.logger.error(f"Critical error loading FAISS index: {e}")
+            self._create_empty_index()
+    
+    def _try_salvage_index(self):
+        """Try to salvage a corrupted FAISS index."""
+        try:
+            self.logger.info("Attempting to salvage FAISS index...")
+            
+            # Try to load just the index
+            if self._index_path.exists():
+                try:
+                    self._index = faiss.read_index(str(self._index_path))
+                    self._dimension = self._index.d
+                    self.logger.info("Successfully loaded FAISS index, documents list will be empty")
+                    
+                    # Reset documents since we can't load them
+                    self._documents = []
+                    self._id_to_index = {}
+                    self._stats['index_size'] = self._index.ntotal
+                    return
+                except Exception:
+                    self.logger.error("FAISS index file is corrupted")
+            
+            # If index is corrupted, try to load just documents
+            if self._documents_path.exists():
+                try:
+                    with open(self._documents_path, 'rb') as f:
+                        data = pickle.load(f)
+                        self._documents = data.get('documents', [])
+                        self._id_to_index = data.get('id_to_index', {})
+                    
+                    self.logger.info(f"Loaded {len(self._documents)} documents, but index is corrupted - creating new index")
+                    self._create_empty_index()
+                    return
+                except Exception:
+                    self.logger.error("Documents file is also corrupted")
+            
+            # Everything is corrupted, start fresh
+            self.logger.warning("All FAISS files corrupted, starting with empty index")
+            self._create_empty_index()
+            
+        except Exception as e:
+            self.logger.error(f"Salvage operation failed: {e}")
             self._create_empty_index()
     
     def _save_to_disk(self):
@@ -311,8 +403,17 @@ class FaissClient:
                         chunk_id = f"{document_id}_{chunk.chunk_index}"
                         chunk_ids.append(chunk_id)
                         
-                        # Combine metadata
-                        metadata = {
+                        # Combine metadata - start with chunk metadata (includes conversation_id)
+                        metadata = {}
+                        
+                        # Add chunk metadata first (this includes conversation_id and other overrides)
+                        if hasattr(chunk, 'metadata') and chunk.metadata:
+                            for key, value in chunk.metadata.items():
+                                if isinstance(value, (str, int, float, bool)):
+                                    metadata[key] = value
+                        
+                        # Then add document-level metadata (may override some chunk metadata)
+                        metadata.update({
                             "document_id": document_id,
                             "chunk_index": chunk.chunk_index if chunk.chunk_index is not None else 0,
                             "start_char": chunk.start_char if chunk.start_char is not None else 0,
@@ -323,9 +424,9 @@ class FaissClient:
                             "filename": document.metadata.filename or "untitled",
                             "file_extension": document.metadata.file_extension or ".txt",
                             "created_at": time.time(),
-                        }
+                        })
                         
-                        # Add document metadata
+                        # Add document metadata (won't override chunk metadata due to update order)
                         if document.metadata.title:
                             metadata["title"] = document.metadata.title
                         if document.metadata.author:
@@ -333,7 +434,7 @@ class FaissClient:
                         if document.metadata.language:
                             metadata["language"] = document.metadata.language
                         
-                        # Add custom metadata
+                        # Add custom metadata from document
                         if document.metadata.custom:
                             for key, value in document.metadata.custom.items():
                                 if isinstance(value, (str, int, float, bool)):
@@ -414,7 +515,9 @@ class FaissClient:
                     # Search in FAISS
                     search_k = min(top_k * 2, self._index.ntotal)  # Get more results for filtering
                     try:
+                        self.logger.debug(f"FAISS search: total vectors={self._index.ntotal}, search_k={search_k}, top_k={top_k}")
                         similarities, indices = self._index.search(query_vector, search_k)
+                        self.logger.debug(f"FAISS raw results: similarities={similarities[0][:5]}, indices={indices[0][:5]}")
                     except Exception as search_error:
                         self.logger.error(f"FAISS search failed: {search_error}")
                         self.logger.error(f"Query vector shape: {query_vector.shape}, dtype: {query_vector.dtype}")
@@ -423,55 +526,72 @@ class FaissClient:
                     
                     # Convert to SearchResult objects
                     results = []
+                    self.logger.debug(f"Processing {len(indices[0])} potential results, docs available: {len(self._documents)}")
                     for i in range(len(indices[0])):
                         index_value = int(indices[0][i])
                         if index_value == -1:  # FAISS returns -1 for invalid results
+                            self.logger.debug(f"Skipping invalid result at position {i}")
                             continue
                         
                         doc_idx = index_value
                         similarity_score = float(similarities[0][i])
+                        self.logger.debug(f"Result {i}: doc_idx={doc_idx}, score={similarity_score}")
                         
                         # Get document info
                         if doc_idx < len(self._documents):
                             chunk_id, content, metadata = self._documents[doc_idx]
-                            
-                            # Apply metadata filters if provided
-                            if filters:
-                                skip = False                                
-                                try:
-                                    for filter_key, filter_value in filters.items():
-                                        if filter_key not in metadata:
-                                            skip = True
-                                            break
-                                        
-                                        metadata_value = metadata[filter_key]
-                                        
-                                        # Use safe array comparison method
-                                        if not safe_array_comparison(metadata_value, filter_value, filter_key):
-                                            skip = True
-                                            break
+                        else:
+                            # Handle mismatch between index and documents
+                            self.logger.warning(f"Document index {doc_idx} out of range (have {len(self._documents)} docs)")
+                            # Create placeholder document
+                            chunk_id = f"orphan_{doc_idx}"
+                            content = f"[Orphaned vector at index {doc_idx}]"
+                            metadata = {"orphaned": True, "index": doc_idx}
+                        
+                        # CRITICAL FIX: Apply metadata filters to ALL documents (not just orphaned ones)
+                        if filters:
+                            skip = False                                
+                            try:
+                                self.logger.debug(f"Applying filters {filters} to document metadata {list(metadata.keys())}")
+                                for filter_key, filter_value in filters.items():
+                                    if filter_key not in metadata:
+                                        self.logger.debug(f"Filter key '{filter_key}' not found in metadata, skipping document")
+                                        skip = True
+                                        break
                                     
-                                    if skip:
-                                        continue
-                                        
-                                except Exception as filter_error:
-                                    self.logger.warning(f"Error during metadata filtering: {filter_error}")
-                                    # Skip this result to be safe
+                                    metadata_value = metadata[filter_key]
+                                    
+                                    # Use safe array comparison method
+                                    if not safe_array_comparison(metadata_value, filter_value, filter_key):
+                                        self.logger.debug(f"Filter mismatch: '{filter_key}' value '{metadata_value}' != '{filter_value}', skipping document")
+                                        skip = True
+                                        break
+                                    else:
+                                        self.logger.debug(f"Filter match: '{filter_key}' value '{metadata_value}' == '{filter_value}'")
+                                
+                                if skip:
+                                    self.logger.debug(f"Document {chunk_id} filtered out")
                                     continue
-                            
-                            # Create search result
-                            result = SearchResult(
-                                content=content,
-                                metadata=metadata,
-                                score=similarity_score,
-                                chunk_id=chunk_id,
-                                document_id=metadata.get("document_id", ""),
-                                embedding=None  # FAISS doesn't return embeddings by default
-                            )
-                            results.append(result)
-                            
-                            if len(results) >= top_k:
-                                break
+                                    
+                            except Exception as filter_error:
+                                self.logger.warning(f"Error during metadata filtering: {filter_error}")
+                                # Skip this result to be safe
+                                continue
+                        
+                        # Create search result
+                        result = SearchResult(
+                            content=content,
+                            metadata=metadata,
+                            score=similarity_score,
+                            chunk_id=chunk_id,
+                            document_id=metadata.get("document_id", ""),
+                            embedding=None  # FAISS doesn't return embeddings by default
+                        )
+                        results.append(result)
+                        self.logger.debug(f"Added result: {chunk_id} (score: {similarity_score})")
+                        
+                        if len(results) >= top_k:
+                            break
                     
                     return results
             

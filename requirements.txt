@@ -1,5 +1,5 @@
 # Ghostman Requirements
-# Complete dependency list for Ghostman with unified session RAG pipeline
+# Complete dependency list for Ghostman with FAISS-only RAG pipeline
 
 # Core GUI and application dependencies
 PyQt6>=6.4.0
@@ -15,16 +15,8 @@ requests>=2.28.0
 urllib3>=1.26.0
 openai>=1.0.0
 
-# LangChain RAG Pipeline - Core packages
-langchain>=0.2.0
-langchain-community>=0.2.0
-langchain-core>=0.2.0
-langchain-openai>=0.1.0
-langchain-chroma>=0.1.0
-
-# Vector store and embeddings
-chromadb>=0.4.0
-faiss-cpu>=1.7.0  # Backup vector store
+# FAISS-only RAG Pipeline
+faiss-cpu>=1.7.0  # Primary vector store
 numpy<2.0.0  # Compatibility constraint
 scipy>=1.7.0
 scikit-learn>=1.0.0
