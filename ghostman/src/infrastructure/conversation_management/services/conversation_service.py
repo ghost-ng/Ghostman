@@ -314,14 +314,24 @@ class ConversationService:
         status: Optional[ConversationStatus] = None,
         limit: Optional[int] = None,
         offset: int = 0,
-        sort_order: SortOrder = SortOrder.UPDATED_DESC
+        sort_order: SortOrder = SortOrder.UPDATED_DESC,
+        include_deleted: bool = False
     ) -> List[Conversation]:
         """List conversations with filtering and pagination."""
         try:
-            return await self.repository.list_conversations(status, limit, offset, sort_order)
+            conversations = await self.repository.list_conversations(status, limit, offset, sort_order, include_deleted)
+            return conversations
         except Exception as e:
             logger.error(f"✗ Failed to list conversations: {e}")
             return []
+    
+    async def get_conversations_with_file_counts(self, conversation_ids: List[str]) -> Dict[str, int]:
+        """Get file counts for multiple conversations in a single batch query."""
+        try:
+            return await self.repository.get_conversations_file_counts(conversation_ids)
+        except Exception as e:
+            logger.error(f"✗ Failed to get conversations file counts: {e}")
+            return {}
     
     async def search_conversations(self, query: SearchQuery) -> SearchResults:
         """Search conversations using full-text search and filters."""

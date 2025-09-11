@@ -211,7 +211,8 @@ class ConversationRepository:
         status: Optional[ConversationStatus] = None,
         limit: Optional[int] = None,
         offset: int = 0,
-        sort_order: SortOrder = SortOrder.UPDATED_DESC
+        sort_order: SortOrder = SortOrder.UPDATED_DESC,
+        include_deleted: bool = False
     ) -> List[Conversation]:
         """List conversations with optional filtering using SQLAlchemy ORM."""
         try:
@@ -221,6 +222,10 @@ class ConversationRepository:
                 # Apply filters
                 if status:
                     query = query.filter(ConversationModel.status == status.value)
+                
+                # Always exclude deleted conversations unless explicitly requested
+                if not include_deleted:
+                    query = query.filter(ConversationModel.status != ConversationStatus.DELETED.value)
                 
                 # Apply sorting
                 query = self._apply_sort_order(query, sort_order)
@@ -244,6 +249,26 @@ class ConversationRepository:
         except SQLAlchemyError as e:
             logger.error(f"✗ Failed to list conversations: {e}")
             return []
+    
+    async def get_conversations_file_counts(self, conversation_ids: List[str]) -> Dict[str, int]:
+        """Get file counts for multiple conversations in single batch query - solves N+1 problem."""
+        try:
+            with self.db.get_session() as session:
+                # Single query to get file counts for all conversations
+                query = session.query(
+                    ConversationFileModel.conversation_id,
+                    func.count(ConversationFileModel.id).label('file_count')
+                ).filter(
+                    ConversationFileModel.conversation_id.in_(conversation_ids),
+                    ConversationFileModel.is_enabled == True
+                ).group_by(ConversationFileModel.conversation_id)
+                
+                results = query.all()
+                return {conv_id: count for conv_id, count in results}
+                
+        except SQLAlchemyError as e:
+            logger.error(f"✗ Failed to batch load file counts: {e}")
+            return {}
     
     # --- Message Operations ---
     

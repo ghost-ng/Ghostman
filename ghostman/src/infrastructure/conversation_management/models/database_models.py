@@ -77,6 +77,8 @@ class ConversationModel(Base):
         Index('idx_conversations_status_updated', 'status', 'updated_at'),
         Index('idx_conversations_category_status', 'category', 'status'),
         Index('idx_conversations_status_only', 'status'),  # Fast status lookups
+        Index('idx_conversations_non_deleted', 'status', 'updated_at', sqlite_where=text("status != 'deleted'")),  # Fast non-deleted lookup
+        Index('idx_conversations_active_updated', 'updated_at', sqlite_where=text("status != 'deleted'"))  # Fast sorting for active conversations
     )
     
     @validates('title')
@@ -394,6 +396,7 @@ class ConversationFileModel(Base):
         Index('idx_conversation_files_conv_status', 'conversation_id', 'processing_status'),
         Index('idx_conversation_files_conv_enabled', 'conversation_id', 'is_enabled'),
         Index('idx_conversation_files_file_id', 'file_id'),  # For efficient file lookups
+        Index('idx_conversation_files_batch_count', 'conversation_id', 'is_enabled', sqlite_where=text("is_enabled = 1"))  # Optimized for batch file counts
     )
     
     @validates('filename')

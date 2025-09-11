@@ -60,7 +60,7 @@ class ConversationLoader(QObject):
     def load_conversations(self):
         """Load conversations in background."""
         try:
-            # Get all conversations including current one
+            # Get all conversations except deleted ones
             conversations = []
             
             # Create new event loop for this thread
@@ -69,16 +69,12 @@ class ConversationLoader(QObject):
             asyncio.set_event_loop(loop)
             
             try:
-                # Get all conversations from database (exactly like REPL widget does)
-                recent = loop.run_until_complete(
-                    self.conversation_manager.list_conversations(limit=100)
+                # Get non-deleted conversations from database using service-level filtering
+                conversations = loop.run_until_complete(
+                    self.conversation_manager.list_conversations(limit=100, include_deleted=False)
                 )
                 
-                # Use the same logic as REPL widget - no additional filtering
-                # The conversation service should already filter out deleted conversations
-                conversations.extend(recent)
-                
-                logger.debug(f"Loaded {len(recent)} conversations (same as REPL widget)")
+                logger.debug(f"Loaded {len(conversations)} active conversations (deleted conversations excluded by service)")
                 
                 self.conversations_loaded.emit(conversations)
                 
@@ -577,8 +573,23 @@ class SimpleConversationBrowser(QDialog):
         self.loader_thread.wait()
     
     def _populate_table(self):
-        """Populate conversations table with optional search highlighting."""
+        """Populate conversations table with optional search highlighting and batch file loading."""
         self.conversations_table.setRowCount(len(self.conversations))
+        
+        # Batch load file counts for all conversations to solve N+1 query problem
+        file_counts = {}
+        if self.conversations and self.conversation_manager:
+            conversation_ids = [conv.id for conv in self.conversations]
+            try:
+                file_counts = self._safe_run_async(
+                    self.conversation_manager.conversation_service.get_conversations_with_file_counts(conversation_ids)
+                )
+                if file_counts is None:
+                    file_counts = {}
+                logger.debug(f"Batch loaded file counts for {len(file_counts)} conversations")
+            except Exception as e:
+                logger.error(f"Failed to batch load file counts: {e}")
+                file_counts = {}
         
         for row, conversation in enumerate(self.conversations):
             # Checkbox column (column 0)
@@ -614,8 +625,8 @@ class SimpleConversationBrowser(QDialog):
             count_item = QTableWidgetItem(str(conversation.get_message_count()))
             self.conversations_table.setItem(row, 3, count_item)
             
-            # Attachments count - column 4
-            attachments_text = self._get_attachments_text(conversation.id)
+            # Attachments count - column 4 (using batch-loaded data)
+            attachments_text = self._get_attachments_text_from_count(conversation.id, file_counts)
             attachments_item = QTableWidgetItem(attachments_text)
             attachments_item.setToolTip(f"Files attached to this conversation")
             self.conversations_table.setItem(row, 4, attachments_item)
@@ -644,22 +655,64 @@ class SimpleConversationBrowser(QDialog):
             if not conv_service:
                 return "—"
             
-            # Safely get files count for this conversation
-            files = self._safe_run_async(conv_service.get_conversation_files(conversation_id))
+            # Safely get files count for this conversation - including all processing statuses
+            files = self._safe_run_async(conv_service.get_conversation_files(conversation_id, enabled_only=False))
             
             if files is None:
                 return "—"
             
-            file_count = len(files)
-            if file_count == 0:
+            # Count files by status
+            total_files = len(files)
+            if total_files == 0:
                 return "—"
-            elif file_count == 1:
-                return "1 file"
+            
+            # Count completed files specifically 
+            completed_files = sum(1 for f in files if f.get('processing_status') == 'completed')
+            processing_files = sum(1 for f in files if f.get('processing_status') in ['queued', 'processing'])
+            failed_files = sum(1 for f in files if f.get('processing_status') == 'failed')
+            
+            # Create informative display text
+            if total_files == 1:
+                file_info = files[0]
+                status = file_info.get('processing_status', 'unknown')
+                if status == 'completed':
+                    return "1 file"
+                elif status in ['queued', 'processing']:
+                    return "1 file (processing)"
+                elif status == 'failed':
+                    return "1 file (failed)"
+                else:
+                    return "1 file"
             else:
-                return f"{file_count} files"
+                # Multiple files - show summary
+                if completed_files == total_files:
+                    return f"{total_files} files"
+                elif processing_files > 0:
+                    return f"{total_files} files ({processing_files} processing)"
+                elif failed_files > 0:
+                    if completed_files > 0:
+                        return f"{total_files} files ({failed_files} failed)"
+                    else:
+                        return f"{total_files} files (failed)"
+                else:
+                    return f"{total_files} files"
                 
         except Exception as e:
             logger.debug(f"Error getting attachments for {conversation_id}: {e}")
+            return "—"
+    
+    def _get_attachments_text_from_count(self, conversation_id: str, file_counts: Dict[str, int]) -> str:
+        """Get attachments text from batch-loaded file counts - optimized for performance."""
+        try:
+            count = file_counts.get(conversation_id, 0)
+            if count == 0:
+                return "—"
+            elif count == 1:
+                return "1 file"
+            else:
+                return f"{count} files"
+        except Exception as e:
+            logger.error(f"Failed to format attachment count for conversation {conversation_id}: {e}")
             return "—"
     
     def _get_status_text(self, status) -> str:

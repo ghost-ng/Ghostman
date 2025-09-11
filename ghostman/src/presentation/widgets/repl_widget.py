@@ -3519,15 +3519,69 @@ class REPLWidget(QWidget):
     def _on_file_processing_started(self, file_id, filename):
         """Handle file processing started signal."""
         logger.info(f"📄 File processing started: {filename}")
+        
+        # Update conversation file association with processing status
+        self._update_file_processing_status_async(file_id, 'processing', 0, {'filename': filename})
     
     def _on_file_processing_completed(self, file_id, result_data):
         """Handle file processing completed signal."""
         filename = result_data.get('filename', 'unknown')
-        logger.info(f"✅ File processing completed: {filename}")
+        chunk_count = result_data.get('chunk_count', 0)
+        logger.info(f"✅ File processing completed: {filename} ({chunk_count} chunks)")
+        
+        # Update conversation file association with completion status
+        self._update_file_processing_status_async(file_id, 'completed', chunk_count, result_data)
     
     def _on_file_processing_failed(self, file_id, error_message):
         """Handle file processing failed signal."""
         logger.error(f"❌ File processing failed: {error_message}")
+        
+        # Update conversation file association with failed status
+        self._update_file_processing_status_async(file_id, 'failed', 0, {'error': error_message})
+    
+    def _update_file_processing_status_async(self, file_id: str, status: str, chunk_count: int = 0, metadata: dict = None):
+        """Update file processing status in conversation database asynchronously."""
+        try:
+            if not hasattr(self, 'conversation_manager') or not self.conversation_manager:
+                logger.debug(f"No conversation manager available to update file {file_id} status")
+                return
+            
+            conv_service = self.conversation_manager.conversation_service
+            if not conv_service:
+                logger.debug(f"No conversation service available to update file {file_id} status")
+                return
+            
+            # Update status asynchronously using safe threading approach
+            def update_status():
+                try:
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        success = loop.run_until_complete(
+                            conv_service.update_file_processing_status(
+                                file_id=file_id,
+                                status=status,
+                                chunk_count=chunk_count,
+                                metadata=metadata
+                            )
+                        )
+                        if success:
+                            logger.info(f"✅ Updated file {file_id} status to {status}")
+                        else:
+                            logger.warning(f"⚠ Failed to update file {file_id} status to {status}")
+                    finally:
+                        loop.close()
+                except Exception as e:
+                    logger.error(f"❌ Error updating file {file_id} status: {e}")
+            
+            # Run in background thread to avoid blocking UI
+            import threading
+            thread = threading.Thread(target=update_status, daemon=True)
+            thread.start()
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to start file status update for {file_id}: {e}")
     
     def _on_attach_toggle_clicked(self):
         """Emit attach toggle request with current state and update tooltip/icon."""
@@ -3976,6 +4030,14 @@ class REPLWidget(QWidget):
                     except Exception as bar_error:
                         logger.error(f"Failed to update browser bar status: {bar_error}")
                 
+                # Update conversation database with file processing completion
+                self._update_file_processing_status_async(
+                    file_id or filename, 
+                    "completed",
+                    result.get('chunks', 0),
+                    {'tokens': result.get('tokens', 0), 'processed_at': datetime.now().isoformat()}
+                )
+                
                 logger.info(status_message)
                 logger.info("🔍 DEBUG: About to finish processing completion handler")
                 
@@ -3995,10 +4057,19 @@ class REPLWidget(QWidget):
                 # Update file browser bar status to "failed"
                 if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
                     try:
-                        self.file_browser_bar.update_file_status(filename, "failed")
+                        file_id = result.get('file_id', filename)
+                        self.file_browser_bar.update_file_status(file_id, "failed")
                         logger.info(f"📄 Updated browser bar status to 'failed' for: {filename}")
                     except Exception as bar_error:
                         logger.error(f"Failed to update browser bar status: {bar_error}")
+                
+                # Update conversation database with file processing failure
+                self._update_file_processing_status_async(
+                    result.get('file_id', filename),
+                    "failed",
+                    0,
+                    {'error': result.get('error', 'Unknown error'), 'failed_at': datetime.now().isoformat()}
+                )
                 
                 logger.info("🔍 DEBUG: Finished handling failed processing")
                     
@@ -4007,6 +4078,41 @@ class REPLWidget(QWidget):
             logger.error(f"🔍 DEBUG: Exception in embeddings completion handler: {e}")
         finally:
             logger.info("🔍 DEBUG: Exiting _on_embeddings_complete method")
+    
+    def _update_file_processing_status_async(self, file_id: str, status: str, chunk_count: int = 0, metadata: dict = None):
+        """Update file processing status in conversation database using thread-safe async pattern."""
+        try:
+            if not hasattr(self, 'conversation_manager') or not self.conversation_manager:
+                logger.debug(f"No conversation manager available for file status update: {file_id}")
+                return
+            
+            conv_service = self.conversation_manager.conversation_service
+            if not conv_service:
+                logger.debug(f"No conversation service available for file status update: {file_id}")
+                return
+            
+            # Use thread-safe async pattern like other database operations
+            from ....infrastructure.async_manager import get_async_manager
+            
+            async_manager = get_async_manager()
+            if async_manager:
+                def on_update_complete(result, error):
+                    if error:
+                        logger.error(f"Failed to update file processing status for {file_id}: {error}")
+                    else:
+                        logger.info(f"✅ Updated file processing status: {file_id} -> {status}")
+                
+                # Update file processing status in database
+                async_manager.run_async_task_safe(
+                    conv_service.update_file_processing_status(file_id, status, chunk_count, metadata),
+                    callback=on_update_complete,
+                    timeout=10.0
+                )
+            else:
+                logger.warning(f"No async manager available for file status update: {file_id}")
+                
+        except Exception as e:
+            logger.error(f"Failed to schedule file processing status update for {file_id}: {e}")
     
     def _schedule_ui_update(self, file_path: str, result: dict, status: str):
         """Schedule UI updates to run in the main thread using QTimer."""
