@@ -576,20 +576,20 @@ class SimpleConversationBrowser(QDialog):
         """Populate conversations table with optional search highlighting and batch file loading."""
         self.conversations_table.setRowCount(len(self.conversations))
         
-        # Batch load file counts for all conversations to solve N+1 query problem
-        file_counts = {}
+        # Batch load file info for all conversations to solve N+1 query problem
+        file_info = {}
         if self.conversations and self.conversation_manager:
             conversation_ids = [conv.id for conv in self.conversations]
             try:
-                file_counts = self._safe_run_async(
-                    self.conversation_manager.conversation_service.get_conversations_with_file_counts(conversation_ids)
+                file_info = self._safe_run_async(
+                    self.conversation_manager.get_conversations_with_file_info(conversation_ids)
                 )
-                if file_counts is None:
-                    file_counts = {}
-                logger.debug(f"Batch loaded file counts for {len(file_counts)} conversations")
+                if file_info is None:
+                    file_info = {}
+                logger.debug(f"Batch loaded file info for {len(file_info)} conversations")
             except Exception as e:
-                logger.error(f"Failed to batch load file counts: {e}")
-                file_counts = {}
+                logger.error(f"Failed to batch load file info: {e}")
+                file_info = {}
         
         for row, conversation in enumerate(self.conversations):
             # Checkbox column (column 0)
@@ -625,10 +625,22 @@ class SimpleConversationBrowser(QDialog):
             count_item = QTableWidgetItem(str(conversation.get_message_count()))
             self.conversations_table.setItem(row, 3, count_item)
             
-            # Attachments count - column 4 (using batch-loaded data)
-            attachments_text = self._get_attachments_text_from_count(conversation.id, file_counts)
+            # Attachments - column 4 (using batch-loaded file info)
+            attachments_text = self._get_attachments_text_from_info(conversation.id, file_info)
             attachments_item = QTableWidgetItem(attachments_text)
-            attachments_item.setToolTip(f"Files attached to this conversation")
+            # Set detailed tooltip with file names if available
+            files = file_info.get(conversation.id, [])
+            if files:
+                tooltip_lines = ["Files attached to this conversation:"]
+                for f in files[:5]:  # Show first 5 files in tooltip
+                    status = f.get('processing_status', '')
+                    status_text = f" ({status})" if status and status != 'completed' else ""
+                    tooltip_lines.append(f"• {f['filename']}{status_text}")
+                if len(files) > 5:
+                    tooltip_lines.append(f"... and {len(files) - 5} more")
+                attachments_item.setToolTip("\n".join(tooltip_lines))
+            else:
+                attachments_item.setToolTip("No files attached to this conversation")
             self.conversations_table.setItem(row, 4, attachments_item)
             
             # Updated time - column 5
@@ -713,6 +725,33 @@ class SimpleConversationBrowser(QDialog):
                 return f"{count} files"
         except Exception as e:
             logger.error(f"Failed to format attachment count for conversation {conversation_id}: {e}")
+            return "—"
+    
+    def _get_attachments_text_from_info(self, conversation_id: str, file_info: Dict[str, List[Dict[str, Any]]]) -> str:
+        """Get attachments text from batch-loaded file info - shows actual file names."""
+        try:
+            files = file_info.get(conversation_id, [])
+            if not files:
+                return "—"
+            
+            # Format file names for display
+            if len(files) == 1:
+                # Single file - show the filename
+                filename = files[0].get('filename', 'unknown')
+                status = files[0].get('processing_status', '')
+                if status and status != 'completed':
+                    return f"{filename} ({status})"
+                return filename
+            elif len(files) <= 2:
+                # Two files - show both names
+                names = [f.get('filename', 'unknown') for f in files[:2]]
+                return ", ".join(names)
+            else:
+                # Multiple files - show first file + count
+                first_file = files[0].get('filename', 'unknown')
+                return f"{first_file} +{len(files)-1} more"
+        except Exception as e:
+            logger.error(f"Failed to format attachment info for conversation {conversation_id}: {e}")
             return "—"
     
     def _get_status_text(self, status) -> str:

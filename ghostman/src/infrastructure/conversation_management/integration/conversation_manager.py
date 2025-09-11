@@ -187,6 +187,17 @@ class ConversationManager:
             logger.error(f"✗ Failed to list conversations: {e}")
             return []
     
+    async def get_conversations_with_file_info(self, conversation_ids: List[str]) -> Dict[str, List[Dict[str, Any]]]:
+        """Get file info for multiple conversations in a single batch query."""
+        if not self._initialized:
+            return {}
+        
+        try:
+            return await self.conversation_service.get_conversations_with_file_info(conversation_ids)
+        except Exception as e:
+            logger.error(f"✗ Failed to get conversations file info: {e}")
+            return {}
+    
     async def search_conversations(self, query: SearchQuery) -> SearchResults:
         """Search conversations."""
         if not self._initialized:

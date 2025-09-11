@@ -270,6 +270,42 @@ class ConversationRepository:
             logger.error(f"✗ Failed to batch load file counts: {e}")
             return {}
     
+    async def get_conversations_file_info(self, conversation_ids: List[str]) -> Dict[str, List[Dict[str, Any]]]:
+        """Get file names and info for multiple conversations in single batch query."""
+        try:
+            with self.db.get_session() as session:
+                # Single query to get all files for all conversations
+                query = session.query(ConversationFileModel).filter(
+                    ConversationFileModel.conversation_id.in_(conversation_ids),
+                    ConversationFileModel.is_enabled == True
+                ).order_by(
+                    ConversationFileModel.conversation_id,
+                    ConversationFileModel.upload_timestamp
+                )
+                
+                files = query.all()
+                
+                # Group files by conversation_id
+                result = {}
+                for file in files:
+                    conv_id = file.conversation_id
+                    if conv_id not in result:
+                        result[conv_id] = []
+                    
+                    result[conv_id].append({
+                        'file_id': file.file_id,
+                        'filename': file.filename,
+                        'processing_status': file.processing_status,
+                        'file_size': file.file_size,
+                        'chunk_count': file.chunk_count
+                    })
+                
+                return result
+                
+        except SQLAlchemyError as e:
+            logger.error(f"✗ Failed to batch load file info: {e}")
+            return {}
+    
     # --- Message Operations ---
     
     async def add_message(self, message: Message) -> bool:
