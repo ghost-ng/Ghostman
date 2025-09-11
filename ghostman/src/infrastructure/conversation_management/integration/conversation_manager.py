@@ -168,7 +168,8 @@ class ConversationManager:
         status: Optional[ConversationStatus] = None,
         limit: Optional[int] = 20,
         offset: int = 0,
-        sort_order: SortOrder = SortOrder.UPDATED_DESC
+        sort_order: SortOrder = SortOrder.UPDATED_DESC,
+        include_deleted: bool = False
     ) -> List[Conversation]:
         """List conversations with filtering."""
         if not self._initialized:
@@ -179,7 +180,8 @@ class ConversationManager:
                 status=status,
                 limit=limit,
                 offset=offset,
-                sort_order=sort_order
+                sort_order=sort_order,
+                include_deleted=include_deleted
             )
         except Exception as e:
             logger.error(f"✗ Failed to list conversations: {e}")

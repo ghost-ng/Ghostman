@@ -1921,7 +1921,8 @@ class REPLWidget(QWidget):
                 self._load_search_icon()
             self._load_chain_icon()
             self._load_upload_icon()
-            self._load_chat_icon()
+            if hasattr(self, 'chat_btn'):
+                self._load_chat_icon()
             if hasattr(self, 'title_settings_btn'):
                 self._load_gear_icon(self.title_settings_btn)
             if hasattr(self, 'settings_btn'):
