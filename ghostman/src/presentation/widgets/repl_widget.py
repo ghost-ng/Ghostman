@@ -3382,12 +3382,18 @@ class REPLWidget(QWidget):
             from ...infrastructure.async_manager import run_async_task_safe
             
             def on_files_loaded(files, error):
+                logger.info(f"🔍 DEBUG: on_files_loaded called - files={files}, error={error}")
                 if error:
                     logger.error(f"Failed to load conversation files: {error}")
                     if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
                         self.file_browser_bar.setVisible(False)
                     return
                 
+                if files is None:
+                    logger.warning("🔍 DEBUG: files is None")
+                    files = []
+                
+                logger.info(f"🔍 DEBUG: Processing {len(files)} loaded files")
                 self._process_loaded_files(files)
             
             # Run the async operation safely
@@ -3403,6 +3409,19 @@ class REPLWidget(QWidget):
     def _process_loaded_files(self, files):
         """Process the loaded files and update the UI."""
         try:
+            logger.info(f"🔍 DEBUG: _process_loaded_files called with {len(files) if files else 0} files")
+            
+            # Check if file browser bar exists
+            if not hasattr(self, 'file_browser_bar'):
+                logger.error("🔍 DEBUG: No file_browser_bar attribute!")
+                return
+            
+            if not self.file_browser_bar:
+                logger.error("🔍 DEBUG: file_browser_bar is None!")
+                return
+                
+            logger.info(f"🔍 DEBUG: file_browser_bar exists and is valid")
+            
             # RAG integration is now handled by FAISS-only system
             # No additional setup needed as FAISS uses conversation metadata directly
             
@@ -3410,8 +3429,10 @@ class REPLWidget(QWidget):
             if files:
                 logger.info(f"📄 Found {len(files)} files for conversation")
                 
-                for file_info in files:
-                    if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                for i, file_info in enumerate(files):
+                    logger.info(f"🔍 DEBUG: Processing file {i+1}: {file_info}")
+                    
+                    try:
                         # Add file to browser bar with current status
                         self.file_browser_bar.add_file(
                             file_id=file_info['file_id'],
@@ -3420,7 +3441,7 @@ class REPLWidget(QWidget):
                             file_type=file_info.get('file_type', ''),
                             status=file_info['processing_status']
                         )
-                        
+                        logger.info(f"🔍 DEBUG: Successfully added file {file_info['filename']} to browser bar")
                         # Update enabled state
                         if file_info.get('is_enabled', True):
                             self._enabled_files.add(file_info['file_id'])
@@ -3434,6 +3455,11 @@ class REPLWidget(QWidget):
                         except AttributeError:
                             # Method doesn't exist yet, will be added
                             pass
+                            
+                    except Exception as add_error:
+                        logger.error(f"🔍 DEBUG: Failed to add file to browser bar: {add_error}")
+                        import traceback
+                        traceback.print_exc()
                 
                 # Show browser bar if files exist
                 if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
