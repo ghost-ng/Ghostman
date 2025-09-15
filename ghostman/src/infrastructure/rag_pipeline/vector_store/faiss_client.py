@@ -67,6 +67,9 @@ def safe_array_comparison(metadata_value: Any, filter_value: Any, filter_key: st
         True if values are equal, False otherwise
     """
     try:
+        # ENHANCED DEBUG LOGGING
+        debug_logger.debug(f"safe_array_comparison called: key='{filter_key}', meta_type={type(metadata_value)}, filter_type={type(filter_value)}")
+        debug_logger.debug(f"metadata_value={metadata_value}, filter_value={filter_value}")
         # Handle numpy scalars and arrays
         if hasattr(metadata_value, 'item'):  # numpy scalar
             metadata_value = metadata_value.item()
@@ -581,10 +584,16 @@ class FaissClient:
                                     
                                     if 'pending_conversation_id' in metadata:
                                         doc_pending_id = metadata['pending_conversation_id']
-                                        self.logger.warning(f"🔍 PENDING FILTER: Document has pending_conversation_id = {doc_pending_id[:8] if doc_pending_id else 'None'}...")
+                                        # Handle numpy arrays/scalars safely
+                                        if hasattr(doc_pending_id, 'item'):
+                                            doc_pending_id = doc_pending_id.item()
+                                        doc_id_str = str(doc_pending_id)[:8] if doc_pending_id is not None else 'None'
+                                        self.logger.warning(f"🔍 PENDING FILTER: Document has pending_conversation_id = {doc_id_str}...")
                                         
-                                        if safe_array_comparison(metadata['pending_conversation_id'], pending_value, 'pending_conversation_id'):
-                                            self.logger.warning(f"✅ PENDING FILTER: Document {chunk_id} MATCHES pending filter!")
+                                        try:
+                                            comparison_result = safe_array_comparison(metadata['pending_conversation_id'], pending_value, 'pending_conversation_id')
+                                            if comparison_result:
+                                                self.logger.warning(f"✅ PENDING FILTER: Document {chunk_id} MATCHES pending filter!")
                                             # Continue processing other filters if any
                                             remaining_filters = {k: v for k, v in filters.items() if k != 'pending_conversation_id'}
                                             if remaining_filters:
@@ -597,8 +606,14 @@ class FaissClient:
                                                         break
                                                 if skip:
                                                     continue
-                                        else:
-                                            self.logger.warning(f"❌ PENDING FILTER: Document {chunk_id} filtered out - pending mismatch ({doc_pending_id[:8]}... != {pending_value[:8]}...)")
+                                            else:
+                                                self.logger.warning(f"❌ PENDING FILTER: Document {chunk_id} filtered out - pending mismatch ({doc_id_str}... != {pending_value[:8]}...)")
+                                                skip = True
+                                        except Exception as pending_error:
+                                            self.logger.error(f"🔥 PENDING FILTER ERROR: {pending_error}")
+                                            skip = True
+                                        
+                                        if skip:
                                             continue
                                     else:
                                         self.logger.warning(f"❌ PENDING FILTER: Document {chunk_id} filtered out - no pending_conversation_id in metadata")
