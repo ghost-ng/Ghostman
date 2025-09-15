@@ -102,10 +102,12 @@ class SmartContextSelector:
         }
         
         # Generate query embedding once
+        self.logger.warning(f"🔍 EMBEDDING: Generating embedding for query: '{query_text[:50]}...'")
         query_embedding = embedding_service.create_embedding(query_text)
         if query_embedding is None:
             self.logger.error("Failed to generate query embedding")
             return [], selection_info
+        self.logger.warning(f"🔍 EMBEDDING: Successfully generated embedding with {len(query_embedding)} dimensions")
         
         all_results = []
         
@@ -249,11 +251,16 @@ class SmartContextSelector:
             # FIXED: Multiple filter strategies for pending files
             filters = {'pending_conversation_id': conversation_id}
             
+            self.logger.warning(f"🔍 PENDING SEARCH: About to call FAISS with filters: {filters}")
+            self.logger.warning(f"🔍 PENDING SEARCH: Query embedding shape: {len(query_embedding) if query_embedding is not None else 'None'}")
+            
             raw_results = await faiss_client.similarity_search(
                 query_embedding=query_embedding,
                 top_k=top_k * 3,  # Increased multiplier
                 filters=filters
             )
+            
+            self.logger.warning(f"🔍 PENDING SEARCH: FAISS returned {len(raw_results)} raw results")
             
             # FIXED: Debug pending search
             self.logger.info(f"🔍 DEBUG Pending: Got {len(raw_results)} raw results for pending conversation {conversation_id[:8]}...")
