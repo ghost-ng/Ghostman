@@ -594,18 +594,19 @@ class FaissClient:
                                             comparison_result = safe_array_comparison(metadata['pending_conversation_id'], pending_value, 'pending_conversation_id')
                                             if comparison_result:
                                                 self.logger.warning(f"✅ PENDING FILTER: Document {chunk_id} MATCHES pending filter!")
-                                            # Continue processing other filters if any
-                                            remaining_filters = {k: v for k, v in filters.items() if k != 'pending_conversation_id'}
-                                            if remaining_filters:
-                                                for filter_key, filter_value in remaining_filters.items():
-                                                    if filter_key not in metadata:
-                                                        skip = True
-                                                        break
-                                                    if not safe_array_comparison(metadata[filter_key], filter_value, filter_key):
-                                                        skip = True
-                                                        break
-                                                if skip:
-                                                    continue
+                                                # Continue processing other filters if any
+                                                remaining_filters = {k: v for k, v in filters.items() if k != 'pending_conversation_id'}
+                                                if remaining_filters:
+                                                    for filter_key, filter_value in remaining_filters.items():
+                                                        if filter_key not in metadata:
+                                                            skip = True
+                                                            break
+                                                        if not safe_array_comparison(metadata[filter_key], filter_value, filter_key):
+                                                            skip = True
+                                                            break
+                                                    if skip:
+                                                        continue
+                                                # If we get here, all filters passed - don't skip this document
                                             else:
                                                 self.logger.warning(f"❌ PENDING FILTER: Document {chunk_id} filtered out - pending mismatch ({doc_id_str}... != {pending_value[:8]}...)")
                                                 skip = True
