@@ -95,7 +95,15 @@ def safe_array_comparison(metadata_value: Any, filter_value: Any, filter_key: st
         
         # Regular comparison for non-array types
         result = metadata_value == filter_value
-        return result
+        
+        # Ensure we return a Python bool, not a numpy bool or array
+        if hasattr(result, 'item'):  # numpy scalar bool
+            return result.item()
+        elif hasattr(result, 'any'):  # This shouldn't happen, but safety check
+            debug_logger.warning(f"Unexpected array result in regular comparison for '{filter_key}': {type(result)}")
+            return bool(result.any())
+        else:
+            return bool(result)  # Convert to Python bool
         
     except Exception as e:
         debug_logger.error(f"Safe array comparison failed for '{filter_key}': {e}")
@@ -218,6 +226,8 @@ class FaissClient:
         self._documents = []
         self._id_to_index = {}
         self._stats['index_size'] = 0
+        self._stats['documents_stored'] = 0
+        self._stats['chunks_stored'] = 0
         self.logger.info(f"Created empty FAISS index with dimension {self._dimension}")
     
     def _load_from_disk(self):
@@ -250,6 +260,8 @@ class FaissClient:
                             self.logger.info("Truncated document list to match index size")
                     
                     self._stats['index_size'] = self._index.ntotal
+                    self._stats['documents_stored'] = len(self._documents)
+                    self._stats['chunks_stored'] = self._index.ntotal
                     self.logger.info(f"Loaded FAISS index: {self._index.ntotal} vectors, {len(self._documents)} documents")
                     
                 except Exception as load_error:
@@ -515,9 +527,12 @@ class FaissClient:
                     # Search in FAISS
                     search_k = min(top_k * 2, self._index.ntotal)  # Get more results for filtering
                     try:
-                        self.logger.debug(f"FAISS search: total vectors={self._index.ntotal}, search_k={search_k}, top_k={top_k}")
+                        self.logger.warning(f"🔍 FAISS SEARCH: total vectors={self._index.ntotal}, search_k={search_k}, top_k={top_k}")
+                        if filters:
+                            self.logger.warning(f"🔍 FAISS SEARCH: Will apply filters after search: {filters}")
                         similarities, indices = self._index.search(query_vector, search_k)
-                        self.logger.debug(f"FAISS raw results: similarities={similarities[0][:5]}, indices={indices[0][:5]}")
+                        self.logger.warning(f"🔍 FAISS SEARCH: Raw results count: {len([i for i in indices[0] if i != -1])}")
+                        self.logger.warning(f"🔍 FAISS SEARCH: similarities={similarities[0][:5]}, indices={indices[0][:5]}")
                     except Exception as search_error:
                         self.logger.error(f"FAISS search failed: {search_error}")
                         self.logger.error(f"Query vector shape: {query_vector.shape}, dtype: {query_vector.dtype}")
@@ -548,26 +563,102 @@ class FaissClient:
                             content = f"[Orphaned vector at index {doc_idx}]"
                             metadata = {"orphaned": True, "index": doc_idx}
                         
-                        # CRITICAL FIX: Apply metadata filters to ALL documents (not just orphaned ones)
+                        # ENHANCED FILTERING: Support OR logic for conversation isolation
                         if filters:
                             skip = False                                
                             try:
-                                self.logger.debug(f"Applying filters {filters} to document metadata {list(metadata.keys())}")
-                                for filter_key, filter_value in filters.items():
-                                    if filter_key not in metadata:
-                                        self.logger.debug(f"Filter key '{filter_key}' not found in metadata, skipping document")
-                                        skip = True
-                                        break
+                                self.logger.warning(f"🔍 FILTER DEBUG: Applying filters {filters} to document {chunk_id}")
+                                self.logger.warning(f"🔍 FILTER DEBUG: Document metadata keys: {list(metadata.keys())}")
+                                
+                                # FIXED: Handle single pending_conversation_id filter (Tier 2 search)
+                                if 'pending_conversation_id' in filters and 'conversation_id' not in filters and '_or_pending_conversation_id' not in filters:
+                                    # This is a direct pending conversation search (Tier 2 in SmartContextSelector)
+                                    pending_value = filters['pending_conversation_id']
                                     
-                                    metadata_value = metadata[filter_key]
+                                    # ENHANCED DEBUG LOGGING
+                                    self.logger.warning(f"🔍 PENDING FILTER: Looking for pending_conversation_id = {pending_value[:8]}...")
+                                    self.logger.warning(f"🔍 PENDING FILTER: Document {chunk_id} metadata keys: {list(metadata.keys())}")
                                     
-                                    # Use safe array comparison method
-                                    if not safe_array_comparison(metadata_value, filter_value, filter_key):
-                                        self.logger.debug(f"Filter mismatch: '{filter_key}' value '{metadata_value}' != '{filter_value}', skipping document")
-                                        skip = True
-                                        break
+                                    if 'pending_conversation_id' in metadata:
+                                        doc_pending_id = metadata['pending_conversation_id']
+                                        self.logger.warning(f"🔍 PENDING FILTER: Document has pending_conversation_id = {doc_pending_id[:8] if doc_pending_id else 'None'}...")
+                                        
+                                        if safe_array_comparison(metadata['pending_conversation_id'], pending_value, 'pending_conversation_id'):
+                                            self.logger.warning(f"✅ PENDING FILTER: Document {chunk_id} MATCHES pending filter!")
+                                            # Continue processing other filters if any
+                                            remaining_filters = {k: v for k, v in filters.items() if k != 'pending_conversation_id'}
+                                            if remaining_filters:
+                                                for filter_key, filter_value in remaining_filters.items():
+                                                    if filter_key not in metadata:
+                                                        skip = True
+                                                        break
+                                                    if not safe_array_comparison(metadata[filter_key], filter_value, filter_key):
+                                                        skip = True
+                                                        break
+                                                if skip:
+                                                    continue
+                                        else:
+                                            self.logger.warning(f"❌ PENDING FILTER: Document {chunk_id} filtered out - pending mismatch ({doc_pending_id[:8]}... != {pending_value[:8]}...)")
+                                            continue
                                     else:
-                                        self.logger.debug(f"Filter match: '{filter_key}' value '{metadata_value}' == '{filter_value}'")
+                                        self.logger.warning(f"❌ PENDING FILTER: Document {chunk_id} filtered out - no pending_conversation_id in metadata")
+                                        continue
+                                # Handle special OR filtering for conversation isolation
+                                elif 'conversation_id' in filters and '_or_pending_conversation_id' in filters:
+                                    # Check if document belongs to this conversation via either field
+                                    conv_id_value = filters['conversation_id']
+                                    pending_conv_id_value = filters['_or_pending_conversation_id']
+                                    
+                                    # Document matches if it has matching conversation_id OR pending_conversation_id
+                                    matches_conversation = (
+                                        ('conversation_id' in metadata and safe_array_comparison(metadata['conversation_id'], conv_id_value, 'conversation_id')) or
+                                        ('pending_conversation_id' in metadata and safe_array_comparison(metadata['pending_conversation_id'], pending_conv_id_value, 'pending_conversation_id'))
+                                    )
+                                    
+                                    if matches_conversation:
+                                        self.logger.debug(f"Document {chunk_id} matches conversation filter (OR logic)")
+                                    else:
+                                        self.logger.debug(f"Document {chunk_id} filtered out - no conversation match")
+                                        continue
+                                        
+                                    # Skip regular filter processing for these special keys
+                                    remaining_filters = {k: v for k, v in filters.items() 
+                                                       if k not in ['conversation_id', '_or_pending_conversation_id']}
+                                    if not remaining_filters:
+                                        # Only conversation filters - we already processed them
+                                        pass
+                                    else:
+                                        # Apply remaining filters normally
+                                        for filter_key, filter_value in remaining_filters.items():
+                                            if filter_key not in metadata:
+                                                self.logger.debug(f"Filter key '{filter_key}' not found in metadata, skipping document")
+                                                skip = True
+                                                break
+                                            
+                                            metadata_value = metadata[filter_key]
+                                            if not safe_array_comparison(metadata_value, filter_value, filter_key):
+                                                self.logger.debug(f"Filter mismatch: '{filter_key}' value '{metadata_value}' != '{filter_value}', skipping document")
+                                                skip = True
+                                                break
+                                else:
+                                    # Regular filtering logic for other cases
+                                    for filter_key, filter_value in filters.items():
+                                        if filter_key.startswith('_or_'):
+                                            # Skip special OR keys when not used with conversation_id
+                                            continue
+                                            
+                                        if filter_key not in metadata:
+                                            self.logger.debug(f"Filter key '{filter_key}' not found in metadata, skipping document")
+                                            skip = True
+                                            break
+                                        
+                                        metadata_value = metadata[filter_key]
+                                        if not safe_array_comparison(metadata_value, filter_value, filter_key):
+                                            self.logger.debug(f"Filter mismatch: '{filter_key}' value '{metadata_value}' != '{filter_value}', skipping document")
+                                            skip = True
+                                            break
+                                        else:
+                                            self.logger.debug(f"Filter match: '{filter_key}' value '{metadata_value}' == '{filter_value}'")
                                 
                                 if skip:
                                     self.logger.debug(f"Document {chunk_id} filtered out")
@@ -592,6 +683,11 @@ class FaissClient:
                         
                         if len(results) >= top_k:
                             break
+                    
+                    # FINAL RESULT DEBUG
+                    self.logger.warning(f"🔍 FAISS SEARCH COMPLETE: Returning {len(results)} results after filtering")
+                    if filters and len(results) == 0:
+                        self.logger.warning(f"❌ FAISS SEARCH: No results survived filtering with {filters}")
                     
                     return results
             
@@ -732,6 +828,31 @@ class FaissClient:
             self._stats[key] = 0
         self._stats['avg_search_time'] = 0.0
         self._stats['avg_storage_time'] = 0.0
+    
+    def clear_all_documents(self):
+        """Clear all documents and embeddings from the FAISS index."""
+        try:
+            with self._lock:
+                self.logger.info("Clearing all documents from FAISS index")
+                
+                # Create a fresh empty index
+                self._create_empty_index()
+                
+                # Clear all data structures
+                self._documents = []
+                self._id_to_index = {}
+                
+                # Reset stats
+                self.reset_stats()
+                
+                # Save the cleared state to disk
+                self._save_to_disk()
+                
+                self.logger.info("Successfully cleared all documents from FAISS index")
+                
+        except Exception as e:
+            self.logger.error(f"Failed to clear documents: {e}")
+            raise
     
     async def health_check(self) -> Dict[str, Any]:
         """Perform health check on FAISS store."""
