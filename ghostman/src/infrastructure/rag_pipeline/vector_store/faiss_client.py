@@ -527,8 +527,20 @@ class FaissClient:
                     # Reshape for FAISS
                     query_vector = query_vector.reshape(1, -1)
                     
-                    # Search in FAISS
-                    search_k = min(top_k * 2, self._index.ntotal)  # Get more results for filtering
+                    # Search in FAISS - use all documents when conversation isolation is needed
+                    is_conversation_filter = (filters and 
+                        ('conversation_id' in filters or 
+                         'pending_conversation_id' in filters or 
+                         '_or_pending_conversation_id' in filters))
+                    
+                    if is_conversation_filter:
+                        # For conversation isolation, search ALL documents to ensure we find 
+                        # conversation-specific files regardless of similarity ranking
+                        search_k = self._index.ntotal
+                        self.logger.warning(f"🔒 CONVERSATION ISOLATION: Searching ALL {search_k} documents")
+                    else:
+                        # For regular similarity search, use limited search
+                        search_k = min(top_k * 2, self._index.ntotal)  # Get more results for filtering
                     try:
                         self.logger.warning(f"🔍 FAISS SEARCH: total vectors={self._index.ntotal}, search_k={search_k}, top_k={top_k}")
                         if filters:

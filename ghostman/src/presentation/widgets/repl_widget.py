@@ -1886,7 +1886,7 @@ class REPLWidget(QWidget):
                 self._load_chain_icon()
             
             if hasattr(self, 'upload_btn'):
-                self._load_upload_icon()
+                self._load_filebar_icon()
             
             if hasattr(self, 'move_btn'):
                 self._load_move_icon(self.move_btn)
@@ -1911,6 +1911,8 @@ class REPLWidget(QWidget):
             # Update button visual states
             if hasattr(self, 'search_btn'):
                 self._update_search_button_state()
+            if hasattr(self, 'upload_btn'):
+                self._update_upload_button_state()
             if hasattr(self, 'attach_btn'):
                 self._update_attach_button_state()
             if hasattr(self, 'pin_btn'):
@@ -1920,7 +1922,7 @@ class REPLWidget(QWidget):
             if hasattr(self, 'search_btn'):
                 self._load_search_icon()
             self._load_chain_icon()
-            self._load_upload_icon()
+            self._load_filebar_icon()
             if hasattr(self, 'chat_btn'):
                 self._load_chat_icon()
             if hasattr(self, 'title_settings_btn'):
@@ -2249,8 +2251,7 @@ class REPLWidget(QWidget):
             
             logger.info(f"Startup tasks completed - first_run: {startup_result.get('first_run')}, api_status: {api_status}")
             
-            # Auto-create a new conversation on startup
-            self._auto_create_startup_conversation()
+            # Don't auto-create conversations on startup - wait for user to actually send a message
             
             # Mark startup tasks as completed to prevent re-execution during theme switching
             self._startup_tasks_completed = True
@@ -2741,12 +2742,38 @@ class REPLWidget(QWidget):
         self.attach_btn.clicked.connect(self._on_attach_toggle_clicked)
         title_layout.addWidget(self.attach_btn)
         
-        # Upload/File context button
+        # Upload/File context button (now toggles file browser bar)
         self.upload_btn = QToolButton()
-        self._load_upload_icon()
-        self.upload_btn.setToolTip("Upload files for context")
+        self.upload_btn.setToolTip("Toggle file browser (Ctrl+U)\nClick 'Upload Files' button inside to add files")
+        
+        # SET ICON DIRECTLY HERE - NO SEPARATE METHOD CALL
+        try:
+            icon_variant = self._get_icon_variant()
+            filebar_icon_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", 
+                "assets", "icons", f"filebar_{icon_variant}.png"
+            )
+            
+            if os.path.exists(filebar_icon_path):
+                filebar_icon = QIcon(filebar_icon_path)
+                if not filebar_icon.isNull():
+                    self.upload_btn.setIcon(filebar_icon)
+                    from PyQt6.QtCore import QSize
+                    self.upload_btn.setIconSize(QSize(16, 16))
+                    logger.debug(f"Set filebar icon: filebar_{icon_variant}.png")
+                else:
+                    self.upload_btn.setText("📁")
+            else:
+                self.upload_btn.setText("📁")
+        except Exception as e:
+            logger.error(f"Failed to set filebar icon: {e}")
+            self.upload_btn.setText("📁")
+        
+        self.upload_btn.clicked.connect(self._toggle_file_browser)
+        # Apply uniform styling first
         self._style_title_button(self.upload_btn)
-        self.upload_btn.clicked.connect(self._on_upload_clicked)
+        # Style: theme-aware styling
+        self._update_upload_button_state()
         title_layout.addWidget(self.upload_btn)
         
         # Search button
@@ -3108,6 +3135,7 @@ class REPLWidget(QWidget):
                 self.file_browser_bar.clear_all_requested.connect(self._on_clear_all_files_safe)
                 self.file_browser_bar.file_viewed.connect(self._on_file_viewed)
                 self.file_browser_bar.file_toggled.connect(self._on_file_toggled)
+                self.file_browser_bar.upload_files_requested.connect(self._on_upload_files_from_browser)
                 logger.info("✅ FileBrowserBar signals connected safely")
             except Exception as signal_error:
                 logger.error(f"⚠️ Failed to connect FileBrowserBar signals: {signal_error}")
@@ -3383,18 +3411,34 @@ class REPLWidget(QWidget):
             
             def on_files_loaded(files, error):
                 logger.info(f"🔍 DEBUG: on_files_loaded called - files={files}, error={error}")
-                if error:
-                    logger.error(f"Failed to load conversation files: {error}")
-                    if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
-                        self.file_browser_bar.setVisible(False)
-                    return
-                
-                if files is None:
-                    logger.warning("🔍 DEBUG: files is None")
-                    files = []
-                
-                logger.info(f"🔍 DEBUG: Processing {len(files)} loaded files")
-                self._process_loaded_files(files)
+                try:
+                    if error:
+                        logger.error(f"Failed to load conversation files: {error}")
+                        if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                            self.file_browser_bar.setVisible(False)
+                        return
+                    
+                    if files is None:
+                        logger.warning("🔍 DEBUG: files is None")
+                        files = []
+                    
+                    logger.info(f"🔍 DEBUG: Processing {len(files)} loaded files")
+                    logger.info(f"🔍 DEBUG: Files data: {files}")
+                    
+                    # Use QTimer to ensure UI updates happen on main thread
+                    from PyQt6.QtCore import QTimer
+                    
+                    def process_on_main_thread():
+                        logger.info(f"🔍 DEBUG: Processing files on main thread")
+                        self._process_loaded_files(files)
+                    
+                    # Schedule on main thread with single shot timer
+                    QTimer.singleShot(0, process_on_main_thread)
+                    
+                except Exception as callback_error:
+                    logger.error(f"🔍 DEBUG: Exception in on_files_loaded callback: {callback_error}")
+                    import traceback
+                    traceback.print_exc()
             
             # Run the async operation safely
             run_async_task_safe(
@@ -3402,6 +3446,27 @@ class REPLWidget(QWidget):
                 callback=on_files_loaded,
                 timeout=15.0  # 15 second timeout
             )
+            
+            # Also schedule a fallback check in case async callback fails
+            from PyQt6.QtCore import QTimer
+            
+            def fallback_check():
+                logger.info(f"🔍 DEBUG: Fallback check - loading files directly for {conversation_id}")
+                try:
+                    # Try to get files synchronously as backup
+                    import asyncio
+                    if hasattr(asyncio, 'run'):
+                        files = asyncio.run(conv_service.get_conversation_files(conversation_id))
+                        logger.info(f"🔍 DEBUG: Fallback got {len(files) if files else 0} files")
+                        if files:
+                            self._process_loaded_files(files)
+                    else:
+                        logger.info(f"🔍 DEBUG: asyncio.run not available, skipping fallback")
+                except Exception as fallback_error:
+                    logger.error(f"🔍 DEBUG: Fallback loading failed: {fallback_error}")
+            
+            # Schedule fallback check after 2 seconds
+            QTimer.singleShot(2000, fallback_check)
                 
         except Exception as e:
             logger.error(f"Failed to load conversation files: {e}")
@@ -3566,6 +3631,28 @@ class REPLWidget(QWidget):
         # Update conversation file association with failed status
         self._update_file_processing_status_async(file_id, 'failed', 0, {'error': error_message})
     
+    def _get_file_id_for_path_or_name(self, filename_or_path: str, fallback_id: str = None) -> str:
+        """Get the correct file_id for a filename or path from our mapping."""
+        import os
+        # First try direct mapping lookup (path -> file_id)
+        if hasattr(self, '_file_id_to_path_map'):
+            for file_id, mapped_path in self._file_id_to_path_map.items():
+                # Check if path matches exactly or basename matches
+                if (mapped_path == filename_or_path or 
+                    os.path.basename(mapped_path) == filename_or_path or
+                    os.path.basename(mapped_path) == os.path.basename(filename_or_path)):
+                    logger.info(f"🔍 Found file_id mapping: {filename_or_path} -> {file_id}")
+                    return file_id
+        
+        # Fallback to provided file_id if available
+        if fallback_id:
+            logger.info(f"🔍 Using fallback file_id: {fallback_id}")
+            return fallback_id
+        
+        # Final fallback to the filename/path itself
+        logger.warning(f"🔍 No file_id mapping found, using filename: {filename_or_path}")
+        return filename_or_path
+    
     def _update_file_processing_status_async(self, file_id: str, status: str, chunk_count: int = 0, metadata: dict = None):
         """Update file processing status in conversation database asynchronously."""
         try:
@@ -3667,14 +3754,45 @@ class REPLWidget(QWidget):
         except Exception as e:
             logger.error(f"Failed to handle upload click: {e}")
     
+    def _on_upload_files_from_browser(self):
+        """Handle upload files request from file browser bar."""
+        try:
+            from PyQt6.QtWidgets import QFileDialog
+            
+            logger.info("📁 Upload files requested from browser bar")
+            
+            # Show file dialog
+            file_paths, _ = QFileDialog.getOpenFileNames(
+                self,
+                "Select files to upload for context",
+                "",
+                "All supported files (*.txt *.py *.js *.json *.md *.csv *.html *.css *.xml *.yaml *.yml);;All files (*.*)"
+            )
+            
+            if file_paths:
+                logger.info(f"📁 Selected {len(file_paths)} files for upload")
+                self._process_uploaded_files(file_paths)
+                # Keep file browser open after uploading files
+                if hasattr(self, 'file_browser_bar') and not self.file_browser_bar.isVisible():
+                    self.file_browser_bar.setVisible(True)
+                    self._update_upload_button_state()
+            else:
+                logger.debug("📁 No files selected")
+                
+        except Exception as e:
+            logger.error(f"Failed to handle upload files from browser: {e}")
+    
     def _process_uploaded_files(self, file_paths):
         """Process the uploaded files for context with immediate embeddings processing."""
         try:
             # Get current conversation ID for file linking - use robust method
             current_conversation_id = self._get_safe_conversation_id()
             if not current_conversation_id:
-                logger.warning("No current conversation found - creating one for file upload")
-                current_conversation_id = self._ensure_active_conversation_for_files()
+                logger.warning("⚠️ No current conversation found - creating temporary conversation for file isolation")
+                # FIXED: Create a temporary conversation to prevent global storage
+                current_conversation_id = self._ensure_conversation_for_files()
+                if not current_conversation_id:
+                    logger.error("😱 Failed to create conversation for files - storing globally")
             
             logger.info(f"📎 Linking files to conversation: {current_conversation_id[:8] if current_conversation_id else 'None'}...")
             
@@ -3710,48 +3828,100 @@ class REPLWidget(QWidget):
                             # Add file to conversation in database
                             import asyncio
                             
-                            def save_file_sync():
-                                try:
-                                    loop = asyncio.get_event_loop()
-                                except RuntimeError:
-                                    loop = asyncio.new_event_loop()
-                                    asyncio.set_event_loop(loop)
+                            async def save_with_fallback():
+                                # Check if conversation exists first
+                                conversation = await conv_service.get_conversation(current_conversation_id)
+                                active_conversation_id = current_conversation_id
                                 
-                                async def save_with_fallback():
-                                    # Check if conversation exists first
-                                    conversation = await conv_service.get_conversation(current_conversation_id)
-                                    active_conversation_id = current_conversation_id
+                                if not conversation:
+                                    # TIMING FIX: Wait for startup conversation to be created (up to 2 seconds)
+                                    logger.warning(f"Conversation {current_conversation_id} not found during file upload - waiting for startup conversation")
+                                    import time
+                                    for attempt in range(20):  # Wait up to 2 seconds (20 * 0.1s)
+                                        await asyncio.sleep(0.1)
+                                        conversation = await conv_service.get_conversation(current_conversation_id)
+                                        if conversation:
+                                            logger.info(f"✅ Found startup conversation {current_conversation_id} on attempt {attempt + 1}")
+                                            break
                                     
                                     if not conversation:
-                                        logger.warning(f"Conversation {current_conversation_id} not found, creating new one for file upload")
-                                        # Create a new conversation for the file
+                                        logger.warning(f"Startup conversation still not ready after 2s, creating new one for file upload")
+                                        # Create a new conversation for the file as fallback
                                         new_conversation_id = await conv_service.create_conversation("New Conversation")
                                         if new_conversation_id:
                                             active_conversation_id = new_conversation_id
-                                            logger.info(f"Created new conversation {active_conversation_id} for file upload")
-                                            # Update current conversation reference
-                                            if hasattr(self, 'conversation_manager') and self.conversation_manager.has_ai_service():
-                                                ai_service = self.conversation_manager.get_ai_service()
-                                                if ai_service:
-                                                    ai_service.set_current_conversation(active_conversation_id)
-                                            # Update our internal reference
-                                            self._current_conversation_id = active_conversation_id
-                                        else:
-                                            logger.error("Failed to create new conversation for file upload")
-                                            return False
-                                    
-                                    # Now add the file to the conversation
-                                    return await conv_service.add_file_to_conversation(
-                                        conversation_id=active_conversation_id,
-                                        file_id=file_id,
-                                        filename=filename,
-                                        file_path=file_path,
-                                        file_size=file_size,
-                                        file_type=file_ext,
-                                        metadata={'upload_timestamp': datetime.now().isoformat()}
-                                    )
+                                            logger.info(f"Created fallback conversation {active_conversation_id} for file upload")
+                                        # Update current conversation reference
+                                        if hasattr(self, 'conversation_manager') and self.conversation_manager.has_ai_service():
+                                            ai_service = self.conversation_manager.get_ai_service()
+                                            if ai_service:
+                                                ai_service.set_current_conversation(active_conversation_id)
+                                        # Update our internal reference
+                                        self._current_conversation_id = active_conversation_id
+                                    else:
+                                        logger.error("Failed to create new conversation for file upload")
+                                        return False
                                 
-                                return loop.run_until_complete(save_with_fallback())
+                                # Now add the file to the conversation
+                                return await conv_service.add_file_to_conversation(
+                                    conversation_id=active_conversation_id,
+                                    file_id=file_id,
+                                    filename=filename,
+                                    file_path=file_path,
+                                    file_size=file_size,
+                                    file_type=file_ext,
+                                    metadata={'upload_timestamp': datetime.now().isoformat()}
+                                )
+                            
+                            def save_file_sync():
+                                try:
+                                    # Check if we're in an event loop already (PyQt environment)
+                                    try:
+                                        loop = asyncio.get_running_loop()
+                                        # We're in a running loop, so we need to use a thread
+                                        import concurrent.futures
+                                        import threading
+                                        
+                                        result_container = {'result': None, 'exception': None}
+                                        event = threading.Event()
+                                        
+                                        def run_in_new_loop():
+                                            try:
+                                                new_loop = asyncio.new_event_loop()
+                                                asyncio.set_event_loop(new_loop)
+                                                try:
+                                                    result = new_loop.run_until_complete(save_with_fallback())
+                                                    result_container['result'] = result
+                                                finally:
+                                                    new_loop.close()
+                                            except Exception as e:
+                                                result_container['exception'] = e
+                                            finally:
+                                                event.set()
+                                        
+                                        thread = threading.Thread(target=run_in_new_loop, daemon=True)
+                                        thread.start()
+                                        # Wait for completion with timeout
+                                        if event.wait(timeout=30.0):
+                                            if result_container['exception']:
+                                                raise result_container['exception']
+                                            return result_container['result']
+                                        else:
+                                            logger.error("File save operation timed out")
+                                            return False
+                                            
+                                    except RuntimeError:
+                                        # No running loop, we can create one
+                                        loop = asyncio.new_event_loop()
+                                        asyncio.set_event_loop(loop)
+                                        try:
+                                            return loop.run_until_complete(save_with_fallback())
+                                        finally:
+                                            loop.close()
+                                
+                                except Exception as e:
+                                    logger.error(f"Error in save_file_sync: {e}")
+                                    return False
                             
                             success = save_file_sync()
                             if success:
@@ -3796,8 +3966,34 @@ class REPLWidget(QWidget):
         except Exception as e:
             logger.error(f"Failed to process uploaded files: {e}")
     
+    def _ensure_conversation_for_files(self) -> Optional[str]:
+        """Ensure there's a conversation for file uploads, creating one if needed."""
+        try:
+            # First try to get any existing conversation
+            if hasattr(self, 'conversation_manager') and self.conversation_manager:
+                if self.conversation_manager.has_ai_service():
+                    ai_service = self.conversation_manager.get_ai_service()
+                    if ai_service:
+                        existing_id = ai_service.get_current_conversation_id()
+                        if existing_id:
+                            logger.info(f"🔗 Using existing conversation for files: {existing_id[:8]}...")
+                            return existing_id
+            
+            # No existing conversation - create a pending one that will be "adopted" 
+            # when user sends their first message
+            if not hasattr(self, '_pending_conversation_id'):
+                import uuid
+                self._pending_conversation_id = str(uuid.uuid4())
+                logger.info(f"🆕 Created new pending conversation for files: {self._pending_conversation_id[:8]}...")
+            
+            return self._pending_conversation_id
+            
+        except Exception as e:
+            logger.error(f"Failed to ensure conversation for files: {e}")
+            return None
+    
     def _get_safe_conversation_id(self) -> Optional[str]:
-        """Get the current conversation ID using multiple fallback methods."""
+        """Get the current conversation ID using multiple fallback methods with pending session support."""
         # Method 1: Direct reference
         if hasattr(self, '_current_conversation_id') and self._current_conversation_id:
             return self._current_conversation_id
@@ -3807,17 +4003,16 @@ class REPLWidget(QWidget):
             self._current_conversation_id = self.current_conversation.id
             return self.current_conversation.id
         
-        # Method 3: Via conversation manager AI service
-        if hasattr(self, 'conversation_manager') and self.conversation_manager:
-            if self.conversation_manager.has_ai_service():
-                ai_service = self.conversation_manager.get_ai_service()
-                if ai_service:
-                    conv_id = ai_service.get_current_conversation_id()
-                    if conv_id:
-                        self._current_conversation_id = conv_id
-                        return conv_id
+        # Method 3: Check if we need to create a pending session ID for file isolation
+        # This prevents context bleeding when files are uploaded before any conversation exists
+        if not hasattr(self, '_pending_conversation_id'):
+            # Create a temporary conversation ID that will be used for file uploads
+            # This ID will be replaced when the user sends their first message and a real conversation is created
+            import uuid
+            self._pending_conversation_id = str(uuid.uuid4())
+            logger.info(f"🆕 Created pending conversation ID for file isolation: {self._pending_conversation_id[:8]}...")
         
-        return None
+        return self._pending_conversation_id
     
     def _ensure_active_conversation_for_files(self) -> Optional[str]:
         """Ensure there's an active conversation for file uploads, creating one if needed."""
@@ -3833,7 +4028,10 @@ class REPLWidget(QWidget):
             try:
                 conv_service = self.conversation_manager.conversation_service
                 new_conv_id = loop.run_until_complete(
-                    conv_service.create_conversation("New Conversation")
+                    conv_service.create_conversation(
+                        title="New Conversation",
+                        initial_message="Files uploaded to conversation."
+                    )
                 )
                 
                 if new_conv_id:
@@ -3899,6 +4097,21 @@ class REPLWidget(QWidget):
             
             # Display processing started status in chat
             logger.info(f"🔍 DEBUG: About to call _display_processing_started_in_chat for: {filename}")
+            
+            # CRITICAL: Ensure file is associated with current conversation before processing
+            # This is essential for strict conversation isolation
+            current_conv_id = self._get_safe_conversation_id()
+            if current_conv_id:
+                logger.info(f"🔗 STRICT ISOLATION: File {filename} will be associated with conversation: {current_conv_id[:8]}...")
+            else:
+                logger.warning(f"⚠️ STRICT ISOLATION: File {filename} processing without conversation association - will create isolated conversation")
+                # Create a new conversation to ensure strict isolation
+                current_conv_id = self._ensure_conversation_for_files()
+                if current_conv_id:
+                    logger.info(f"🆕 Created isolated conversation for file: {current_conv_id[:8]}...")
+                else:
+                    logger.error(f"❌ Failed to create isolated conversation - file may be globally accessible")
+            
             # Store the file_id for later use in status updates
             self._current_processing_file_id = file_id
             self._display_processing_started_in_chat(filename)
@@ -3964,13 +4177,51 @@ class REPLWidget(QWidget):
                                     if ai_service:
                                         conversation_id = ai_service.get_current_conversation_id()
                             
+                            # CRITICAL FIX: Use _get_safe_conversation_id as fallback to ensure files are never truly global
+                            print(f"🔍 THREAD DEBUG: conversation_id before fallback: {conversation_id}")
+                            logger.info(f"🔍 THREAD DEBUG: conversation_id before fallback: {conversation_id}")
+                            if not conversation_id:
+                                conversation_id = self.parent_repl._get_safe_conversation_id()
+                                print(f"🔍 THREAD DEBUG: conversation_id after fallback: {conversation_id}")
+                                logger.info(f"🔍 THREAD DEBUG: conversation_id after fallback: {conversation_id}")
+                                if conversation_id:
+                                    logger.info(f"🔄 Using fallback conversation ID from _get_safe_conversation_id: {conversation_id[:8]}...")
+                            
                             # Prepare metadata with conversation association
                             metadata_override = {}
+                            
+                            # FIXED: Enhanced conversation association logic with better fallbacks
                             if conversation_id:
-                                metadata_override['conversation_id'] = conversation_id
-                                logger.info(f"📎 Associating document with conversation: {conversation_id}")
+                                logger.info(f"🔗 Attempting to associate document with conversation: {conversation_id[:8]}...")
+                                
+                                # Always store pending_conversation_id as primary association method
+                                metadata_override['pending_conversation_id'] = conversation_id
+                                logger.info(f"🔗 Document stored with pending_conversation_id: {conversation_id[:8]}...")
+                                
+                                # Validate conversation exists in database and add formal association if found
+                                if hasattr(self.parent_repl, 'conversation_manager') and self.parent_repl.conversation_manager:
+                                    conv_service = self.parent_repl.conversation_manager.conversation_service
+                                    if conv_service:
+                                        try:
+                                            import asyncio
+                                            loop = asyncio.new_event_loop()
+                                            asyncio.set_event_loop(loop)
+                                            conversation = loop.run_until_complete(conv_service.get_conversation(conversation_id))
+                                            if conversation:
+                                                metadata_override['conversation_id'] = conversation_id
+                                                logger.info(f"✅ Document also associated with verified conversation: {conversation_id[:8]}...")
+                                            else:
+                                                logger.info(f"🕰️ Conversation {conversation_id[:8]}... not yet in database - using pending association")
+                                        except Exception as conv_check_error:
+                                            logger.warning(f"⚠️ Failed to verify conversation {conversation_id[:8]}...: {conv_check_error}")
+                                    else:
+                                        logger.info("🕰️ No conversation service - using pending association")
+                                else:
+                                    logger.info("🕰️ No conversation manager - using pending association")
                             else:
-                                logger.warning("⚠️ No current conversation ID found - document will be global")
+                                logger.warning("⚠️ No current conversation ID found - document will be truly global")
+                                # Add a marker to help identify truly global vs pending files
+                                metadata_override['storage_type'] = 'global_no_conversation'
                             
                             document_id = safe_rag.ingest_document(
                                 file_path=self.file_path,
@@ -4093,7 +4344,8 @@ class REPLWidget(QWidget):
             logger.error(f"Failed to start embeddings processing for {filename}: {e}")
             # Update UI to failed status
             if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
-                self.file_browser_bar.update_file_status(file_path, "failed")
+                file_id = self._get_file_id_for_path_or_name(file_path)
+                self.file_browser_bar.update_file_status(file_id, "failed")
     
     def _on_embeddings_complete(self, file_path: str, filename: str, success: bool, result: dict):
         """Handle completion of embeddings processing."""
@@ -4116,7 +4368,9 @@ class REPLWidget(QWidget):
                     try:
                         tokens_used = result.get('tokens', 0)
                         chunks = result.get('chunks', 0)
-                        file_id = result.get('file_id', filename)  # Use file_id from result if available
+                        # Get the correct file_id from our mapping
+                        file_id = self._get_file_id_for_path_or_name(filename, result.get('file_id'))
+                        logger.info(f"🔍 Using file_id: {file_id} for filename: {filename}")
                         self.file_browser_bar.update_file_status(file_id, "completed")
                         self.file_browser_bar.update_file_usage(file_id, tokens_used, 1.0)  # Default relevance
                         logger.info(f"📄 Updated browser bar status to 'completed' for: {filename} (ID: {file_id})")
@@ -4185,7 +4439,7 @@ class REPLWidget(QWidget):
                 return
             
             # Use thread-safe async pattern like other database operations
-            from ....infrastructure.async_manager import get_async_manager
+            from ...infrastructure.async_manager import get_async_manager
             
             async_manager = get_async_manager()
             if async_manager:
@@ -4228,7 +4482,8 @@ class REPLWidget(QWidget):
                         
                         # Update status
                         if hasattr(self.file_browser_bar, 'update_file_status'):
-                            self.file_browser_bar.update_file_status(file_path, status)
+                            file_id = self._get_file_id_for_path_or_name(file_path)
+                            self.file_browser_bar.update_file_status(file_id, status)
                             logger.info("🔍 DEBUG: Status updated successfully")
                         
                         # Update usage info if successful and tokens available
@@ -4421,7 +4676,8 @@ class REPLWidget(QWidget):
                         
                         # SAFE: Update status only (this method works correctly)
                         if hasattr(self.file_browser_bar, 'update_file_status'):
-                            self.file_browser_bar.update_file_status(file_path, status)
+                            file_id = self._get_file_id_for_path_or_name(file_path)
+                            self.file_browser_bar.update_file_status(file_id, status)
                             logger.info("🔍 DEBUG: Status updated successfully")
                         
                         # SKIP: update_file_usage is the method causing segmentation faults
@@ -4460,7 +4716,8 @@ class REPLWidget(QWidget):
             
             # Update UI to failed status
             if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
-                self.file_browser_bar.update_file_status(file_path, "failed")
+                file_id = self._get_file_id_for_path_or_name(file_path)
+                self.file_browser_bar.update_file_status(file_id, "failed")
                 
             logger.error(f"💥 Processing timeout for {filename} after 30 seconds")
             
@@ -4536,8 +4793,10 @@ class REPLWidget(QWidget):
         """Handle file processing progress updates."""
         try:
             if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
-                self.file_browser_bar.update_file_status(file_path, status)
-                logger.info(f"📄 Updated {filename} status: {status}")
+                # Use correct file_id instead of file_path
+                file_id = self._get_file_id_for_path_or_name(file_path)
+                self.file_browser_bar.update_file_status(file_id, status)
+                logger.info(f"📄 Updated {filename} status: {status} (ID: {file_id})")
         except Exception as e:
             logger.error(f"Failed to update file progress: {e}")
     
@@ -4574,24 +4833,63 @@ class REPLWidget(QWidget):
                             if ai_service:
                                 conversation_id = ai_service.get_current_conversation_id()
                     
+                    # CRITICAL FIX: Use _get_safe_conversation_id as fallback for drag/drop files too
+                    print(f"🔍 DRAG DEBUG: conversation_id before fallback: {conversation_id}")
+                    logger.info(f"🔍 DRAG DEBUG: conversation_id before fallback: {conversation_id}")
+                    if not conversation_id:
+                        conversation_id = self._get_safe_conversation_id()
+                        print(f"🔍 DRAG DEBUG: conversation_id after fallback: {conversation_id}")
+                        logger.info(f"🔍 DRAG DEBUG: conversation_id after fallback: {conversation_id}")
+                        if conversation_id:
+                            logger.info(f"🔄 Using fallback conversation ID for drag/drop from _get_safe_conversation_id: {conversation_id[:8]}...")
+                    
                     # Prepare metadata with conversation association
                     metadata_override = {}
+                    
+                    # FIXED: Enhanced conversation association logic with better fallbacks (drag/drop version)
                     if conversation_id:
-                        metadata_override['conversation_id'] = conversation_id
-                        logger.info(f"📎 Associating document with conversation: {conversation_id}")
+                        logger.info(f"🔗 Attempting to associate drag/drop document with conversation: {conversation_id[:8]}...")
+                        
+                        # Always store pending_conversation_id as primary association method
+                        metadata_override['pending_conversation_id'] = conversation_id
+                        logger.info(f"🔗 Drag/drop document stored with pending_conversation_id: {conversation_id[:8]}...")
+                        
+                        # Validate conversation exists in database and add formal association if found
+                        if hasattr(self, 'conversation_manager') and self.conversation_manager:
+                            conv_service = self.conversation_manager.conversation_service
+                            if conv_service:
+                                try:
+                                    import asyncio
+                                    loop = asyncio.new_event_loop()
+                                    asyncio.set_event_loop(loop)
+                                    conversation = loop.run_until_complete(conv_service.get_conversation(conversation_id))
+                                    if conversation:
+                                        metadata_override['conversation_id'] = conversation_id
+                                        logger.info(f"✅ Drag/drop document also associated with verified conversation: {conversation_id[:8]}...")
+                                    else:
+                                        logger.info(f"🕰️ Conversation {conversation_id[:8]}... not yet in database - using pending association")
+                                except Exception as conv_check_error:
+                                    logger.warning(f"⚠️ Failed to verify conversation {conversation_id[:8]}...: {conv_check_error}")
+                            else:
+                                logger.info("🕰️ No conversation service - using pending association")
+                        else:
+                            logger.info("🕰️ No conversation manager - using pending association")
                     else:
-                        logger.warning("⚠️ No current conversation ID found - document will be global")
+                        logger.warning("⚠️ No current conversation ID found - drag/drop document will be truly global")
+                        # Add a marker to help identify truly global vs pending files
+                        metadata_override['storage_type'] = 'global_no_conversation'
                     
                     # Process file with RAG pipeline
                     success = await self.rag_session.ingest_document(file_path, metadata_override)
                     
                     # Update browser bar based on result
                     if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                        file_id = self._get_file_id_for_path_or_name(file_path)
                         if success:
-                            self.file_browser_bar.update_file_status(file_path, "completed")
+                            self.file_browser_bar.update_file_status(file_id, "completed")
                             logger.info(f"✅ Successfully processed: {filename}")
                         else:
-                            self.file_browser_bar.update_file_status(file_path, "failed")
+                            self.file_browser_bar.update_file_status(file_id, "failed")
                             logger.error(f"❌ Failed to process: {filename} - {result.error_message}")
                             
                 except Exception as file_error:
@@ -5215,6 +5513,48 @@ class REPLWidget(QWidget):
         except Exception as e:
             logger.error(f"Failed to update search button state: {e}")
     
+    def _update_upload_button_state(self):
+        """Update upload button visual state using unified styling system."""
+        try:
+            if not hasattr(self, 'upload_btn'):
+                return
+                
+            # Check if file browser is active
+            file_browser_active = hasattr(self, 'file_browser_bar') and self.file_browser_bar and self.file_browser_bar.isVisible()
+            colors = self.theme_manager.current_theme if self.theme_manager and THEME_SYSTEM_AVAILABLE else None
+            
+            if file_browser_active:
+                # Use primary state for active file browser (matching theme)
+                state = "warning"
+                special_colors = {
+                    "background": colors.primary if colors else "#007bff",
+                    "text": colors.background_primary if colors else "#ffffff",
+                    "hover": colors.primary_hover if colors else "#0056b3",
+                    "active": colors.primary if colors else "#004085"
+                }
+            else:
+                # Apply theme-aware darker styling for better visibility (all themes)
+                state = "normal"
+                special_colors = {}
+                if colors:
+                    # Use high-contrast background calculation to ensure button visibility
+                    special_colors = {
+                        "text": colors.text_primary,  # Use primary text color
+                        "background": self._get_high_contrast_button_background(colors),  # Use calculated high-contrast background
+                        "hover": colors.interactive_hover,  # Use theme's hover color
+                        "active": colors.interactive_active  # Use theme's active color
+                    }
+            
+            # Apply unified styling
+            ButtonStyleManager.apply_unified_button_style(
+                self.upload_btn, colors, "tool", "icon", state, special_colors
+            )
+            
+            logger.debug(f"Updated upload button state: active={file_browser_active}")
+            
+        except Exception as e:
+            logger.error(f"Failed to update upload button state: {e}")
+    
     def _update_attach_button_state(self):
         """Update attach button visual state using unified styling system."""
         try:
@@ -5381,33 +5721,61 @@ class REPLWidget(QWidget):
             if hasattr(self, 'attach_btn') and self.attach_btn:
                 self.attach_btn.setText("⚲")  # Fallback
     
-    def _load_upload_icon(self):
-        """Load theme-appropriate upload icon."""
+    def _load_filebar_icon(self):
+        """Load theme-appropriate filebar icon - EXACT COPY of _load_search_icon pattern."""
+        logger.info("🎨 ICON: Loading filebar icon...")
         try:
-            # Check if upload_btn exists first
-            if not hasattr(self, 'upload_btn') or not self.upload_btn:
-                logger.debug("upload_btn not yet created, skipping upload icon loading")
+            # Check button exists
+            if not hasattr(self, 'upload_btn'):
+                logger.error("❌ ICON: upload_btn doesn't exist yet!")
                 return
                 
-            # Determine if theme is dark or light  
+            # Determine if theme is dark or light
             icon_variant = self._get_icon_variant()
+            logger.info(f"🎨 ICON: Theme variant = {icon_variant}")
             
-            upload_icon_path = os.path.join(
+            filebar_icon_path = os.path.join(
                 os.path.dirname(__file__), "..", "..", "..", 
-                "assets", "icons", f"upload_{icon_variant}.png"
+                "assets", "icons", f"filebar_{icon_variant}.png"
             )
+            logger.info(f"🎨 ICON: Looking for icon at: {filebar_icon_path}")
             
-            if os.path.exists(upload_icon_path):
-                upload_icon = QIcon(upload_icon_path)
-                self.upload_btn.setIcon(upload_icon)
-                logger.debug(f"Loaded upload icon: upload_{icon_variant}.png")
+            if os.path.exists(filebar_icon_path):
+                logger.info(f"✅ ICON: File exists at {filebar_icon_path}")
+                filebar_icon = QIcon(filebar_icon_path)
+                
+                if filebar_icon.isNull():
+                    logger.error(f"❌ ICON: QIcon is null after loading from {filebar_icon_path}")
+                    self.upload_btn.setText("📁")
+                else:
+                    self.upload_btn.setIcon(filebar_icon)
+                    
+                    # Set icon size explicitly
+                    from PyQt6.QtCore import QSize
+                    self.upload_btn.setIconSize(QSize(16, 16))
+                    
+                    # Verify the icon was actually set
+                    final_icon = self.upload_btn.icon()
+                    if final_icon.isNull():
+                        logger.error("❌ ICON: Icon is null after setting!")
+                        self.upload_btn.setText("📁")  # Fallback
+                    else:
+                        logger.info(f"✅ ICON: Icon successfully set and verified: filebar_{icon_variant}.png")
+                        # Clear any text when icon is set successfully
+                        self.upload_btn.setText("")
+                    
+                    # Check final button state
+                    button_text = self.upload_btn.text()
+                    logger.info(f"🔧 ICON: Final button text = '{button_text}'")
             else:
                 # Fallback to Unicode symbol
+                logger.warning(f"❌ ICON: Filebar icon not found at: {filebar_icon_path}")
                 self.upload_btn.setText("📁")
-                logger.warning(f"Upload icon not found: {upload_icon_path}")
                 
         except Exception as e:
-            logger.error(f"Failed to load upload icon: {e}")
+            logger.error(f"❌ ICON: Exception loading filebar icon: {e}")
+            import traceback
+            traceback.print_exc()
             if hasattr(self, 'upload_btn') and self.upload_btn:
                 self.upload_btn.setText("📁")  # Fallback
     
@@ -5882,7 +6250,7 @@ class REPLWidget(QWidget):
         # In-conversation search bar (initially hidden)
         self._init_search_bar(layout)
         
-        # File browser bar (initially hidden)
+        # File browser bar (initially hidden) - with explicit spacing
         self._init_file_browser_bar(layout)
         
         # Input area with background styling for prompt
@@ -6387,9 +6755,21 @@ class REPLWidget(QWidget):
             self._toggle_search()
             return
         
+        # Ctrl+U to toggle file browser
+        elif event.key() == Qt.Key.Key_U and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            self._toggle_file_browser()
+            return
+        
         # Escape to close search if open
         elif event.key() == Qt.Key.Key_Escape and self.search_frame.isVisible():
             self._close_search()
+            return
+        
+        # Escape to close file browser if open
+        elif (event.key() == Qt.Key.Key_Escape and 
+              hasattr(self, 'file_browser_bar') and 
+              self.file_browser_bar.isVisible()):
+            self._close_file_browser()
             return
         
         super().keyPressEvent(event)
@@ -7348,12 +7728,13 @@ def test_theme():
         class EnhancedAIWorker(QObject):
             response_received = pyqtSignal(str, bool)  # response, success
             
-            def __init__(self, message, conversation_manager, current_conversation, rag_session=None):
+            def __init__(self, message, conversation_manager, current_conversation, rag_session=None, conversation_id=None):
                 super().__init__()
                 self.message = message
                 self.conversation_manager = conversation_manager
                 self.current_conversation = current_conversation
                 self.rag_session = rag_session
+                self.conversation_id = conversation_id
             
             def run(self):
                 try:
@@ -7370,12 +7751,23 @@ def test_theme():
                         
                         if ai_service:
                             # Ensure current conversation context is set
+                            conversation_context = {}
                             if self.current_conversation:
                                 logger.debug(f"Setting AI service conversation context to: {self.current_conversation.id}")
                                 ai_service.set_current_conversation(self.current_conversation.id)
+                                conversation_context['conversation_id'] = self.current_conversation.id
+                            elif hasattr(self, '_current_conversation_id') and self._current_conversation_id:
+                                # Use internal conversation ID if available
+                                conversation_context['conversation_id'] = self._current_conversation_id
+                                ai_service.set_current_conversation(self._current_conversation_id)
+                                logger.debug(f"Using internal conversation ID: {self._current_conversation_id}")
                             
-                            # Send message with full conversation context and file context
-                            result = ai_service.send_message(enhanced_message, save_conversation=True)
+                            # Send message with full conversation context for strict file isolation
+                            result = ai_service.send_message(
+                                enhanced_message, 
+                                save_conversation=True,
+                                conversation_context=conversation_context
+                            )
                             
                             if result.get('success', False):
                                 response_content = result['response']
@@ -7430,8 +7822,10 @@ def test_theme():
             
             def _enhance_message_with_file_context(self, message: str) -> str:
                 """Enhance message with file context using SafeRAG pipeline."""
+                print(f"🔍 PRINT DEBUG: _enhance_message_with_file_context called with message: '{message[:50]}...'")
                 logger.info(f"🔍 DEBUG: _enhance_message_with_file_context called with message: '{message[:50]}...'")
                 logger.info(f"🔍 DEBUG: rag_session present: {self.rag_session is not None}")
+                print(f"🔍 PRINT DEBUG: rag_session present: {self.rag_session is not None}")
                 
                 if not self.rag_session:
                     logger.info("🔍 DEBUG: No RAG session available, returning original message")
@@ -7484,59 +7878,64 @@ def test_theme():
                     logger.info(f"Querying SafeRAG pipeline with: '{message[:100]}...'")
                     
                     try:
-                        # Get current conversation ID for filtering
-                        current_conversation_id = None
-                        if hasattr(self, 'conversation_manager') and self.conversation_manager:
-                            # Get AI service and use its current conversation ID
-                            if self.conversation_manager.has_ai_service():
-                                ai_service = self.conversation_manager.get_ai_service()
-                                if ai_service:
-                                    current_conversation_id = ai_service.get_current_conversation_id()
-                            # Fallback to REPL's current conversation
-                            if not current_conversation_id and hasattr(self, 'current_conversation') and self.current_conversation:
-                                current_conversation_id = self.current_conversation.id
+                        # Get current conversation ID for filtering - use passed parameter
+                        current_conversation_id = self.conversation_id
+                        logger.info(f"🔍 DEBUG: Retrieved conversation ID for RAG filtering: {current_conversation_id}")
                         
-                        # Query using SafeRAGSession with conversation filter
-                        filters = {}
-                        if current_conversation_id:
-                            filters['conversation_id'] = current_conversation_id
-                            logger.info(f"🔍 Filtering RAG results by conversation: {current_conversation_id}")
-                        else:
-                            logger.warning("⚠️ No current conversation ID - using global RAG results")
+                        # Query using SafeRAGSession with SmartContextSelector progressive fallback
+                        # NEW: Smart context selection eliminates "all or nothing" problem
+                        logger.info(f"🧠 Using SmartContextSelector for conversation: {current_conversation_id or 'None'}")
                         
                         response = safe_rag.query(
                             query_text=message,
                             top_k=3,
-                            filters=filters if filters else None,
-                            timeout=10.0
+                            filters=None,  # Filters now handled by SmartContextSelector
+                            timeout=10.0,
+                            conversation_id=current_conversation_id  # Pass conversation_id for smart selection
                         )
                         
                         if response:
                             sources = response.get('sources', [])
-                            logger.info(f"🔍 SafeRAG query returned {len(sources)} sources")
+                            selection_info = response.get('selection_info', {})
+                            built_in_context = response.get('context', '')
+                            
+                            # Log transparency information
+                            strategies = selection_info.get('strategies_attempted', [])
+                            final_strategy = selection_info.get('final_strategy', 'unknown')
+                            fallback_occurred = selection_info.get('fallback_occurred', False)
+                            
+                            logger.info(f"🧠 SmartContextSelector results: {len(sources)} sources using strategy '{final_strategy}'")
+                            logger.info(f"🔄 Strategies attempted: {strategies}")
+                            if fallback_occurred:
+                                logger.info("🔄 Fallback strategies were activated")
                             
                             if sources:
+                                # Log detailed source information with transparency
                                 for i, source in enumerate(sources):
-                                    content_preview = source.get('content', '')[:100] if isinstance(source, dict) else str(source)[:100]
-                                    logger.info(f"  Source {i+1}: {content_preview}...")
-                                
-                                # Build context from sources
-                                context_parts = []
-                                for source in sources:
                                     if isinstance(source, dict):
-                                        content = source.get('content', '')
-                                        metadata = source.get('metadata', {})
-                                        if content:
-                                            context_parts.append(f"[From {metadata.get('source', 'document')}]: {content}")
+                                        content_preview = source.get('content', '')[:100]
+                                        source_type = source.get('source_type', 'unknown')
+                                        score = source.get('score', 0.0)
+                                        tier = source.get('selection_tier', 0)
+                                        threshold = source.get('threshold_used', 0.0)
+                                        
+                                        logger.info(f"  Source {i+1} [{source_type.upper()}]: Score={score:.3f}, Tier={tier}, "
+                                                  f"Threshold={threshold:.3f}, Content: {content_preview}...")
                                 
-                                if context_parts:
-                                    context = "\n\n".join(context_parts)
-                                    enhanced_message = f"Context from uploaded files:\n{context}\n\nUser question: {message}"
+                                # Use the built-in context from SmartContextSelector
+                                if built_in_context:
+                                    enhanced_message = f"Context from files:\n{built_in_context}\n\nUser question: {message}"
                                     
-                                    logger.info(f"✅ Enhanced message with {len(context_parts)} context sources")
+                                    logger.info(f"✅ Enhanced message with {len(sources)} smart-selected context sources")
                                     if is_new_session:
                                         safe_rag.close()
                                     return enhanced_message
+                                else:
+                                    logger.warning("⚠️ SmartContextSelector returned sources but no built context")
+                            else:
+                                # Log why no sources were found
+                                message_text = response.get('message', 'No explanation provided')
+                                logger.warning(f"⚠️ SmartContextSelector found no sources: {message_text}")
                         else:
                             logger.warning("⚠️ SafeRAG query returned no response")
                             
@@ -7647,7 +8046,13 @@ def test_theme():
         
         # Create and start worker thread
         self.ai_thread = QThread()
-        self.ai_worker = EnhancedAIWorker(message, self.conversation_manager, self.current_conversation, self.rag_session)
+        self.ai_worker = EnhancedAIWorker(
+            message, 
+            self.conversation_manager, 
+            self.current_conversation, 
+            self.rag_session,
+            conversation_id=self._get_safe_conversation_id()
+        )
         self.ai_worker.moveToThread(self.ai_thread)
         
         # Store references for cancellation
@@ -7975,6 +8380,9 @@ def test_theme():
                 else:
                     logger.debug("No messages found for conversation")
                 
+                # Load conversation files and update file browser bar
+                self._load_conversation_files(conversation.id)
+                
                 self.append_output("", "system")  # Add spacing
                 self.append_output("💬 Conversation restored. Continue chatting...", "system")
                 
@@ -7990,15 +8398,26 @@ def test_theme():
             self.append_output(f"✗ Failed to restore conversation: {str(e)}", "error")
     
     def _has_unsaved_messages(self) -> bool:
-        """Check if current conversation has unsaved messages."""
+        """Check if current conversation has unsaved messages and user messages."""
         if not self.current_conversation:
+            return False
+        
+        # First check if there are any user messages in this conversation
+        user_message_count = 0
+        for message in self.current_conversation.messages:
+            if hasattr(message, 'role') and message.role and str(message.role).lower() == 'user':
+                user_message_count += 1
+        
+        # Only consider saving if there are user messages
+        if user_message_count == 0:
+            logger.debug(f"No user messages found in conversation - not saving (total messages: {len(self.current_conversation.messages)})")
             return False
         
         # Check if there's content in the MixedContentDisplay
         if not hasattr(self.output_display, 'content_widgets'):
             return False
             
-        # If there are content widgets, assume there might be unsaved content
+        # If there are content widgets and user messages, assume there might be unsaved content
         # This is a simplified check since MixedContentDisplay doesn't have toPlainText()
         return len(self.output_display.content_widgets) > 0
     
@@ -8889,6 +9308,9 @@ def test_theme():
                     # Start new conversation
                     new_id = await ai_service.start_new_conversation(title="New Conversation")
                     if new_id:
+                        # Migrate any pending files to this conversation
+                        self._migrate_pending_files_to_conversation(new_id)
+                        
                         # Refresh conversation list
                         await self._load_conversations()
                         self.append_output("✓ Started new conversation", "system")
@@ -9053,6 +9475,62 @@ def test_theme():
         except Exception as e:
             logger.error(f"Save conversation failed: {e}")
     
+    async def _create_conversation_async(self, title: str, initial_message: str = None) -> Optional['Conversation']:
+        """Create a conversation asynchronously with proper database persistence."""
+        try:
+            if not self.conversation_manager:
+                logger.error("No conversation manager available")
+                return None
+            
+            # Create conversation with initial message to ensure it's not considered empty
+            conversation = await self.conversation_manager.create_conversation(
+                title=title,
+                initial_message=initial_message or "Conversation started."
+            )
+            
+            if conversation:
+                logger.info(f"✓ Created conversation: {conversation.id} - {conversation.title}")
+                # Migrate any pending files to this conversation
+                self._migrate_pending_files_to_conversation(conversation.id)
+                return conversation
+            else:
+                logger.error("✗ Conversation creation returned None")
+                return None
+                
+        except Exception as e:
+            logger.error(f"✗ Failed to create conversation async: {e}")
+            return None
+    
+    def _migrate_pending_files_to_conversation(self, conversation_id: str):
+        """Migrate files with pending_conversation_id to the actual conversation."""
+        try:
+            if not hasattr(self, 'rag_session') or not self.rag_session:
+                return
+            
+            # Get the pending conversation ID that was used for file uploads
+            pending_id = getattr(self, '_pending_conversation_id', None)
+            if not pending_id:
+                logger.debug("No pending conversation ID to migrate")
+                return
+                
+            logger.info(f"🔄 Migrating files from pending ID {pending_id[:8]}... to conversation: {conversation_id}")
+            
+            # Update the current conversation ID so future queries use the real conversation
+            self._current_conversation_id = conversation_id
+            
+            # Clear the pending conversation ID since it's no longer needed
+            if hasattr(self, '_pending_conversation_id'):
+                delattr(self, '_pending_conversation_id')
+                logger.info("✓ Cleared pending conversation ID - now using real conversation")
+                
+            # Note: The FAISS client handles the OR logic for pending_conversation_id automatically
+            # Files uploaded with pending_conversation_id will be found when filtering by the real conversation_id
+            # because the filtering logic looks for: conversation_id = real_id OR pending_conversation_id = real_id
+            logger.info(f"✅ Files migrated to conversation {conversation_id} - isolation maintained")
+            
+        except Exception as e:
+            logger.error(f"Failed to migrate pending files: {e}")
+    
     def _toggle_search(self):
         """Toggle search bar visibility."""
         try:
@@ -9107,6 +9585,56 @@ def test_theme():
             
         except Exception as e:
             logger.error(f"Failed to close search: {e}")
+    
+    def _toggle_file_browser(self):
+        """Toggle file browser bar visibility."""
+        logger.info("📁 TOGGLE: File browser toggle button clicked")
+        try:
+            if not hasattr(self, 'file_browser_bar'):
+                logger.error("❌ TOGGLE: file_browser_bar attribute does not exist!")
+                return
+            
+            if not self.file_browser_bar:
+                logger.error("❌ TOGGLE: file_browser_bar is None!")
+                return
+            
+            current_visibility = self.file_browser_bar.isVisible()
+            logger.info(f"📁 TOGGLE: Current visibility = {current_visibility}")
+            
+            if current_visibility:
+                logger.info("📁 TOGGLE: Closing file browser...")
+                self._close_file_browser()
+            else:
+                # Show file browser bar
+                logger.info("📁 TOGGLE: Opening file browser...")
+                self.file_browser_bar.setVisible(True)
+                logger.info("✅ TOGGLE: File browser bar opened successfully")
+                
+            # Update upload button visual state
+            logger.info("📁 TOGGLE: Updating upload button state...")
+            self._update_upload_button_state()
+            
+            final_visibility = self.file_browser_bar.isVisible()
+            logger.info(f"✅ TOGGLE: Complete. Final visibility = {final_visibility}")
+                
+        except Exception as e:
+            logger.error(f"❌ TOGGLE: Failed to toggle file browser: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _close_file_browser(self):
+        """Close file browser bar."""
+        try:
+            if hasattr(self, 'file_browser_bar'):
+                self.file_browser_bar.setVisible(False)
+            
+            logger.debug("File browser bar closed")
+            
+            # Update upload button visual state
+            self._update_upload_button_state()
+            
+        except Exception as e:
+            logger.error(f"Failed to close file browser: {e}")
     
     def _search_next(self):
         """Navigate to next search match."""
