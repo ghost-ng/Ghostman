@@ -2469,6 +2469,7 @@ class REPLWidget(QWidget):
             
             # Connect tab manager signals
             self.tab_manager.tab_switched.connect(self._on_tab_switched)
+            self.tab_manager.conversation_context_switched.connect(self._on_conversation_context_switched)
             self.tab_manager.tab_created.connect(self._on_tab_created)
             self.tab_manager.tab_closed.connect(self._on_tab_closed)
         else:
@@ -3203,24 +3204,26 @@ class REPLWidget(QWidget):
                     conv_service = self.conversation_manager.conversation_service
                     if conv_service:
                         # Use thread-safe async pattern
-                        from ....infrastructure.async_manager import get_async_manager
+                        from ...infrastructure.async_manager import run_async_task_safe
                         
-                        async_manager = get_async_manager()
-                        if async_manager:
-                            db_success = async_manager.run_async_task_safe(
-                                conv_service.remove_file_from_conversation(file_id),
-                                timeout=10.0
-                            )
-                        else:
-                            logger.warning("No async manager available for file removal")
-                            db_success = False
-                        if db_success:
-                            logger.info(f"✅ Removed file {file_id} from conversation database")
-                        else:
-                            logger.warning(f"⚠️ Failed to remove file {file_id} from database")
-                            
+                        def on_removal_complete(result, error):
+                            if error:
+                                logger.error(f"Failed to remove file from database: {error}")
+                            else:
+                                logger.info(f"✅ File removed from database: {file_id}")
+                        
+                        run_async_task_safe(
+                            conv_service.remove_file_from_conversation(file_id),
+                            callback=on_removal_complete,
+                            timeout=10.0
+                        )
+                    else:
+                        logger.warning("No conversation service available for file removal")
+                        
                 except Exception as db_error:
                     logger.error(f"Failed to remove file from database: {db_error}")
+                    
+            # Continue with UI removal regardless of database result
             
             # Remove from enabled files tracking
             if hasattr(self, '_enabled_files'):
@@ -3380,9 +3383,15 @@ class REPLWidget(QWidget):
         try:
             logger.info(f"📁 Loading files for conversation: {conversation_id}")
             
-            # Clear existing files from browser bar immediately
+            # First try to show existing files for this conversation
             if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
-                self.file_browser_bar.clear_all_files()
+                existing_files = self.file_browser_bar.get_files_for_conversation(conversation_id)
+                if existing_files:
+                    logger.info(f"📁 Found {len(existing_files)} existing files for conversation, showing them")
+                    self.file_browser_bar.show_files_for_conversation(conversation_id)
+                    return  # Files already exist, just show them
+                else:
+                    logger.info(f"📁 No existing files found for conversation, loading from database")
             
             # Update current conversation ID for file operations
             self._current_conversation_id = conversation_id
@@ -3498,15 +3507,23 @@ class REPLWidget(QWidget):
                     logger.info(f"🔍 DEBUG: Processing file {i+1}: {file_info}")
                     
                     try:
-                        # Add file to browser bar with current status
+                        # Add file to browser bar with current status and conversation association
+                        current_tab_id = None
+                        if hasattr(self, 'tab_manager') and self.tab_manager:
+                            active_tab = self.tab_manager.get_active_tab()
+                            if active_tab:
+                                current_tab_id = active_tab.tab_id
+                        
                         self.file_browser_bar.add_file(
                             file_id=file_info['file_id'],
                             filename=file_info['filename'],
                             file_size=file_info.get('file_size', 0),
                             file_type=file_info.get('file_type', ''),
-                            status=file_info['processing_status']
+                            status=file_info['processing_status'],
+                            conversation_id=conversation_id,
+                            tab_id=current_tab_id
                         )
-                        logger.info(f"🔍 DEBUG: Successfully added file {file_info['filename']} to browser bar")
+                        logger.info(f"🔍 DEBUG: Successfully added file {file_info['filename']} to browser bar (conversation: {conversation_id[:8] if conversation_id else 'None'}, tab: {current_tab_id})")
                         # Update enabled state
                         if file_info.get('is_enabled', True):
                             self._enabled_files.add(file_info['file_id'])
@@ -3621,6 +3638,9 @@ class REPLWidget(QWidget):
         chunk_count = result_data.get('chunk_count', 0)
         logger.info(f"✅ File processing completed: {filename} ({chunk_count} chunks)")
         
+        # IMMEDIATE ASSOCIATION: Associate file with current tab and conversation
+        self._associate_file_with_current_tab_and_conversation(file_id, filename, result_data)
+        
         # Update conversation file association with completion status
         self._update_file_processing_status_async(file_id, 'completed', chunk_count, result_data)
     
@@ -3630,6 +3650,58 @@ class REPLWidget(QWidget):
         
         # Update conversation file association with failed status
         self._update_file_processing_status_async(file_id, 'failed', 0, {'error': error_message})
+    
+    def _associate_file_with_current_tab_and_conversation(self, file_id: str, filename: str, result_data: dict = None):
+        """Immediately associate file with current tab and conversation when processing completes."""
+        try:
+            # Get current tab and conversation
+            current_tab_id = None
+            current_conversation_id = None
+            
+            if hasattr(self, 'tab_manager') and self.tab_manager:
+                active_tab = self.tab_manager.get_active_tab()
+                if active_tab:
+                    current_tab_id = active_tab.tab_id
+                    current_conversation_id = getattr(active_tab, 'conversation_id', None)
+            
+            # Fallback to internal conversation tracking
+            if not current_conversation_id:
+                current_conversation_id = self._get_safe_conversation_id()
+            
+            logger.info(f"🔗 IMMEDIATE ASSOCIATION: {filename} → tab {current_tab_id}, conversation {current_conversation_id[:8] if current_conversation_id else 'None'}")
+            
+            # Add file to browser bar immediately with tab and conversation association
+            if hasattr(self, 'file_browser_bar') and self.file_browser_bar and current_tab_id and current_conversation_id:
+                try:
+                    # Get file path from result data if available
+                    file_path = result_data.get('file_path') if result_data else None
+                    file_size = result_data.get('file_size', 0) if result_data else 0
+                    
+                    # Add to browser bar with immediate association
+                    self.file_browser_bar.add_file(
+                        file_id=file_id,
+                        filename=filename,
+                        file_path=file_path,
+                        file_size=file_size,
+                        conversation_id=current_conversation_id,
+                        tab_id=current_tab_id
+                    )
+                    
+                    # Make file browser visible immediately
+                    self.file_browser_bar.setVisible(True)
+                    
+                    logger.info(f"📄 IMMEDIATE: Added {filename} to browser bar (tab: {current_tab_id}, conv: {current_conversation_id[:8]})")
+                    
+                    # Force show files for current conversation
+                    self.file_browser_bar.show_files_for_conversation(current_conversation_id)
+                    
+                except Exception as browser_error:
+                    logger.error(f"Failed to add file to browser bar immediately: {browser_error}")
+            else:
+                logger.warning(f"Cannot associate file immediately - missing tab ({current_tab_id}) or conversation ({current_conversation_id}) or browser bar")
+                
+        except Exception as e:
+            logger.error(f"Failed to associate file with tab and conversation: {e}")
     
     def _get_file_id_for_path_or_name(self, filename_or_path: str, fallback_id: str = None) -> str:
         """Get the correct file_id for a filename or path from our mapping."""
@@ -3785,14 +3857,64 @@ class REPLWidget(QWidget):
     def _process_uploaded_files(self, file_paths):
         """Process the uploaded files for context with immediate embeddings processing."""
         try:
-            # Get current conversation ID for file linking - use robust method
+            # CRITICAL FIX: Always ensure we have a conversation before uploading files
             current_conversation_id = self._get_safe_conversation_id()
             if not current_conversation_id:
-                logger.warning("⚠️ No current conversation found - creating temporary conversation for file isolation")
-                # FIXED: Create a temporary conversation to prevent global storage
+                logger.warning("⚠️ No current conversation found - creating conversation for file upload")
+                # Create a conversation immediately to ensure files have proper association
                 current_conversation_id = self._ensure_conversation_for_files()
                 if not current_conversation_id:
-                    logger.error("😱 Failed to create conversation for files - storing globally")
+                    logger.error("😱 Failed to create conversation for files - this will break file isolation!")
+                    return  # Don't upload files without conversation
+                
+                # CRITICAL: Associate this conversation with the current tab immediately
+                if hasattr(self, 'tab_manager') and self.tab_manager:
+                    active_tab = self.tab_manager.get_active_tab()
+                    if active_tab and not active_tab.conversation_id:
+                        # Create conversation title from first uploaded file
+                        import os
+                        first_file = file_paths[0] if file_paths else "Untitled"
+                        conversation_title = f"Files: {os.path.basename(first_file)}"
+                        
+                        # Associate tab with conversation
+                        self.tab_manager.associate_conversation_with_tab(
+                            active_tab.tab_id,
+                            current_conversation_id,
+                            conversation_title
+                        )
+                        logger.info(f"✅ Associated conversation {current_conversation_id[:8]} with tab {active_tab.tab_id}")
+                
+                # Set this as the current conversation and load it properly
+                self._current_conversation_id = current_conversation_id
+                
+                # Load the actual conversation object if possible
+                if hasattr(self, 'conversation_manager') and self.conversation_manager:
+                    try:
+                        import asyncio
+                        
+                        def get_conversation_sync():
+                            try:
+                                new_loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(new_loop)
+                                try:
+                                    return new_loop.run_until_complete(
+                                        self.conversation_manager.get_conversation(current_conversation_id)
+                                    )
+                                finally:
+                                    new_loop.close()
+                            except Exception as e:
+                                logger.error(f"Error loading conversation object: {e}")
+                                return None
+                        
+                        conversation_obj = get_conversation_sync()
+                        if conversation_obj:
+                            self.current_conversation = conversation_obj
+                            logger.info(f"✅ Loaded conversation object for {current_conversation_id[:8]}")
+                        
+                    except Exception as e:
+                        logger.warning(f"Could not load conversation object: {e}")
+                
+                logger.info(f"✅ Created and set conversation {current_conversation_id[:8]} for file upload")
             
             logger.info(f"📎 Linking files to conversation: {current_conversation_id[:8] if current_conversation_id else 'None'}...")
             
@@ -3834,33 +3956,58 @@ class REPLWidget(QWidget):
                                 active_conversation_id = current_conversation_id
                                 
                                 if not conversation:
-                                    # TIMING FIX: Wait for startup conversation to be created (up to 2 seconds)
-                                    logger.warning(f"Conversation {current_conversation_id} not found during file upload - waiting for startup conversation")
-                                    import time
-                                    for attempt in range(20):  # Wait up to 2 seconds (20 * 0.1s)
-                                        await asyncio.sleep(0.1)
-                                        conversation = await conv_service.get_conversation(current_conversation_id)
-                                        if conversation:
-                                            logger.info(f"✅ Found startup conversation {current_conversation_id} on attempt {attempt + 1}")
-                                            break
+                                    # EDGE CASE FIX: Handle conversation not found during file upload
+                                    logger.warning(f"Conversation {current_conversation_id} not found during file upload")
                                     
-                                    if not conversation:
-                                        logger.warning(f"Startup conversation still not ready after 2s, creating new one for file upload")
-                                        # Create a new conversation for the file as fallback
-                                        new_conversation_id = await conv_service.create_conversation("New Conversation")
+                                    # Check if user deleted all conversations - create one if needed
+                                    conversations = await conv_service.repository.list_conversations(
+                                        limit=1,
+                                        include_deleted=False
+                                    )
+                                    
+                                    if len(conversations) == 0:
+                                        logger.warning(f"⚠️ EDGE CASE: User has 0 conversations during file upload - creating new conversation")
+                                        new_conversation_id = await conv_service.create_conversation("File Upload Chat")
                                         if new_conversation_id:
                                             active_conversation_id = new_conversation_id
-                                            logger.info(f"Created fallback conversation {active_conversation_id} for file upload")
-                                        # Update current conversation reference
-                                        if hasattr(self, 'conversation_manager') and self.conversation_manager.has_ai_service():
-                                            ai_service = self.conversation_manager.get_ai_service()
-                                            if ai_service:
-                                                ai_service.set_current_conversation(active_conversation_id)
-                                        # Update our internal reference
-                                        self._current_conversation_id = active_conversation_id
+                                            logger.info(f"✅ Created new conversation {active_conversation_id} for file upload (0 conversations case)")
+                                            # Update current conversation reference
+                                            if hasattr(self, 'conversation_manager') and self.conversation_manager.has_ai_service():
+                                                ai_service = self.conversation_manager.get_ai_service()
+                                                if ai_service:
+                                                    ai_service.set_current_conversation(active_conversation_id)
+                                            # Update our internal reference
+                                            self._current_conversation_id = active_conversation_id
+                                        else:
+                                            logger.error("Failed to create new conversation for file upload (0 conversations case)")
+                                            return False
                                     else:
-                                        logger.error("Failed to create new conversation for file upload")
-                                        return False
+                                        # TIMING FIX: Wait for startup conversation to be created (up to 2 seconds)
+                                        logger.info(f"Found {len(conversations)} conversations, waiting for startup conversation")
+                                        for attempt in range(20):  # Wait up to 2 seconds (20 * 0.1s)
+                                            await asyncio.sleep(0.1)
+                                            conversation = await conv_service.get_conversation(current_conversation_id)
+                                            if conversation:
+                                                logger.info(f"✅ Found startup conversation {current_conversation_id} on attempt {attempt + 1}")
+                                                break
+                                        
+                                        if not conversation:
+                                            logger.warning(f"Startup conversation still not ready after 2s, creating new one for file upload")
+                                            # Create a new conversation for the file as fallback
+                                            new_conversation_id = await conv_service.create_conversation("File Upload Chat")
+                                            if new_conversation_id:
+                                                active_conversation_id = new_conversation_id
+                                                logger.info(f"Created fallback conversation {active_conversation_id} for file upload")
+                                            # Update current conversation reference
+                                            if hasattr(self, 'conversation_manager') and self.conversation_manager.has_ai_service():
+                                                ai_service = self.conversation_manager.get_ai_service()
+                                                if ai_service:
+                                                    ai_service.set_current_conversation(active_conversation_id)
+                                            # Update our internal reference
+                                            self._current_conversation_id = active_conversation_id
+                                        else:
+                                            logger.error("Failed to create new conversation for file upload")
+                                            return False
                                 
                                 # Now add the file to the conversation
                                 return await conv_service.add_file_to_conversation(
@@ -3932,16 +4079,39 @@ class REPLWidget(QWidget):
                     except Exception as db_error:
                         logger.error(f"Failed to save file to database: {db_error}")
                 
-                # Add to UI with generated file_id
+                # Add to UI with generated file_id and conversation association
                 if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                    # CRITICAL DEBUG: Get current tab ID with extensive logging
+                    current_tab_id = None
+                    logger.info(f"🔍 FILE UPLOAD DEBUG: Starting tab ID detection")
+                    logger.info(f"🔍 FILE UPLOAD DEBUG: has tab_manager: {hasattr(self, 'tab_manager')}")
+                    
+                    if hasattr(self, 'tab_manager') and self.tab_manager:
+                        logger.info(f"🔍 FILE UPLOAD DEBUG: tab_manager exists: {self.tab_manager}")
+                        active_tab = self.tab_manager.get_active_tab()
+                        logger.info(f"🔍 FILE UPLOAD DEBUG: active_tab: {active_tab}")
+                        
+                        if active_tab:
+                            current_tab_id = active_tab.tab_id
+                            logger.info(f"✅ FILE UPLOAD: Using tab {current_tab_id}")
+                            print(f"✅ FILE UPLOAD: Using tab {current_tab_id}")  # Force console
+                        else:
+                            logger.error("❌ FILE UPLOAD: No active tab found - this will break file association!")
+                            print("❌ FILE UPLOAD: No active tab found - this will break file association!")
+                    else:
+                        logger.error("❌ FILE UPLOAD: No tab manager available - this will break file association!")
+                        print("❌ FILE UPLOAD: No tab manager available - this will break file association!")
+                    
                     self.file_browser_bar.add_file(
                         file_id=file_id,  # Use generated file_id as first parameter
                         filename=filename, 
                         file_size=file_size, 
                         file_type=file_ext, 
-                        status="queued"
+                        status="queued",
+                        conversation_id=current_conversation_id,
+                        tab_id=current_tab_id
                     )
-                    logger.info(f"📄 Added to browser bar: {filename} (ID: {file_id})")
+                    logger.info(f"📄 Added to browser bar: {filename} (ID: {file_id}, conversation: {current_conversation_id[:8] if current_conversation_id else 'None'}, tab: {current_tab_id})")
                 
                 # Track uploaded files with file_id
                 if not hasattr(self, '_uploaded_files'):
@@ -4363,13 +4533,21 @@ class REPLWidget(QWidget):
                 # Display file processing status in chat instead of separate widget
                 self._display_file_status_in_chat(filename, result, "completed")
                 
+                # IMMEDIATE ASSOCIATION: Associate file with current tab and conversation
+                file_id = self._get_file_id_for_path_or_name(filename, result.get('file_id'))
+                result_data = {
+                    'file_path': file_path,
+                    'file_size': result.get('file_size', 0),
+                    'chunks': result.get('chunks', 0),
+                    'tokens': result.get('tokens', 0)
+                }
+                self._associate_file_with_current_tab_and_conversation(file_id, filename, result_data)
+                
                 # Update file browser bar status to "completed"
                 if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
                     try:
                         tokens_used = result.get('tokens', 0)
                         chunks = result.get('chunks', 0)
-                        # Get the correct file_id from our mapping
-                        file_id = self._get_file_id_for_path_or_name(filename, result.get('file_id'))
                         logger.info(f"🔍 Using file_id: {file_id} for filename: {filename}")
                         self.file_browser_bar.update_file_status(file_id, "completed")
                         self.file_browser_bar.update_file_usage(file_id, tokens_used, 1.0)  # Default relevance
@@ -4449,8 +4627,9 @@ class REPLWidget(QWidget):
                     else:
                         logger.info(f"✅ Updated file processing status: {file_id} -> {status}")
                 
-                # Update file processing status in database
-                async_manager.run_async_task_safe(
+                # Update file processing status in database  
+                from ...infrastructure.async_manager import run_async_task_safe
+                run_async_task_safe(
                     conv_service.update_file_processing_status(file_id, status, chunk_count, metadata),
                     callback=on_update_complete,
                     timeout=10.0
@@ -4817,9 +4996,27 @@ class REPLWidget(QWidget):
                     import os
                     filename = os.path.basename(file_path)
                     
-                    # Add to browser bar with processing status
+                    # Add to browser bar with processing status and PROPER TAB ASSOCIATION
                     if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
-                        self.file_browser_bar.add_file(file_path, filename, status="processing")
+                        # CRITICAL: Get current tab ID for association
+                        current_tab_id = None
+                        if hasattr(self, 'tab_manager') and self.tab_manager:
+                            active_tab = self.tab_manager.get_active_tab()
+                            if active_tab:
+                                current_tab_id = active_tab.tab_id
+                                logger.info(f"🔍 ASYNC PROCESSING: Using tab {current_tab_id} for {filename}")
+                                print(f"🔍 ASYNC PROCESSING: Using tab {current_tab_id} for {filename}")
+                            else:
+                                logger.error(f"❌ ASYNC PROCESSING: No active tab for {filename} - will break file association!")
+                                print(f"❌ ASYNC PROCESSING: No active tab for {filename} - will break file association!")
+                        
+                        self.file_browser_bar.add_file(
+                            file_id=file_path,  # Using file_path as file_id for now
+                            filename=filename, 
+                            status="processing",
+                            conversation_id=conversation_id,
+                            tab_id=current_tab_id
+                        )
                     
                     logger.info(f"📄 Processing file with embeddings: {filename}")
                     
@@ -4907,10 +5104,30 @@ class REPLWidget(QWidget):
                 import os
                 filename = os.path.basename(file_path)
                 
-                # Add to browser bar
+                # Add to browser bar with PROPER TAB ASSOCIATION
                 if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
-                    self.file_browser_bar.add_file(file_path, filename, status="pending")
-                    logger.info(f"📄 Added to context (sync): {filename}")
+                    # CRITICAL: Get current tab ID for association
+                    current_tab_id = None
+                    current_conversation_id = getattr(self, '_current_conversation_id', None)
+                    
+                    if hasattr(self, 'tab_manager') and self.tab_manager:
+                        active_tab = self.tab_manager.get_active_tab()
+                        if active_tab:
+                            current_tab_id = active_tab.tab_id
+                            logger.info(f"🔍 SYNC PROCESSING: Using tab {current_tab_id} for {filename}")
+                            print(f"🔍 SYNC PROCESSING: Using tab {current_tab_id} for {filename}")
+                        else:
+                            logger.error(f"❌ SYNC PROCESSING: No active tab for {filename} - will break file association!")
+                            print(f"❌ SYNC PROCESSING: No active tab for {filename} - will break file association!")
+                    
+                    self.file_browser_bar.add_file(
+                        file_id=file_path,  # Using file_path as file_id for now 
+                        filename=filename, 
+                        status="pending",
+                        conversation_id=current_conversation_id,
+                        tab_id=current_tab_id
+                    )
+                    logger.info(f"📄 Added to context (sync): {filename} with tab {current_tab_id}")
                     
         except Exception as e:
             logger.error(f"Error in sync file processing: {e}")
@@ -6904,6 +7121,15 @@ class REPLWidget(QWidget):
         
         logger.info(f"🔄 Switching to conversation: {conversation.title}")
         
+        # CRITICAL FIX: Hide current conversation's files BEFORE switching
+        if hasattr(self, 'file_browser_bar') and self.file_browser_bar and self.current_conversation:
+            self.file_browser_bar.hide_files_for_conversation(self.current_conversation.id)
+            logger.info(f"📁 Hidden files for conversation {self.current_conversation.id[:8]}...")
+        
+        # Clear internal file tracking
+        if hasattr(self, '_uploaded_files'):
+            self._uploaded_files.clear()
+        
         # Save current conversation state if needed and mark as inactive
         if self.current_conversation:
             self.idle_detector.reset_activity(conversation.id)
@@ -6922,6 +7148,17 @@ class REPLWidget(QWidget):
         # Switch to new conversation
         self.current_conversation = conversation
         self._update_status_label(conversation)
+        
+        # Associate conversation with current tab if tab system is available and not already associated
+        if hasattr(self, 'tab_manager') and self.tab_manager:
+            active_tab = self.tab_manager.get_active_tab()
+            if active_tab and not active_tab.conversation_id:
+                self.tab_manager.associate_conversation_with_tab(
+                    active_tab.tab_id, 
+                    conversation.id, 
+                    conversation.title
+                )
+                logger.info(f"✓ Associated loaded conversation {conversation.id} with tab {active_tab.tab_id}")
         
         # Start autosave timer for the new conversation
         self._start_autosave_timer()
@@ -7685,10 +7922,63 @@ def test_theme():
         self.append_output(f"Success rate: {success_count}/{len(available_themes)} ({(success_count/len(available_themes)*100):.1f}%)", "info")
         self.append_output("================================", "info")
     
+    def _ensure_conversation_exists_for_message(self, message: str):
+        """EDGE CASE FIX: Ensure conversation exists when user sends message after deleting all conversations."""
+        if not self.conversation_manager:
+            return
+            
+        try:
+            # Check if we have ANY conversations at all (user may have deleted all)
+            conv_service = self.conversation_manager.conversation_service
+            if conv_service:
+                # Count existing non-deleted conversations
+                import asyncio
+                import threading
+                
+                def check_conversation_count():
+                    try:
+                        new_loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(new_loop)
+                        try:
+                            # Use list_conversations to count existing conversations
+                            conversations = new_loop.run_until_complete(
+                                conv_service.repository.list_conversations(
+                                    limit=1,  # Just need to check if ANY exist
+                                    include_deleted=False  # Don't count deleted ones
+                                )
+                            )
+                            return len(conversations)
+                        finally:
+                            new_loop.close()
+                    except Exception as e:
+                        logger.error(f"Error checking conversation count: {e}")
+                        return -1  # Error state
+                
+                conversation_count = check_conversation_count()
+                
+                if conversation_count == 0:
+                    logger.warning("⚠️ EDGE CASE: User has 0 conversations - auto-creating new conversation for message")
+                    self._create_new_conversation_for_message(message)
+                elif conversation_count == -1:
+                    logger.error("❌ Error checking conversation count - forcing conversation creation")
+                    self._create_new_conversation_for_message(message)
+                else:
+                    logger.debug(f"✓ {conversation_count} conversations exist - no auto-creation needed")
+                    
+        except Exception as e:
+            logger.error(f"Error in _ensure_conversation_exists_for_message: {e}")
+            # Fallback: try to create conversation anyway
+            logger.info("🔄 Fallback: Creating conversation due to error checking count")
+            self._create_new_conversation_for_message(message)
+    
     def _send_to_ai(self, message: str):
         """Send message to AI service with conversation management."""
         # Store message for potential resend
         self.last_failed_message = message
+        
+        # EDGE CASE FIX: Check if user deleted all conversations and needs a new one
+        if self.conversation_manager:
+            self._ensure_conversation_exists_for_message(message)
         
         # Ensure we have an active conversation
         if not self.current_conversation and self.conversation_manager:
@@ -9276,6 +9566,15 @@ def test_theme():
                 self.append_output("⚠ Conversation management not available", "error")
                 return
             
+            # CRITICAL FIX: Hide file browser bar for new conversation
+            if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                self.file_browser_bar.hide_all_files()
+                logger.info("📁 Hidden file browser bar for new conversation")
+            
+            # Clear internal file tracking
+            if hasattr(self, '_uploaded_files'):
+                self._uploaded_files.clear()
+            
             # Get AI service for conversation integration
             ai_service = None
             if self.conversation_manager:
@@ -9490,6 +9789,18 @@ def test_theme():
             
             if conversation:
                 logger.info(f"✓ Created conversation: {conversation.id} - {conversation.title}")
+                
+                # Associate conversation with current tab if tab system is available
+                if hasattr(self, 'tab_manager') and self.tab_manager:
+                    active_tab = self.tab_manager.get_active_tab()
+                    if active_tab:
+                        self.tab_manager.associate_conversation_with_tab(
+                            active_tab.tab_id, 
+                            conversation.id, 
+                            conversation.title
+                        )
+                        logger.info(f"✓ Associated conversation {conversation.id} with tab {active_tab.tab_id}")
+                
                 # Migrate any pending files to this conversation
                 self._migrate_pending_files_to_conversation(conversation.id)
                 return conversation
@@ -9983,24 +10294,15 @@ def test_theme():
     
     
     
-    @pyqtSlot(str, str)
-    def _on_tab_switched(self, old_tab_id: str, new_tab_id: str):
-        """Handle tab switching event."""
-        try:
-            logger.debug(f"Tab switched from {old_tab_id} to {new_tab_id}")
-            
-            # The context switch will be handled by _on_conversation_context_switched
-            # This is just for UI updates if needed
-            
-        except Exception as e:
-            logger.error(f"Error handling tab switch: {e}")
-    
     @pyqtSlot(str)
     def _on_conversation_context_switched(self, conversation_id: str):
         """Handle conversation context switching from tab manager."""
         try:
+            logger.info(f"🔄 Conversation context switched to: {conversation_id}")
+            
             if not conversation_id:
                 # Clear current conversation for new conversation
+                logger.info("📁 No conversation ID - clearing current conversation")
                 self._clear_current_conversation()
                 return
                 
@@ -10072,6 +10374,18 @@ def test_theme():
         try:
             self.current_conversation = None
             
+            # CRITICAL FIX: Hide file browser bar for new conversations
+            if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                self.file_browser_bar.hide_all_files()
+                logger.info("📁 Hidden file browser bar for new conversation")
+            
+            # Clear internal file tracking
+            if hasattr(self, '_uploaded_files'):
+                self._uploaded_files.clear()
+            
+            # Clear current conversation ID
+            self._current_conversation_id = None
+            
             # Clear output display
             self.output_display.clear()
             
@@ -10087,7 +10401,7 @@ def test_theme():
             if hasattr(self, 'idle_detector'):
                 self.idle_detector.reset_activity(None)
                 
-            logger.debug("Cleared current conversation for new context")
+            logger.debug("Cleared current conversation and files for new context")
             
         except Exception as e:
             logger.error(f"Error clearing current conversation: {e}")
@@ -10109,14 +10423,6 @@ def test_theme():
             logger.error(f"Error syncing tab with conversation: {e}")
     
     # Tab event handlers
-    def _on_tab_switched(self, tab_id: str):
-        """Handle tab switching - change conversation context."""
-        if hasattr(self, 'tab_manager') and self.tab_manager:
-            active_tab = self.tab_manager.get_active_tab()
-            if active_tab and active_tab.conversation_id:
-                # Switch to the conversation associated with this tab
-                logger.debug(f"Switching to conversation for tab: {tab_id}")
-                # TODO: Implement conversation context switching
     
     def _on_tab_created(self, tab_id: str):
         """Handle new tab creation."""
@@ -10180,30 +10486,43 @@ def test_theme():
     
     # --- Tab Event Handlers ---
     
-    def _on_tab_switched(self, tab_id: str):
-        """Handle tab switching - always start fresh as requested by user."""
-        if not self.tab_manager:
-            logger.warning("Tab manager not available for tab switching")
-            return
+    def _on_tab_switched(self, old_tab_id: str, new_tab_id: str):
+        """Handle tab switching with proper conversation restoration."""
+        try:
+            logger.info(f"🔄 TAB SWITCH DETECTED: {old_tab_id} → {new_tab_id}")
+            print(f"🔄 TAB SWITCH DETECTED: {old_tab_id} → {new_tab_id}")  # Force console output
             
-        tab = self.tab_manager.tabs.get(tab_id)
-        if not tab:
-            logger.warning(f"Tab not found for switching: {tab_id}")
-            return
+            # SIMPLE LOGIC: TAB → CONVERSATION → FILES
+            if hasattr(self, 'file_browser_bar') and self.file_browser_bar and hasattr(self, 'tab_manager'):
+                logger.info(f"🔄 Tab switch: Finding conversation for tab {new_tab_id}")
+                
+                # Step 1: Get the conversation for this tab
+                new_tab = self.tab_manager.tabs.get(new_tab_id)
+                if new_tab and hasattr(new_tab, 'conversation_id') and new_tab.conversation_id:
+                    conversation_id = new_tab.conversation_id
+                    logger.info(f"📝 Tab {new_tab_id} has conversation {conversation_id[:8]}...")
+                    
+                    # Step 2: Show files for this conversation
+                    file_count = len(self.file_browser_bar.get_files_for_conversation(conversation_id))
+                    logger.info(f"📁 Conversation {conversation_id[:8]} has {file_count} files")
+                    
+                    if file_count > 0:
+                        self.file_browser_bar.show_files_for_conversation(conversation_id)
+                        logger.info(f"✅ Showing {file_count} files for conversation {conversation_id[:8]}")
+                    else:
+                        self.file_browser_bar.hide_all_files()
+                        logger.info(f"📁 No files to show for conversation {conversation_id[:8]}")
+                        
+                else:
+                    logger.info(f"📝 Tab {new_tab_id} has no conversation - hiding all files")
+                    self.file_browser_bar.hide_all_files()
+            else:
+                logger.warning("📁 File browser or tab manager not available")
             
-        logger.info(f"Switching to tab: {tab_id} - starting fresh conversation")
-        
-        # User requested that ALL tabs start fresh - no auto-loading of conversations
-        # User must explicitly load conversations through the conversation dialog
-        self.current_conversation = None
-        self.clear_output()
-        self.append_output("💬 Start typing to begin a new conversation", "info")
-        
-        # Clear the tab's conversation association to keep it fresh
-        tab.conversation_id = None
-        
-        # Reset focus to input
-        self.command_input.setFocus()
+            # The conversation context switching may also trigger, but we handle files here too
+            
+        except Exception as e:
+            logger.error(f"Error handling tab switch: {e}")
     
     def _on_tab_created(self, tab_id: str):
         """Handle new tab creation."""
