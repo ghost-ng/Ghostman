@@ -682,6 +682,7 @@ class MixedContentDisplay(QScrollArea):
         """Internal method to add HTML content without storing history."""
         label = QLabel()
         label.setWordWrap(True)
+        label.setTextFormat(Qt.TextFormat.RichText)  # Enable HTML rendering
         label.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse | 
             Qt.TextInteractionFlag.LinksAccessibleByMouse
@@ -729,6 +730,7 @@ class MixedContentDisplay(QScrollArea):
                     )
                     text_label.setAutoFillBackground(False)  # Prevent Qt from filling background
                     text_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)  # Make widget transparent
+                    text_label.setTextFormat(Qt.TextFormat.RichText)
                     text_label.setText(part)
                     self._apply_label_styling(text_label, message_style)
                     self.content_layout.addWidget(text_label)
@@ -743,6 +745,7 @@ class MixedContentDisplay(QScrollArea):
                     self.add_code_snippet(code, language)
         else:
             # No code blocks, just add the HTML as is
+            label.setTextFormat(Qt.TextFormat.RichText)
             label.setText(processed_html)
             self._apply_label_styling(label, message_style)
             self.content_layout.addWidget(label)
@@ -1152,19 +1155,29 @@ class MixedContentDisplay(QScrollArea):
         
     def clear(self):
         """Clear all content."""
+        import logging
+        logger = logging.getLogger(__name__)
+
+        widget_count = len(self.content_widgets)
+        history_count = len(self.content_history)
+
+        logger.debug(f"🗑️  Clearing REPL display: {widget_count} widgets, {history_count} history items")
+
         # Remove all widgets
         for widget in self.content_widgets:
             widget.deleteLater()
         self.content_widgets.clear()
-        
+
         # Clear history
         self.content_history.clear()
-        
+
         # Clear the layout
         while self.content_layout.count():
             item = self.content_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+
+        logger.debug(f"✅ REPL display cleared completely")
                 
     def scroll_to_bottom(self):
         """Auto-scroll to the bottom."""
@@ -1214,3 +1227,7 @@ class MixedContentDisplay(QScrollArea):
                     padding: 4px;
                 """)
             self.content_layout.insertWidget(0, notice)
+
+    # DEAD CODE REMOVED: save_content_state() and restore_content_state()
+    # These methods were used for the old save/restore tab switching mechanism.
+    # Now each tab owns its own MixedContentDisplay widget that persists, so save/restore is not needed.

@@ -9,6 +9,7 @@ import asyncio
 import html
 import os
 import re
+import uuid
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 
@@ -1359,7 +1360,24 @@ class REPLWidget(QWidget):
         QTimer.singleShot(200, self._load_window_dimensions)
         
         logger.info("Enhanced REPLWidget initialized with conversation management")
-    
+
+    @property
+    def output_display(self):
+        """
+        Get the active tab's output display widget.
+        This property provides backward compatibility - code can still use self.output_display,
+        but it now points to the active tab's widget instead of a shared widget.
+        """
+        # Check if tab manager exists and has an active tab
+        if hasattr(self, 'tab_manager') and self.tab_manager and self.tab_manager.active_tab_id:
+            active_tab = self.tab_manager.get_active_tab()
+            if active_tab and active_tab.output_display:
+                return active_tab.output_display
+
+        # Return None during initialization or when no tabs exist
+        # This is normal during app startup before tabs are created
+        return None
+
     def _init_dynamic_input_height(self):
         """Initialize dynamic input height system."""
         # Initialize variables for dynamic height management
@@ -1756,12 +1774,19 @@ class REPLWidget(QWidget):
                 'selection': colors.primary
             }
             
-            # Pass opacity-adjusted colors to MixedContentDisplay
-            # This won't cause duplication since we fixed set_theme_colors to not re-render
-            if hasattr(self, 'output_display') and self.output_display:
+            # Apply theme colors to ALL tab widgets, not just the active one
+            # Since we now have per-tab widgets, we need to update all of them
+            if hasattr(self, 'tab_manager') and self.tab_manager:
+                tabs_updated = 0
+                for tab in self.tab_manager.tabs.values():
+                    if tab.output_display:
+                        tab.output_display.set_theme_colors(theme_colors)
+                        tabs_updated += 1
+                logger.debug(f"Applied theme colors to {tabs_updated} tab widgets with opacity: {alpha:.3f}")
+            elif hasattr(self, 'output_display') and self.output_display:
+                # Fallback for old code or if tab_manager doesn't exist yet
                 self.output_display.set_theme_colors(theme_colors)
-            
-            logger.debug(f"Applied MixedContentDisplay theme colors with opacity: {alpha:.3f}")
+                logger.debug(f"Applied MixedContentDisplay theme colors with opacity: {alpha:.3f}")
         except Exception as e:
             logger.warning(f"Theme update handled automatically by theme manager: {e}")
     
@@ -1922,7 +1947,8 @@ class REPLWidget(QWidget):
             if hasattr(self, 'search_btn'):
                 self._load_search_icon()
             self._load_chain_icon()
-            self._load_filebar_icon()
+            if hasattr(self, 'upload_btn'):
+                self._load_filebar_icon()
             if hasattr(self, 'chat_btn'):
                 self._load_chat_icon()
             if hasattr(self, 'title_settings_btn'):
@@ -2216,6 +2242,9 @@ class REPLWidget(QWidget):
             self.conversation_manager = ConversationManager()
             if self.conversation_manager.initialize():
                 logger.info("✓ Conversation manager initialized successfully")
+
+                # OPTIMIZATION: Set file browser reference in AI service for RAG query optimization
+                self._set_file_browser_reference_in_ai_service()
             else:
                 logger.error("✗ Failed to initialize conversation manager")
                 self.conversation_manager = None
@@ -2361,11 +2390,24 @@ class REPLWidget(QWidget):
                 logger.debug("No conversations found - no current conversation set")
             
             logger.info(f"📋 Loaded {len(conversations)} conversations")
-            
+
+            # Create initial tab if tab manager exists and no tabs created yet
+            if hasattr(self, 'tab_manager') and self.tab_manager and len(self.tab_manager.tabs) == 0:
+                logger.info("Creating initial tab for current conversation...")
+                # Determine tab title from current conversation
+                if self.current_conversation and self.current_conversation.title:
+                    tab_title = self.current_conversation.title[:23] + "..." if len(self.current_conversation.title) > 25 else self.current_conversation.title
+                else:
+                    tab_title = "New Conversation"
+
+                # Create and activate the first tab
+                first_tab_id = self.tab_manager.create_tab(title=tab_title, activate=True)
+                logger.info(f"✅ Created initial tab: {first_tab_id}")
+
             # Simple UI refresh
             if hasattr(self, '_refresh_conversation_selector'):
                 QTimer.singleShot(50, self._refresh_conversation_selector)
-            
+
         except Exception as e:
             logger.error(f"✗ Failed to load conversations: {e}", exc_info=True)
             # Ensure state is valid even if conversation loading fails
@@ -2465,7 +2507,14 @@ class REPLWidget(QWidget):
             
             # Initialize tab manager but don't create initial tab yet
             # We'll create tabs on demand when user clicks "New Tab"
-            self.tab_manager = TabConversationManager(self, self.tab_frame, self.tab_layout, create_initial_tab=False)
+            # Pass parent_layout so tab manager can add its QStackedWidget to hold tab output widgets
+            self.tab_manager = TabConversationManager(
+                self,
+                self.tab_frame,
+                self.tab_layout,
+                output_container_layout=parent_layout,
+                create_initial_tab=False
+            )
             
             # Connect tab manager signals
             self.tab_manager.tab_switched.connect(self._on_tab_switched)
@@ -3133,6 +3182,7 @@ class REPLWidget(QWidget):
             # Connect signals with error handling to prevent segfaults
             try:
                 self.file_browser_bar.file_removed.connect(self._on_file_removed_safe)
+                self.file_browser_bar.processing_completed.connect(self._on_file_processing_completed)
                 self.file_browser_bar.clear_all_requested.connect(self._on_clear_all_files_safe)
                 self.file_browser_bar.file_viewed.connect(self._on_file_viewed)
                 self.file_browser_bar.file_toggled.connect(self._on_file_toggled)
@@ -3144,11 +3194,39 @@ class REPLWidget(QWidget):
             # Add to layout
             parent_layout.addWidget(self.file_browser_bar)
             logger.info("✅ File browser bar enabled with segfault prevention")
-            
+
+            # NOTE: File browser reference will be set in AI service after conversation_manager initializes
+            # See _initialize_conversation_manager() which calls _set_file_browser_reference_in_ai_service()
+
         except Exception as e:
             logger.error(f"❌ Failed to initialize file browser bar: {e}")
             self.file_browser_bar = None
     
+    def _set_file_browser_reference_in_ai_service(self):
+        """Set file browser reference in AI service for RAG query optimization."""
+        logger.info("🔧 ATTEMPTING to set file browser reference in AI service...")
+        try:
+            if hasattr(self, 'conversation_manager') and self.conversation_manager:
+                logger.info("  - conversation_manager: ✅ FOUND")
+                ai_service = self.conversation_manager.get_ai_service()
+                logger.info(f"  - ai_service: {'✅ FOUND' if ai_service else '❌ NONE'}")
+                if ai_service and hasattr(ai_service, 'set_file_browser_reference'):
+                    logger.info("  - set_file_browser_reference method: ✅ EXISTS")
+                    if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                        logger.info("  - file_browser_bar: ✅ FOUND")
+                        ai_service.set_file_browser_reference(self.file_browser_bar)
+                        logger.info("✅✅✅ SUCCESSFULLY set file browser reference in AI service for RAG optimization ✅✅✅")
+                    else:
+                        logger.warning("  - file_browser_bar: ❌ NOT FOUND - cannot set reference")
+                else:
+                    logger.warning("  - set_file_browser_reference method: ❌ DOES NOT EXIST - AI service version mismatch")
+            else:
+                logger.warning("  - conversation_manager: ❌ NOT FOUND")
+        except Exception as e:
+            logger.error(f"❌ Failed to set file browser reference in AI service: {e}")
+            import traceback
+            logger.debug(f"Traceback: {traceback.format_exc()}")
+
     def _on_file_removed_safe(self, file_id):
         """Safely handle file removal from browser bar with RAG cleanup."""
         try:
@@ -3241,7 +3319,7 @@ class REPLWidget(QWidget):
                 
         except Exception as e:
             logger.error(f"Failed to handle file removal: {e}")
-    
+
     def _on_clear_all_files_safe(self):
         """Safely handle clear all files request with RAG cleanup."""
         try:
@@ -3632,17 +3710,33 @@ class REPLWidget(QWidget):
         # Update conversation file association with processing status
         self._update_file_processing_status_async(file_id, 'processing', 0, {'filename': filename})
     
-    def _on_file_processing_completed(self, file_id, result_data):
-        """Handle file processing completed signal."""
-        filename = result_data.get('filename', 'unknown')
-        chunk_count = result_data.get('chunk_count', 0)
-        logger.info(f"✅ File processing completed: {filename} ({chunk_count} chunks)")
-        
-        # IMMEDIATE ASSOCIATION: Associate file with current tab and conversation
-        self._associate_file_with_current_tab_and_conversation(file_id, filename, result_data)
-        
-        # Update conversation file association with completion status
-        self._update_file_processing_status_async(file_id, 'completed', chunk_count, result_data)
+    def _on_file_processing_completed(self, file_id, status):
+        """Handle file processing completed signal from FileBrowserBar.
+
+        Args:
+            file_id: The file ID
+            status: Status string ("completed" or "failed")
+        """
+        logger.info(f"📁 File processing completed signal: {file_id[:8]} - {status}")
+
+        if status == "completed":
+            # File was successfully processed and added to FAISS
+            # Refresh the RAG session so next query sees the new file
+            logger.info("🔄 Refreshing RAG session to include newly processed file")
+
+            if hasattr(self, 'rag_session') and self.rag_session:
+                try:
+                    # Get fresh stats to verify file was added
+                    stats = self.rag_session.get_stats(timeout=2.0)
+                    doc_count = stats.get('rag_pipeline', {}).get('documents_processed', 0)
+                    logger.info(f"✅ RAG session refreshed - now has {doc_count} documents")
+                except Exception as stats_err:
+                    logger.debug(f"Could not get RAG stats: {stats_err}")
+            else:
+                logger.debug("No RAG session to refresh")
+
+        elif status == "failed":
+            logger.warning(f"⚠️ File processing failed for {file_id[:8]}")
     
     def _on_file_processing_failed(self, file_id, error_message):
         """Handle file processing failed signal."""
@@ -3669,36 +3763,37 @@ class REPLWidget(QWidget):
                 current_conversation_id = self._get_safe_conversation_id()
             
             logger.info(f"🔗 IMMEDIATE ASSOCIATION: {filename} → tab {current_tab_id}, conversation {current_conversation_id[:8] if current_conversation_id else 'None'}")
-            
-            # Add file to browser bar immediately with tab and conversation association
-            if hasattr(self, 'file_browser_bar') and self.file_browser_bar and current_tab_id and current_conversation_id:
+
+            # Add file to browser bar immediately with conversation association (tab is optional for avatar mode)
+            if hasattr(self, 'file_browser_bar') and self.file_browser_bar and current_conversation_id:
                 try:
                     # Get file path from result data if available
                     file_path = result_data.get('file_path') if result_data else None
                     file_size = result_data.get('file_size', 0) if result_data else 0
-                    
-                    # Add to browser bar with immediate association
+
+                    # Add to browser bar with immediate association (tab_id can be None for avatar mode)
                     self.file_browser_bar.add_file(
                         file_id=file_id,
                         filename=filename,
                         file_path=file_path,
                         file_size=file_size,
                         conversation_id=current_conversation_id,
-                        tab_id=current_tab_id
+                        tab_id=current_tab_id  # Can be None for avatar window mode
                     )
-                    
+
                     # Make file browser visible immediately
                     self.file_browser_bar.setVisible(True)
-                    
-                    logger.info(f"📄 IMMEDIATE: Added {filename} to browser bar (tab: {current_tab_id}, conv: {current_conversation_id[:8]})")
-                    
+
+                    tab_info = f"tab: {current_tab_id}" if current_tab_id else "avatar mode (no tab)"
+                    logger.info(f"📄 IMMEDIATE: Added {filename} to browser bar ({tab_info}, conv: {current_conversation_id[:8]})")
+
                     # Force show files for current conversation
                     self.file_browser_bar.show_files_for_conversation(current_conversation_id)
-                    
+
                 except Exception as browser_error:
                     logger.error(f"Failed to add file to browser bar immediately: {browser_error}")
             else:
-                logger.warning(f"Cannot associate file immediately - missing tab ({current_tab_id}) or conversation ({current_conversation_id}) or browser bar")
+                logger.warning(f"Cannot associate file immediately - missing conversation ({current_conversation_id}) or browser bar")
                 
         except Exception as e:
             logger.error(f"Failed to associate file with tab and conversation: {e}")
@@ -3917,14 +4012,26 @@ class REPLWidget(QWidget):
                 logger.info(f"✅ Created and set conversation {current_conversation_id[:8]} for file upload")
             
             logger.info(f"📎 Linking files to conversation: {current_conversation_id[:8] if current_conversation_id else 'None'}...")
-            
+
+            # CRITICAL: Get active tab ID BEFORE processing files
+            current_tab_id = None
+            if hasattr(self, 'tab_manager') and self.tab_manager:
+                active_tab = self.tab_manager.get_active_tab()
+                if active_tab:
+                    current_tab_id = active_tab.tab_id
+                    logger.info(f"📁 Processing files for tab: {current_tab_id}")
+                else:
+                    logger.info("📁 No active tab - using avatar window mode (files will be conversation-scoped)")
+            else:
+                logger.debug("📁 No tab manager - using avatar window mode")
+
             # Show file browser bar immediately when files are selected
             if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
                 self.file_browser_bar.setVisible(True)
                 logger.info("📄 File browser bar shown")
             else:
                 logger.warning("📄 File browser bar not available")
-            
+
             # Process each file and link to conversation
             for file_path in file_paths:
                 import os
@@ -4081,37 +4188,19 @@ class REPLWidget(QWidget):
                 
                 # Add to UI with generated file_id and conversation association
                 if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
-                    # CRITICAL DEBUG: Get current tab ID with extensive logging
-                    current_tab_id = None
-                    logger.info(f"🔍 FILE UPLOAD DEBUG: Starting tab ID detection")
-                    logger.info(f"🔍 FILE UPLOAD DEBUG: has tab_manager: {hasattr(self, 'tab_manager')}")
-                    
-                    if hasattr(self, 'tab_manager') and self.tab_manager:
-                        logger.info(f"🔍 FILE UPLOAD DEBUG: tab_manager exists: {self.tab_manager}")
-                        active_tab = self.tab_manager.get_active_tab()
-                        logger.info(f"🔍 FILE UPLOAD DEBUG: active_tab: {active_tab}")
-                        
-                        if active_tab:
-                            current_tab_id = active_tab.tab_id
-                            logger.info(f"✅ FILE UPLOAD: Using tab {current_tab_id}")
-                            print(f"✅ FILE UPLOAD: Using tab {current_tab_id}")  # Force console
-                        else:
-                            logger.error("❌ FILE UPLOAD: No active tab found - this will break file association!")
-                            print("❌ FILE UPLOAD: No active tab found - this will break file association!")
-                    else:
-                        logger.error("❌ FILE UPLOAD: No tab manager available - this will break file association!")
-                        print("❌ FILE UPLOAD: No tab manager available - this will break file association!")
-                    
+                    # Use the tab_id retrieved at the start of the method
+                    # No need to retrieve again - already got it before the loop
+
                     self.file_browser_bar.add_file(
                         file_id=file_id,  # Use generated file_id as first parameter
-                        filename=filename, 
-                        file_size=file_size, 
-                        file_type=file_ext, 
+                        filename=filename,
+                        file_size=file_size,
+                        file_type=file_ext,
                         status="queued",
                         conversation_id=current_conversation_id,
-                        tab_id=current_tab_id
+                        tab_id=current_tab_id  # ✅ ALWAYS PASSED - retrieved before loop
                     )
-                    logger.info(f"📄 Added to browser bar: {filename} (ID: {file_id}, conversation: {current_conversation_id[:8] if current_conversation_id else 'None'}, tab: {current_tab_id})")
+                    logger.info(f"📄 Added file to browser: {filename} (ID: {file_id}, conversation: {current_conversation_id[:8] if current_conversation_id else 'None'}, tab: {current_tab_id})")
                 
                 # Track uploaded files with file_id
                 if not hasattr(self, '_uploaded_files'):
@@ -4163,17 +4252,26 @@ class REPLWidget(QWidget):
             return None
     
     def _get_safe_conversation_id(self) -> Optional[str]:
-        """Get the current conversation ID using multiple fallback methods with pending session support."""
-        # Method 1: Direct reference
+        """Get the current conversation ID - ALWAYS prefer tab-specific conversation."""
+        # Method 1: Get from active tab (TAB-SPECIFIC - HIGHEST PRIORITY)
+        if hasattr(self, 'tab_manager') and self.tab_manager:
+            tab_conversation_id = self.tab_manager.get_active_conversation_id()
+            if tab_conversation_id:
+                logger.debug(f"🎯 Using tab-specific conversation: {tab_conversation_id[:8]}")
+                return tab_conversation_id
+
+        # Method 2: Direct reference (fallback for non-tab mode like avatar window)
         if hasattr(self, '_current_conversation_id') and self._current_conversation_id:
+            logger.debug(f"📌 Using direct conversation reference: {self._current_conversation_id[:8]}")
             return self._current_conversation_id
-        
-        # Method 2: Current conversation object
+
+        # Method 3: Current conversation object (legacy fallback)
         if hasattr(self, 'current_conversation') and self.current_conversation:
+            logger.debug(f"📋 Using current_conversation object: {self.current_conversation.id[:8]}")
             self._current_conversation_id = self.current_conversation.id
             return self.current_conversation.id
-        
-        # Method 3: Check if we need to create a pending session ID for file isolation
+
+        # Method 4: Create pending session ID for file isolation
         # This prevents context bleeding when files are uploaded before any conversation exists
         if not hasattr(self, '_pending_conversation_id'):
             # Create a temporary conversation ID that will be used for file uploads
@@ -4181,7 +4279,8 @@ class REPLWidget(QWidget):
             import uuid
             self._pending_conversation_id = str(uuid.uuid4())
             logger.info(f"🆕 Created pending conversation ID for file isolation: {self._pending_conversation_id[:8]}...")
-        
+
+        logger.debug(f"⏳ Using pending conversation: {self._pending_conversation_id[:8]}")
         return self._pending_conversation_id
     
     def _ensure_active_conversation_for_files(self) -> Optional[str]:
@@ -4995,32 +5094,8 @@ class REPLWidget(QWidget):
                 try:
                     import os
                     filename = os.path.basename(file_path)
-                    
-                    # Add to browser bar with processing status and PROPER TAB ASSOCIATION
-                    if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
-                        # CRITICAL: Get current tab ID for association
-                        current_tab_id = None
-                        if hasattr(self, 'tab_manager') and self.tab_manager:
-                            active_tab = self.tab_manager.get_active_tab()
-                            if active_tab:
-                                current_tab_id = active_tab.tab_id
-                                logger.info(f"🔍 ASYNC PROCESSING: Using tab {current_tab_id} for {filename}")
-                                print(f"🔍 ASYNC PROCESSING: Using tab {current_tab_id} for {filename}")
-                            else:
-                                logger.error(f"❌ ASYNC PROCESSING: No active tab for {filename} - will break file association!")
-                                print(f"❌ ASYNC PROCESSING: No active tab for {filename} - will break file association!")
-                        
-                        self.file_browser_bar.add_file(
-                            file_id=file_path,  # Using file_path as file_id for now
-                            filename=filename, 
-                            status="processing",
-                            conversation_id=conversation_id,
-                            tab_id=current_tab_id
-                        )
-                    
-                    logger.info(f"📄 Processing file with embeddings: {filename}")
-                    
-                    # Get current conversation ID for document association
+
+                    # Get current conversation ID for document association FIRST
                     conversation_id = None
                     if hasattr(self, 'current_conversation') and self.current_conversation:
                         conversation_id = self.current_conversation.id
@@ -5039,7 +5114,31 @@ class REPLWidget(QWidget):
                         logger.info(f"🔍 DRAG DEBUG: conversation_id after fallback: {conversation_id}")
                         if conversation_id:
                             logger.info(f"🔄 Using fallback conversation ID for drag/drop from _get_safe_conversation_id: {conversation_id[:8]}...")
-                    
+
+                    # Add to browser bar with processing status and PROPER TAB ASSOCIATION
+                    # Now that we have conversation_id, we can add the file
+                    if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                        # CRITICAL: Get current tab ID for association
+                        current_tab_id = None
+                        if hasattr(self, 'tab_manager') and self.tab_manager:
+                            active_tab = self.tab_manager.get_active_tab()
+                            if active_tab:
+                                current_tab_id = active_tab.tab_id
+                                logger.info(f"🔍 ASYNC PROCESSING: Using tab {current_tab_id} for {filename}")
+                            else:
+                                logger.error(f"❌ ASYNC PROCESSING: No active tab for {filename} - will break file association!")
+
+                        self.file_browser_bar.add_file(
+                            file_id=file_path,  # Using file_path as file_id for now
+                            filename=filename,
+                            status="processing",
+                            conversation_id=conversation_id,
+                            tab_id=current_tab_id
+                        )
+                        logger.info(f"📄 Added to browser: {filename} (conversation: {conversation_id[:8] if conversation_id else 'None'}, tab: {current_tab_id})")
+
+                    logger.info(f"📄 Processing file with embeddings: {filename}")
+
                     # Prepare metadata with conversation association
                     metadata_override = {}
                     
@@ -6444,26 +6543,17 @@ class REPLWidget(QWidget):
         # Title bar with new conversation and help buttons
         self._init_title_bar(layout)
         
-        # Output display - using MixedContentDisplay for complete control over content rendering
-        self.output_display = MixedContentDisplay()
-        
-        # CRITICAL FIX: Apply theme colors immediately after output_display is created
-        # This ensures existing conversation content gets proper theme colors on startup
-        if hasattr(self, 'theme_manager') and self.theme_manager:
-            try:
-                self._style_output_display()
-                logger.debug("Applied initial theme colors to output_display")
-            except Exception as e:
-                logger.warning(f"Failed to apply initial theme colors: {e}")
-        
-        # Enable manual link detection and handling
-        self._setup_link_handling()
-        # Enable custom context menu for link operations
-        self.output_display.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.output_display.customContextMenuRequested.connect(self._show_output_context_menu)
-        self.output_display.setMinimumHeight(300)
-        layout.addWidget(self.output_display, 1)
-        
+        # Output display - NOW HANDLED BY TAB MANAGER!
+        # Each tab owns its own MixedContentDisplay widget in the TabManager's QStackedWidget
+        # We keep self.output_display as a property for backward compatibility,
+        # but it now points to the active tab's widget
+
+        # Add the tab manager's QStackedWidget to the layout in the correct position
+        # This replaces the old self.output_display widget
+        if self.tab_manager and hasattr(self.tab_manager, 'output_stack'):
+            layout.addWidget(self.tab_manager.output_stack, 1)  # Stretch factor of 1
+            logger.debug("Added tab_manager.output_stack to layout")
+
         # In-conversation search bar (initially hidden)
         self._init_search_bar(layout)
         
@@ -7617,22 +7707,27 @@ class REPLWidget(QWidget):
     def append_output(self, text: str, style: str = "normal", force_plain: bool = False):
         """
         Append text to the output display with advanced markdown rendering and styling.
-        
+
         Features:
         - Full markdown support (headers, emphasis, code blocks, lists, links, tables)
         - Preserves message type color coding
         - Graceful fallback to plain text rendering
         - Performance optimized for long conversations
         - Code snippets with solid backgrounds and proper formatting
-        
+
         Args:
             text: Text to append (supports markdown formatting)
             style: Style type for color coding (normal, input, response, system, info, warning, error)
             force_plain: If True, bypasses markdown processing for plain text rendering
         """
+        # Defensive check: if no output_display (no tabs yet), skip silently
+        if not self.output_display:
+            logger.debug(f"Skipping output append - no tabs created yet: {text[:50]}")
+            return
+
         if not hasattr(self, '_markdown_renderer'):
             self._markdown_renderer = MarkdownRenderer(self.theme_manager)
-        
+
         # Render content with markdown support
         try:
             if force_plain:
@@ -7642,27 +7737,37 @@ class REPLWidget(QWidget):
                 html_content = self._markdown_renderer.render(text, style, force_plain)
                 # Use the MixedContentDisplay method to add HTML content with code block extraction
                 self.output_display.add_html_content(html_content, style)
-            
+
             # Performance optimization: limit content size for very long conversations
             self._manage_document_size()
-            
+
         except Exception as e:
             logger.error(f"Error rendering output: {e}")
-            # Fallback to plain text rendering
-            self.output_display.add_plain_text(str(text), style)
+            # Fallback to plain text rendering - check again if output_display exists
+            if self.output_display:
+                self.output_display.add_plain_text(str(text), style)
     
     def _manage_document_size(self):
         """
         Manage document size for performance in long conversations.
         Uses MixedContentDisplay's built-in content management.
         """
+        # Defensive check: if no output_display, skip
+        if not self.output_display:
+            return
+
         # Use MixedContentDisplay's built-in content size management
         self.output_display.manage_content_size(max_widgets=500)
-    
+
     def clear_output(self):
         """Clear the output display and reset markdown renderer cache."""
+        # Defensive check: if no output_display (no tabs yet), skip
+        if not self.output_display:
+            logger.debug("Skipping clear_output - no tabs created yet")
+            return
+
         self.output_display.clear()
-        
+
         # Clear markdown renderer cache to free memory
         if hasattr(self, '_markdown_renderer'):
             self._markdown_renderer.clear_cache()
@@ -7686,8 +7791,8 @@ class REPLWidget(QWidget):
             Dictionary containing render statistics
         """
         stats = {
-            'content_widgets': len(self.output_display.content_widgets) if hasattr(self.output_display, 'content_widgets') else 0,
-            'content_height': self.output_display.get_content_height() if hasattr(self.output_display, 'get_content_height') else 0,
+            'content_widgets': len(self.output_display.content_widgets) if self.output_display and hasattr(self.output_display, 'content_widgets') else 0,
+            'content_height': self.output_display.get_content_height() if self.output_display and hasattr(self.output_display, 'get_content_height') else 0,
             'markdown_available': MARKDOWN_AVAILABLE
         }
         
@@ -8018,13 +8123,14 @@ def test_theme():
         class EnhancedAIWorker(QObject):
             response_received = pyqtSignal(str, bool)  # response, success
             
-            def __init__(self, message, conversation_manager, current_conversation, rag_session=None, conversation_id=None):
+            def __init__(self, message, conversation_manager, current_conversation, rag_session=None, conversation_id=None, file_browser_bar=None):
                 super().__init__()
                 self.message = message
                 self.conversation_manager = conversation_manager
                 self.current_conversation = current_conversation
                 self.rag_session = rag_session
                 self.conversation_id = conversation_id
+                self.file_browser_bar = file_browser_bar  # For RAG optimization
             
             def run(self):
                 try:
@@ -8164,13 +8270,43 @@ def test_theme():
                             safe_rag.close()
                         return message
                     
+                    # CRITICAL OPTIMIZATION: Skip RAG query if this conversation has no files
+                    # This prevents expensive FAISS searches when result is guaranteed to be empty
+                    current_conversation_id = self.conversation_id
+                    logger.info(f"🔍 RAG OPTIMIZATION CHECK:")
+                    logger.info(f"  - conversation_id: {current_conversation_id[:8] if current_conversation_id else 'NONE'}")
+
+                    if current_conversation_id and hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                        try:
+                            logger.info(f"  - file_browser_bar: ✅ FOUND")
+                            logger.info(f"  - Calling get_files_for_conversation({current_conversation_id[:8]})...")
+                            files = self.file_browser_bar.get_files_for_conversation(current_conversation_id)
+                            file_count = len(files) if files else 0
+                            logger.info(f"  - File count result: {file_count}")
+
+                            if file_count == 0:
+                                logger.info(f"⏭️⏭️⏭️ SKIPPING RAG: Conversation {current_conversation_id[:8]} has no files uploaded ⏭️⏭️⏭️")
+                                if is_new_session:
+                                    safe_rag.close()
+                                return message
+                            else:
+                                logger.info(f"✅ Conversation {current_conversation_id[:8]} has {file_count} files - proceeding with RAG query")
+                        except Exception as e:
+                            logger.warning(f"❌ File browser check failed: {e} - proceeding with query to be safe")
+                            import traceback
+                            logger.debug(f"Traceback: {traceback.format_exc()}")
+                    else:
+                        if not current_conversation_id:
+                            logger.warning(f"⚠️ No conversation ID - cannot optimize RAG query")
+                        elif not hasattr(self, 'file_browser_bar'):
+                            logger.warning(f"⚠️ File browser not available - cannot optimize RAG query")
+                        logger.info(f"  - Proceeding with RAG query (no optimization possible)")
+
                     # Use SafeRAG query to get relevant context (thread-safe)
                     logger.info(f"Querying SafeRAG pipeline with: '{message[:100]}...'")
                     
                     try:
-                        # Get current conversation ID for filtering - use passed parameter
-                        current_conversation_id = self.conversation_id
-                        logger.info(f"🔍 DEBUG: Retrieved conversation ID for RAG filtering: {current_conversation_id}")
+                        # Get current conversation ID for filtering - already retrieved above in optimization check
                         
                         # Query using SafeRAGSession with SmartContextSelector progressive fallback
                         # NEW: Smart context selection eliminates "all or nothing" problem
@@ -8341,7 +8477,8 @@ def test_theme():
             self.conversation_manager, 
             self.current_conversation, 
             self.rag_session,
-            conversation_id=self._get_safe_conversation_id()
+            conversation_id=self._get_safe_conversation_id(),
+            file_browser_bar=self.file_browser_bar  # Pass file browser for RAG optimization
         )
         self.ai_worker.moveToThread(self.ai_thread)
         
@@ -8390,40 +8527,33 @@ def test_theme():
                 response = "[No response content received]"
             
             # Display AI response with better separation
-            self.append_output("🤖 **Spector:**", "response")
-            # Display the actual response without prefixing to preserve markdown
-            self.append_output(response, "response")
-            # Add spacing after AI response
-            self.append_output("", "normal")
-            self.append_output("\n--------------------------------------------------\n", "divider")
-            
-            # If we have a conversation manager, refresh the conversation data
-            # to update message counts and other metadata
-            if self.conversation_manager and self.current_conversation:
-                # Refresh conversation data to get updated message count
+            try:
+                self.append_output("🤖 **Spector:**", "response")
+                # Display the actual response without prefixing to preserve markdown
+                self.append_output(response, "response")
+                # Add spacing after AI response
+                self.append_output("", "normal")
+                self.append_output("\n--------------------------------------------------\n", "normal")  # Changed from "divider" to "normal"
+            except Exception as e:
+                logger.error(f"Error displaying AI response: {e}", exc_info=True)
+                # Try fallback plain text display
                 try:
-                    import asyncio
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    try:
-                        # Reload the current conversation to get updated message count
-                        updated_conv = loop.run_until_complete(
-                            self.conversation_manager.get_conversation(
-                                self.current_conversation.id, 
-                                include_messages=False
-                            )
-                        )
-                        if updated_conv:
-                            self.current_conversation = updated_conv
-                            self._update_status_label(updated_conv)
-                            logger.debug(f"Refreshed conversation data - message count: {updated_conv.get_message_count()}")
-                    finally:
-                        loop.close()
-                except Exception as e:
-                    logger.error(f"Failed to refresh conversation data: {e}")
-            elif not self.conversation_manager and self.current_conversation:
-                # Manual fallback - add to conversation if needed
-                logger.info("Manual message saving not yet implemented")
+                    if self.output_display:
+                        self.output_display.add_plain_text(f"🤖 Spector: {response}", "response")
+                except Exception as e2:
+                    logger.error(f"Fallback display also failed: {e2}", exc_info=True)
+            
+            # NOTE: Conversation refresh disabled to prevent asyncio event loop conflicts with Qt
+            # The conversation manager already handles message persistence in the background
+            # If we need to refresh conversation metadata, it should be done via Qt signals/slots
+            # to avoid creating conflicting event loops
+
+            # if self.conversation_manager and self.current_conversation:
+            #     # This code was causing crashes by creating a new asyncio event loop
+            #     # which conflicts with Qt's event loop
+            #     pass
+
+            logger.debug("Conversation data refresh skipped (handled by conversation manager)")
         else:
             # Error occurred - display error message with resend option
             self.append_output("❌ **Connection Failed**", "error")
@@ -8453,7 +8583,10 @@ def test_theme():
             '''
             
             # Add the resend option using MixedContentDisplay
-            self.output_display.add_html_content(resend_html, "system")
+            if self.output_display:
+                self.output_display.add_html_content(resend_html, "system")
+            else:
+                logger.warning("Cannot add resend option - no output display available")
                 
         except Exception as e:
             logger.error(f"Failed to add resend option: {e}")
@@ -8462,7 +8595,11 @@ def test_theme():
     
     def _handle_link_click(self, url):
         """Handle clicks on all links including resend and external links."""
-        url_string = url.toString()
+        # Handle both QUrl objects and strings
+        if isinstance(url, str):
+            url_string = url
+        else:
+            url_string = url.toString()
         
         # Handle resend links
         if url_string == "resend_message" and self.last_failed_message:
@@ -10222,13 +10359,14 @@ def test_theme():
         try:
             if not self.current_search_matches or self.current_search_index < 0:
                 return
-            
+
             # MixedContentDisplay doesn't support text highlighting like QTextEdit
             # Scroll to bottom as a simple fallback
-            self.output_display.scroll_to_bottom()
-            
+            if self.output_display:
+                self.output_display.scroll_to_bottom()
+
             logger.debug("Search highlighting not supported with MixedContentDisplay")
-            
+
         except Exception as e:
             logger.error(f"Failed to highlight current match: {e}")
     
@@ -10299,18 +10437,56 @@ def test_theme():
         """Handle conversation context switching from tab manager."""
         try:
             logger.info(f"🔄 Conversation context switched to: {conversation_id}")
-            
+
             if not conversation_id:
-                # Clear current conversation for new conversation
-                logger.info("📁 No conversation ID - clearing current conversation")
-                self._clear_current_conversation()
+                # New tab with no conversation - just update references
+                # DON'T clear output or files - they belong to the previous tab!
+                # Tab manager handles saving/restoring per-tab state
+                logger.info("📁 No conversation ID - updating references only (tab manager handles state)")
+                self.current_conversation = None
+                self._current_conversation_id = None
+                # Tab manager will restore the correct state for this tab
                 return
-                
+
+            # CRITICAL FIX: When tab manager is active, DON'T reload conversation
+            # Tab manager already restored the cached output/files for this tab
+            # Reloading would overwrite the cache with database content!
+            if hasattr(self, 'tab_manager') and self.tab_manager:
+                logger.info(f"⏭️⏭️⏭️ TAB MANAGER ACTIVE - SKIPPING CONVERSATION RELOAD (using cached state) ⏭️⏭️⏭️")
+                # Just update the conversation reference, don't reload messages
+                self._current_conversation_id = conversation_id
+
+                # Load conversation object but DON'T call _switch_to_conversation
+                if self.conversation_manager:
+                    async def load_conv_ref_only():
+                        try:
+                            conversation = await self.conversation_manager.get_conversation(conversation_id)
+                            if conversation:
+                                self.current_conversation = conversation
+                                self._update_status_label(conversation)
+                                logger.info(f"✅ Updated conversation reference (cache preserved)")
+                        except Exception as e:
+                            logger.error(f"Failed to load conversation reference: {e}")
+
+                    import asyncio
+                    try:
+                        # Try to get running event loop
+                        try:
+                            loop = asyncio.get_running_loop()
+                            asyncio.create_task(load_conv_ref_only())
+                        except RuntimeError:
+                            # No running loop - skip async load (non-critical)
+                            logger.debug("No running event loop - skipping conversation reference load")
+                    except Exception as e:
+                        logger.debug(f"Error loading conversation reference (non-critical): {e}")
+                return
+
+            # NO TAB MANAGER: Original behavior - load conversation from database
             # Find the conversation
             if not self.conversation_manager:
                 logger.warning("Cannot switch conversation context - no conversation manager")
                 return
-                
+
             # Load the conversation asynchronously
             async def load_conversation():
                 try:
@@ -10321,7 +10497,7 @@ def test_theme():
                         logger.info(f"Switched to conversation context: {conversation.title}")
                     else:
                         logger.warning(f"Conversation {conversation_id} not found")
-                        
+
                 except Exception as e:
                     logger.error(f"Failed to load conversation {conversation_id}: {e}")
             
@@ -10370,41 +10546,33 @@ def test_theme():
             logger.error(f"Error handling tab closure: {e}")
     
     def _clear_current_conversation(self):
-        """Clear current conversation for new tab/conversation."""
+        """
+        DEPRECATED: Tab manager now handles clearing per-tab state.
+        This method only updates conversation references.
+
+        DO NOT use this for clearing output, files, or UI state.
+        The tab manager handles all per-tab state (output, files, scroll position).
+        """
         try:
+            # Update current tab's conversation reference
+            if hasattr(self, 'tab_manager') and self.tab_manager:
+                active_tab = self.tab_manager.get_active_tab()
+                if active_tab:
+                    active_tab.conversation_id = None
+
+            # Update global references (will be overwritten when switching tabs)
             self.current_conversation = None
-            
-            # CRITICAL FIX: Hide file browser bar for new conversations
-            if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
-                self.file_browser_bar.hide_all_files()
-                logger.info("📁 Hidden file browser bar for new conversation")
-            
-            # Clear internal file tracking
-            if hasattr(self, '_uploaded_files'):
-                self._uploaded_files.clear()
-            
-            # Clear current conversation ID
             self._current_conversation_id = None
-            
-            # Clear output display
-            self.output_display.clear()
-            
-            # Show welcome message
-            self.append_output("🎆 Start a new conversation!", "info")
-            
-            # Reset status label
-            if hasattr(self, 'status_label'):
-                self.status_label.setText("Ready")
-                self.status_label.setStyleSheet("color: #4CAF50; font-weight: bold; font-size: 10px;")
-            
-            # Reset idle detector
-            if hasattr(self, 'idle_detector'):
-                self.idle_detector.reset_activity(None)
-                
-            logger.debug("Cleared current conversation and files for new context")
-            
+
+            # DON'T clear output - tab manager handles this!
+            # DON'T clear files - tab manager handles this!
+            # DON'T hide file browser - tab manager handles this!
+            # DON'T clear _uploaded_files - this is global state that breaks isolation!
+
+            logger.debug("Cleared conversation references only (tab manager handles state)")
+
         except Exception as e:
-            logger.error(f"Error clearing current conversation: {e}")
+            logger.error(f"Error clearing conversation references: {e}")
     
     def _sync_tab_with_conversation(self):
         """Sync active tab title with current conversation title."""
@@ -10470,10 +10638,12 @@ def test_theme():
             
             first_tab_id = self.tab_manager.create_tab(title=current_tab_title, activate=False)
             first_tab = self.tab_manager.tabs.get(first_tab_id)
-            if first_tab:
-                # User requested all tabs start fresh - no conversation association
-                first_tab.conversation_id = None
-                logger.info("Tab 1 created without conversation (fresh start as requested)")
+            # Note: Don't clear conversation_id here - the tab_created signal handler
+            # already associated a conversation, and we shouldn't overwrite it
+            if first_tab and first_tab.conversation_id:
+                logger.info(f"Tab 1 created with conversation: {first_tab.conversation_id[:8]}")
+            else:
+                logger.info("Tab 1 created (conversation will be assigned by signal handler)")
             
             # Create Tab 2 as new empty tab
             new_tab_id = self.tab_manager.create_tab(title="Conversation", activate=True)
@@ -10487,54 +10657,208 @@ def test_theme():
     # --- Tab Event Handlers ---
     
     def _on_tab_switched(self, old_tab_id: str, new_tab_id: str):
-        """Handle tab switching with proper conversation restoration."""
+        """
+        Handle tab switching - restore conversation context for the new tab.
+
+        The tab manager already:
+        - Saved old tab state (output, files, scroll position)
+        - Restored new tab state (output, files, scroll position)
+        - Showed files for new tab via show_files_for_tab()
+        - Set file browser visibility based on file count
+
+        This method handles conversation context switching.
+        """
         try:
-            logger.info(f"🔄 TAB SWITCH DETECTED: {old_tab_id} → {new_tab_id}")
-            print(f"🔄 TAB SWITCH DETECTED: {old_tab_id} → {new_tab_id}")  # Force console output
-            
-            # SIMPLE LOGIC: TAB → CONVERSATION → FILES
-            if hasattr(self, 'file_browser_bar') and self.file_browser_bar and hasattr(self, 'tab_manager'):
-                logger.info(f"🔄 Tab switch: Finding conversation for tab {new_tab_id}")
-                
-                # Step 1: Get the conversation for this tab
-                new_tab = self.tab_manager.tabs.get(new_tab_id)
-                if new_tab and hasattr(new_tab, 'conversation_id') and new_tab.conversation_id:
-                    conversation_id = new_tab.conversation_id
-                    logger.info(f"📝 Tab {new_tab_id} has conversation {conversation_id[:8]}...")
-                    
-                    # Step 2: Show files for this conversation
-                    file_count = len(self.file_browser_bar.get_files_for_conversation(conversation_id))
-                    logger.info(f"📁 Conversation {conversation_id[:8]} has {file_count} files")
-                    
-                    if file_count > 0:
-                        self.file_browser_bar.show_files_for_conversation(conversation_id)
-                        logger.info(f"✅ Showing {file_count} files for conversation {conversation_id[:8]}")
+            logger.info(f"🔄 TAB SWITCH: {old_tab_id} → {new_tab_id}")
+
+            # Get the conversation ID for the new tab
+            new_conversation_id = None
+            if self.tab_manager:
+                new_conversation_id = self.tab_manager.get_conversation_for_tab(new_tab_id)
+
+            logger.info(f"🔄 Conversation context switched to: {new_conversation_id[:8] if new_conversation_id else 'None'}")
+
+            # Switch the conversation context in the AI service
+            if new_conversation_id and self.conversation_manager:
+                try:
+                    ai_service = self.conversation_manager.get_ai_service()
+                    if ai_service:
+                        ai_service.set_current_conversation(new_conversation_id)
+                        logger.info(f"✅ AI service conversation context switched to: {new_conversation_id[:8]}")
                     else:
-                        self.file_browser_bar.hide_all_files()
-                        logger.info(f"📁 No files to show for conversation {conversation_id[:8]}")
-                        
-                else:
-                    logger.info(f"📝 Tab {new_tab_id} has no conversation - hiding all files")
-                    self.file_browser_bar.hide_all_files()
+                        logger.warning("AI service not available for conversation switch")
+                except Exception as conv_error:
+                    logger.error(f"Failed to switch AI service conversation: {conv_error}")
             else:
-                logger.warning("📁 File browser or tab manager not available")
-            
-            # The conversation context switching may also trigger, but we handle files here too
-            
+                if not new_conversation_id:
+                    logger.info("📁 No conversation ID - updating references only (tab manager handles state)")
+                if not self.conversation_manager:
+                    logger.warning("No conversation manager available")
+
+            logger.info(f"✅ Tab switch complete (tab manager handled state restoration)")
+
         except Exception as e:
             logger.error(f"Error handling tab switch: {e}")
     
     def _on_tab_created(self, tab_id: str):
-        """Handle new tab creation."""
-        logger.info(f"Tab created: {tab_id}")
-        
-        # Don't create conversation immediately - wait for first message
-        # Just mark the tab as ready for a new conversation
-        if self.tab_manager:
-            tab = self.tab_manager.tabs.get(tab_id)
-            if tab:
-                tab.conversation_id = None  # No conversation yet
-                logger.debug(f"Tab {tab_id} created without conversation - waiting for first message")
+        """Handle new tab creation - create a new conversation for the tab."""
+        logger.info(f"")
+        logger.info(f"{'='*80}")
+        logger.info(f"💬 CREATING NEW CONVERSATION FOR TAB")
+        logger.info(f"{'='*80}")
+        logger.info(f"   Tab ID: {tab_id}")
+
+        # Create a new conversation for this tab immediately
+        if self.tab_manager and self.conversation_manager:
+            try:
+                # Create new conversation
+                title = "New Conversation"
+
+                logger.info(f"   📝 Conversation title: {title}")
+                logger.info(f"")
+                logger.info(f"   ⚙️ Creating conversation in database...")
+
+                # Create conversation in database (it generates its own ID)
+                # Generate UUID first so we can continue even if async creation is slow
+                import uuid
+                conversation_id = str(uuid.uuid4())
+
+                if hasattr(self.conversation_manager, 'conversation_service'):
+                    import asyncio
+                    # Schedule async conversation creation in background
+                    # Don't block UI waiting for it
+                    try:
+                        loop = asyncio.get_running_loop()
+                        # Create task but don't wait for it
+                        task = asyncio.create_task(
+                            self.conversation_manager.conversation_service.create_conversation(
+                                title=title,
+                                force_create=True
+                            )
+                        )
+                        logger.info(f"   ✅ Conversation creation scheduled")
+                        logger.info(f"   📝 Generated conversation ID: {conversation_id}")
+
+                        # The task will complete in background
+                        # For now, use the UUID we generated
+                    except RuntimeError:
+                        # No running loop - shouldn't happen but handle it
+                        logger.warning(f"   ⚠️ No event loop - using generated UUID only")
+                        logger.info(f"   📝 Generated conversation ID: {conversation_id}")
+                else:
+                    logger.error(f"   ❌ No conversation_service available!")
+                    return
+
+                logger.info(f"")
+                logger.info(f"   🔗 Associating conversation with tab...")
+
+                # Associate conversation with tab
+                self.tab_manager.associate_conversation_with_tab(tab_id, conversation_id, title)
+                logger.info(f"   ✅ Conversation {conversation_id[:8]} → Tab {tab_id}")
+
+                logger.info(f"")
+                logger.info(f"   🎯 Setting conversation as active in AI service...")
+
+                # Set this conversation as active in AI service
+                ai_service = self.conversation_manager.get_ai_service()
+                if ai_service:
+                    ai_service.set_current_conversation(conversation_id)
+                    logger.info(f"   ✅ AI service → Conversation {conversation_id[:8]}")
+                else:
+                    logger.warning(f"   ⚠️ AI service not available")
+
+                # Set up link handling and context menu for this tab's output widget
+                tab = self.tab_manager.tabs.get(tab_id)
+                if tab and tab.output_display:
+                    from PyQt6.QtCore import Qt
+                    # Note: MixedContentDisplay is QScrollArea-based, not QTextEdit-based
+                    # so it doesn't have setOpenExternalLinks() or anchorClicked signal
+                    # Link handling is done in the HTML widgets it contains
+
+                    # Enable custom context menu
+                    tab.output_display.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                    if hasattr(self, '_show_output_context_menu'):
+                        tab.output_display.customContextMenuRequested.connect(self._show_output_context_menu)
+
+                    # Apply theme colors to the tab's output widget
+                    # Use the same approach as _style_output_display()
+                    if hasattr(self, 'theme_manager') and self.theme_manager:
+                        try:
+                            colors = self.theme_manager.current_theme
+
+                            # Apply opacity to background
+                            alpha = max(0.0, min(1.0, getattr(self, '_panel_opacity', 0.90)))
+                            if alpha >= 0.99:
+                                bg_color = colors.background_primary
+                            else:
+                                if colors.background_primary.startswith('#'):
+                                    r = int(colors.background_primary[1:3], 16)
+                                    g = int(colors.background_primary[3:5], 16)
+                                    b = int(colors.background_primary[5:7], 16)
+                                    bg_color = f"rgba({r}, {g}, {b}, {alpha:.3f})"
+                                else:
+                                    bg_color = f"rgba(30, 30, 30, {alpha:.3f})"
+
+                            # Create theme color dictionary
+                            theme_colors = {
+                                'bg_primary': bg_color,
+                                'bg_secondary': colors.background_secondary,
+                                'bg_tertiary': colors.background_tertiary,
+                                'text_primary': colors.text_primary,
+                                'text_secondary': colors.text_secondary,
+                                'border': colors.border_primary,
+                                'info': colors.status_info,
+                                'warning': colors.status_warning,
+                                'error': colors.status_error,
+                                'keyword': colors.primary,
+                                'string': colors.secondary,
+                                'comment': colors.text_tertiary,
+                                'function': colors.primary,
+                                'number': colors.secondary,
+                                'interactive': colors.interactive_normal,
+                                'interactive_hover': colors.interactive_hover,
+                                'selection': colors.primary
+                            }
+
+                            tab.output_display.set_theme_colors(theme_colors)
+                            logger.info(f"   ✅ Theme colors applied to tab widget (opacity: {alpha:.3f})")
+                        except Exception as e:
+                            logger.warning(f"   ⚠️ Failed to apply theme colors: {e}", exc_info=True)
+
+                    logger.info(f"   ✅ Context menu and theme colors configured for tab widget")
+
+                logger.info(f"")
+                logger.info(f"   ✅ NEW REPL SESSION READY")
+                logger.info(f"   Tab: {tab_id}")
+                logger.info(f"   Conversation: {conversation_id}")
+                logger.info(f"{'='*80}")
+                logger.info(f"")
+
+            except Exception as e:
+                logger.error(f"")
+                logger.error(f"{'='*80}")
+                logger.error(f"❌ FAILED TO CREATE CONVERSATION")
+                logger.error(f"{'='*80}")
+                logger.error(f"   Tab: {tab_id}")
+                logger.error(f"   Error: {e}")
+                logger.error(f"{'='*80}")
+                logger.error(f"")
+                import traceback
+                logger.error(traceback.format_exc())
+                # Fallback
+                tab = self.tab_manager.tabs.get(tab_id)
+                if tab:
+                    tab.conversation_id = None
+        else:
+            logger.warning(f"")
+            logger.warning(f"{'='*80}")
+            logger.warning(f"⚠️ CANNOT CREATE CONVERSATION")
+            logger.warning(f"{'='*80}")
+            logger.warning(f"   Tab: {tab_id}")
+            logger.warning(f"   tab_manager: {'✅' if self.tab_manager else '❌'}")
+            logger.warning(f"   conversation_manager: {'✅' if self.conversation_manager else '❌'}")
+            logger.warning(f"{'='*80}")
+            logger.warning(f"")
     
     def _on_tab_closed(self, tab_id: str):
         """Handle tab closure."""
