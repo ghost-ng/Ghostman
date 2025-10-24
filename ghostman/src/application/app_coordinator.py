@@ -128,9 +128,10 @@ class AppCoordinator(QObject):
                     2000
                 )
             
-            # Disabled auto-loading of last conversation - user requested not to auto-load
-            # from PyQt6.QtCore import QTimer
-            # QTimer.singleShot(500, self._restore_current_conversation_state)
+            # Auto-create a new conversation on app startup immediately (no delay)
+            # This prevents race conditions with file uploads
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(50, self._create_startup_conversation)  # Minimal delay just for UI to be ready
             
             logger.info("Ghostman application initialized successfully")
             # Diagnostic path logging
@@ -282,12 +283,31 @@ class AppCoordinator(QObject):
                 current_conversation_id = self._main_window.floating_repl.repl_widget.get_current_conversation_id()
                 
                 if current_conversation_id:
+                    # Check if conversation has user messages before saving
+                    repl_widget = self._main_window.floating_repl.repl_widget
+                    has_user_messages = False
+                    
+                    # Check for user messages in the conversation
+                    if hasattr(repl_widget, 'current_conversation') and repl_widget.current_conversation:
+                        user_message_count = 0
+                        for message in repl_widget.current_conversation.messages:
+                            if hasattr(message, 'role') and message.role and str(message.role).lower() == 'user':
+                                user_message_count += 1
+                        
+                        # Only save if there's at least one user message
+                        has_user_messages = user_message_count > 0
+                        logger.info(f"🔍 Conversation has {user_message_count} user messages")
+                    
+                    # Only save conversations that have user messages
+                    if not has_user_messages:
+                        logger.info(f"⏭️ Skipping save of conversation without user messages: {current_conversation_id}")
+                        return
+                    
                     # Save conversation ID to settings
                     settings.set('conversation.last_active_id', current_conversation_id)
                     logger.info(f"💾 Saved active conversation ID: {current_conversation_id}")
                     
                     # Check for unsaved messages first
-                    repl_widget = self._main_window.floating_repl.repl_widget
                     has_unsaved = False
                     if hasattr(repl_widget, '_has_unsaved_messages'):
                         has_unsaved = repl_widget._has_unsaved_messages()
@@ -441,6 +461,30 @@ class AppCoordinator(QObject):
                     
         except Exception as e:
             logger.error(f"✗ Failed to initialize fresh conversation: {e}", exc_info=True)
+    
+    def _create_startup_conversation(self):
+        """Create a new conversation automatically when the app starts."""
+        try:
+            logger.info("🆕 Creating new conversation on app startup")
+            
+            # Clear any saved conversation ID to ensure fresh start
+            settings.delete('conversation.last_active_id')
+            
+            # Get the main window and REPL widget to create a new conversation
+            if self._main_window and hasattr(self._main_window, 'floating_repl'):
+                repl_widget = self._main_window.floating_repl.repl_widget
+                
+                if hasattr(repl_widget, '_start_new_conversation'):
+                    # Create new conversation without saving current (since this is startup)
+                    repl_widget._start_new_conversation(save_current=False)
+                    logger.info("✅ Successfully created startup conversation")
+                else:
+                    logger.warning("⚠️ REPL widget doesn't have _start_new_conversation method")
+            else:
+                logger.warning("⚠️ Main window or REPL widget not available for conversation creation")
+                    
+        except Exception as e:
+            logger.error(f"✗ Failed to create startup conversation: {e}", exc_info=True)
     
     def _on_state_changed(self, event: StateChangeEvent):
         """Handle state change events from the state machine."""

@@ -37,16 +37,39 @@ class ConversationRepository:
     
     # --- Conversation CRUD Operations ---
     
-    async def create_conversation(self, conversation: Conversation) -> bool:
-        """Create a new conversation using SQLAlchemy ORM."""
-        # Check if conversation is empty and should not be saved
-        if self._is_empty_conversation(conversation):
-            logger.debug(f"Skipping creation of empty conversation: {conversation.id}")
+    async def create_conversation(self, conversation: Conversation, force_create: bool = False) -> bool:
+        """Create a new conversation using SQLAlchemy ORM with detailed diagnostics."""
+        logger.info(f"🔄 Repository: Creating conversation {conversation.id}")
+        logger.debug(f"  🔍 Force create: {force_create}")
+        logger.debug(f"  🔍 Conversation messages: {len(conversation.messages)}")
+        logger.debug(f"  🔍 Conversation status: {conversation.status}")
+        logger.debug(f"  🔍 Database initialized: {self.db.is_initialized}")
+        
+        # Check if conversation is empty and should not be saved (unless forced)
+        if not force_create and self._is_empty_conversation(conversation):
+            logger.info(f"📝 Skipping creation of empty conversation: {conversation.id} (use force_create=True to override)")
             return False
             
         try:
+            logger.debug("🔍 Attempting to get database session...")
             with self.db.get_session() as session:
+                logger.debug("✓ Database session acquired successfully")
+                
+                # Check if conversation already exists
+                existing = session.query(ConversationModel).filter(
+                    ConversationModel.id == conversation.id
+                ).first()
+                
+                if existing:
+                    logger.warning(f"⚠️ Conversation {conversation.id} already exists in database")
+                    if not force_create:
+                        logger.info(f"❌ Returning False - conversation exists and force_create=False")
+                        return False
+                    else:
+                        logger.info(f"🔄 force_create=True - will overwrite existing conversation")
+                
                 # Create conversation model
+                logger.debug("🔄 Creating ConversationModel...")
                 conv_model = ConversationModel(
                     id=conversation.id,
                     title=sanitize_text(conversation.title),
@@ -55,12 +78,21 @@ class ConversationRepository:
                     updated_at=conversation.updated_at,
                     message_count=len(conversation.messages)
                 )
+                
                 # Set metadata using the proper property
-                conv_model.conversation_metadata = conversation.metadata.to_dict()
+                logger.debug("🔄 Setting conversation metadata...")
+                metadata_dict = conversation.metadata.to_dict()
+                logger.debug(f"  📊 Metadata: {metadata_dict}")
+                conv_model.conversation_metadata = metadata_dict
+                
+                logger.debug("🔄 Adding conversation to session...")
                 session.add(conv_model)
+                logger.debug("✓ Conversation added to session")
                 
                 # Add messages
-                for message in conversation.messages:
+                logger.debug(f"🔄 Adding {len(conversation.messages)} messages...")
+                for i, message in enumerate(conversation.messages):
+                    logger.debug(f"  📝 Adding message {i+1}: {message.role.value} - {message.content[:50]}...")
                     message_model = MessageModel(
                         id=message.id,
                         conversation_id=message.conversation_id,
@@ -72,17 +104,61 @@ class ConversationRepository:
                     )
                     session.add(message_model)
                 
+                logger.debug("✓ All messages added to session")
+                
                 # Update FTS index
-                await self._update_fts_index(session, conversation)
+                logger.debug("🔄 Updating FTS index...")
+                try:
+                    await self._update_fts_index(session, conversation)
+                    logger.debug("✓ FTS index updated")
+                except Exception as fts_error:
+                    logger.warning(f"⚠️ FTS index update failed (non-critical): {fts_error}")
                 
                 # Handle tags
-                await self._update_conversation_tags(session, conversation.id, conversation.metadata.tags)
+                logger.debug(f"🔄 Updating tags: {conversation.metadata.tags}")
+                try:
+                    await self._update_conversation_tags(session, conversation.id, conversation.metadata.tags)
+                    logger.debug("✓ Tags updated")
+                except Exception as tag_error:
+                    logger.warning(f"⚠️ Tag update failed (non-critical): {tag_error}")
                 
-                logger.info(f"✓ Created conversation: {conversation.id}")
-                return True
+                # The session context manager will commit here
+                logger.debug("🔄 Session context manager will now commit...")
+                
+            # If we reach here, the context manager completed successfully
+            logger.info(f"✅ Successfully created conversation: {conversation.id}")
+            
+            # Verify the conversation was actually saved
+            logger.debug("🔍 Verifying conversation was saved...")
+            try:
+                with self.db.get_session() as verify_session:
+                    verify_conv = verify_session.query(ConversationModel).filter(
+                        ConversationModel.id == conversation.id
+                    ).first()
+                    
+                    if verify_conv:
+                        logger.debug(f"✅ Verification successful: Found conversation with {len(verify_conv.messages) if verify_conv.messages else 0} messages")
+                    else:
+                        logger.error(f"🚨 VERIFICATION FAILED: Conversation {conversation.id} not found after creation!")
+                        return False
+                        
+            except Exception as verify_error:
+                logger.error(f"🚨 Verification check failed: {verify_error}")
+                # Don't fail the creation for verification errors
+                
+            return True
                 
         except SQLAlchemyError as e:
-            logger.error(f"✗ Failed to create conversation {conversation.id}: {e}")
+            logger.error(f"💥 SQLAlchemy error creating conversation {conversation.id}: {e}")
+            logger.error(f"  🔍 Error type: {type(e).__name__}")
+            import traceback
+            logger.error(f"  📋 Full traceback:\n{traceback.format_exc()}")
+            return False
+        except Exception as e:
+            logger.error(f"💥 Unexpected error creating conversation {conversation.id}: {e}")
+            logger.error(f"  🔍 Error type: {type(e).__name__}")
+            import traceback
+            logger.error(f"  📋 Full traceback:\n{traceback.format_exc()}")
             return False
     
     async def get_conversation(self, conversation_id: str, include_messages: bool = True) -> Optional[Conversation]:
@@ -802,15 +878,15 @@ class ConversationRepository:
         if not conversation.messages:
             return True
         
-        # Check if there are any non-system messages or system messages with meaningful content
-        meaningful_messages = []
+        # Only save conversations that have actual USER or ASSISTANT messages (not just system messages)
+        non_system_messages = []
         for message in conversation.messages:
-            if message.role != MessageRole.SYSTEM:
-                meaningful_messages.append(message)
-            elif message.content and message.content.strip():
-                meaningful_messages.append(message)
+            if message.role in (MessageRole.USER, MessageRole.ASSISTANT):
+                non_system_messages.append(message)
         
-        return len(meaningful_messages) == 0
+        # Conversation is empty if it has only system messages (no user/assistant interaction)
+        # This allows conversations with files to be saved even without user messages yet
+        return len(non_system_messages) == 0
     
     async def update_all_conversations_status(self, new_status: ConversationStatus, exclude_statuses: List[ConversationStatus] = None) -> bool:
         """

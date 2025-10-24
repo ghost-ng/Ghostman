@@ -87,8 +87,8 @@ class RAGCoordinator:
     def _validate_faiss_initialization(self):
         """Validate FAISS database can be initialized properly."""
         try:
-            from ..rag_pipeline.config.rag_config import get_config
-            from ..rag_pipeline.threading.simple_faiss_session import create_simple_faiss_session
+            from .rag_pipeline.config.rag_config import get_config
+            from .rag_pipeline.threading.simple_faiss_session import create_simple_faiss_session
             
             # Get RAG configuration (this will create directories)
             config = get_config()

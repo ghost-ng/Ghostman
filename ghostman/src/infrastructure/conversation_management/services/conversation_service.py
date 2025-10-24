@@ -55,7 +55,8 @@ class ConversationService:
         initial_message: Optional[str] = None,
         tags: Optional[Set[str]] = None,
         category: Optional[str] = None,
-        auto_title: bool = True
+        auto_title: bool = True,
+        force_create: bool = False
     ) -> Conversation:
         """
         Create a new conversation.
@@ -66,6 +67,7 @@ class ConversationService:
             tags: Optional set of tags
             category: Optional category
             auto_title: Auto-generate title from first user message
+            force_create: Force creation even if conversation appears empty
             
         Returns:
             Created conversation
@@ -84,26 +86,82 @@ class ConversationService:
                 metadata=metadata
             )
             
-            # Save to repository with better error handling
+            # Save to repository with comprehensive error handling and diagnostics
             try:
-                success = await self.repository.create_conversation(conversation)
-                if not success:
-                    # Try to get more detailed error information
-                    logger.error("Database save returned False - attempting to diagnose issue")
+                logger.info(f"🔄 Attempting to create conversation in database: {conversation.id}")
+                logger.debug(f"🔍 Conversation details - Title: '{conversation.title}', Messages: {len(conversation.messages)}, Status: {conversation.status}")
+                
+                # Pre-flight checks
+                logger.debug("🔍 Pre-flight database checks:")
+                try:
+                    # Test database connectivity
+                    test_conversations = await self.repository.list_conversations(limit=1)
+                    logger.debug(f"  ✓ Database connection OK - can list {len(test_conversations)} conversations")
                     
-                    # Check if database is accessible
+                    # Test database write permissions
+                    logger.debug("  🔍 Testing database write permissions...")
+                    
+                except Exception as preflight_error:
+                    logger.error(f"  ✗ Pre-flight database check failed: {preflight_error}")
+                    raise ConversationServiceError(f"Database pre-flight check failed: {preflight_error}")
+                
+                success = await self.repository.create_conversation(conversation, force_create=force_create)
+                
+                # EDGE CASE FIX: Additional validation for successful conversation creation
+                if success:
+                    # Verify the conversation was actually created and can be retrieved
                     try:
-                        test_conversations = await self.repository.list_conversations(limit=1)
-                        logger.info(f"Database is accessible - can list {len(test_conversations)} conversations")
-                    except Exception as db_test_error:
-                        logger.error(f"Database accessibility test failed: {db_test_error}")
-                        raise ConversationServiceError(f"Database is not accessible: {db_test_error}")
+                        verification = await self.repository.get_conversation(conversation.id)
+                        if not verification:
+                            logger.error(f"❌ EDGE CASE: Conversation {conversation.id} creation reported success but cannot be retrieved")
+                            # Don't fail here - the conversation might still be usable
+                        else:
+                            logger.debug(f"✅ Verified conversation {conversation.id} was successfully created and is retrievable")
+                    except Exception as verify_error:
+                        logger.warning(f"⚠️ EDGE CASE: Conversation {conversation.id} verification failed: {verify_error}")
+                        # Don't fail here - the conversation might still be usable
+                
+                if not success:
+                    # Comprehensive diagnosis when creation fails
+                    logger.error("🚨 Database save returned False - running full diagnostics")
                     
-                    raise ConversationServiceError("Failed to create conversation in database - reason unknown")
+                    # Check database state
+                    try:
+                        # Test basic operations
+                        test_list = await self.repository.list_conversations(limit=5)
+                        logger.error(f"  🔍 Database listing works: {len(test_list)} conversations found")
+                        
+                        # Check if conversation was somehow created despite returning False
+                        existing_conv = await self.repository.get_conversation(conversation.id, include_messages=False)
+                        if existing_conv:
+                            logger.error(f"  🚨 PARADOX: Conversation {conversation.id} EXISTS despite creation failure!")
+                            logger.error(f"    Found: {existing_conv.title}, Status: {existing_conv.status}")
+                        else:
+                            logger.error(f"  ✓ Conversation {conversation.id} confirmed NOT in database")
+                            
+                        # Check database integrity
+                        stats = await self.repository.get_conversation_stats()
+                        logger.error(f"  🔍 Database stats: {stats}")
+                        
+                    except Exception as diag_error:
+                        logger.error(f"  ✗ Diagnostic checks failed: {diag_error}")
                     
+                    raise ConversationServiceError(
+                        f"Failed to create conversation in database - Repository returned False. "
+                        f"Conversation ID: {conversation.id}, Force create: {force_create}, "
+                        f"Messages: {len(conversation.messages)}, Title: '{conversation.title}'"
+                    )
+                    
+            except ConversationServiceError:
+                # Re-raise our own errors
+                raise
             except Exception as repo_error:
-                logger.error(f"Repository create_conversation failed: {repo_error}")
-                raise ConversationServiceError(f"Repository error: {repo_error}")
+                logger.error(f"🚨 Repository create_conversation threw exception: {repo_error}")
+                logger.error(f"  🔍 Error type: {type(repo_error).__name__}")
+                logger.error(f"  🔍 Error details: {str(repo_error)}")
+                import traceback
+                logger.error(f"  📋 Full traceback:\n{traceback.format_exc()}")
+                raise ConversationServiceError(f"Repository error during conversation creation: {repo_error}")
             
             # Set as active conversation
             self._active_conversation_id = conversation.id

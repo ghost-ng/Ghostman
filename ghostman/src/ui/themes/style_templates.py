@@ -1510,16 +1510,16 @@ class StyleTemplates:
                 pointer-events: none;
             }}
             QPushButton:hover {{
-                background-color: {colors.interactive_hover} !important;
+                background-color: {inactive_bg_color} !important;
                 color: {colors.text_primary} !important;
-                border: none !important;
+                border: 2px solid {colors.primary} !important;  /* Add visible colored outline on hover */
                 font-weight: bold;
                 height: 36px !important;
                 cursor: pointer !important;
             }}
             QPushButton:pressed {{
                 background-color: {colors.interactive_active} !important;
-                border: none !important;
+                border: 2px solid {colors.primary_hover} !important;  /* Visible outline on press */
                 outline: none !important;
                 padding: 8px 10px !important;
                 height: 36px !important;

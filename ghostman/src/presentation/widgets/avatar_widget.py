@@ -383,14 +383,14 @@ class AvatarWidget(SimpleAvatarArrowMixin, AvatarResizableMixin, QWidget):
             logger.debug("Avatar double-clicked")
     
     def _get_theme_icon(self, icon_name: str) -> QIcon:
-        """Get dark icon for avatar menu (menus are always lite background)."""
+        """Get lite icon for avatar menu (menus have dark backgrounds, need light icons)."""
         try:
             from ...utils.resource_resolver import resolve_icon
-            icon_path = resolve_icon(icon_name, "_dark")
+            icon_path = resolve_icon(icon_name, "_lite")
             if icon_path:
                 return QIcon(str(icon_path))
         except Exception as e:
-            logger.debug(f"Failed to load icon {icon_name}_dark.png: {e}")
+            logger.debug(f"Failed to load icon {icon_name}_lite.png: {e}")
         
         return QIcon()  # Empty icon as fallback
     

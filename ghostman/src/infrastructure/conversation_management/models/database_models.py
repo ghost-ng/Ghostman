@@ -69,6 +69,7 @@ class ConversationModel(Base):
     summary = relationship("ConversationSummaryModel", back_populates="conversation", uselist=False, cascade="all, delete-orphan")
     conversation_tags = relationship("ConversationTagModel", back_populates="conversation", cascade="all, delete-orphan")
     fts_entries = relationship("MessageFTSModel", back_populates="conversation", cascade="all, delete-orphan")
+    conversation_files = relationship("ConversationFileModel", back_populates="conversation", cascade="all, delete-orphan")
     
     # Constraints
     __table_args__ = (
@@ -388,7 +389,7 @@ class ConversationFileModel(Base):
     metadata_json = Column(Text, default='{}')
     
     # Relationships
-    conversation = relationship("ConversationModel", backref="conversation_files")
+    conversation = relationship("ConversationModel", back_populates="conversation_files")
     
     # Constraints
     __table_args__ = (

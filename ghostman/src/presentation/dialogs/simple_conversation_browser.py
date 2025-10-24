@@ -366,35 +366,7 @@ class SimpleConversationBrowser(QDialog):
         self.export_btn.setEnabled(False)
         button_layout.addWidget(self.export_btn)
         
-        # Delete button
-        self.delete_btn = QPushButton("Delete")
-        self.delete_btn.clicked.connect(self._on_delete_clicked)
-        self.delete_btn.setEnabled(False)
-        self.delete_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #d32f2f;
-                color: #ffffff;
-                border: 1px solid #b71c1c;
-                padding: 6px 12px;
-                border-radius: 4px;
-                font-size: 11px;
-            }
-            QPushButton:hover {
-                background-color: #f44336;
-                border-color: #c62828;
-            }
-            QPushButton:pressed {
-                background-color: #b71c1c;
-            }
-            QPushButton:disabled {
-                background-color: #2a2a2a;
-                color: #666666;
-                border-color: #444444;
-            }
-        """)
-        button_layout.addWidget(self.delete_btn)
-        
-        # Mass delete button
+        # Delete Selected button (handles both single and multiple selections)
         self.mass_delete_btn = QPushButton("Delete Selected")
         self.mass_delete_btn.clicked.connect(self._on_mass_delete_clicked)
         self.mass_delete_btn.setEnabled(False)
@@ -868,7 +840,6 @@ class SimpleConversationBrowser(QDialog):
         
         self.restore_btn.setEnabled(has_selection)
         self.export_btn.setEnabled(has_selection)
-        self.delete_btn.setEnabled(has_selection)
         
         # Also update mass delete button based on checkbox states
         selected_conversations = self._get_selected_conversations()
@@ -904,30 +875,7 @@ class SimpleConversationBrowser(QDialog):
             # Simple refresh after a short delay (let the database update complete)
             QTimer.singleShot(300, self._load_conversations)
     
-    def _on_delete_clicked(self):
-        """Handle delete button click."""
-        selected_rows = self.conversations_table.selectionModel().selectedRows()
-        if not selected_rows:
-            return
-        
-        row = selected_rows[0].row()
-        if row < 0 or row >= len(self.conversations):
-            return
-        
-        conversation = self.conversations[row]
-        
-        # Confirm deletion with warning dialog
-        reply = QMessageBox.warning(
-            self,
-            "Delete Conversation",
-            f"Are you sure you want to delete '{conversation.title}'?\n\n"
-            "This action cannot be undone. All messages in this conversation will be permanently removed.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
-            QMessageBox.StandardButton.Cancel
-        )
-        
-        if reply == QMessageBox.StandardButton.Yes:
-            self._delete_conversation(conversation)
+    # Removed _on_delete_clicked - now using _on_mass_delete_clicked for all deletions
     
     def _delete_conversation(self, conversation: Conversation):
         """Delete a conversation from the database."""

@@ -5,7 +5,7 @@ Displays uploaded files with processing status, progress tracking, and managemen
 Integrates seamlessly with the existing theme system and UI architecture.
 """
 
-import logging
+import logging, os
 from typing import List, Dict, Any, Optional, Callable
 from datetime import datetime
 from pathlib import Path
@@ -18,10 +18,13 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QPropertyAnimation, QEasingCurve, QRect, QPoint
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont, QAction, QCursor
 
-# Import ColorUtils for advanced color manipulation
+# Import ColorUtils and theme system for advanced color manipulation
 try:
     from ...ui.themes.color_system import ColorUtils
+    from ...ui.themes.theme_manager import get_theme_manager, get_theme_primary_color, get_theme_color
+    THEME_SYSTEM_AVAILABLE = True
 except ImportError:
+    THEME_SYSTEM_AVAILABLE = False
     # Fallback simple color utility
     class ColorUtils:
         @staticmethod
@@ -30,6 +33,21 @@ except ImportError:
         @staticmethod 
         def darken(color: str, factor: float = 0.1) -> str:
             return color
+    
+    # Fallback helper functions when theme system not available
+    def get_theme_primary_color(theme_manager_instance=None):
+        return "#ecf0f1"
+    
+    def get_theme_color(color_name, theme_manager_instance=None, fallback=None):
+        fallbacks = {
+            'text_primary': '#ecf0f1',
+            'text_secondary': '#95a5a6',
+            'background_secondary': '#2c3e50',
+            'background_primary': '#34495e',
+            'border_secondary': '#34495e',
+            'primary': '#3498db'
+        }
+        return fallbacks.get(color_name, fallback or '#ecf0f1')
 
 logger = logging.getLogger("ghostman.file_browser_bar")
 
@@ -143,9 +161,15 @@ class FileContextItem(QFrame):
     remove_requested = pyqtSignal(str)  # file_id
     view_requested = pyqtSignal(str)    # file_id
     toggle_requested = pyqtSignal(str, bool)  # file_id, enabled
+    processing_completed = pyqtSignal(str, str)  # file_id, status (completed/failed)
     
-    def __init__(self, file_id: str, filename: str, file_size: int = 0, file_type: str = "", theme_manager=None):
+    def __init__(self, file_id: str, filename: str, file_size: int = 0, file_type: str = "", theme_manager=None, conversation_id: str = None, tab_id: str = None):
         super().__init__()
+        
+        # DEBUG: Log constructor parameters
+        logger.info(f"🔍 FileContextItem.__init__: file_id={file_id}, conversation_id={conversation_id}, tab_id={tab_id}")
+        print(f"🔍 FileContextItem.__init__: file_id={file_id}, conversation_id={conversation_id}, tab_id={tab_id}")
+        
         self.file_id = file_id
         self.filename = filename
         self.file_size = file_size
@@ -157,20 +181,36 @@ class FileContextItem(QFrame):
         self.relevance_score = 0.0
         self.is_enabled = True  # Whether file is included in context
         
+        # CRITICAL FIX: Add conversation and tab association
+        self.conversation_id = conversation_id
+        self.tab_id = tab_id
+        
+        # DEBUG: Verify attributes were set
+        logger.info(f"🔍 FileContextItem: Set conversation_id={self.conversation_id}, tab_id={self.tab_id}")
+        print(f"🔍 FileContextItem: Set conversation_id={self.conversation_id}, tab_id={self.tab_id}")
+        
         self._init_ui()
         self._apply_styling()
-        self._setup_context_menu()
         self._setup_toggle_functionality()
     
     def _init_ui(self):
         """Initialize pill-style UI components."""
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(6, 3, 6, 3)
-        layout.setSpacing(4)
+        layout.setContentsMargins(3, 2, 3, 2)  # Reduced padding as requested
+        layout.setSpacing(3)  # Reduced spacing
         
-        # Status indicator (small dot)
-        self.status_indicator = FileStatusIndicator("queued")
-        self.status_indicator.setFixedSize(12, 12)  # Smaller for pill
+        # Status indicator with larger spinner
+        self.status_indicator = QLabel()
+        self.status_indicator.setFixedSize(20, 20)  # Increased to match request
+        self.status_indicator.setText("○")  # Default circle
+        self.status_indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status_indicator.setStyleSheet("""
+            QLabel {
+                color: #ff6b35;  /* Changed to orange color for better visibility */
+                font-size: 14px;  /* Increased from 10px */
+                font-weight: bold;
+            }
+        """)
         layout.addWidget(self.status_indicator)
         
         # File type icon (smaller)
@@ -182,19 +222,32 @@ class FileContextItem(QFrame):
         
         # Filename (main content)
         self.filename_label = QLabel(self._get_pill_name())
-        self.filename_label.setToolTip(f"{self.filename} ({self._format_file_size(self.file_size)})")
         font = self.filename_label.font()
         font.setPointSize(8)
         font.setBold(False)
         self.filename_label.setFont(font)
         layout.addWidget(self.filename_label)
         
-        # Remove button (×)
+        # Remove button (×) - larger with no border
         self.remove_btn = QToolButton()
         self.remove_btn.setText("×")
-        self.remove_btn.setToolTip("Remove file")
         self.remove_btn.clicked.connect(lambda: self.remove_requested.emit(self.file_id))
-        self.remove_btn.setFixedSize(16, 16)
+        self.remove_btn.setFixedSize(20, 20)  # Increased from 16x16
+        # Apply styling with no border
+        self.remove_btn.setStyleSheet("""
+            QToolButton {
+                background-color: transparent;  /* No background */
+                border: none;  /* No border as requested */
+                color: #ff6b6b;
+                font-weight: bold;
+                font-size: 14px;  /* Increased from 10px */
+            }
+            QToolButton:hover {
+                background-color: rgba(255, 107, 107, 0.2);  /* Subtle hover background */
+                color: #ff4444;  /* Darker red on hover */
+                border-radius: 10px;  /* Subtle rounded corners on hover */
+            }
+        """)
         layout.addWidget(self.remove_btn)
         
         # Set size policy for grid pill layout
@@ -203,8 +256,11 @@ class FileContextItem(QFrame):
         self.setMinimumWidth(120)  # Minimum pill width
         self.setMaximumWidth(200)  # Maximum pill width
         
-        # Add tooltip with full info
-        self._update_tooltip()
+        
+        # Initialize spinner animation
+        self._spinner_timer = QTimer()
+        self._spinner_timer.timeout.connect(self._update_spinner)
+        self._spinner_frame = 0
     
     def _update_type_icon(self):
         """Update the file type icon for pill style."""
@@ -455,50 +511,6 @@ class FileContextItem(QFrame):
                 color: white;
             }}
         """)    
-    def _setup_context_menu(self):
-        """Setup context menu for the file item."""
-        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.customContextMenuRequested.connect(self._show_context_menu)
-    
-    def _show_context_menu(self, position: QPoint):
-        """Show context menu."""
-        menu = QMenu(self)
-        
-        # View action
-        view_action = QAction("View Content", self)
-        view_action.triggered.connect(lambda: self.view_requested.emit(self.file_id))
-        menu.addAction(view_action)
-        
-        menu.addSeparator()
-        
-        # Copy actions
-        copy_name_action = QAction("Copy Filename", self)
-        copy_name_action.triggered.connect(self._copy_filename)
-        menu.addAction(copy_name_action)
-        
-        copy_path_action = QAction("Copy Path", self)
-        copy_path_action.triggered.connect(self._copy_path)
-        menu.addAction(copy_path_action)
-        
-        menu.addSeparator()
-        
-        # Remove action
-        remove_action = QAction("Remove", self)
-        remove_action.triggered.connect(lambda: self.remove_requested.emit(self.file_id))
-        menu.addAction(remove_action)
-        
-        menu.exec(self.mapToGlobal(position))
-    
-    def _copy_filename(self):
-        """Copy filename to clipboard."""
-        from PyQt6.QtWidgets import QApplication
-        QApplication.clipboard().setText(self.filename)
-    
-    def _copy_path(self):
-        """Copy full path to clipboard."""
-        from PyQt6.QtWidgets import QApplication
-        # This would need the full path from the file context data
-        QApplication.clipboard().setText(self.filename)  # Placeholder
     
     def update_status(self, status: str, progress: float = 0.0, already_processed: bool = False):
         """Update processing status and progress."""
@@ -507,57 +519,48 @@ class FileContextItem(QFrame):
         self.progress = progress
         self._already_processed = already_processed
         
-        # Update status indicator
-        self.status_indicator.set_status(status)
+        # Update status indicator with spinner
+        self._update_status_indicator(status)
         
         # Reapply styling if status changed
         if old_status != status:
             self._apply_styling()
             
-        # Update tooltip
-        self._update_tooltip()
         
         # Animate status change
         if old_status != status:
             self._animate_status_change()
     
+    def _update_status_indicator(self, status: str):
+        """Update status indicator with spinner animation."""
+        if status == "processing":
+            # Start spinner animation
+            self._spinner_timer.start(80)  # Update every 80ms for smoother animation
+            self.status_indicator.setVisible(True)
+        elif status in ["completed", "failed"]:
+            # Stop spinner and hide indicator
+            self._spinner_timer.stop()
+            self.status_indicator.setVisible(False)
+            # Emit processing completed signal
+            self.processing_completed.emit(self.file_id, status)
+            logger.info(f"🔄 File processing completed: {self.file_id} - {status}")
+        else:
+            # Show static indicator for other states (queued, etc.)
+            self._spinner_timer.stop()
+            self.status_indicator.setText("○")
+            self.status_indicator.setVisible(True)
+    
+    def _update_spinner(self):
+        """Update spinner animation frame."""
+        spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]  # Same as repl widget
+        self.status_indicator.setText(spinner_chars[self._spinner_frame % len(spinner_chars)])
+        self._spinner_frame += 1
+    
     def set_usage_info(self, tokens_used: int, relevance_score: float):
         """Update usage information."""
         self.tokens_used = tokens_used
         self.relevance_score = relevance_score
-        self._update_tooltip()
     
-    def _update_tooltip(self):
-        """Update tooltip with comprehensive file info."""
-        status_text = {
-            "queued": "⏳ Queued for processing",
-            "processing": "🔄 Processing...",
-            "completed": "✅ Processed successfully", 
-            "failed": "❌ Processing failed"
-        }.get(self.processing_status, "❓ Unknown status")
-        
-        # Check if this was already processed
-        if hasattr(self, '_already_processed') and self._already_processed:
-            status_text = "📋 Already processed (using existing embeddings)"
-        
-        size_text = self._format_file_size(self.file_size)
-        tooltip_parts = [
-            f"📄 {self.filename}",
-            f"📊 {size_text}",
-            f"🔧 {self.file_type.upper() if self.file_type else 'Unknown'}",
-            status_text,
-            f"🎯 {'Enabled' if self.is_enabled else 'Disabled'} for context",
-            "",
-            "💡 Click to toggle inclusion in context"
-        ]
-        
-        if self.tokens_used > 0:
-            tooltip_parts.append(f"🔤 {self.tokens_used} tokens")
-            
-        if self.relevance_score > 0:
-            tooltip_parts.append(f"🎯 {self.relevance_score:.1%} relevance")
-            
-        self.setToolTip("\n".join(tooltip_parts))
     
     def _animate_status_change(self):
         """Animate status change with a subtle effect."""
@@ -575,7 +578,6 @@ class FileContextItem(QFrame):
         """Toggle the enabled state of this file."""
         self.is_enabled = not self.is_enabled
         self._apply_styling()
-        self._update_tooltip()
         self.toggle_requested.emit(self.file_id, self.is_enabled)
     
     def set_enabled(self, enabled: bool):
@@ -583,7 +585,6 @@ class FileContextItem(QFrame):
         if self.is_enabled != enabled:
             self.is_enabled = enabled
             self._apply_styling()
-            self._update_tooltip()
     
     def mousePressEvent(self, event):
         """Handle mouse press events for toggling."""
@@ -615,13 +616,14 @@ class FileBrowserBar(QFrame):
     file_toggled = pyqtSignal(str, bool)  # file_id, enabled
     clear_all_requested = pyqtSignal()
     files_reordered = pyqtSignal(list)  # list of file_ids in new order
+    upload_files_requested = pyqtSignal()  # Request file upload dialog
+    processing_completed = pyqtSignal(str, str)  # file_id, status (completed/failed) - propagated from FileContextItem
     
     def __init__(self, theme_manager=None):
         super().__init__()
         self.theme_manager = theme_manager
         self.file_items: Dict[str, FileContextItem] = {}
         self.max_visible_files = 20  # More files in grid
-        self._is_expanded = True
         self._animation = None
         
         # Grid layout tracking
@@ -630,26 +632,50 @@ class FileBrowserBar(QFrame):
         self.max_pills_per_row = 4
         
         self.setVisible(False)  # Initially hidden
+        
+        # Set minimum size to prevent cutoff - increased significantly
+        self.setMinimumHeight(70)  # Increased from 50 to 70 for better button visibility
+        self.setMaximumHeight(120)  # Set maximum to prevent excessive growth
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        
         self._init_ui()
         self._apply_styling()
         self._connect_signals()
+        
+        # Force refresh of label colors after all initialization
+        self._refresh_label_colors()
+        
+        # Load button icons after UI is fully initialized
+        self._load_upload_icon_for_button()
+        self._load_clear_icon()
         
         logger.debug("FileBrowserBar initialized")
     
     def _init_ui(self):
         """Initialize the UI components."""
+        logger.info("🔧 FB_INIT: Initializing FileBrowserBar UI...")
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(8, 4, 8, 4)
-        main_layout.setSpacing(4)
+        main_layout.setContentsMargins(8, 6, 8, 12)  # Increased margins, especially bottom
+        main_layout.setSpacing(8)  # Increased spacing for better button visibility
         
         # Header section
         header_frame = QFrame()
         header_layout = QHBoxLayout(header_frame)
-        header_layout.setContentsMargins(4, 2, 4, 2)
-        header_layout.setSpacing(8)
+        header_layout.setContentsMargins(4, 4, 4, 4)  # Balanced margins
+        header_layout.setSpacing(6)  # Reduced spacing for better alignment
         
         # Title with file count
-        self.title_label = QLabel("📁 File Contexts")
+        self.title_label = QLabel("📁 Attachments")
+        self.title_label.setObjectName("title_label")  # Set object name for CSS targeting
+        
+        # Apply theme-aware color using QPalette (works better than stylesheet due to CSS conflicts)
+        title_color = get_theme_primary_color(self.theme_manager)
+        from PyQt6.QtGui import QPalette, QColor
+        palette = self.title_label.palette()
+        palette.setColor(QPalette.ColorRole.WindowText, QColor(title_color))
+        self.title_label.setPalette(palette)
+        logger.info(f"🎨 Applied theme color via QPalette: {title_color}")
+        
         font = self.title_label.font()
         font.setBold(True)
         font.setPointSize(10)
@@ -658,27 +684,34 @@ class FileBrowserBar(QFrame):
         
         header_layout.addStretch()
         
-        # Toggle collapse/expand button
-        self.toggle_btn = QToolButton()
-        self.toggle_btn.setText("▼")
-        self.toggle_btn.setToolTip("Collapse/Expand")
-        self.toggle_btn.clicked.connect(self._toggle_expansion)
-        self.toggle_btn.setFixedSize(20, 20)
-        header_layout.addWidget(self.toggle_btn)
+        # Upload files button with icon
+        logger.info("🔧 FB_INIT: Creating upload button...")
+        self.upload_files_btn = QPushButton()
+        logger.info(f"🔧 FB_INIT: Upload button created: {self.upload_files_btn}")
         
-        # Settings button
-        self.settings_btn = QToolButton()
-        self.settings_btn.setText("⚙️")
-        self.settings_btn.setToolTip("File context settings")
-        self.settings_btn.clicked.connect(self._show_settings_menu)
-        self.settings_btn.setFixedSize(20, 20)
-        header_layout.addWidget(self.settings_btn)
+        # Load icon using the theme-aware method (avoid duplicate loading)
+        logger.info("🔧 FB_INIT: Setting up icon loading...")
+        # The icon will be loaded by _load_upload_icon_for_button() after UI init
         
-        # Clear all button
-        self.clear_all_btn = QPushButton("Clear All")
+        self.upload_files_btn.setToolTip("Open file dialog to select files for context")
+        self.upload_files_btn.clicked.connect(self._on_upload_files_clicked)
+        self.upload_files_btn.setMaximumWidth(120)
+        header_layout.addWidget(self.upload_files_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
+        logger.info("🔧 FB_INIT: Upload button added to layout")
+        
+        
+        # Removed toggle collapse/expand button as requested
+        
+        # Settings button removed as requested
+        
+        # Clear all button with icon
+        self.clear_all_btn = QToolButton()
+        self.clear_all_btn.setToolTip("Clear all files")
         self.clear_all_btn.clicked.connect(self.clear_all_requested.emit)
-        self.clear_all_btn.setMaximumWidth(80)
-        header_layout.addWidget(self.clear_all_btn)
+        self.clear_all_btn.setMinimumSize(28, 28)  # Increased size for better visibility
+        self.clear_all_btn.setMaximumSize(32, 32)  # Allow slight growth to prevent cutoff
+        # Icon will be loaded in _load_clear_icon() after UI init
+        header_layout.addWidget(self.clear_all_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
         
         main_layout.addWidget(header_frame)
         
@@ -710,6 +743,16 @@ class FileBrowserBar(QFrame):
         status_layout.setSpacing(8)
         
         self.status_label = QLabel("No files loaded")
+        self.status_label.setObjectName("status_label")  # Set object name for CSS targeting
+        
+        # Apply theme-aware color using QPalette (works better than stylesheet due to CSS conflicts)
+        status_color = get_theme_primary_color(self.theme_manager)
+        from PyQt6.QtGui import QPalette, QColor
+        palette = self.status_label.palette()
+        palette.setColor(QPalette.ColorRole.WindowText, QColor(status_color))
+        self.status_label.setPalette(palette)
+        logger.info(f"🎨 Applied status color via QPalette: {status_color}")
+        
         font = self.status_label.font()
         font.setPointSize(8)
         self.status_label.setFont(font)
@@ -721,33 +764,31 @@ class FileBrowserBar(QFrame):
         main_layout.addWidget(self.files_frame)
     
     def _apply_styling(self):
-        """Apply theme-aware styling."""
-        if self.theme_manager and hasattr(self.theme_manager, 'current_theme'):
-            colors = self.theme_manager.current_theme
-            bg_color = colors.background_secondary
-            bg_primary = colors.background_primary
-            text_color = colors.text_primary
-            text_secondary = colors.text_secondary
-            border_color = colors.border_secondary
-            accent_color = colors.primary
-        else:
-            # Fallback colors
-            bg_color = "#2c3e50"
-            bg_primary = "#34495e"
-            text_color = "#ecf0f1"
-            text_secondary = "#95a5a6"
-            border_color = "#34495e"
-            accent_color = "#3498db"
+        """Apply theme-aware styling using optimized helper functions."""
+        logger.info(f"🎨 FileBrowserBar _apply_styling called")
+        
+        # Use optimized helper functions for consistent color retrieval
+        bg_color = get_theme_color('background_secondary', self.theme_manager)
+        bg_primary = get_theme_color('background_primary', self.theme_manager)
+        text_color = get_theme_color('text_primary', self.theme_manager)
+        text_secondary = get_theme_color('text_secondary', self.theme_manager)
+        border_color = get_theme_color('border_secondary', self.theme_manager)
+        accent_color = get_theme_color('primary', self.theme_manager)
+        
+        logger.info(f"🎨 Retrieved colors - text_primary: {text_color}, bg: {bg_color}, accent: {accent_color}")
         
         self.setStyleSheet(f"""
             FileBrowserBar {{
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1, 
                     stop:0 {bg_color}, stop:1 {ColorUtils.darken(bg_color, 0.1)});
                 border: 1px solid {ColorUtils.lighten(border_color, 0.2)};
-                border-radius: 16px;  /* More rounded */
-                margin: 4px;
-                padding: 8px 12px;  /* Better spacing for pills */
-                min-height: 36px;  /* Ensure space for pills */
+                border-radius: 4px;  /* Further reduced to prevent any clipping */
+                margin: 0px;  /* Remove margin that might cause overlap */
+                padding: 12px;  /* Increased padding */
+                padding-top: 8px;  /* Normal top padding */
+                padding-bottom: 16px;  /* Increased bottom padding for buttons */
+                min-height: 60px;  /* Increased minimum height to match widget */
+                max-height: 120px;  /* Ensure consistent height */
             }}
             QFrame {{
                 background-color: transparent;
@@ -758,6 +799,12 @@ class FileBrowserBar(QFrame):
                 background: transparent;
                 border: none;
                 font-weight: 500;
+            }}
+            QLabel#status_label {{
+                color: {text_color};  /* Use primary text color as requested */
+            }}
+            QLabel#title_label {{
+                color: {text_color};  /* Ensure title uses primary text color */
             }}
             QPushButton {{
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1, 
@@ -779,16 +826,24 @@ class FileBrowserBar(QFrame):
             }}
             QToolButton {{
                 background-color: rgba(255,255,255,0.1);
-                border: none;
-                border-radius: 10px;
+                border: 1px solid rgba(255,255,255,0.15);
+                border-radius: 4px;  /* Reduced to match container */
                 color: {text_color};
                 font-size: 12px;
-                min-width: 20px;
-                min-height: 20px;
+                min-width: 28px;  /* Increased to match setMinimumSize */
+                min-height: 28px;  /* Increased to match setMinimumSize */
+                max-width: 32px;  /* Ensure consistent sizing */
+                max-height: 32px;  /* Ensure consistent sizing */
+                padding: 2px;  /* Slightly increased padding for better appearance */
             }}
             QToolButton:hover {{
                 background-color: {accent_color};
+                border-color: {accent_color};
                 color: white;
+            }}
+            QToolButton:pressed {{
+                background-color: {ColorUtils.darken(accent_color, 0.2)};
+                border-color: {ColorUtils.darken(accent_color, 0.2)};
             }}
             QScrollArea {{
                 background-color: transparent;
@@ -816,8 +871,15 @@ class FileBrowserBar(QFrame):
             }}
         """)
         
-        # Update status label color
-        self.status_label.setStyleSheet(f"color: {text_secondary};")
+        # Apply theme colors to labels using helper functions for consistency
+        if hasattr(self, 'status_label'):
+            self.status_label.setObjectName("status_label")
+            self.status_label.setStyleSheet(f"color: {text_color};")  # Use primary text color
+            logger.info(f"🎨 Applied status_label stylesheet: color: {text_color};")
+        if hasattr(self, 'title_label'):
+            self.title_label.setObjectName("title_label")
+            self.title_label.setStyleSheet(f"color: {text_color}; font-weight: bold;")  # Use primary text color
+            logger.info(f"🎨 Applied title_label stylesheet: color: {text_color}; font-weight: bold;")
     
     def _connect_signals(self):
         """Connect internal signals."""
@@ -826,31 +888,198 @@ class FileBrowserBar(QFrame):
             if hasattr(self.theme_manager, 'theme_changed'):
                 self.theme_manager.theme_changed.connect(self._on_theme_changed)
     
+    def _on_theme_changed(self):
+        """Handle theme changes by reapplying styling."""
+        self._apply_styling()
+        self._refresh_label_colors()
+    
+    def _refresh_label_colors(self):
+        """Force refresh label colors using QPalette approach."""
+        try:
+            logger.info("🎨 Force refreshing label colors...")
+            
+            # Get the primary text color using helper function
+            text_color = get_theme_primary_color(self.theme_manager)
+            logger.info(f"🎨 Retrieved primary text color: {text_color}")
+            
+            from PyQt6.QtGui import QPalette, QColor
+            
+            # Apply to title label using QPalette (proven to work)
+            if hasattr(self, 'title_label') and self.title_label:
+                palette = self.title_label.palette()
+                palette.setColor(QPalette.ColorRole.WindowText, QColor(text_color))
+                self.title_label.setPalette(palette)
+                logger.info(f"🎨 Applied theme color to title_label via QPalette: {text_color}")
+            
+            # Apply to status label using QPalette
+            if hasattr(self, 'status_label') and self.status_label:
+                palette = self.status_label.palette()
+                palette.setColor(QPalette.ColorRole.WindowText, QColor(text_color))
+                self.status_label.setPalette(palette)
+                logger.info(f"🎨 Applied theme color to status_label via QPalette: {text_color}")
+                
+        except Exception as e:
+            logger.error(f"Error refreshing label colors: {e}")
+    
+    def _get_icon_variant(self) -> str:
+        """Determine which icon variant to use based on theme - EXACT COPY from REPL widget."""
+        try:
+            if self.theme_manager and hasattr(self.theme_manager, 'current_theme'):
+                colors = self.theme_manager.current_theme
+                # Check if background is dark or light
+                bg_color = colors.background_primary
+                # Simple heuristic: if background starts with #0-#7, it's dark
+                if bg_color.startswith('#') and len(bg_color) >= 2:
+                    first_hex_digit = int(bg_color[1], 16)
+                    return "lite" if first_hex_digit <= 7 else "dark"
+            
+            # Default fallback
+            return "lite"
+            
+        except Exception as e:
+            logger.error(f"Failed to determine icon variant: {e}")
+            return "lite"
+    
+    def _is_theme_dark(self) -> bool:
+        """Determine if current theme is dark."""
+        try:
+            if self.theme_manager and hasattr(self.theme_manager, 'current_theme'):
+                colors = self.theme_manager.current_theme
+                bg_color = colors.background_primary
+                
+                # Parse hex color to determine brightness
+                bg_color = bg_color.lstrip('#')
+                r = int(bg_color[0:2], 16)
+                g = int(bg_color[2:4], 16)
+                b = int(bg_color[4:6], 16)
+                
+                # Calculate perceived brightness
+                brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+                
+                # Return True if dark (low brightness)
+                return brightness < 0.5
+            else:
+                # Default to dark theme
+                return True
+        except Exception as e:
+            logger.debug(f"Failed to determine theme darkness: {e}")
+            return True  # Default fallback
+    
+    def _load_upload_icon_for_button(self):
+        """Load theme-appropriate upload icon - EXACT COPY of REPL icon loading pattern."""
+        logger.info("🎨 FB_ICON: Loading upload icon for file browser button...")
+        try:
+            # Check button exists
+            if not hasattr(self, 'upload_files_btn'):
+                logger.error("❌ FB_ICON: upload_files_btn doesn't exist yet!")
+                return
+                
+            # Determine if theme is dark or light (use EXACT same method as REPL)
+            variant = self._get_icon_variant()
+            logger.info(f"🎨 FB_ICON: Theme variant = {variant}")
+            
+            upload_icon_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", 
+                "assets", "icons", f"upload_{variant}.png"
+            )
+            logger.info(f"🎨 FB_ICON: Looking for icon at: {upload_icon_path}")
+            
+            if os.path.exists(upload_icon_path):
+                logger.info(f"✅ FB_ICON: File exists at {upload_icon_path}")
+                upload_icon = QIcon(upload_icon_path)
+                
+                if upload_icon.isNull():
+                    logger.error(f"❌ FB_ICON: QIcon is null after loading from {upload_icon_path}")
+                else:
+                    # Set icon on QPushButton
+                    self.upload_files_btn.setIcon(upload_icon)
+                    # Set icon size explicitly for QPushButton
+                    from PyQt6.QtCore import QSize
+                    self.upload_files_btn.setIconSize(QSize(16, 16))
+                    
+                    # Verify the icon was actually set
+                    final_icon = self.upload_files_btn.icon()
+                    if final_icon.isNull():
+                        logger.error("❌ FB_ICON: Icon is null after setting!")
+                    else:
+                        logger.info(f"✅ FB_ICON: Icon successfully set and verified: upload_{variant}.png with size 16x16")
+                        
+                    # Check button text
+                    button_text = self.upload_files_btn.text()
+                    logger.info(f"🔧 FB_ICON: Button text = '{button_text}'")
+            else:
+                # No fallback text for this button, just log warning
+                logger.warning(f"❌ FB_ICON: Upload icon not found at: {upload_icon_path}")
+                
+        except Exception as e:
+            logger.error(f"❌ FB_ICON: Exception loading upload icon: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _load_clear_icon(self):
+        """Load theme-appropriate clear icon for the clear button."""
+        logger.info("🎨 FB_ICON: Loading clear icon for clear button...")
+        try:
+            # Check button exists
+            if not hasattr(self, 'clear_all_btn'):
+                logger.error("❌ FB_ICON: clear_all_btn doesn't exist yet!")
+                return
+                
+            # Determine if theme is dark or light (use EXACT same method as REPL)
+            variant = self._get_icon_variant()
+            logger.info(f"🎨 FB_ICON: Theme variant = {variant}")
+            
+            # Use clear icon with theme variant
+            clear_icon_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", 
+                "assets", "icons", f"clear_{variant}.png"
+            )
+            logger.info(f"🎨 FB_ICON: Looking for icon at: {clear_icon_path}")
+            
+            if os.path.exists(clear_icon_path):
+                logger.info(f"✅ FB_ICON: File exists at {clear_icon_path}")
+                clear_icon = QIcon(clear_icon_path)
+                
+                if not clear_icon.isNull():
+                    # Set icon on QToolButton
+                    self.clear_all_btn.setIcon(clear_icon)
+                    # Set icon size explicitly for QToolButton
+                    from PyQt6.QtCore import QSize
+                    self.clear_all_btn.setIconSize(QSize(16, 16))
+                    
+                    # Verify the icon was actually set
+                    final_icon = self.clear_all_btn.icon()
+                    if not final_icon.isNull():
+                        logger.info(f"✅ FB_ICON: Icon successfully set: clear_{variant}.png")
+                    else:
+                        logger.error(f"❌ FB_ICON: Icon is null after setting!")
+                        self.clear_all_btn.setText("Clear")
+                else:
+                    logger.error(f"❌ FB_ICON: QIcon is null after loading from {clear_icon_path}")
+                    self.clear_all_btn.setText("Clear")
+            else:
+                logger.warning(f"❌ FB_ICON: Clear icon not found at: {clear_icon_path}")
+                self.clear_all_btn.setText("Clear")
+                
+        except Exception as e:
+            logger.error(f"❌ FB_ICON: Exception loading clear icon: {e}")
+            # Fallback to text
+            self.clear_all_btn.setText("Clear")
+    
     def _on_theme_changed(self, new_theme):
         """Handle theme changes."""
         self._apply_styling()
+        # Update upload button icon for new theme
+        if hasattr(self, 'upload_files_btn'):
+            self._load_upload_icon_for_button()
+        # Update clear button icon for new theme
+        if hasattr(self, 'clear_all_btn'):
+            self._load_clear_icon()
         # Update all file items
         for item in self.file_items.values():
             item._apply_styling()
     
-    def _toggle_expansion(self):
-        """Toggle collapsed/expanded state."""
-        # DISABLED: QPropertyAnimation was causing segmentation faults
-        # Use instant expand/collapse instead of animation
-        
-        self._is_expanded = not self._is_expanded
-        
-        # Update toggle button
-        self.toggle_btn.setText("▲" if self._is_expanded else "▼")
-        
-        # Instant expand/collapse without animation
-        if self._is_expanded:
-            self.files_frame.setVisible(True)
-            self.files_frame.setMaximumHeight(16777215)  # Qt's QWIDGETSIZE_MAX equivalent
-        else:
-            self.files_frame.setVisible(False)
-            self.files_frame.setMaximumHeight(0)
-    
+    # _toggle_expansion method removed as expand/collapse button was removed
     def _show_settings_menu(self):
         """Show settings context menu."""
         menu = QMenu(self)
@@ -881,27 +1110,55 @@ class FileBrowserBar(QFrame):
         
         menu.exec(QCursor.pos())
     
-    def add_file(self, file_id: str, filename: str, file_size: int = 0, file_type: str = "", status: str = "queued"):
-        """Add a file to the browser bar."""
+    def _on_upload_files_clicked(self):
+        """Handle upload files button click - emit signal for parent to handle."""
+        try:
+            logger.debug("Upload Files button clicked in FileBrowserBar")
+            self.upload_files_requested.emit()
+        except Exception as e:
+            logger.error(f"Failed to handle upload files button click: {e}")
+    
+    def add_file(self, file_id: str, filename: str, file_size: int = 0, file_type: str = "", status: str = "queued", conversation_id: str = None, tab_id: str = None):
+        """Add a file to the browser bar with conversation and tab association."""
+        logger.info(f"🔍 ADD_FILE DEBUG: file_id={file_id}, conversation_id={conversation_id}, tab_id={tab_id}")
+        print(f"🔍 ADD_FILE DEBUG: file_id={file_id}, conversation_id={conversation_id}, tab_id={tab_id}")
+        
         if file_id in self.file_items:
             # Update existing item
             item = self.file_items[file_id]
             item.update_status(status)
+            # Update conversation/tab association if provided
+            if conversation_id:
+                item.conversation_id = conversation_id
+                logger.info(f"🔍 ADD_FILE: Updated existing file {file_id} conversation_id to {conversation_id}")
+            if tab_id:
+                item.tab_id = tab_id
+                logger.info(f"🔍 ADD_FILE: Updated existing file {file_id} tab_id to {tab_id}")
             return
         
-        # Create new file item
+        # Create new file item with conversation and tab association
+        logger.info(f"🔍 ADD_FILE: Creating NEW FileContextItem with tab_id={tab_id}")
+        print(f"🔍 ADD_FILE: Creating NEW FileContextItem with tab_id={tab_id}")
+        
         item = FileContextItem(
             file_id=file_id,
             filename=filename,
             file_size=file_size,
             file_type=file_type,
-            theme_manager=self.theme_manager
+            theme_manager=self.theme_manager,
+            conversation_id=conversation_id,
+            tab_id=tab_id
         )
+        
+        # Verify the tab_id was set correctly
+        logger.info(f"🔍 ADD_FILE: Created file item - actual tab_id: {getattr(item, 'tab_id', 'NOT SET')}")
+        print(f"🔍 ADD_FILE: Created file item - actual tab_id: {getattr(item, 'tab_id', 'NOT SET')}")
         
         # Connect signals
         item.remove_requested.connect(self._on_file_remove_requested)
         item.view_requested.connect(self.file_viewed.emit)
         item.toggle_requested.connect(self.file_toggled.emit)
+        item.processing_completed.connect(self._on_file_processing_completed)
         
         # Add to grid layout
         if not self.current_row_layout or self.pills_in_current_row >= self.max_pills_per_row:
@@ -940,6 +1197,21 @@ class FileBrowserBar(QFrame):
         self.remove_file(file_id)
         self.file_removed.emit(file_id)
     
+    def _on_file_processing_completed(self, file_id: str, status: str):
+        """Handle file processing completion - hide spinner and propagate signal."""
+        logger.info(f"🔄 _on_file_processing_completed called: {file_id} - {status}")
+        if file_id in self.file_items:
+            item = self.file_items[file_id]
+            item.status_indicator.setVisible(False)
+            logger.info(f"✅ Successfully hid spinner for file: {file_id}")
+        else:
+            logger.warning(f"❌ File item not found for processing completion: {file_id}")
+            logger.info(f"Available file IDs: {list(self.file_items.keys())}")
+
+        # Propagate signal to parent widgets (e.g., REPLWidget for RAG refresh)
+        logger.info(f"📡 Propagating processing_completed signal for {file_id[:8]} - {status}")
+        self.processing_completed.emit(file_id, status)
+    
     def remove_file(self, file_id: str):
         """Remove a file from the browser."""
         if file_id in self.file_items:
@@ -965,6 +1237,7 @@ class FileBrowserBar(QFrame):
     def update_file_status(self, file_id: str, status: str, progress: float = 0.0):
         """Update file processing status."""
         logger.info(f"🔍 DEBUG: update_file_status called - file_id: {file_id}, status: {status}")
+        logger.info(f"🔍 DEBUG: Available file IDs: {list(self.file_items.keys())}")
         try:
             if file_id in self.file_items:
                 logger.info(f"🔍 DEBUG: Found file item for {file_id}")
@@ -973,7 +1246,16 @@ class FileBrowserBar(QFrame):
                 self._update_status_display()
                 logger.info(f"🔍 DEBUG: Updated status display for {file_id}")
             else:
-                logger.info(f"🔍 DEBUG: File item not found for {file_id}")
+                logger.warning(f"🔍 DEBUG: File item not found for {file_id}")
+                logger.info(f"🔍 DEBUG: Trying to find by filename match...")
+                # Try to find by filename if file_id doesn't match
+                for item_id, item in self.file_items.items():
+                    if item.filename == file_id or file_id.endswith(item.filename):
+                        logger.info(f"🔍 DEBUG: Found match by filename: {item_id} -> {item.filename}")
+                        item.update_status(status, progress)
+                        self._update_status_display()
+                        return
+                logger.warning(f"🔍 DEBUG: No filename match found either")
         except Exception as e:
             logger.error(f"🔍 DEBUG: Exception in update_file_status: {e}")
             raise
@@ -999,6 +1281,96 @@ class FileBrowserBar(QFrame):
         self.setVisible(False)
         logger.debug("Cleared all file items")
     
+    def hide_files_for_conversation(self, conversation_id: str):
+        """Hide files that belong to a specific conversation."""
+        visible_count = 0
+        for item in self.file_items.values():
+            if item.conversation_id == conversation_id:
+                item.setVisible(False)
+            else:
+                if item.isVisible():
+                    visible_count += 1
+        
+        # Hide the entire bar if no files are visible
+        if visible_count == 0:
+            self.setVisible(False)
+        
+        logger.debug(f"Hidden files for conversation {conversation_id[:8]}...")
+    
+    def show_files_for_conversation(self, conversation_id: str):
+        """Show only files that belong to a specific conversation."""
+        logger.debug(f"🔍 DEBUG: show_files_for_conversation called for {conversation_id[:8]}...")
+        logger.debug(f"🔍 DEBUG: Total file_items: {len(self.file_items)}")
+        
+        visible_count = 0
+        for file_id, item in self.file_items.items():
+            logger.debug(f"🔍 DEBUG: File {file_id} has conversation_id: {getattr(item, 'conversation_id', 'NO ATTRIBUTE')}")
+            
+            if item.conversation_id == conversation_id:
+                item.setVisible(True)
+                visible_count += 1
+                logger.debug(f"🔍 DEBUG: Showing file {file_id} (matches conversation)")
+            else:
+                item.setVisible(False)
+                logger.debug(f"🔍 DEBUG: Hiding file {file_id} (different conversation: {getattr(item, 'conversation_id', 'None')})")
+        
+        # Show the entire bar if any files are visible
+        if visible_count > 0:
+            self.setVisible(True)
+            logger.debug(f"Showing {visible_count} files for conversation {conversation_id[:8]}...")
+        else:
+            self.setVisible(False)
+            logger.debug(f"No files found for conversation {conversation_id[:8]}...")
+    
+    def hide_all_files(self):
+        """Hide all files without removing them."""
+        for item in self.file_items.values():
+            item.setVisible(False)
+        self.setVisible(False)
+        logger.debug("Hidden all file items")
+    
+    def get_files_for_conversation(self, conversation_id: str) -> list:
+        """Get list of file IDs for a specific conversation."""
+        files = [file_id for file_id, item in self.file_items.items() 
+                if item.conversation_id == conversation_id]
+        logger.debug(f"🔍 get_files_for_conversation({conversation_id[:8] if conversation_id else 'None'}): Found {len(files)} files")
+        return files
+    
+    def get_files_for_tab(self, tab_id: str) -> list:
+        """Get list of file IDs for a specific tab."""
+        files = [file_id for file_id, item in self.file_items.items() 
+                if getattr(item, 'tab_id', None) == tab_id]
+        logger.debug(f"🔍 get_files_for_tab({tab_id}): Found {len(files)} files")
+        return files
+    
+    def show_files_for_tab(self, tab_id: str):
+        """Show only files that belong to a specific tab."""
+        logger.info(f"🔍 show_files_for_tab called for tab {tab_id}")
+        
+        visible_count = 0
+        for file_id, item in self.file_items.items():
+            if getattr(item, 'tab_id', None) == tab_id:
+                item.setVisible(True)
+                visible_count += 1
+                logger.debug(f"✅ Showing file {file_id} for tab {tab_id}")
+            else:
+                item.setVisible(False)
+        
+        # Show the entire bar if any files are visible
+        if visible_count > 0:
+            self.setVisible(True)
+            logger.info(f"📁 Showing {visible_count} files for tab {tab_id}")
+        else:
+            self.setVisible(False)
+            logger.info(f"📁 No files found for tab {tab_id}")
+    
+    def count_files_for_tab(self, tab_id: str) -> int:
+        """Count files associated with a specific tab."""
+        count = len([item for item in self.file_items.values() 
+                    if getattr(item, 'tab_id', None) == tab_id])
+        logger.debug(f"🔢 Tab {tab_id} has {count} files")
+        return count
+    
     def set_file_enabled(self, file_id: str, enabled: bool):
         """Set the enabled state of a specific file."""
         try:
@@ -1006,7 +1378,6 @@ class FileBrowserBar(QFrame):
                 file_item = self.file_items[file_id]
                 file_item.is_enabled = enabled
                 file_item._apply_styling()
-                file_item._update_tooltip()
                 logger.debug(f"Updated file {file_id} enabled state to {enabled}")
                 return True
             else:
@@ -1062,9 +1433,9 @@ class FileBrowserBar(QFrame):
         
         # Update title with count
         if total_files > 0:
-            self.title_label.setText(f"📁 File Contexts ({total_files})")
+            self.title_label.setText(f"📁 Attachments ({total_files})")
         else:
-            self.title_label.setText("📁 File Contexts")
+            self.title_label.setText("📁 Attachments")
     
     def has_files(self) -> bool:
         """Check if any files are present."""

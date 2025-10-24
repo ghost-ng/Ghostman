@@ -816,3 +816,166 @@ theme_manager = ThemeManager()
 def get_theme_manager() -> ThemeManager:
     """Get the global theme manager instance."""
     return theme_manager
+
+# Performance-optimized theme color helpers
+# ========================================
+
+# Cache for theme-system availability check (performance optimization)  
+_theme_system_available_cache: Optional[bool] = None
+
+# Default fallback colors optimized for both light and dark themes
+_DEFAULT_FALLBACK_COLORS = {
+    'text_primary': '#ecf0f1',      # Light text - works on dark backgrounds  
+    'text_secondary': '#bdc3c7',    # Secondary light text
+    'text_tertiary': '#95a5a6',     # Tertiary light text
+    'background_primary': '#2c3e50', # Dark background
+    'background_secondary': '#34495e', # Slightly lighter dark background  
+    'primary': '#3498db',           # Blue accent
+    'secondary': '#e74c3c',         # Red accent
+    'status_success': '#27ae60',    # Green
+    'status_warning': '#f39c12',    # Orange
+    'status_error': '#e74c3c',      # Red
+    'status_info': '#3498db',       # Blue
+}
+
+
+def get_theme_primary_color(theme_manager_instance: Optional[ThemeManager] = None) -> str:
+    """Get the theme primary text color with performance optimization and fallback."""
+    global _theme_system_available_cache
+    
+    # Fast path: Check cached availability first
+    if _theme_system_available_cache is False:
+        return _DEFAULT_FALLBACK_COLORS['text_primary']
+    
+    # Use provided theme manager or get global instance
+    tm = theme_manager_instance or theme_manager
+    
+    # Check if theme manager and theme system are available
+    if tm and hasattr(tm, 'current_theme') and tm.current_theme:
+        try:
+            # Use cached color dictionary for optimal performance
+            cached_colors = tm._get_cached_theme_color_dict()
+            if cached_colors and 'text_primary' in cached_colors:
+                # Cache that theme system is available
+                _theme_system_available_cache = True
+                return cached_colors['text_primary']
+            
+            # Fallback to direct property access if cache is not available
+            return tm.current_theme.text_primary
+        except (AttributeError, KeyError):
+            # Cache that theme system is not working properly
+            _theme_system_available_cache = False
+            pass
+    
+    # Theme system unavailable - use fallback
+    _theme_system_available_cache = False
+    return _DEFAULT_FALLBACK_COLORS['text_primary']
+
+
+
+
+
+
+def get_theme_color(color_name: str, 
+                   theme_manager_instance: Optional[ThemeManager] = None, 
+                   fallback: Optional[str] = None) -> str:
+    """
+    Get any color from the current theme with performance optimization and fallback.
+    
+    Args:
+        color_name: Name of the color to retrieve (e.g., 'text_primary', 'background_secondary')
+        theme_manager_instance: Optional theme manager instance for better performance
+        fallback: Custom fallback color. If None, uses predefined fallback for the color name.
+    
+    Returns:
+        str: Hex color code for the requested color, or fallback if unavailable.
+    """
+    global _theme_system_available_cache
+    
+    # Determine fallback color
+    if fallback is None:
+        fallback = _DEFAULT_FALLBACK_COLORS.get(color_name, '#ecf0f1')
+    
+    # Fast path: Check cached availability first
+    if _theme_system_available_cache is False:
+        return fallback
+    
+    # Use provided theme manager or get global instance
+    tm = theme_manager_instance or theme_manager
+    
+    # Check if theme manager and theme system are available
+    if tm and hasattr(tm, 'current_theme') and tm.current_theme:
+        try:
+            # Use cached color dictionary for optimal performance
+            cached_colors = tm._get_cached_theme_color_dict()
+            if cached_colors and color_name in cached_colors:
+                # Cache that theme system is available
+                _theme_system_available_cache = True
+                return cached_colors[color_name]
+            
+            # Fallback to direct property access if cache is not available
+            if hasattr(tm.current_theme, color_name):
+                color_value = getattr(tm.current_theme, color_name)
+                _theme_system_available_cache = True
+                return color_value
+        except (AttributeError, KeyError):
+            # Cache that theme system is not working properly
+            _theme_system_available_cache = False
+            pass
+    
+    # Theme system unavailable - use fallback
+    _theme_system_available_cache = False
+    return fallback
+
+def get_theme_colors_dict(theme_manager_instance: Optional[ThemeManager] = None) -> Dict[str, str]:
+    """Get a complete dictionary of theme colors with fallbacks."""
+    global _theme_system_available_cache
+    
+    # Fast path: Check cached availability first
+    if _theme_system_available_cache is False:
+        return _DEFAULT_FALLBACK_COLORS.copy()
+    
+    # Use provided theme manager or get global instance
+    tm = theme_manager_instance or theme_manager
+    
+    # Check if theme manager and theme system are available
+    if tm and hasattr(tm, 'current_theme') and tm.current_theme:
+        try:
+            # Use cached color dictionary for optimal performance
+            cached_colors = tm._get_cached_theme_color_dict()
+            if cached_colors:
+                # Cache that theme system is available
+                _theme_system_available_cache = True
+                return cached_colors
+            
+            # Fallback to direct theme object access
+            theme_dict = tm.current_theme.to_dict()
+            _theme_system_available_cache = True
+            return theme_dict
+        except (AttributeError, KeyError):
+            # Cache that theme system is not working properly
+            _theme_system_available_cache = False
+            pass
+    
+    # Theme system unavailable - use fallback
+    _theme_system_available_cache = False
+    return _DEFAULT_FALLBACK_COLORS.copy()
+
+
+def get_theme_text_color(theme_manager_instance: Optional[ThemeManager] = None) -> str:
+    """Alias for get_theme_primary_color for backwards compatibility."""
+    return get_theme_primary_color(theme_manager_instance)
+
+
+def get_theme_background_color(theme_manager_instance: Optional[ThemeManager] = None) -> str:
+    """Get the theme primary background color with fallback."""
+    return get_theme_color('background_primary', theme_manager_instance)
+
+
+def get_theme_accent_color(theme_manager_instance: Optional[ThemeManager] = None) -> str:
+    """Get the theme primary accent color with fallback."""
+    return get_theme_color('primary', theme_manager_instance)
+
+
+# Export for backwards compatibility
+THEME_SYSTEM_AVAILABLE = True

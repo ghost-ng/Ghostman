@@ -35,9 +35,9 @@ class SafeRAGSession:
         """Ingest document - delegate to simple session."""
         return self.simple_session.ingest_document(file_path, metadata_override, timeout)
     
-    def query(self, query_text, top_k=5, filters=None, timeout=30.0):
+    def query(self, query_text, top_k=5, filters=None, timeout=30.0, conversation_id=None):
         """Query - delegate to simple session."""
-        return self.simple_session.query(query_text, top_k, filters, timeout)
+        return self.simple_session.query(query_text, top_k, filters, timeout, conversation_id)
     
     def get_stats(self, timeout=5.0):
         """Get stats - delegate to simple session."""

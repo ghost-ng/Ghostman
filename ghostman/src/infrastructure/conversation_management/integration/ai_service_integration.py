@@ -25,7 +25,7 @@ class ConversationContextAdapter:
         
         context = ConversationContext(
             max_messages=conversation.metadata.custom_fields.get('max_messages', 50),
-            max_tokens=conversation.metadata.estimated_tokens or 8000
+            max_tokens=conversation.metadata.estimated_tokens or 32768  # Increased for modern models
         )
         
         # Convert messages with proper error handling
@@ -81,16 +81,24 @@ class ConversationAIService(AIService):
     def __init__(self, conversation_service: Optional[ConversationService] = None):
         """Initialize conversation-aware AI service."""
         super().__init__()
-        
+
         self.conversation_service = conversation_service or ConversationService()
         self._current_conversation_id: Optional[str] = None
         self._auto_save_conversations = True
         self._auto_generate_titles = True
         self._auto_generate_summaries = False
         self._conversation_update_callbacks = []
-        
+
+        # Reference to file browser for checking file counts (set by REPL widget)
+        self._file_browser_ref = None
+
         logger.info("ConversationAIService initialized")
-    
+
+    def set_file_browser_reference(self, file_browser):
+        """Set reference to file browser for file count checking (optimization)."""
+        self._file_browser_ref = file_browser
+        logger.debug("File browser reference set for RAG optimization")
+
     # --- Conversation Management Integration ---
     
     async def start_new_conversation(
@@ -209,7 +217,8 @@ class ConversationAIService(AIService):
         self, 
         message: str,
         stream: bool = False,
-        save_conversation: bool = True
+        save_conversation: bool = True,
+        conversation_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Send message with automatic conversation saving and robust persistence.
@@ -218,6 +227,7 @@ class ConversationAIService(AIService):
             message: User message to send
             stream: Whether to stream the response
             save_conversation: Whether to save to conversation management
+            conversation_context: Optional context about conversation (includes conversation_id)
             
         Returns:
             Dict with response information
@@ -226,26 +236,82 @@ class ConversationAIService(AIService):
         logger.info(f"💬 Sending message with conversation context (current: {self._current_conversation_id})")
         logger.debug(f"💬 Context before send: {len(self.conversation.messages)} messages")
         
+        # Handle conversation context if provided
+        if conversation_context and 'conversation_id' in conversation_context:
+            context_conv_id = conversation_context['conversation_id']
+            if context_conv_id != self._current_conversation_id:
+                logger.info(f"🔄 Switching conversation context from {self._current_conversation_id} to {context_conv_id}")
+                self.set_current_conversation(context_conv_id)
+        
+        # NUCLEAR DEBUG: Log the AI service state before RAG enhancement
+        logger.warning(f"🚨 NUCLEAR DEBUG: AI Service conversation ID: {self._current_conversation_id}")
+        if not self._current_conversation_id:
+            logger.error("🚨 NUCLEAR CRITICAL: AI Service has NO conversation ID - this will cause isolation failure")
+            logger.error("🚫 Files uploaded to this conversation may not be findable")
+        
+        # Enhance message with RAG context if available (with strict conversation isolation)
+        enhanced_message = self._enhance_message_with_rag_context(message)
+        
         # Ensure we have a conversation to save to
         if save_conversation and self._auto_save_conversations and not self._current_conversation_id:
             logger.info("🆕 No active conversation, creating new one for message")
             try:
-                import asyncio
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    conversation_id = loop.run_until_complete(self.start_new_conversation())
-                    if conversation_id:
-                        logger.info(f"✓ Created new conversation for message: {conversation_id}")
-                    else:
-                        logger.error("✗ Failed to create conversation for message")
-                finally:
-                    loop.close()
+                from ...async_manager import get_async_manager
+                
+                async_manager = get_async_manager()
+                if async_manager and async_manager.is_initialized():
+                    # Use async manager for thread-safe conversation creation
+                    def on_conversation_created(result, error):
+                        if error:
+                            logger.error(f"✗ Failed to create conversation for message: {error}")
+                        elif result:
+                            self._current_conversation_id = result
+                            logger.info(f"✓ Created new conversation for message: {result}")
+                        else:
+                            logger.error("✗ Failed to create conversation for message - no result")
+                    
+                    async_manager.run_async_task(
+                        self.start_new_conversation(),
+                        callback=on_conversation_created,
+                        timeout=10.0
+                    )
+                else:
+                    logger.warning("AsyncManager not available, attempting direct conversation creation")
+                    # Fallback with better error handling
+                    import asyncio
+                    try:
+                        current_loop = asyncio.get_event_loop()
+                        if current_loop.is_closed():
+                            raise RuntimeError("Event loop is closed")
+                        
+                        if not current_loop.is_running():
+                            conversation_id = current_loop.run_until_complete(self.start_new_conversation())
+                            if conversation_id:
+                                logger.info(f"✓ Created new conversation for message: {conversation_id}")
+                            else:
+                                logger.error("✗ Failed to create conversation for message")
+                    except (RuntimeError, Exception) as loop_error:
+                        logger.warning(f"Event loop issue during conversation creation: {loop_error}")
+                        # Create new loop as last resort
+                        loop = asyncio.new_event_loop()
+                        try:
+                            asyncio.set_event_loop(loop)
+                            conversation_id = loop.run_until_complete(self.start_new_conversation())
+                            if conversation_id:
+                                logger.info(f"✓ Created new conversation for message: {conversation_id}")
+                            else:
+                                logger.error("✗ Failed to create conversation for message")
+                        finally:
+                            try:
+                                loop.close()
+                            except Exception as e:
+                                logger.debug(f"Error closing conversation creation loop: {e}")
+                        
             except Exception as e:
                 logger.error(f"✗ Failed to create conversation for message: {e}")
         
-        # Call parent method
-        result = super().send_message(message, stream)
+        # Call parent method with enhanced message
+        result = super().send_message(enhanced_message, stream)
         
         # Debug: Log what the parent method returned
         logger.info(f"🔍 CONVERSATION AI SERVICE - Parent result: success={result.get('success')}")
@@ -403,6 +469,187 @@ class ConversationAIService(AIService):
         except Exception as e:
             logger.error(f"✗ Failed to save current conversation: {e}", exc_info=True)
     
+    def _enhance_message_with_rag_context(self, message: str) -> str:
+        """Enhance message with RAG context using FAISS pipeline."""
+        print(f"🔍 PRINT DEBUG: _enhance_message_with_rag_context called with message: '{message[:50]}...'")
+        logger.info(f"🔍 DEBUG: _enhance_message_with_rag_context called with message: '{message[:50]}...'")
+        
+        try:
+            # Import SafeRAG session
+            from ...rag_pipeline.threading.safe_rag_session import create_safe_rag_session
+            
+            # Create a SafeRAG session for context retrieval
+            logger.info("🔍 Creating SafeRAG session for context retrieval")
+            safe_rag = create_safe_rag_session()
+            
+            if not safe_rag or not safe_rag.is_ready:
+                logger.warning("⚠️ SafeRAG session not available for context retrieval")
+                return message
+            
+            try:
+                # First, check if we have any documents in the pipeline
+                stats = safe_rag.get_stats(timeout=5.0)
+                logger.info(f"📊 RAG pipeline stats before query: {stats}")
+                
+                # Check if there are any documents GLOBALLY
+                rag_stats = stats.get('rag_pipeline', {}) if stats else {}
+                docs_processed = rag_stats.get('documents_processed', 0)
+                chunks_stored = rag_stats.get('vector_store', {}).get('chunks_stored', 0)
+                logger.info(f"📊 Documents processed (global): {docs_processed}, Chunks stored (global): {chunks_stored}")
+
+                if docs_processed == 0:
+                    logger.warning("⚠️ RAG pipeline has no documents globally - no context to retrieve")
+                    safe_rag.close()
+                    return message
+
+                # CRITICAL FIX: Skip RAG query entirely if no files uploaded in this conversation
+                # Get current conversation ID for checking
+                current_conversation_id = self._current_conversation_id
+
+                # ENHANCED DEBUG LOGGING
+                logger.info(f"🔍 RAG OPTIMIZATION CHECK:")
+                logger.info(f"  - conversation_id: {current_conversation_id[:8] if current_conversation_id else 'NONE'}")
+                logger.info(f"  - file_browser_ref: {'SET ✅' if self._file_browser_ref else 'NOT SET ❌'}")
+
+                # The SmartContextSelector in safe_rag.query() will filter by conversation_id,
+                # but we can save expensive FAISS queries by checking file count first
+                if current_conversation_id and self._file_browser_ref:
+                    try:
+                        logger.info(f"  - Calling get_files_for_conversation({current_conversation_id[:8]})...")
+                        # Check file browser for files in this conversation
+                        files = self._file_browser_ref.get_files_for_conversation(current_conversation_id)
+                        file_count = len(files) if files else 0
+                        logger.info(f"  - File count result: {file_count}")
+
+                        if file_count == 0:
+                            logger.info(f"⏭️⏭️⏭️ SKIPPING RAG: Conversation {current_conversation_id[:8]} has no files uploaded ⏭️⏭️⏭️")
+                            safe_rag.close()
+                            return message
+                        else:
+                            logger.info(f"✅ Conversation {current_conversation_id[:8]} has {file_count} files - proceeding with RAG query")
+                    except Exception as e:
+                        logger.warning(f"❌ File browser check failed: {e} - proceeding with query to be safe")
+                        import traceback
+                        logger.debug(f"Traceback: {traceback.format_exc()}")
+                else:
+                    if not current_conversation_id:
+                        logger.warning(f"⚠️ No conversation ID - cannot optimize, proceeding with query")
+                    if not self._file_browser_ref:
+                        logger.warning(f"⚠️ File browser reference NOT SET - cannot optimize, proceeding with query")
+                    logger.warning(f"  - Proceeding with RAG query (no optimization possible)")
+                
+                # Use SafeRAG query to get relevant context (thread-safe)
+                logger.info(f"Querying SafeRAG pipeline with: '{message[:100]}...'")
+                
+                # Get current conversation ID for filtering
+                current_conversation_id = self._current_conversation_id
+                logger.info(f"🔍 DEBUG: Retrieved conversation ID for RAG filtering: {current_conversation_id}")
+                
+                # NUCLEAR OPTION: FLEXIBLE conversation isolation
+                if not current_conversation_id:
+                    logger.warning("🚨 NUCLEAR OPTION: No conversation ID found - creating emergency conversation context")
+                    # Create an emergency conversation ID to prevent global contamination
+                    import uuid
+                    current_conversation_id = str(uuid.uuid4())
+                    logger.warning(f"🚨 EMERGENCY: Created isolation ID {current_conversation_id[:8]}... to prevent cross-conversation contamination")
+                
+                # FINAL NUCLEAR OPTION: Check for recently uploaded files from current session
+                # Since conversation IDs might be inconsistent, look for files uploaded in last 10 minutes
+                import time
+                current_time = time.time()
+                recent_threshold = current_time - 600  # 10 minutes ago
+                
+                logger.warning(f"🚨 FINAL NUCLEAR OPTION: Searching for conversation {current_conversation_id[:8]}... AND recent files")
+                logger.warning(f"🕒 Will also include files uploaded after {time.ctime(recent_threshold)}")
+                
+                response = safe_rag.query(
+                    query_text=message,
+                    top_k=3,
+                    filters=None,  # Filters now handled by SmartContextSelector
+                    timeout=10.0,
+                    conversation_id=current_conversation_id  # Pass conversation_id for smart selection
+                )
+                
+                if response:
+                    sources = response.get('sources', [])
+                    selection_info = response.get('selection_info', {})
+                    built_in_context = response.get('context', '')
+                    
+                    # Log transparency information
+                    strategies = selection_info.get('strategies_attempted', [])
+                    final_strategy = selection_info.get('final_strategy', 'unknown')
+                    fallback_occurred = selection_info.get('fallback_occurred', False)
+                    
+                    logger.info(f"🧠 SmartContextSelector results: {len(sources)} sources using strategy '{final_strategy}'")
+                    logger.info(f"🔄 Strategies attempted: {strategies}")
+                    if fallback_occurred:
+                        logger.info("🔄 Fallback strategies were activated")
+                    
+                    if sources:
+                        # Log detailed source information with transparency
+                        for i, source in enumerate(sources):
+                            if isinstance(source, dict):
+                                content_preview = source.get('content', '')[:100]
+                                source_type = source.get('source_type', 'unknown')
+                                score = source.get('score', 0.0)
+                                tier = source.get('selection_tier', 0)
+                                threshold = source.get('threshold_used', 0.0)
+                                
+                                # FIXED: Enhanced logging with conversation association info
+                                metadata = source.get('metadata', {})
+                                conv_id = metadata.get('conversation_id', 'None')
+                                pending_id = metadata.get('pending_conversation_id', 'None')
+                                
+                                logger.info(f"  Source {i+1} [{source_type.upper()}]: Score={score:.3f}, Tier={tier}, "
+                                          f"Threshold={threshold:.3f}")
+                                logger.info(f"    ConvID: {conv_id[:8] if conv_id != 'None' else 'None'}, "
+                                          f"PendingID: {pending_id[:8] if pending_id != 'None' else 'None'}")
+                                logger.info(f"    Content: {content_preview}...")
+                        
+                        # Use the built-in context from SmartContextSelector
+                        if built_in_context:
+                            enhanced_message = f"Context from files:\n{built_in_context}\n\nUser question: {message}"
+                            
+                            logger.info(f"✅ Enhanced message with {len(sources)} smart-selected context sources")
+                            safe_rag.close()
+                            return enhanced_message
+                        else:
+                            logger.warning("⚠️ SmartContextSelector returned sources but no built context")
+                    else:
+                        # Log why no sources were found with enhanced debugging
+                        message_text = response.get('message', 'No explanation provided')
+                        results_by_tier = selection_info.get('results_by_tier', {})
+                        logger.warning(f"⚠️ SmartContextSelector found no sources: {message_text}")
+                        logger.warning(f"🔍 Results by tier: {results_by_tier}")
+                        
+                        # FIXED: Suggest debugging steps for users
+                        if not any(results_by_tier.values()):
+                            logger.warning("📝 Debugging suggestions:")
+                            logger.warning("  1. Check if files were actually processed and stored")
+                            logger.warning("  2. Verify conversation association is working")
+                            logger.warning("  3. Try a more general query (e.g., 'content' instead of specific terms)")
+                            logger.warning("  4. Check if similarity thresholds are too high")
+                else:
+                    logger.warning("⚠️ SafeRAG query returned no response")
+                    logger.warning("📝 This usually means:")
+                    logger.warning("  1. No documents in the RAG pipeline")
+                    logger.warning("  2. SafeRAG session is not properly initialized")
+                    logger.warning("  3. Query processing failed internally")
+                
+                safe_rag.close()
+                
+            except Exception as query_error:
+                logger.error(f"Error during RAG query: {query_error}")
+                safe_rag.close()
+                return message
+                
+        except Exception as e:
+            logger.error(f"Error enhancing message with RAG context: {e}")
+            return message
+        
+        logger.info("🔍 DEBUG: No context found, returning original message")
+        return message
+    
     # --- Configuration ---
     
     def set_auto_save(self, enabled: bool):
@@ -443,62 +690,117 @@ class ConversationAIService(AIService):
         return self._current_conversation_id
     
     def set_current_conversation(self, conversation_id: str):
-        """Set the current conversation ID and load its context."""
+        """Set the current conversation ID and load its context using thread-safe patterns."""
         try:
             logger.info(f"Setting current conversation to: {conversation_id}")
             self._current_conversation_id = conversation_id
             
-            # Load conversation context - try sync first for better reliability
+            # AUTO-RESTORE DELETED CONVERSATIONS: If conversation is deleted, restore it automatically
+            # This ensures files uploaded to this conversation remain accessible
             try:
-                self._load_conversation_context_sync(conversation_id)
+                if hasattr(self, 'conversation_service') and self.conversation_service:
+                    async def check_and_restore():
+                        conv = await self.conversation_service.get_conversation(conversation_id, include_messages=False)
+                        if conv and conv.status.value == 'deleted':
+                            logger.warning(f"🔄 Auto-restoring deleted conversation {conversation_id[:8]}... to access its files")
+                            success = await self.conversation_service.restore_conversation(conversation_id)
+                            if success:
+                                logger.info(f"✅ Successfully restored conversation {conversation_id[:8]}... for file access")
+                            else:
+                                logger.error(f"❌ Failed to restore conversation {conversation_id[:8]}...")
+                    
+                    # Execute restoration asynchronously
+                    import asyncio
+                    try:
+                        # Try to get existing event loop, if none exists, create one
+                        try:
+                            loop = asyncio.get_running_loop()
+                            # Loop is running - create task
+                            asyncio.create_task(check_and_restore())
+                        except RuntimeError:
+                            # No running loop - use async manager or skip
+                            logger.debug("No running event loop - skipping auto-restore (non-critical)")
+                    except Exception as restore_error:
+                        logger.debug(f"Auto-restore attempt failed (non-critical): {restore_error}")
             except Exception as e:
-                logger.warning(f"Sync context loading failed, trying async: {e}")
-                # Fallback to async
-                import asyncio
+                logger.debug(f"Auto-restore check failed (this is non-critical): {e}")
+            
+            # Use async manager for thread-safe context loading
+            try:
+                from ...async_manager import get_async_manager
                 
+                async_manager = get_async_manager()
+                if async_manager and async_manager.is_initialized():
+                    # Use async manager for thread-safe context loading
+                    def on_context_loaded(result, error):
+                        if error:
+                            logger.error(f"Failed to load conversation context: {error}")
+                        else:
+                            logger.debug(f"Conversation context loaded successfully for {conversation_id}")
+                    
+                    async_manager.run_async_task(
+                        self._load_conversation_context(conversation_id),
+                        callback=on_context_loaded,
+                        timeout=10.0
+                    )
+                else:
+                    logger.warning("AsyncManager not available, falling back to sync loading")
+                    # Fallback to sync method
+                    self._load_conversation_context_sync(conversation_id)
+                    
+            except Exception as e:
+                logger.error(f"Failed to load conversation context using async manager: {e}")
+                # Last resort fallback
                 try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        # Schedule the context loading as a task
-                        asyncio.create_task(self._load_conversation_context(conversation_id))
-                    else:
-                        # Run synchronously
-                        loop.run_until_complete(self._load_conversation_context(conversation_id))
-                except RuntimeError:
-                    # No event loop - create one
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    loop.run_until_complete(self._load_conversation_context(conversation_id))
-                    loop.close()
+                    self._load_conversation_context_sync(conversation_id)
+                except Exception as sync_error:
+                    logger.error(f"Sync fallback also failed: {sync_error}")
                 
         except Exception as e:
             logger.error(f"Failed to set current conversation {conversation_id}: {e}")
     
     def _load_conversation_context_sync(self, conversation_id: str):
-        """Load conversation context synchronously using async tools."""
+        """Load conversation context synchronously with proper event loop handling."""
         import asyncio
         
-        # Create a new event loop for this operation
-        loop = asyncio.new_event_loop()
-        old_loop = None
         try:
-            # Check if there's an existing loop
+            # Check if there's an existing event loop and if it's running
+            current_loop = None
+            loop_was_running = False
+            
             try:
-                old_loop = asyncio.get_event_loop()
+                current_loop = asyncio.get_event_loop()
+                loop_was_running = current_loop.is_running()
             except RuntimeError:
-                pass  # No current loop
+                # No event loop exists
+                current_loop = None
             
-            # Set our new loop
-            asyncio.set_event_loop(loop)
-            
-            # Run the async operation
-            loop.run_until_complete(self._load_conversation_context(conversation_id))
-            
-        finally:
-            # Clean up
-            loop.close()
-            if old_loop:
-                asyncio.set_event_loop(old_loop)
+            if current_loop and not loop_was_running and not current_loop.is_closed():
+                # We have a loop that's not running and not closed - use it
+                current_loop.run_until_complete(self._load_conversation_context(conversation_id))
+            else:
+                # Create a new event loop for this operation
+                loop = asyncio.new_event_loop()
+                try:
+                    # Temporarily set this as the current loop
+                    asyncio.set_event_loop(loop)
+                    
+                    # Run the async operation
+                    loop.run_until_complete(self._load_conversation_context(conversation_id))
+                    
+                finally:
+                    # Clean up the loop
+                    try:
+                        loop.close()
+                    except Exception as e:
+                        logger.debug(f"Error closing temporary event loop: {e}")
+                    
+                    # Restore the original loop if it existed and wasn't closed
+                    if current_loop and not current_loop.is_closed():
+                        asyncio.set_event_loop(current_loop)
+                    
+        except Exception as e:
+            logger.error(f"Failed to load conversation context synchronously: {e}")
     
     async def get_current_conversation_info(self) -> Optional[Dict[str, Any]]:
         """Get information about the current conversation."""
@@ -544,32 +846,69 @@ class ConversationAIService(AIService):
     # --- Shutdown ---
     
     def shutdown(self):
-        """Shutdown the service with conversation saving."""
+        """Shutdown the service with conversation saving using thread-safe patterns."""
+        logger.info("Starting ConversationAIService shutdown...")
+        
         try:
-            # Save current conversation before shutdown
+            # Save current conversation before shutdown using async manager
             if self._current_conversation_id and self._auto_save_conversations:
-                import asyncio
+                logger.debug("Attempting to save conversation on shutdown...")
                 try:
-                    loop = asyncio.get_event_loop()
-                    if not loop.is_running():
-                        loop.run_until_complete(self._save_current_conversation())
+                    from ...async_manager import get_async_manager
+                    
+                    async_manager = get_async_manager()
+                    if async_manager and async_manager.is_initialized():
+                        # Use the async manager for thread-safe shutdown save
+                        def on_shutdown_save_complete(result, error):
+                            if error:
+                                logger.warning(f"Failed to save conversation on shutdown: {error}")
+                            else:
+                                logger.debug("Conversation saved successfully during shutdown")
+                        
+                        async_manager.run_async_task(
+                            self._save_current_conversation(),
+                            callback=on_shutdown_save_complete,
+                            timeout=5.0  # Short timeout for shutdown
+                        )
+                    else:
+                        logger.debug("AsyncManager not available for shutdown save")
+                        
                 except Exception as e:
-                    logger.warning(f"Failed to save conversation on shutdown: {e}")
+                    logger.warning(f"Failed to schedule conversation save on shutdown: {e}")
             
-            # Shutdown conversation service
+            # Shutdown conversation service using async manager
             if hasattr(self.conversation_service, 'shutdown'):
-                import asyncio  # Import asyncio in proper scope
+                logger.debug("Attempting to shutdown conversation service...")
                 try:
-                    loop = asyncio.get_event_loop()
-                    if not loop.is_running():
-                        loop.run_until_complete(self.conversation_service.shutdown())
+                    from ...async_manager import get_async_manager
+                    
+                    async_manager = get_async_manager()
+                    if async_manager and async_manager.is_initialized():
+                        # Use async manager for thread-safe service shutdown
+                        def on_service_shutdown_complete(result, error):
+                            if error:
+                                logger.warning(f"Failed to shutdown conversation service: {error}")
+                            else:
+                                logger.debug("Conversation service shutdown completed")
+                        
+                        async_manager.run_async_task(
+                            self.conversation_service.shutdown(),
+                            callback=on_service_shutdown_complete,
+                            timeout=5.0  # Short timeout for shutdown
+                        )
+                    else:
+                        logger.debug("AsyncManager not available for service shutdown")
+                        
                 except Exception as e:
-                    logger.warning(f"Failed to shutdown conversation service: {e}")
+                    logger.warning(f"Failed to schedule conversation service shutdown: {e}")
                 
         except Exception as e:
             logger.error(f"Error during conversation service shutdown: {e}")
         finally:
             # Call parent shutdown
-            super().shutdown()
+            try:
+                super().shutdown()
+            except Exception as e:
+                logger.warning(f"Error during parent shutdown: {e}")
         
-        logger.info("ConversationAIService shut down")
+        logger.info("ConversationAIService shutdown completed")
