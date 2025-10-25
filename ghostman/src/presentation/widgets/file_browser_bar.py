@@ -632,11 +632,11 @@ class FileBrowserBar(QFrame):
         self.max_pills_per_row = 4
         
         self.setVisible(False)  # Initially hidden
-        
-        # Set minimum size to prevent cutoff - increased significantly
-        self.setMinimumHeight(70)  # Increased from 50 to 70 for better button visibility
-        self.setMaximumHeight(120)  # Set maximum to prevent excessive growth
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+        # Set flexible height constraints for file badges
+        self.setMinimumHeight(80)  # Minimum to show header + 1 row of badges
+        self.setMaximumHeight(300)  # Maximum height before scroll (allows ~6 rows of badges)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         
         self._init_ui()
         self._apply_styling()
@@ -695,7 +695,7 @@ class FileBrowserBar(QFrame):
         
         self.upload_files_btn.setToolTip("Open file dialog to select files for context")
         self.upload_files_btn.clicked.connect(self._on_upload_files_clicked)
-        self.upload_files_btn.setMaximumWidth(120)
+        self.upload_files_btn.setFixedSize(32, 32)  # Standard button size
         header_layout.addWidget(self.upload_files_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
         logger.info("🔧 FB_INIT: Upload button added to layout")
         
@@ -724,17 +724,25 @@ class FileBrowserBar(QFrame):
         # Grid container for Bootstrap-style pills
         self.pills_container = QWidget()
         self.pills_container.setObjectName("pills_container")
-        
+
         # Use a flow layout-like approach with QHBoxLayout and wrapping
         self.pills_grid = QVBoxLayout(self.pills_container)  # Vertical for rows
         self.pills_grid.setContentsMargins(0, 0, 0, 0)
         self.pills_grid.setSpacing(8)
-        
+
         self.current_row_layout = None
         self.pills_in_current_row = 0
         self.max_pills_per_row = 4  # Grid layout
-        
-        files_layout.addWidget(self.pills_container)
+
+        # Wrap pills container in scroll area for overflow handling
+        pills_scroll = QScrollArea()
+        pills_scroll.setWidget(self.pills_container)
+        pills_scroll.setWidgetResizable(True)
+        pills_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        pills_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        pills_scroll.setFrameShape(QFrame.Shape.NoFrame)
+
+        files_layout.addWidget(pills_scroll)
         
         # Status section (summary info)
         self.status_frame = QFrame()
