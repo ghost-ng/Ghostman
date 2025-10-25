@@ -10734,43 +10734,39 @@ def test_theme():
                 logger.info(f"")
                 logger.info(f"   ⚙️ Creating conversation in database...")
 
-                # Create conversation synchronously using the SYNCHRONOUS create_conversation method
+                # Create conversation using async manager (thread-safe)
                 # This ensures the conversation is in the database before we associate it with the tab
                 conversation_id = None
                 if hasattr(self.conversation_manager, 'conversation_service'):
                     try:
-                        # Use run_coroutine_threadsafe to create conversation synchronously
-                        # This ensures we get the actual conversation ID back
-                        import asyncio
-                        import concurrent.futures
+                        # Use the async manager like other parts of the code do
+                        from ...infrastructure.async_manager import get_async_manager
 
-                        try:
-                            loop = asyncio.get_running_loop()
-                            # Create a future to get the conversation object back
-                            future = asyncio.run_coroutine_threadsafe(
+                        async_manager = get_async_manager()
+                        if async_manager:
+                            # Run the async conversation creation and wait for result
+                            conversation_obj = async_manager.run_coroutine_sync(
                                 self.conversation_manager.conversation_service.create_conversation(
                                     title=title,
                                     force_create=True
                                 ),
-                                loop
+                                timeout=5.0  # 5 second timeout
                             )
-                            # Wait for up to 2 seconds for conversation creation
-                            conversation_obj = future.result(timeout=2.0)
+
                             if conversation_obj:
                                 conversation_id = conversation_obj.id
                                 logger.info(f"   ✅ Conversation created in database: {conversation_id[:8]}")
                             else:
                                 logger.error(f"   ❌ Conversation creation returned None")
                                 return
-                        except concurrent.futures.TimeoutError:
-                            logger.error(f"   ❌ Conversation creation timed out after 2s")
+                        else:
+                            logger.error(f"   ❌ AsyncManager not available")
                             return
-                        except RuntimeError:
-                            # No running loop - this shouldn't happen in Qt app but handle it
-                            logger.warning(f"   ⚠️ No event loop available")
-                            return
+                    except TimeoutError:
+                        logger.error(f"   ❌ Conversation creation timed out after 5s")
+                        return
                     except Exception as create_error:
-                        logger.error(f"   ❌ Failed to create conversation: {create_error}")
+                        logger.error(f"   ❌ Failed to create conversation: {create_error}", exc_info=True)
                         return
                 else:
                     logger.error(f"   ❌ No conversation_service available!")
