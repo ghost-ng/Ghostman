@@ -10739,32 +10739,37 @@ def test_theme():
                 conversation_id = None
                 if hasattr(self.conversation_manager, 'conversation_service'):
                     try:
-                        # Use the async manager like other parts of the code do
+                        # Use the async manager's event loop to run the coroutine synchronously
                         from ...infrastructure.async_manager import get_async_manager
+                        import asyncio
+                        import concurrent.futures
 
                         async_manager = get_async_manager()
-                        if async_manager:
-                            # Run the async conversation creation and wait for result
-                            conversation_obj = async_manager.run_coroutine_sync(
+                        if async_manager and async_manager._loop:
+                            # Use asyncio.run_coroutine_threadsafe with the async manager's loop
+                            future = asyncio.run_coroutine_threadsafe(
                                 self.conversation_manager.conversation_service.create_conversation(
                                     title=title,
                                     force_create=True
                                 ),
-                                timeout=5.0  # 5 second timeout
+                                async_manager._loop
                             )
 
-                            if conversation_obj:
-                                conversation_id = conversation_obj.id
-                                logger.info(f"   ✅ Conversation created in database: {conversation_id[:8]}")
-                            else:
-                                logger.error(f"   ❌ Conversation creation returned None")
+                            # Wait for result with timeout
+                            try:
+                                conversation_obj = future.result(timeout=5.0)
+                                if conversation_obj:
+                                    conversation_id = conversation_obj.id
+                                    logger.info(f"   ✅ Conversation created in database: {conversation_id[:8]}")
+                                else:
+                                    logger.error(f"   ❌ Conversation creation returned None")
+                                    return
+                            except concurrent.futures.TimeoutError:
+                                logger.error(f"   ❌ Conversation creation timed out after 5s")
                                 return
                         else:
-                            logger.error(f"   ❌ AsyncManager not available")
+                            logger.error(f"   ❌ AsyncManager not available or not initialized")
                             return
-                    except TimeoutError:
-                        logger.error(f"   ❌ Conversation creation timed out after 5s")
-                        return
                     except Exception as create_error:
                         logger.error(f"   ❌ Failed to create conversation: {create_error}", exc_info=True)
                         return
