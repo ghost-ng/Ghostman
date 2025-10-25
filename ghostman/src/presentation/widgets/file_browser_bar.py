@@ -196,26 +196,26 @@ class FileContextItem(QFrame):
     def _init_ui(self):
         """Initialize pill-style UI components."""
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(6, 2, 6, 2)  # Compact horizontal padding, minimal vertical
-        layout.setSpacing(4)  # Minimal spacing between elements
-        
-        # Status indicator - compact size
+        layout.setContentsMargins(4, 1, 4, 1)  # Very compact padding
+        layout.setSpacing(3)  # Minimal spacing between elements
+
+        # Status indicator - very compact size
         self.status_indicator = QLabel()
-        self.status_indicator.setFixedSize(16, 16)  # Compact size for smaller badge
+        self.status_indicator.setFixedSize(12, 12)  # Smaller size
         self.status_indicator.setText("○")  # Default circle
         self.status_indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.status_indicator.setStyleSheet("""
             QLabel {
                 color: #ff6b35;  /* Orange color for visibility */
-                font-size: 12px;  /* Compact font size */
+                font-size: 10px;  /* Smaller font size */
                 font-weight: bold;
             }
         """)
         layout.addWidget(self.status_indicator)
-        
+
         # File type icon (smaller)
         self.type_label = QLabel()
-        self.type_label.setFixedSize(14, 14)
+        self.type_label.setFixedSize(12, 12)
         self.type_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._update_type_icon()
         layout.addWidget(self.type_label)
@@ -223,16 +223,16 @@ class FileContextItem(QFrame):
         # Filename (main content)
         self.filename_label = QLabel(self._get_pill_name())
         font = self.filename_label.font()
-        font.setPointSize(8)
+        font.setPointSize(7)  # Smaller font
         font.setBold(False)
         self.filename_label.setFont(font)
         layout.addWidget(self.filename_label)
-        
-        # Remove button (×) - compact with no border
+
+        # Remove button (×) - very compact with no border
         self.remove_btn = QToolButton()
         self.remove_btn.setText("×")
         self.remove_btn.clicked.connect(lambda: self.remove_requested.emit(self.file_id))
-        self.remove_btn.setFixedSize(16, 16)  # Compact size
+        self.remove_btn.setFixedSize(14, 14)  # Very compact size
         # Apply styling with no border
         self.remove_btn.setStyleSheet("""
             QToolButton {
@@ -240,24 +240,24 @@ class FileContextItem(QFrame):
                 border: none;  /* No border */
                 color: #ff6b6b;
                 font-weight: bold;
-                font-size: 12px;  /* Compact font size */
+                font-size: 11px;  /* Smaller font size */
             }
             QToolButton:hover {
                 background-color: rgba(255, 107, 107, 0.2);  /* Subtle hover background */
                 color: #ff4444;  /* Darker red on hover */
-                border-radius: 8px;  /* Subtle rounded corners on hover */
+                border-radius: 7px;  /* Subtle rounded corners on hover */
             }
         """)
         layout.addWidget(self.remove_btn)
         
         # Set size policy for grid pill layout with bottom margin
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.setFixedHeight(28)  # More compact pill height
-        self.setMinimumWidth(120)  # Minimum pill width
-        self.setMaximumWidth(200)  # Maximum pill width
+        self.setFixedHeight(24)  # Very compact pill height
+        self.setMinimumWidth(100)  # Smaller minimum width
+        self.setMaximumWidth(180)  # Smaller maximum width
 
         # Add bottom margin to badge for visual separation
-        self.setContentsMargins(0, 0, 0, 4)  # 4px bottom margin
+        self.setContentsMargins(0, 0, 0, 2)  # Small bottom margin
         
         
         # Initialize spinner animation
@@ -294,14 +294,25 @@ class FileContextItem(QFrame):
         self.type_label.setFont(font)
     
     def _get_pill_name(self) -> str:
-        """Get pill-style display name (just filename, no extension for brevity)."""
-        name = Path(self.filename).stem
-        max_length = 15  # Shorter for pill style
-        
+        """Get pill-style display name with extension."""
+        name = self.filename  # Use full filename with extension
+        max_length = 18  # Slightly increased to accommodate extensions
+
         if len(name) <= max_length:
             return name
         else:
-            return f"{name[:max_length-3]}..."
+            # Truncate from middle to preserve extension
+            path = Path(name)
+            stem = path.stem
+            ext = path.suffix
+
+            # Calculate available space for stem
+            available = max_length - len(ext) - 3  # 3 for "..."
+
+            if available > 0:
+                return f"{stem[:available]}...{ext}"
+            else:
+                return f"{name[:max_length-3]}..."
     
     def _get_status_styling(self) -> Dict[str, str]:
         """Get Bootstrap CSS badge colors for pill styling."""
@@ -658,13 +669,13 @@ class FileBrowserBar(QFrame):
         """Initialize the UI components."""
         logger.info("🔧 FB_INIT: Initializing FileBrowserBar UI...")
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(8, 6, 8, 6)  # Reduced bottom margin to minimize space
-        main_layout.setSpacing(4)  # Reduced spacing to minimize gaps
-        
+        main_layout.setContentsMargins(8, 2, 8, 4)  # Minimal top margin, compact bottom
+        main_layout.setSpacing(2)  # Minimal spacing
+
         # Header section
         header_frame = QFrame()
         header_layout = QHBoxLayout(header_frame)
-        header_layout.setContentsMargins(4, 4, 4, 4)  # Balanced margins
+        header_layout.setContentsMargins(4, 0, 4, 2)  # No top margin, minimal bottom
         header_layout.setSpacing(6)  # Reduced spacing for better alignment
         
         # Title with file count
@@ -720,7 +731,7 @@ class FileBrowserBar(QFrame):
         # Files section (grid layout pills)
         self.files_frame = QFrame()
         files_layout = QVBoxLayout(self.files_frame)
-        files_layout.setContentsMargins(8, 2, 8, 2)  # Minimal vertical margins for compact layout
+        files_layout.setContentsMargins(8, 2, 8, 0)  # No bottom margin
         files_layout.setSpacing(2)  # Minimal spacing between elements
         
         # Grid container for Bootstrap-style pills
@@ -753,7 +764,7 @@ class FileBrowserBar(QFrame):
         # Status section (summary info)
         self.status_frame = QFrame()
         status_layout = QHBoxLayout(self.status_frame)
-        status_layout.setContentsMargins(4, 2, 4, 2)
+        status_layout.setContentsMargins(4, 0, 4, 0)  # No vertical margins
         status_layout.setSpacing(8)
         
         self.status_label = QLabel("No files loaded")
