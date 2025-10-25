@@ -1378,6 +1378,22 @@ class REPLWidget(QWidget):
         # This is normal during app startup before tabs are created
         return None
 
+    @property
+    def file_browser_bar(self):
+        """
+        Get the active tab's file browser widget.
+        This property provides backward compatibility - code can still use self.file_browser_bar,
+        but it now points to the active tab's widget instead of a shared widget.
+        """
+        # Check if tab manager exists and has an active tab
+        if hasattr(self, 'tab_manager') and self.tab_manager and self.tab_manager.active_tab_id:
+            active_tab = self.tab_manager.get_active_tab()
+            if active_tab and hasattr(active_tab, 'file_browser'):
+                return active_tab.file_browser
+
+        # Return None during initialization or when no tabs exist
+        return None
+
     def _init_dynamic_input_height(self):
         """Initialize dynamic input height system."""
         # Initialize variables for dynamic height management
@@ -3202,6 +3218,19 @@ class REPLWidget(QWidget):
             logger.error(f"❌ Failed to initialize file browser bar: {e}")
             self.file_browser_bar = None
     
+    def _connect_file_browser_signals(self, file_browser):
+        """Connect signals for a file browser widget (used for per-tab file browsers)."""
+        try:
+            file_browser.file_removed.connect(self._on_file_removed_safe)
+            file_browser.processing_completed.connect(self._on_file_processing_completed)
+            file_browser.clear_all_requested.connect(self._on_clear_all_files_safe)
+            file_browser.file_viewed.connect(self._on_file_viewed)
+            file_browser.file_toggled.connect(self._on_file_toggled)
+            file_browser.upload_files_requested.connect(self._on_upload_files_from_browser)
+            logger.debug("Connected file browser signals")
+        except Exception as e:
+            logger.error(f"Failed to connect file browser signals: {e}")
+
     def _set_file_browser_reference_in_ai_service(self):
         """Set file browser reference in AI service for RAG query optimization."""
         logger.info("🔧 ATTEMPTING to set file browser reference in AI service...")
@@ -10026,38 +10055,34 @@ def test_theme():
             logger.error(f"Failed to close search: {e}")
     
     def _toggle_file_browser(self):
-        """Toggle file browser bar visibility."""
-        logger.info("📁 TOGGLE: File browser toggle button clicked")
+        """Toggle file browser bar visibility for the active tab."""
+        logger.debug("File browser toggle clicked")
         try:
-            if not hasattr(self, 'file_browser_bar'):
-                logger.error("❌ TOGGLE: file_browser_bar attribute does not exist!")
+            # Get active tab's file browser
+            if not self.tab_manager:
+                logger.error("No tab manager available")
                 return
-            
-            if not self.file_browser_bar:
-                logger.error("❌ TOGGLE: file_browser_bar is None!")
+
+            active_tab = self.tab_manager.get_active_tab()
+            if not active_tab or not hasattr(active_tab, 'file_browser'):
+                logger.error("No active tab or file browser not available")
                 return
-            
-            current_visibility = self.file_browser_bar.isVisible()
-            logger.info(f"📁 TOGGLE: Current visibility = {current_visibility}")
-            
-            if current_visibility:
-                logger.info("📁 TOGGLE: Closing file browser...")
-                self._close_file_browser()
-            else:
-                # Show file browser bar
-                logger.info("📁 TOGGLE: Opening file browser...")
-                self.file_browser_bar.setVisible(True)
-                logger.info("✅ TOGGLE: File browser bar opened successfully")
-                
+
+            file_browser = active_tab.file_browser
+            current_visibility = file_browser.isVisible()
+            logger.debug(f"Current visibility: {current_visibility}")
+
+            # Toggle visibility
+            file_browser.setVisible(not current_visibility)
+            active_tab.file_browser_visible = not current_visibility
+
             # Update upload button visual state
-            logger.info("📁 TOGGLE: Updating upload button state...")
             self._update_upload_button_state()
-            
-            final_visibility = self.file_browser_bar.isVisible()
-            logger.info(f"✅ TOGGLE: Complete. Final visibility = {final_visibility}")
-                
+
+            logger.debug(f"File browser toggled to: {not current_visibility}")
+
         except Exception as e:
-            logger.error(f"❌ TOGGLE: Failed to toggle file browser: {e}")
+            logger.error(f"Failed to toggle file browser: {e}")
             import traceback
             traceback.print_exc()
     

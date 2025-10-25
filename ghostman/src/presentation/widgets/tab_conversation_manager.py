@@ -194,6 +194,11 @@ class TabConversationManager(QObject):
         self.file_browser_stack.addWidget(tab.file_browser)
         logger.info(f"   📁 Added tab's file browser to QStackedWidget (index: {self.file_browser_stack.count() - 1})")
 
+        # Connect file browser signals to parent REPL widget
+        if hasattr(self.parent_repl, '_connect_file_browser_signals'):
+            self.parent_repl._connect_file_browser_signals(tab.file_browser)
+            logger.debug(f"   ✅ Connected file browser signals for tab {tab_id[:8]}")
+
         # Activate if requested
         if activate:
             logger.info(f"   🔄 Activating new tab...")
