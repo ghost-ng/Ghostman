@@ -10056,30 +10056,32 @@ def test_theme():
     
     def _toggle_file_browser(self):
         """Toggle file browser bar visibility for the active tab."""
-        logger.debug("File browser toggle clicked")
+        logger.info("File browser toggle clicked")
         try:
-            # Get active tab's file browser
-            if not self.tab_manager:
-                logger.error("No tab manager available")
+            # Get file browser stack
+            if not self.tab_manager or not hasattr(self.tab_manager, 'file_browser_stack'):
+                logger.error("No tab manager or file browser stack available")
                 return
 
             active_tab = self.tab_manager.get_active_tab()
-            if not active_tab or not hasattr(active_tab, 'file_browser'):
-                logger.error("No active tab or file browser not available")
+            if not active_tab:
+                logger.error("No active tab available")
                 return
 
-            file_browser = active_tab.file_browser
-            current_visibility = file_browser.isVisible()
-            logger.debug(f"Current visibility: {current_visibility}")
+            # Toggle the file browser stack visibility (shows/hides the entire container)
+            stack = self.tab_manager.file_browser_stack
+            current_visibility = stack.isVisible()
+            logger.info(f"Current file browser visibility: {current_visibility}")
 
             # Toggle visibility
-            file_browser.setVisible(not current_visibility)
-            active_tab.file_browser_visible = not current_visibility
+            new_visibility = not current_visibility
+            stack.setVisible(new_visibility)
+            active_tab.file_browser_visible = new_visibility
 
             # Update upload button visual state
             self._update_upload_button_state()
 
-            logger.debug(f"File browser toggled to: {not current_visibility}")
+            logger.info(f"File browser toggled to: {new_visibility}")
 
         except Exception as e:
             logger.error(f"Failed to toggle file browser: {e}")

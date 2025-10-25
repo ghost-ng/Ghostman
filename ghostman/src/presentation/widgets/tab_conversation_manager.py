@@ -96,6 +96,7 @@ class TabConversationManager(QObject):
         # Stacked widget to hold all tab file browsers
         # Each tab's file_browser will be added here and we'll switch between them
         self.file_browser_stack = QStackedWidget()
+        self.file_browser_stack.setVisible(False)  # Initially hidden
 
         # NOTE: We create the QStackedWidget here but DON'T add it to the layout yet
         # The parent (REPLWidget) will add it in the correct position in its layout
