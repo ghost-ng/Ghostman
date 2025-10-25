@@ -10991,24 +10991,14 @@ def test_theme():
             logger.error(f"✗ Error during REPL widget shutdown: {e}")
 
     def showEvent(self, event):
-        """Called when the widget is shown - apply opacity here when window exists."""
-        try:
-            super().showEvent(event)
+        """Handle show event - apply window opacity on first show."""
+        super().showEvent(event)
 
-            # Apply window opacity now that we have a parent window
-            # This is needed because __init__ runs before widget is added to window
-            if not hasattr(self, '_opacity_applied_on_show'):
-                logger.debug(f"🎨 showEvent: First show, applying window opacity...")
-                parent_window = self.window()
-
-                if not parent_window:
-                    logger.warning(f"⚠️ showEvent: No parent window found!")
-                elif not hasattr(self, '_panel_opacity'):
-                    logger.warning(f"⚠️ showEvent: No _panel_opacity attribute!")
-                else:
-                    logger.debug(f"🎨 showEvent: Setting window opacity to {self._panel_opacity:.3f}")
-                    parent_window.setWindowOpacity(self._panel_opacity)
-                    logger.info(f"✅ Applied startup window opacity on first show: {self._panel_opacity:.3f} ({int(self._panel_opacity * 100)}%)")
-                    self._opacity_applied_on_show = True
-        except Exception as e:
-            logger.error(f"❌ Error in showEvent: {e}", exc_info=True)
+        # Apply window opacity once when widget is first shown
+        # This ensures opacity is applied after widget is added to window
+        if not hasattr(self, '_opacity_applied_on_show'):
+            parent_window = self.window()
+            if parent_window and hasattr(self, '_panel_opacity'):
+                parent_window.setWindowOpacity(self._panel_opacity)
+                self._opacity_applied_on_show = True
+                logger.debug(f"Applied window opacity on show: {self._panel_opacity:.3f}")
