@@ -10986,6 +10986,19 @@ def test_theme():
             self.conversations_list.clear()
             
             logger.info("✓ Enhanced REPL Widget shut down successfully")
-            
+
         except Exception as e:
             logger.error(f"✗ Error during REPL widget shutdown: {e}")
+
+    def showEvent(self, event):
+        """Called when the widget is shown - apply opacity here when window exists."""
+        super().showEvent(event)
+
+        # Apply window opacity now that we have a parent window
+        # This is needed because __init__ runs before widget is added to window
+        if not hasattr(self, '_opacity_applied_on_show'):
+            parent_window = self.window()
+            if parent_window and hasattr(self, '_panel_opacity'):
+                parent_window.setWindowOpacity(self._panel_opacity)
+                logger.info(f"✅ Applied startup window opacity on first show: {self._panel_opacity:.3f} ({int(self._panel_opacity * 100)}%)")
+                self._opacity_applied_on_show = True
