@@ -32,6 +32,11 @@ class ConversationTab:
         # Theme will be applied via the global theme system
         self.output_display = MixedContentDisplay()
 
+        # Each tab owns its own file browser widget - per-tab file isolation
+        from .file_browser_bar import FileBrowserBar
+        self.file_browser = FileBrowserBar(theme_manager=theme_manager)
+        self.file_browser.setVisible(False)  # Initially hidden
+
         # Per-tab state storage for sandboxing
         self.file_ids: List[str] = []  # Files associated with THIS tab
         self.file_browser_visible: bool = False  # File browser visibility state
@@ -87,6 +92,10 @@ class TabConversationManager(QObject):
         # Each tab's output_display will be added here and we'll switch between them
         self.output_stack = QStackedWidget()
         self.output_stack.setMinimumHeight(300)
+
+        # Stacked widget to hold all tab file browsers
+        # Each tab's file_browser will be added here and we'll switch between them
+        self.file_browser_stack = QStackedWidget()
 
         # NOTE: We create the QStackedWidget here but DON'T add it to the layout yet
         # The parent (REPLWidget) will add it in the correct position in its layout
@@ -181,6 +190,10 @@ class TabConversationManager(QObject):
         self.output_stack.addWidget(tab.output_display)
         logger.info(f"   📺 Added tab's output widget to QStackedWidget (index: {self.output_stack.count() - 1})")
 
+        # Add tab's file browser widget to the file browser stacked widget
+        self.file_browser_stack.addWidget(tab.file_browser)
+        logger.info(f"   📁 Added tab's file browser to QStackedWidget (index: {self.file_browser_stack.count() - 1})")
+
         # Activate if requested
         if activate:
             logger.info(f"   🔄 Activating new tab...")
@@ -274,26 +287,11 @@ class TabConversationManager(QObject):
         # Each tab owns its own MixedContentDisplay widget - just show it!
         self.output_stack.setCurrentWidget(tab.output_display)
         logger.info(f"🔄 Switched QStackedWidget to tab {tab_id[:8]}'s output display")
+
+        # Switch to this tab's file browser widget in the file browser stacked widget
+        self.file_browser_stack.setCurrentWidget(tab.file_browser)
+        logger.debug(f"🔄 Switched file browser stack to tab {tab_id[:8]}'s file browser")
         logger.debug(f"Switched to tab: {tab_id} (from {old_tab_id})")
-
-        # Update file browser to show this tab's files
-        if hasattr(self.parent_repl, 'file_browser_bar') and self.parent_repl.file_browser_bar:
-            try:
-                # Show files for this tab
-                self.parent_repl.file_browser_bar.show_files_for_tab(tab_id)
-
-                # Auto-open file browser if files are present
-                file_count = self.parent_repl.file_browser_bar.count_files_for_tab(tab_id)
-                if file_count > 0:
-                    # Files present - auto-open file browser
-                    self.parent_repl.file_browser_bar.setVisible(True)
-                    logger.debug(f"Auto-opened file browser for tab {tab_id} ({file_count} files)")
-                else:
-                    # No files - default to closed
-                    self.parent_repl.file_browser_bar.setVisible(False)
-                    logger.debug(f"Closed file browser for tab {tab_id} (no files)")
-            except Exception as e:
-                logger.warning(f"Failed to update file browser state: {e}")
 
         # Emit tab switch with both old and new IDs
         self.tab_switched.emit(old_tab_id or "", tab_id)

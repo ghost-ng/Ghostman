@@ -8086,15 +8086,16 @@ def test_theme():
                     # Keep tab title as "New Conversation" - don't associate with created conversations
                     logger.debug(f"Tab {active_tab.tab_id} remains fresh - no conversation association")
             
-        # Ensure AI service has the correct conversation context
-        if self.current_conversation and self.conversation_manager and self.conversation_manager.has_ai_service():
+        # Ensure AI service has the correct conversation context from active tab
+        active_conversation_id = self._get_safe_conversation_id()
+        if active_conversation_id and self.conversation_manager and self.conversation_manager.has_ai_service():
             ai_service = self.conversation_manager.get_ai_service()
             if ai_service:
                 # Make sure the current conversation is set in the AI service
                 current_ai_conversation = ai_service.get_current_conversation_id()
-                if current_ai_conversation != self.current_conversation.id:
-                    logger.info(f"🔄 Syncing AI service conversation context: {current_ai_conversation} -> {self.current_conversation.id}")
-                    ai_service.set_current_conversation(self.current_conversation.id)
+                if current_ai_conversation != active_conversation_id:
+                    logger.debug(f"Syncing AI service to active tab conversation: {active_conversation_id[:8]}...")
+                    ai_service.set_current_conversation(active_conversation_id)
         
         # Show spinner in prompt instead of "Processing with AI..." message
         self._set_processing_mode(True)
