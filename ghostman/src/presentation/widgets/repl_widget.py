@@ -6531,9 +6531,11 @@ class REPLWidget(QWidget):
 
         # In-conversation search bar (initially hidden)
         self._init_search_bar(layout)
-        
-        # File browser bar (initially hidden) - with explicit spacing
-        self._init_file_browser_bar(layout)
+
+        # File browser stack (per-tab file browsers)
+        if self.tab_manager and hasattr(self.tab_manager, 'file_browser_stack'):
+            layout.addWidget(self.tab_manager.file_browser_stack)
+            logger.debug("Added tab_manager.file_browser_stack to layout")
         
         # Input area with background styling for prompt
         input_layout = QHBoxLayout()
