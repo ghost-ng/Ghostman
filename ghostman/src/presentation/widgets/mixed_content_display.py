@@ -98,33 +98,67 @@ class MixedContentDisplay(QScrollArea):
         # Note: _update_existing_widgets_theme() now handles all refresh scheduling
         
     def _update_stylesheet(self):
-        """Update the stylesheet based on theme colors."""
+        """Update the stylesheet based on theme colors with proper transparency support."""
         if not self.theme_colors:
             return
 
         bg_color = self.theme_colors.get('bg_primary', self.theme_colors.get('background_primary', '#000000'))
-
-        # CRITICAL FIX: Convert rgba() to hex for Qt stylesheet compatibility
-        # Qt stylesheets don't properly support rgba() colors
-        bg_color = self._convert_rgba_to_hex(bg_color)
-
-        # Only use fallback if text_primary is missing
-        text_color = self.theme_colors.get('text_primary')
-        if not text_color:
-            text_color = self._get_smart_text_fallback(bg_color)
-            logger.debug(f"text_primary missing in stylesheet update, using fallback: {text_color}")
         border_color = self.theme_colors.get('border', self.theme_colors.get('border_subtle', '#666666'))
-        border_color = self._convert_rgba_to_hex(border_color)
 
-        self.setStyleSheet(f"""
-            QScrollArea {{
-                background-color: {bg_color};
-                border: 1px solid {border_color};
-            }}
-            QWidget#MixedContentContainer {{
-                background-color: {bg_color};
-            }}
-        """)
+        # Handle transparency: if bg_color is rgba, extract RGB and alpha separately
+        import re
+        rgba_match = re.match(r'rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)', bg_color)
+
+        if rgba_match:
+            r, g, b, alpha = rgba_match.groups()
+            alpha = float(alpha) if alpha else 1.0
+
+            # For Qt transparency, we need to:
+            # 1. Use hex color in stylesheet (Qt stylesheets don't support rgba well)
+            # 2. Apply alpha via QPalette with QColor that has alpha channel
+            hex_bg = f"#{int(r):02x}{int(g):02x}{int(b):02x}"
+
+            # Apply hex color to stylesheet
+            border_hex = self._convert_rgba_to_hex(border_color)
+            self.setStyleSheet(f"""
+                QScrollArea {{
+                    background-color: {hex_bg};
+                    border: 1px solid {border_hex};
+                }}
+                QWidget#MixedContentContainer {{
+                    background-color: {hex_bg};
+                }}
+            """)
+
+            # Apply transparency via QPalette with alpha
+            from PyQt6.QtGui import QColor, QPalette
+            palette = self.palette()
+            bg_with_alpha = QColor(int(r), int(g), int(b), int(alpha * 255))
+            palette.setColor(QPalette.ColorRole.Base, bg_with_alpha)
+            palette.setColor(QPalette.ColorRole.Window, bg_with_alpha)
+            self.setPalette(palette)
+
+            # Enable transparency attributes
+            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+            self.content_widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+
+            logger.debug(f"Applied transparency: rgba({r},{g},{b},{alpha}) -> hex {hex_bg} + alpha {alpha}")
+        else:
+            # No alpha channel - use regular hex colors
+            bg_hex = self._convert_rgba_to_hex(bg_color)
+            border_hex = self._convert_rgba_to_hex(border_color)
+
+            self.setStyleSheet(f"""
+                QScrollArea {{
+                    background-color: {bg_hex};
+                    border: 1px solid {border_hex};
+                }}
+                QWidget#MixedContentContainer {{
+                    background-color: {bg_hex};
+                }}
+            """)
+
+            logger.debug(f"Applied opaque colors: bg={bg_hex}, border={border_hex}")
     
     def _convert_rgba_to_hex(self, color: str) -> str:
         """

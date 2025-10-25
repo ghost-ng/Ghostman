@@ -114,12 +114,13 @@ class ConversationAIService(AIService):
             if self.conversation.messages and self.conversation.messages[0].role == 'system':
                 system_prompt = self.conversation.messages[0].content
             
-            # Create new conversation
+            # Create new conversation with force_create=True to allow empty conversations
             conversation = await self.conversation_service.create_conversation(
                 title=title or "New Conversation",
                 initial_message=system_prompt,
                 tags=tags,
-                category=category
+                category=category,
+                force_create=True
             )
             
             # Set as active
