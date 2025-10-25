@@ -196,18 +196,18 @@ class FileContextItem(QFrame):
     def _init_ui(self):
         """Initialize pill-style UI components."""
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(3, 2, 3, 2)  # Reduced padding as requested
-        layout.setSpacing(3)  # Reduced spacing
+        layout.setContentsMargins(6, 2, 6, 2)  # Compact horizontal padding, minimal vertical
+        layout.setSpacing(4)  # Minimal spacing between elements
         
-        # Status indicator with larger spinner
+        # Status indicator - compact size
         self.status_indicator = QLabel()
-        self.status_indicator.setFixedSize(20, 20)  # Increased to match request
+        self.status_indicator.setFixedSize(16, 16)  # Compact size for smaller badge
         self.status_indicator.setText("○")  # Default circle
         self.status_indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.status_indicator.setStyleSheet("""
             QLabel {
-                color: #ff6b35;  /* Changed to orange color for better visibility */
-                font-size: 14px;  /* Increased from 10px */
+                color: #ff6b35;  /* Orange color for visibility */
+                font-size: 12px;  /* Compact font size */
                 font-weight: bold;
             }
         """)
@@ -228,33 +228,36 @@ class FileContextItem(QFrame):
         self.filename_label.setFont(font)
         layout.addWidget(self.filename_label)
         
-        # Remove button (×) - larger with no border
+        # Remove button (×) - compact with no border
         self.remove_btn = QToolButton()
         self.remove_btn.setText("×")
         self.remove_btn.clicked.connect(lambda: self.remove_requested.emit(self.file_id))
-        self.remove_btn.setFixedSize(20, 20)  # Increased from 16x16
+        self.remove_btn.setFixedSize(16, 16)  # Compact size
         # Apply styling with no border
         self.remove_btn.setStyleSheet("""
             QToolButton {
                 background-color: transparent;  /* No background */
-                border: none;  /* No border as requested */
+                border: none;  /* No border */
                 color: #ff6b6b;
                 font-weight: bold;
-                font-size: 14px;  /* Increased from 10px */
+                font-size: 12px;  /* Compact font size */
             }
             QToolButton:hover {
                 background-color: rgba(255, 107, 107, 0.2);  /* Subtle hover background */
                 color: #ff4444;  /* Darker red on hover */
-                border-radius: 10px;  /* Subtle rounded corners on hover */
+                border-radius: 8px;  /* Subtle rounded corners on hover */
             }
         """)
         layout.addWidget(self.remove_btn)
         
-        # Set size policy for grid pill layout
+        # Set size policy for grid pill layout with bottom margin
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.setFixedHeight(32)  # Bootstrap pill height
+        self.setFixedHeight(28)  # More compact pill height
         self.setMinimumWidth(120)  # Minimum pill width
         self.setMaximumWidth(200)  # Maximum pill width
+
+        # Add bottom margin to badge for visual separation
+        self.setContentsMargins(0, 0, 0, 4)  # 4px bottom margin
         
         
         # Initialize spinner animation
@@ -717,8 +720,8 @@ class FileBrowserBar(QFrame):
         # Files section (grid layout pills)
         self.files_frame = QFrame()
         files_layout = QVBoxLayout(self.files_frame)
-        files_layout.setContentsMargins(8, 4, 8, 4)  # Reduced vertical margins
-        files_layout.setSpacing(4)  # Reduced spacing between elements
+        files_layout.setContentsMargins(8, 2, 8, 2)  # Minimal vertical margins for compact layout
+        files_layout.setSpacing(2)  # Minimal spacing between elements
         
         # Grid container for Bootstrap-style pills
         self.pills_container = QWidget()
@@ -727,7 +730,7 @@ class FileBrowserBar(QFrame):
         # Use a flow layout-like approach with QHBoxLayout and wrapping
         self.pills_grid = QVBoxLayout(self.pills_container)  # Vertical for rows
         self.pills_grid.setContentsMargins(0, 0, 0, 0)
-        self.pills_grid.setSpacing(8)
+        self.pills_grid.setSpacing(6)  # Reduced spacing between badge rows
 
         self.current_row_layout = None
         self.pills_in_current_row = 0
