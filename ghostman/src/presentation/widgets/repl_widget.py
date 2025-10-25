@@ -6721,15 +6721,22 @@ class REPLWidget(QWidget):
             
         logger.info(f"🎨 Applying panel opacity: {old_val:.3f} -> {new_val:.3f}")
         self._panel_opacity = new_val
+
+        # CRITICAL: Apply window-level opacity for true transparency
+        parent_window = self.window()
+        if parent_window:
+            parent_window.setWindowOpacity(new_val)
+            logger.debug(f"   ✅ Set window opacity to {new_val:.3f}")
+
         self._apply_styles()
-        
+
         # Also update the output display style with new opacity
         if hasattr(self, 'output_display'):
             self._style_output_display()
-            
+
         # Ensure tab frame transparency after opacity changes (which may trigger style reapplication)
         self._schedule_tab_transparency_enforcement()
-            
+
         logger.info(f"✓ REPL panel opacity applied successfully: {new_val:.3f}")
         
         # Force immediate visual update by refreshing all themed components
