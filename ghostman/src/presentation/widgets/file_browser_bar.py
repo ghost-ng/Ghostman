@@ -647,9 +647,10 @@ class FileBrowserBar(QFrame):
         
         self.setVisible(False)  # Initially hidden
 
-        # Set flexible height constraints for file badges
-        self.setMinimumHeight(80)  # Minimum to show header + 1 row of badges
+        # Set flexible size constraints for file badges
+        self.setMinimumHeight(60)  # Minimum to show header + 1 row of compact badges
         self.setMaximumHeight(300)  # Maximum height before scroll (allows ~6 rows of badges)
+        self.setMinimumWidth(300)  # Ensure enough width to display badges without clipping
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         
         self._init_ui()
