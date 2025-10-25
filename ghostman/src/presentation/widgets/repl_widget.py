@@ -10678,13 +10678,27 @@ def test_theme():
 
             logger.info(f"🔄 Conversation context switched to: {new_conversation_id[:8] if new_conversation_id else 'None'}")
 
-            # Switch the conversation context in the AI service
+            # Switch the conversation context in the AI service AND update self.current_conversation
             if new_conversation_id and self.conversation_manager:
                 try:
                     ai_service = self.conversation_manager.get_ai_service()
                     if ai_service:
                         ai_service.set_current_conversation(new_conversation_id)
                         logger.info(f"✅ AI service conversation context switched to: {new_conversation_id[:8]}")
+
+                        # CRITICAL: Update self.current_conversation to match the tab's conversation
+                        # This ensures send_message() uses the correct conversation ID
+                        try:
+                            conversation_service = self.conversation_manager.conversation_service
+                            if conversation_service:
+                                conversation_obj = conversation_service.get_conversation(new_conversation_id)
+                                if conversation_obj:
+                                    self.current_conversation = conversation_obj
+                                    logger.info(f"✅ Updated self.current_conversation to match tab conversation: {new_conversation_id[:8]}")
+                                else:
+                                    logger.warning(f"⚠️ Could not load conversation object for {new_conversation_id[:8]}")
+                        except Exception as conv_load_error:
+                            logger.error(f"Failed to load conversation object: {conv_load_error}")
                     else:
                         logger.warning("AI service not available for conversation switch")
                 except Exception as conv_error:
@@ -10692,6 +10706,8 @@ def test_theme():
             else:
                 if not new_conversation_id:
                     logger.info("📁 No conversation ID - updating references only (tab manager handles state)")
+                    # Clear current_conversation if no conversation for this tab
+                    self.current_conversation = None
                 if not self.conversation_manager:
                     logger.warning("No conversation manager available")
 
