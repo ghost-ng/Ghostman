@@ -196,7 +196,7 @@ class FileContextItem(QFrame):
     def _init_ui(self):
         """Initialize pill-style UI components."""
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(4, 1, 4, 1)  # Very compact padding
+        layout.setContentsMargins(6, 0, 6, 0)  # Minimal horizontal padding, no vertical padding
         layout.setSpacing(3)  # Minimal spacing between elements
 
         # Status indicator - very compact size
@@ -741,7 +741,7 @@ class FileBrowserBar(QFrame):
         # Use a flow layout-like approach with QHBoxLayout and wrapping
         self.pills_grid = QVBoxLayout(self.pills_container)  # Vertical for rows
         self.pills_grid.setContentsMargins(0, 0, 0, 0)
-        self.pills_grid.setSpacing(6)  # Reduced spacing between badge rows
+        self.pills_grid.setSpacing(4)  # Minimal spacing between badge rows
 
         self.current_row_layout = None
         self.pills_in_current_row = 0
