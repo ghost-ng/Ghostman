@@ -655,8 +655,8 @@ class FileBrowserBar(QFrame):
         """Initialize the UI components."""
         logger.info("🔧 FB_INIT: Initializing FileBrowserBar UI...")
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(8, 6, 8, 12)  # Increased margins, especially bottom
-        main_layout.setSpacing(8)  # Increased spacing for better button visibility
+        main_layout.setContentsMargins(8, 6, 8, 6)  # Reduced bottom margin to minimize space
+        main_layout.setSpacing(4)  # Reduced spacing to minimize gaps
         
         # Header section
         header_frame = QFrame()
@@ -684,32 +684,31 @@ class FileBrowserBar(QFrame):
         
         header_layout.addStretch()
         
-        # Upload files button with icon
+        # Upload files button with icon (QToolButton for consistency)
         logger.info("🔧 FB_INIT: Creating upload button...")
-        self.upload_files_btn = QPushButton()
+        self.upload_files_btn = QToolButton()
         logger.info(f"🔧 FB_INIT: Upload button created: {self.upload_files_btn}")
-        
+
         # Load icon using the theme-aware method (avoid duplicate loading)
         logger.info("🔧 FB_INIT: Setting up icon loading...")
         # The icon will be loaded by _load_upload_icon_for_button() after UI init
-        
+
         self.upload_files_btn.setToolTip("Open file dialog to select files for context")
         self.upload_files_btn.clicked.connect(self._on_upload_files_clicked)
         self.upload_files_btn.setFixedSize(32, 32)  # Standard button size
         header_layout.addWidget(self.upload_files_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
         logger.info("🔧 FB_INIT: Upload button added to layout")
-        
-        
+
+
         # Removed toggle collapse/expand button as requested
-        
+
         # Settings button removed as requested
-        
+
         # Clear all button with icon
         self.clear_all_btn = QToolButton()
         self.clear_all_btn.setToolTip("Clear all files")
         self.clear_all_btn.clicked.connect(self.clear_all_requested.emit)
-        self.clear_all_btn.setMinimumSize(28, 28)  # Increased size for better visibility
-        self.clear_all_btn.setMaximumSize(32, 32)  # Allow slight growth to prevent cutoff
+        self.clear_all_btn.setFixedSize(32, 32)  # Standard button size (consistent with upload)
         # Icon will be loaded in _load_clear_icon() after UI init
         header_layout.addWidget(self.clear_all_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
         
@@ -718,8 +717,8 @@ class FileBrowserBar(QFrame):
         # Files section (grid layout pills)
         self.files_frame = QFrame()
         files_layout = QVBoxLayout(self.files_frame)
-        files_layout.setContentsMargins(8, 8, 8, 8)
-        files_layout.setSpacing(6)
+        files_layout.setContentsMargins(8, 4, 8, 4)  # Reduced vertical margins
+        files_layout.setSpacing(4)  # Reduced spacing between elements
         
         # Grid container for Bootstrap-style pills
         self.pills_container = QWidget()
@@ -741,6 +740,10 @@ class FileBrowserBar(QFrame):
         pills_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         pills_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         pills_scroll.setFrameShape(QFrame.Shape.NoFrame)
+
+        # Set transparent background for scroll area and container
+        pills_scroll.setStyleSheet("QScrollArea { background-color: transparent; border: none; }")
+        self.pills_container.setStyleSheet("QWidget#pills_container { background-color: transparent; }")
 
         files_layout.addWidget(pills_scroll)
         
