@@ -4363,28 +4363,19 @@ class REPLWidget(QWidget):
                 
                 logger.error(f"❌ Failed to initialize RAG session for {filename}")
                 return
-            
-            # Display processing started status in chat
-            logger.info(f"🔍 DEBUG: About to call _display_processing_started_in_chat for: {filename}")
-            
-            # CRITICAL: Ensure file is associated with current conversation before processing
-            # This is essential for strict conversation isolation
+            # Ensure file is associated with current conversation before processing
             current_conv_id = self._get_safe_conversation_id()
-            if current_conv_id:
-                logger.info(f"🔗 STRICT ISOLATION: File {filename} will be associated with conversation: {current_conv_id[:8]}...")
-            else:
-                logger.warning(f"⚠️ STRICT ISOLATION: File {filename} processing without conversation association - will create isolated conversation")
-                # Create a new conversation to ensure strict isolation
+            if not current_conv_id:
+                logger.warning(f"No conversation found for file {filename} - creating isolated conversation")
                 current_conv_id = self._ensure_conversation_for_files()
-                if current_conv_id:
-                    logger.info(f"🆕 Created isolated conversation for file: {current_conv_id[:8]}...")
-                else:
-                    logger.error(f"❌ Failed to create isolated conversation - file may be globally accessible")
-            
+                if not current_conv_id:
+                    logger.error(f"Failed to create conversation - file may be globally accessible")
+
+            logger.debug(f"Processing file {filename} for conversation: {current_conv_id[:8] if current_conv_id else 'None'}...")
+
             # Store the file_id for later use in status updates
             self._current_processing_file_id = file_id
             self._display_processing_started_in_chat(filename)
-            logger.info(f"🔄 Started processing: {filename} (ID: {file_id})")
             
             # Use thread-safe RAG processing (NO MORE SEGFAULTS!)
             from PyQt6.QtCore import QThread, QObject, pyqtSignal
@@ -4392,22 +4383,23 @@ class REPLWidget(QWidget):
             class SafeEmbeddingsProcessor(QObject):
                 """Thread-safe embeddings processor using the ChromaDB worker thread."""
                 finished = pyqtSignal(str, str, bool, dict)  # file_path, filename, success, result
-                
-                def __init__(self, rag_session, file_path, filename, parent_repl=None):
+
+                def __init__(self, rag_session, file_path, filename, conversation_id=None, parent_repl=None):
                     super().__init__()
                     self.rag_session = rag_session
                     self.file_path = file_path
                     self.filename = filename
+                    self.conversation_id = conversation_id
                     self.parent_repl = parent_repl
                 
                 def process(self):
                     """Process file using thread-safe RAG session (no asyncio/threading issues)."""
                     try:
-                        logger.info(f"🚀 Processing embeddings for {self.filename} with SAFE RAG pipeline")
-                        
+                        logger.debug(f"Processing embeddings for {self.filename}")
+
                         # Check if RAG session is available
                         if not self.rag_session:
-                            logger.error(f"❌ No RAG session available for {self.filename}")
+                            logger.error(f"No RAG session available for {self.filename}")
                             self.finished.emit(self.file_path, self.filename, False, {
                                 'tokens': 0,
                                 'chunks': 0,
@@ -4416,15 +4408,13 @@ class REPLWidget(QWidget):
                                 'error': 'No RAG session'
                             })
                             return
-                        
+
                         # Use the existing RAG session passed to the processor
                         try:
-                            # Use the shared RAG session instead of creating a new one
-                            logger.info(f"🔄 Using existing RAG session for {self.filename} (ID: {getattr(self.rag_session, '_session_id', 'unknown')})")
                             safe_rag = self.rag_session
-                            
+
                             if not safe_rag.is_ready:
-                                logger.error(f"❌ Existing RAG session not ready for {self.filename}")
+                                logger.error(f"RAG session not ready for {self.filename}")
                                 self.finished.emit(self.file_path, self.filename, False, {
                                     'tokens': 0,
                                     'chunks': 0,
@@ -4435,39 +4425,23 @@ class REPLWidget(QWidget):
                                 return
                             
                             # Process document through thread-safe interface (NO ASYNCIO IN QT THREAD!)
-                            logger.info(f"📄 Ingesting document through safe interface: {self.filename}")
-                            # Get current conversation ID for document association
-                            conversation_id = None
-                            if hasattr(self.parent_repl, 'current_conversation') and self.parent_repl.current_conversation:
-                                conversation_id = self.parent_repl.current_conversation.id
-                            elif hasattr(self.parent_repl, 'conversation_manager') and self.parent_repl.conversation_manager:
-                                if self.parent_repl.conversation_manager.has_ai_service():
-                                    ai_service = self.parent_repl.conversation_manager.get_ai_service()
-                                    if ai_service:
-                                        conversation_id = ai_service.get_current_conversation_id()
-                            
-                            # CRITICAL FIX: Use _get_safe_conversation_id as fallback to ensure files are never truly global
-                            print(f"🔍 THREAD DEBUG: conversation_id before fallback: {conversation_id}")
-                            logger.info(f"🔍 THREAD DEBUG: conversation_id before fallback: {conversation_id}")
-                            if not conversation_id:
-                                conversation_id = self.parent_repl._get_safe_conversation_id()
-                                print(f"🔍 THREAD DEBUG: conversation_id after fallback: {conversation_id}")
-                                logger.info(f"🔍 THREAD DEBUG: conversation_id after fallback: {conversation_id}")
-                                if conversation_id:
-                                    logger.info(f"🔄 Using fallback conversation ID from _get_safe_conversation_id: {conversation_id[:8]}...")
+                            logger.debug(f"Processing document: {self.filename}")
+
+                            # Use conversation ID passed from parent during initialization
+                            conversation_id = self.conversation_id
+                            if conversation_id:
+                                logger.debug(f"Using conversation ID: {conversation_id[:8]}...")
                             
                             # Prepare metadata with conversation association
                             metadata_override = {}
-                            
-                            # FIXED: Enhanced conversation association logic with better fallbacks
+
                             if conversation_id:
-                                logger.info(f"🔗 Attempting to associate document with conversation: {conversation_id[:8]}...")
-                                
-                                # Always store pending_conversation_id as primary association method
+                                logger.debug(f"Associating document with conversation: {conversation_id[:8]}...")
+
+                                # Store conversation ID for document association
                                 metadata_override['pending_conversation_id'] = conversation_id
-                                logger.info(f"🔗 Document stored with pending_conversation_id: {conversation_id[:8]}...")
-                                
-                                # Validate conversation exists in database and add formal association if found
+
+                                # Validate conversation exists in database
                                 if hasattr(self.parent_repl, 'conversation_manager') and self.parent_repl.conversation_manager:
                                     conv_service = self.parent_repl.conversation_manager.conversation_service
                                     if conv_service:
@@ -4478,18 +4452,13 @@ class REPLWidget(QWidget):
                                             conversation = loop.run_until_complete(conv_service.get_conversation(conversation_id))
                                             if conversation:
                                                 metadata_override['conversation_id'] = conversation_id
-                                                logger.info(f"✅ Document also associated with verified conversation: {conversation_id[:8]}...")
+                                                logger.debug(f"Document associated with verified conversation: {conversation_id[:8]}...")
                                             else:
-                                                logger.info(f"🕰️ Conversation {conversation_id[:8]}... not yet in database - using pending association")
+                                                logger.debug(f"Conversation {conversation_id[:8]}... pending - using pending association")
                                         except Exception as conv_check_error:
-                                            logger.warning(f"⚠️ Failed to verify conversation {conversation_id[:8]}...: {conv_check_error}")
-                                    else:
-                                        logger.info("🕰️ No conversation service - using pending association")
-                                else:
-                                    logger.info("🕰️ No conversation manager - using pending association")
+                                            logger.debug(f"Failed to verify conversation: {conv_check_error}")
                             else:
-                                logger.warning("⚠️ No current conversation ID found - document will be truly global")
-                                # Add a marker to help identify truly global vs pending files
+                                logger.warning("No conversation ID - document will be global")
                                 metadata_override['storage_type'] = 'global_no_conversation'
                             
                             document_id = safe_rag.ingest_document(
@@ -4509,9 +4478,9 @@ class REPLWidget(QWidget):
                                         content = f.read()
                                         token_count = len(content.split())
                                 except Exception as token_error:
-                                    logger.warning(f"⚠️ Token counting failed for {self.filename}: {token_error}")
+                                    logger.debug(f"Token counting failed for {self.filename}: {token_error}")
                                     token_count = 100  # Default estimate
-                                
+
                                 success_result = {
                                     'tokens': token_count,
                                     'chunks': rag_stats.get('chunks_created', 1),
@@ -4519,17 +4488,17 @@ class REPLWidget(QWidget):
                                     'already_processed': False,
                                     'document_id': document_id
                                 }
-                                
+
                                 if document_id.startswith("skipped_"):
-                                    logger.warning(f"⚠️ Document processing skipped: {document_id}")
+                                    logger.warning(f"Document processing skipped: {document_id}")
                                     success_result['skipped'] = True
                                     success_result['skip_reason'] = 'API key issue'
                                 else:
-                                    logger.info(f"✅ Successfully processed {self.filename} - {token_count} tokens")
-                                
+                                    logger.info(f"Successfully processed {self.filename} - {token_count} tokens")
+
                                 self.finished.emit(self.file_path, self.filename, True, success_result)
                             else:
-                                logger.error(f"❌ Document ingestion failed for {self.filename}")
+                                logger.error(f"Document ingestion failed for {self.filename}")
                                 self.finished.emit(self.file_path, self.filename, False, {
                                     'tokens': 0,
                                     'chunks': 0,
@@ -4552,10 +4521,10 @@ class REPLWidget(QWidget):
                             })
                         
                     except Exception as e:
-                        logger.error(f"❌ Safe embeddings processing error for {self.filename}: {e}")
+                        logger.error(f"Embeddings processing error for {self.filename}: {e}")
                         import traceback
-                        logger.error(f"❌ Full traceback: {traceback.format_exc()}")
-                        
+                        logger.debug(f"Full traceback: {traceback.format_exc()}")
+
                         # Report the failure properly
                         self.finished.emit(self.file_path, self.filename, False, {
                             'tokens': 0,
@@ -4567,7 +4536,13 @@ class REPLWidget(QWidget):
             
             # Create and start SAFE thread (ChromaDB worker prevents segfaults)
             thread = QThread()
-            processor = SafeEmbeddingsProcessor(self.rag_session, file_path, filename, parent_repl=self)
+            processor = SafeEmbeddingsProcessor(
+                self.rag_session,
+                file_path,
+                filename,
+                conversation_id=current_conv_id,
+                parent_repl=self
+            )
             processor.moveToThread(thread)
             
             # Store thread reference to prevent early deletion
