@@ -6744,23 +6744,29 @@ class REPLWidget(QWidget):
     
     def _apply_startup_opacity(self):
         """Apply opacity settings immediately after widget initialization.
-        
+
         This method ensures opacity takes immediate visual effect on startup
         by forcing a style refresh after all components are initialized.
         """
         try:
+            # CRITICAL: Apply window-level opacity for true transparency at startup
+            parent_window = self.window()
+            if parent_window:
+                parent_window.setWindowOpacity(self._panel_opacity)
+                logger.debug(f"   ✅ Set startup window opacity to {self._panel_opacity:.3f}")
+
             # Force immediate application of opacity to output display
             if hasattr(self, 'output_display'):
                 self._style_output_display()
-            
+
             # Apply opacity to command input if needed
             if hasattr(self, 'command_input'):
                 self._style_command_input_with_opacity()
-                
+
             # Apply opacity to title frame
             if hasattr(self, 'title_frame'):
                 self._style_title_frame_with_opacity()
-                
+
             logger.info(f"🎨 Startup opacity applied: {self._panel_opacity:.3f} ({int(self._panel_opacity * 100)}%)")
         except Exception as e:
             logger.error(f"Failed to apply startup opacity: {e}")
