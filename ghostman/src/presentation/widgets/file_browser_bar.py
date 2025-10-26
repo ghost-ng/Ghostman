@@ -207,7 +207,7 @@ class FileContextItem(QFrame):
         self.status_indicator.setStyleSheet("""
             QLabel {
                 color: #ff6b35;  /* Orange color for visibility */
-                font-size: 10px;  /* Smaller font size */
+                font-size: 12px;  /* Smaller font size */
                 font-weight: bold;
             }
         """)
@@ -223,7 +223,7 @@ class FileContextItem(QFrame):
         # Filename (main content)
         self.filename_label = QLabel(self._get_pill_name())
         font = self.filename_label.font()
-        font.setPointSize(7)  # Smaller font
+        font.setPointSize(8)  # Increased by 1 for better readability
         font.setBold(False)
         self.filename_label.setFont(font)
         # Remove maximum width constraint - let it size naturally within badge constraints
@@ -250,8 +250,8 @@ class FileContextItem(QFrame):
                 background-color: transparent;
                 color: #ff6b6b;
                 font-weight: bold;
-                font-size: 11px;
-                line-height: 6px;  /* Match button height for vertical centering */
+                font-size: 12px;
+                line-height: 4px;  /* Match button height for vertical centering */
                 qproperty-alignment: AlignCenter;
             }
             QToolButton:hover {
@@ -259,7 +259,7 @@ class FileContextItem(QFrame):
                 color: #ff4444;
                 padding: 0px;
                 margin: -3px 0px 0px 0px;  /* Keep same margin on hover */
-                border-radius: 7px;
+                border-radius: 3px;  /* Smaller radius for tighter hover area */
             }
         """)
         # Add button with vertical center alignment
@@ -520,7 +520,7 @@ class FileContextItem(QFrame):
                 opacity: {opacity};
 
                 /* Badge text size in pixels */
-                font-size: 11px;
+                font-size: 14px;
 
                 /* Badge text thickness - 500 is medium weight */
                 font-weight: 500;
