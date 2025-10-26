@@ -241,7 +241,25 @@ class FileContextItem(QFrame):
         self.remove_btn.setFixedSize(14, 14)  # Very compact size
         # Center the X text within the button
         self.remove_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
-        # Note: Styling is applied by _apply_styling() method, not inline
+        # Use inline stylesheet to force perfect centering with line-height
+        self.remove_btn.setStyleSheet("""
+            QToolButton {
+                padding: 0px;
+                margin: 0px;
+                border: none;
+                background-color: transparent;
+                color: #ff6b6b;
+                font-weight: bold;
+                font-size: 11px;
+                line-height: 14px;  /* Match button height for vertical centering */
+                qproperty-alignment: AlignCenter;
+            }
+            QToolButton:hover {
+                background-color: rgba(255, 107, 107, 0.2);
+                color: #ff4444;
+                border-radius: 7px;
+            }
+        """)
         # Add button with vertical center alignment
         layout.addWidget(self.remove_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
