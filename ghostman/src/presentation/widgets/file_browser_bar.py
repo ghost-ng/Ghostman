@@ -1252,21 +1252,21 @@ class FileBrowserBar(QFrame):
         """Remove a file from the browser."""
         if file_id in self.file_items:
             item = self.file_items[file_id]
-            
+
             # Remove from parent layout
             parent = item.parent()
             if parent:
                 parent.layout().removeWidget(item)
             item.deleteLater()
             del self.file_items[file_id]
-            
+
             # Rebuild grid layout to fix spacing
             self._rebuild_grid_layout()
-            
-            # Hide if no files left
-            if not self.file_items:
-                self.setVisible(False)
-            
+
+            # Don't hide the entire widget - keep header and buttons visible
+            # so users can still upload new files
+            # The files section will just show "No files loaded" status
+
             self._update_status_display()
             logger.debug(f"Removed file item: {file_id}")
     
