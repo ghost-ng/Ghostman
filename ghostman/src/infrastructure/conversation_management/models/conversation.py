@@ -195,14 +195,25 @@ class Conversation:
             metadata=metadata or ConversationMetadata()
         )
         
-        # Add initial system message if provided
+        # Add initial message if provided
+        # If the message looks like a user message, create it as USER role
+        # Otherwise create it as SYSTEM role
         if initial_message:
-            system_message = Message.create(
+            # Determine if this is a user query or system message
+            is_user_message = (
+                initial_message and 
+                not initial_message.lower().startswith(('system:', 'conversation started', 'files uploaded'))
+                and len(initial_message.strip()) > 0
+                and initial_message.strip() != "Conversation started."
+            )
+            
+            message_role = MessageRole.USER if is_user_message else MessageRole.SYSTEM
+            initial_msg = Message.create(
                 conversation_id=conversation_id,
-                role=MessageRole.SYSTEM,
+                role=message_role,
                 content=initial_message
             )
-            conversation.messages.append(system_message)
+            conversation.messages.append(initial_msg)
         
         return conversation
     

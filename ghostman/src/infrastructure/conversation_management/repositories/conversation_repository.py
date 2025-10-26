@@ -18,7 +18,8 @@ from ..models.enums import ConversationStatus, MessageRole, SortOrder, SearchSco
 from ..models.search import SearchQuery, SearchResult, SearchResults
 from ..models.database_models import (
     ConversationModel, MessageModel, TagModel, ConversationTagModel,
-    MessageFTSModel, ConversationSummaryModel, sanitize_text, sanitize_html
+    MessageFTSModel, ConversationSummaryModel, ConversationFileModel,
+    sanitize_text, sanitize_html
 )
 from .database import DatabaseManager
 
@@ -36,29 +37,62 @@ class ConversationRepository:
     
     # --- Conversation CRUD Operations ---
     
-    async def create_conversation(self, conversation: Conversation) -> bool:
-        """Create a new conversation using SQLAlchemy ORM."""
-        # Check if conversation is empty and should not be saved
-        if self._is_empty_conversation(conversation):
-            logger.debug(f"Skipping creation of empty conversation: {conversation.id}")
+    async def create_conversation(self, conversation: Conversation, force_create: bool = False) -> bool:
+        """Create a new conversation using SQLAlchemy ORM with detailed diagnostics."""
+        logger.info(f"🔄 Repository: Creating conversation {conversation.id}")
+        logger.debug(f"  🔍 Force create: {force_create}")
+        logger.debug(f"  🔍 Conversation messages: {len(conversation.messages)}")
+        logger.debug(f"  🔍 Conversation status: {conversation.status}")
+        logger.debug(f"  🔍 Database initialized: {self.db.is_initialized}")
+        
+        # Check if conversation is empty and should not be saved (unless forced)
+        if not force_create and self._is_empty_conversation(conversation):
+            logger.info(f"📝 Skipping creation of empty conversation: {conversation.id} (use force_create=True to override)")
             return False
             
         try:
+            logger.debug("🔍 Attempting to get database session...")
             with self.db.get_session() as session:
+                logger.debug("✓ Database session acquired successfully")
+                
+                # Check if conversation already exists
+                existing = session.query(ConversationModel).filter(
+                    ConversationModel.id == conversation.id
+                ).first()
+                
+                if existing:
+                    logger.warning(f"⚠️ Conversation {conversation.id} already exists in database")
+                    if not force_create:
+                        logger.info(f"❌ Returning False - conversation exists and force_create=False")
+                        return False
+                    else:
+                        logger.info(f"🔄 force_create=True - will overwrite existing conversation")
+                
                 # Create conversation model
+                logger.debug("🔄 Creating ConversationModel...")
                 conv_model = ConversationModel(
                     id=conversation.id,
                     title=sanitize_text(conversation.title),
                     status=conversation.status.value,
                     created_at=conversation.created_at,
                     updated_at=conversation.updated_at,
-                    message_count=len(conversation.messages),
-                    metadata=conversation.metadata.to_dict()
+                    message_count=len(conversation.messages)
                 )
+                
+                # Set metadata using the proper property
+                logger.debug("🔄 Setting conversation metadata...")
+                metadata_dict = conversation.metadata.to_dict()
+                logger.debug(f"  📊 Metadata: {metadata_dict}")
+                conv_model.conversation_metadata = metadata_dict
+                
+                logger.debug("🔄 Adding conversation to session...")
                 session.add(conv_model)
+                logger.debug("✓ Conversation added to session")
                 
                 # Add messages
-                for message in conversation.messages:
+                logger.debug(f"🔄 Adding {len(conversation.messages)} messages...")
+                for i, message in enumerate(conversation.messages):
+                    logger.debug(f"  📝 Adding message {i+1}: {message.role.value} - {message.content[:50]}...")
                     message_model = MessageModel(
                         id=message.id,
                         conversation_id=message.conversation_id,
@@ -70,17 +104,61 @@ class ConversationRepository:
                     )
                     session.add(message_model)
                 
+                logger.debug("✓ All messages added to session")
+                
                 # Update FTS index
-                await self._update_fts_index(session, conversation)
+                logger.debug("🔄 Updating FTS index...")
+                try:
+                    await self._update_fts_index(session, conversation)
+                    logger.debug("✓ FTS index updated")
+                except Exception as fts_error:
+                    logger.warning(f"⚠️ FTS index update failed (non-critical): {fts_error}")
                 
                 # Handle tags
-                await self._update_conversation_tags(session, conversation.id, conversation.metadata.tags)
+                logger.debug(f"🔄 Updating tags: {conversation.metadata.tags}")
+                try:
+                    await self._update_conversation_tags(session, conversation.id, conversation.metadata.tags)
+                    logger.debug("✓ Tags updated")
+                except Exception as tag_error:
+                    logger.warning(f"⚠️ Tag update failed (non-critical): {tag_error}")
                 
-                logger.info(f"✓ Created conversation: {conversation.id}")
-                return True
+                # The session context manager will commit here
+                logger.debug("🔄 Session context manager will now commit...")
+                
+            # If we reach here, the context manager completed successfully
+            logger.info(f"✅ Successfully created conversation: {conversation.id}")
+            
+            # Verify the conversation was actually saved
+            logger.debug("🔍 Verifying conversation was saved...")
+            try:
+                with self.db.get_session() as verify_session:
+                    verify_conv = verify_session.query(ConversationModel).filter(
+                        ConversationModel.id == conversation.id
+                    ).first()
+                    
+                    if verify_conv:
+                        logger.debug(f"✅ Verification successful: Found conversation with {len(verify_conv.messages) if verify_conv.messages else 0} messages")
+                    else:
+                        logger.error(f"🚨 VERIFICATION FAILED: Conversation {conversation.id} not found after creation!")
+                        return False
+                        
+            except Exception as verify_error:
+                logger.error(f"🚨 Verification check failed: {verify_error}")
+                # Don't fail the creation for verification errors
+                
+            return True
                 
         except SQLAlchemyError as e:
-            logger.error(f"✗ Failed to create conversation {conversation.id}: {e}")
+            logger.error(f"💥 SQLAlchemy error creating conversation {conversation.id}: {e}")
+            logger.error(f"  🔍 Error type: {type(e).__name__}")
+            import traceback
+            logger.error(f"  📋 Full traceback:\n{traceback.format_exc()}")
+            return False
+        except Exception as e:
+            logger.error(f"💥 Unexpected error creating conversation {conversation.id}: {e}")
+            logger.error(f"  🔍 Error type: {type(e).__name__}")
+            import traceback
+            logger.error(f"  📋 Full traceback:\n{traceback.format_exc()}")
             return False
     
     async def get_conversation(self, conversation_id: str, include_messages: bool = True) -> Optional[Conversation]:
@@ -209,7 +287,8 @@ class ConversationRepository:
         status: Optional[ConversationStatus] = None,
         limit: Optional[int] = None,
         offset: int = 0,
-        sort_order: SortOrder = SortOrder.UPDATED_DESC
+        sort_order: SortOrder = SortOrder.UPDATED_DESC,
+        include_deleted: bool = False
     ) -> List[Conversation]:
         """List conversations with optional filtering using SQLAlchemy ORM."""
         try:
@@ -219,6 +298,10 @@ class ConversationRepository:
                 # Apply filters
                 if status:
                     query = query.filter(ConversationModel.status == status.value)
+                
+                # Always exclude deleted conversations unless explicitly requested
+                if not include_deleted:
+                    query = query.filter(ConversationModel.status != ConversationStatus.DELETED.value)
                 
                 # Apply sorting
                 query = self._apply_sort_order(query, sort_order)
@@ -242,6 +325,88 @@ class ConversationRepository:
         except SQLAlchemyError as e:
             logger.error(f"✗ Failed to list conversations: {e}")
             return []
+    
+    async def get_conversations_file_counts(self, conversation_ids: List[str]) -> Dict[str, int]:
+        """Get file counts for multiple conversations in single batch query - solves N+1 problem."""
+        try:
+            with self.db.get_session() as session:
+                # Single query to get file counts for all conversations
+                query = session.query(
+                    ConversationFileModel.conversation_id,
+                    func.count(ConversationFileModel.id).label('file_count')
+                ).filter(
+                    ConversationFileModel.conversation_id.in_(conversation_ids),
+                    ConversationFileModel.is_enabled == True
+                ).group_by(ConversationFileModel.conversation_id)
+                
+                results = query.all()
+                return {conv_id: count for conv_id, count in results}
+                
+        except SQLAlchemyError as e:
+            logger.error(f"✗ Failed to batch load file counts: {e}")
+            return {}
+    
+    async def get_conversations_file_info(self, conversation_ids: List[str]) -> Dict[str, List[Dict[str, Any]]]:
+        """Get file names and info for multiple conversations in single batch query."""
+        try:
+            with self.db.get_session() as session:
+                # Single query to get all files for all conversations
+                query = session.query(ConversationFileModel).filter(
+                    ConversationFileModel.conversation_id.in_(conversation_ids),
+                    ConversationFileModel.is_enabled == True
+                ).order_by(
+                    ConversationFileModel.conversation_id,
+                    ConversationFileModel.upload_timestamp
+                )
+                
+                files = query.all()
+                
+                # Group files by conversation_id
+                result = {}
+                for file in files:
+                    conv_id = file.conversation_id
+                    if conv_id not in result:
+                        result[conv_id] = []
+                    
+                    result[conv_id].append({
+                        'file_id': file.file_id,
+                        'filename': file.filename,
+                        'processing_status': file.processing_status,
+                        'file_size': file.file_size,
+                        'chunk_count': file.chunk_count
+                    })
+                
+                return result
+                
+        except SQLAlchemyError as e:
+            logger.error(f"✗ Failed to batch load file info: {e}")
+            return {}
+    
+    async def reassign_orphaned_files(self, target_conversation_id: str) -> int:
+        """Reassign files from deleted conversations to target conversation."""
+        try:
+            with self.db.get_session() as session:
+                # Find files belonging to deleted conversations
+                deleted_conversations = session.query(ConversationModel.id).filter(
+                    ConversationModel.status == ConversationStatus.DELETED.value
+                ).subquery()
+                
+                # Update files to point to target conversation
+                update_count = session.query(ConversationFileModel).filter(
+                    ConversationFileModel.conversation_id.in_(
+                        session.query(deleted_conversations.c.id)
+                    )
+                ).update(
+                    {ConversationFileModel.conversation_id: target_conversation_id},
+                    synchronize_session='fetch'
+                )
+                
+                logger.info(f"✅ Reassigned {update_count} orphaned files to conversation {target_conversation_id[:8]}...")
+                return update_count
+                
+        except SQLAlchemyError as e:
+            logger.error(f"✗ Failed to reassign orphaned files: {e}")
+            return 0
     
     # --- Message Operations ---
     
@@ -713,15 +878,15 @@ class ConversationRepository:
         if not conversation.messages:
             return True
         
-        # Check if there are any non-system messages or system messages with meaningful content
-        meaningful_messages = []
+        # Only save conversations that have actual USER or ASSISTANT messages (not just system messages)
+        non_system_messages = []
         for message in conversation.messages:
-            if message.role != MessageRole.SYSTEM:
-                meaningful_messages.append(message)
-            elif message.content and message.content.strip():
-                meaningful_messages.append(message)
+            if message.role in (MessageRole.USER, MessageRole.ASSISTANT):
+                non_system_messages.append(message)
         
-        return len(meaningful_messages) == 0
+        # Conversation is empty if it has only system messages (no user/assistant interaction)
+        # This allows conversations with files to be saved even without user messages yet
+        return len(non_system_messages) == 0
     
     async def update_all_conversations_status(self, new_status: ConversationStatus, exclude_statuses: List[ConversationStatus] = None) -> bool:
         """
@@ -751,3 +916,23 @@ class ConversationRepository:
         except SQLAlchemyError as e:
             logger.error(f"✗ Failed to update all conversations status: {e}")
             return False
+    
+    async def _execute_with_session(self, func):
+        """
+        Execute a function with a database session.
+        
+        Args:
+            func: Function that takes a session as parameter and returns a result
+            
+        Returns:
+            The result of the function, or None if an error occurred
+        """
+        try:
+            with self.db.get_session() as session:
+                result = func(session)
+                session.commit()
+                return result
+                
+        except SQLAlchemyError as e:
+            logger.error(f"✗ Database operation failed: {e}")
+            return None

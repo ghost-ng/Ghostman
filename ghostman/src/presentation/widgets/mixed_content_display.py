@@ -98,41 +98,77 @@ class MixedContentDisplay(QScrollArea):
         # Note: _update_existing_widgets_theme() now handles all refresh scheduling
         
     def _update_stylesheet(self):
-        """Update the stylesheet based on theme colors."""
+        """Update the stylesheet based on theme colors.
+
+        Note: Transparency is handled at the window level via setWindowOpacity(),
+        not via rgba colors in stylesheets (Qt doesn't support that well).
+        """
         if not self.theme_colors:
             return
-            
+
         bg_color = self.theme_colors.get('bg_primary', self.theme_colors.get('background_primary', '#000000'))
-        # Only use fallback if text_primary is missing
-        text_color = self.theme_colors.get('text_primary')
-        if not text_color:
-            text_color = self._get_smart_text_fallback(bg_color)
-            logger.debug(f"text_primary missing in stylesheet update, using fallback: {text_color}")
         border_color = self.theme_colors.get('border', self.theme_colors.get('border_subtle', '#666666'))
-        
+
+        # Convert rgba to hex (opacity is handled at window level, not stylesheet level)
+        bg_hex = self._convert_rgba_to_hex(bg_color)
+        border_hex = self._convert_rgba_to_hex(border_color)
+
         self.setStyleSheet(f"""
             QScrollArea {{
-                background-color: {bg_color};
-                border: 1px solid {border_color};
+                background-color: {bg_hex};
+                border: 1px solid {border_hex};
             }}
             QWidget#MixedContentContainer {{
-                background-color: {bg_color};
+                background-color: {bg_hex};
             }}
         """)
+
+        logger.debug(f"Applied theme colors: bg={bg_hex}, border={border_hex}")
     
+    def _convert_rgba_to_hex(self, color: str) -> str:
+        """
+        Convert rgba() color to hex for Qt stylesheet compatibility.
+        Qt stylesheets don't properly support rgba() colors.
+
+        Args:
+            color: Color in any format (hex, rgba, rgb, etc.)
+
+        Returns:
+            Hex color string (#RRGGBB)
+        """
+        import re
+
+        # If already hex, return as-is
+        if color.startswith('#'):
+            return color
+
+        # Check for rgba() format
+        rgba_match = re.match(r'rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)', color)
+        if rgba_match:
+            r, g, b = rgba_match.groups()[:3]
+            # Convert to hex (ignoring alpha channel since Qt stylesheets don't support it)
+            return f"#{int(r):02x}{int(g):02x}{int(b):02x}"
+
+        # If no match, return as-is and hope for the best
+        logger.warning(f"Could not convert color '{color}' to hex, using as-is")
+        return color
+
     def _get_smart_text_fallback(self, bg_color: str) -> str:
         """
         Get smart text color fallback based on background brightness.
         Returns dark text for light backgrounds and light text for dark backgrounds.
         """
         try:
+            # Convert rgba to hex first if needed
+            bg_color = self._convert_rgba_to_hex(bg_color)
+
             # Remove # if present
             hex_color = bg_color.lstrip('#')
-            
+
             # Convert hex to RGB
             if len(hex_color) == 6:
                 r = int(hex_color[0:2], 16)
-                g = int(hex_color[2:4], 16) 
+                g = int(hex_color[2:4], 16)
                 b = int(hex_color[4:6], 16)
             elif len(hex_color) == 3:
                 r = int(hex_color[0], 16) * 17
@@ -141,16 +177,16 @@ class MixedContentDisplay(QScrollArea):
             else:
                 # Invalid color, use dark fallback
                 return '#2d2d2d'
-            
+
             # Calculate luminance (0.299*R + 0.587*G + 0.114*B)
             luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-            
+
             # Return dark text for light backgrounds, light text for dark backgrounds
             if luminance > 0.5:
                 return '#2d2d2d'  # Dark text for light background
             else:
                 return '#f0f0f0'  # Light text for dark background
-                
+
         except (ValueError, TypeError):
             # Fallback if color parsing fails
             return '#2d2d2d'
@@ -682,6 +718,7 @@ class MixedContentDisplay(QScrollArea):
         """Internal method to add HTML content without storing history."""
         label = QLabel()
         label.setWordWrap(True)
+        label.setTextFormat(Qt.TextFormat.RichText)  # Enable HTML rendering
         label.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse | 
             Qt.TextInteractionFlag.LinksAccessibleByMouse
@@ -729,6 +766,7 @@ class MixedContentDisplay(QScrollArea):
                     )
                     text_label.setAutoFillBackground(False)  # Prevent Qt from filling background
                     text_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)  # Make widget transparent
+                    text_label.setTextFormat(Qt.TextFormat.RichText)
                     text_label.setText(part)
                     self._apply_label_styling(text_label, message_style)
                     self.content_layout.addWidget(text_label)
@@ -743,6 +781,7 @@ class MixedContentDisplay(QScrollArea):
                     self.add_code_snippet(code, language)
         else:
             # No code blocks, just add the HTML as is
+            label.setTextFormat(Qt.TextFormat.RichText)
             label.setText(processed_html)
             self._apply_label_styling(label, message_style)
             self.content_layout.addWidget(label)
@@ -1152,19 +1191,29 @@ class MixedContentDisplay(QScrollArea):
         
     def clear(self):
         """Clear all content."""
+        import logging
+        logger = logging.getLogger(__name__)
+
+        widget_count = len(self.content_widgets)
+        history_count = len(self.content_history)
+
+        logger.debug(f"🗑️  Clearing REPL display: {widget_count} widgets, {history_count} history items")
+
         # Remove all widgets
         for widget in self.content_widgets:
             widget.deleteLater()
         self.content_widgets.clear()
-        
+
         # Clear history
         self.content_history.clear()
-        
+
         # Clear the layout
         while self.content_layout.count():
             item = self.content_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+
+        logger.debug(f"✅ REPL display cleared completely")
                 
     def scroll_to_bottom(self):
         """Auto-scroll to the bottom."""
@@ -1214,3 +1263,7 @@ class MixedContentDisplay(QScrollArea):
                     padding: 4px;
                 """)
             self.content_layout.insertWidget(0, notice)
+
+    # DEAD CODE REMOVED: save_content_state() and restore_content_state()
+    # These methods were used for the old save/restore tab switching mechanism.
+    # Now each tab owns its own MixedContentDisplay widget that persists, so save/restore is not needed.

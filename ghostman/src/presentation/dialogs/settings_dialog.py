@@ -1084,6 +1084,25 @@ class SettingsDialog(QDialog):
         self.open_config_btn.clicked.connect(self._open_config_folder)
         storage_layout.addRow("", self.open_config_btn)
         
+        # Data Purge Options
+        purge_layout = QHBoxLayout()
+        
+        self.purge_conversations_btn = QPushButton("Purge Conversations")
+        self.purge_conversations_btn.setToolTip("Delete all conversation history and messages permanently")
+        self.purge_conversations_btn.clicked.connect(self._purge_conversations)
+        self.purge_conversations_btn.setStyleSheet("QPushButton { color: #d32f2f; font-weight: bold; }")
+        
+        self.purge_documents_btn = QPushButton("Purge Documents")  
+        self.purge_documents_btn.setToolTip("Delete all RAG documents and embeddings permanently")
+        self.purge_documents_btn.clicked.connect(self._purge_documents)
+        self.purge_documents_btn.setStyleSheet("QPushButton { color: #d32f2f; font-weight: bold; }")
+        
+        purge_layout.addWidget(self.purge_conversations_btn)
+        purge_layout.addWidget(self.purge_documents_btn)
+        purge_layout.addStretch()
+        
+        storage_layout.addRow("Reset Data:", purge_layout)
+        
         layout.addWidget(storage_group)
         
         layout.addStretch()
@@ -2077,6 +2096,117 @@ class SettingsDialog(QDialog):
                 QMessageBox.warning(self, "Error", f"Log directory does not exist: {log_location}")
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Could not open log folder: {e}")
+    
+    def _purge_conversations(self):
+        """Purge all conversation history and messages permanently."""
+        reply = QMessageBox.question(
+            self,
+            "Confirm Purge Conversations",
+            "⚠️ WARNING: This will permanently delete ALL conversation history and messages.\n\n"
+            "This action cannot be undone. Are you sure you want to continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                # Import required modules
+                from ...infrastructure.conversation_management.repositories.conversation_repository import ConversationRepository
+                from ...infrastructure.conversation_management.repositories.database import DatabaseManager
+                
+                # Initialize database and repository
+                db_manager = DatabaseManager()
+                db_manager.initialize()
+                repo = ConversationRepository(db_manager)
+                
+                # Get all conversations and delete them (hard delete)
+                import asyncio
+                async def purge_all():
+                    conversations = await repo.list_conversations(include_deleted=True)
+                    deleted_count = 0
+                    for conv in conversations:
+                        success = await repo.delete_conversation(conv.id, soft_delete=False)
+                        if success:
+                            deleted_count += 1
+                    return deleted_count
+                
+                # Run the purge
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                deleted_count = loop.run_until_complete(purge_all())
+                loop.close()
+                
+                QMessageBox.information(
+                    self,
+                    "Purge Complete",
+                    f"✅ Successfully purged {deleted_count} conversations.\n\n"
+                    "All conversation history has been permanently deleted."
+                )
+                logger.info(f"Purged {deleted_count} conversations")
+                
+            except Exception as e:
+                QMessageBox.critical(
+                    self,
+                    "Purge Failed",
+                    f"❌ Failed to purge conversations:\n\n{str(e)}"
+                )
+                logger.error(f"Failed to purge conversations: {e}")
+    
+    def _purge_documents(self):
+        """Purge all RAG documents and embeddings permanently."""
+        reply = QMessageBox.question(
+            self,
+            "Confirm Purge Documents",
+            "⚠️ WARNING: This will permanently delete ALL RAG documents and embeddings.\n\n"
+            "This includes all uploaded files and their processed embeddings.\n"
+            "This action cannot be undone. Are you sure you want to continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                # Import FAISS client to clear the vector store
+                from ...infrastructure.rag_pipeline.vector_store.faiss_client import FaissClient
+                from ...infrastructure.rag_pipeline.config.rag_config import RAGPipelineConfig
+                
+                # Initialize FAISS client and clear all data
+                rag_config = RAGPipelineConfig()
+                faiss_client = FaissClient(rag_config.vector_store)
+                
+                # Clear the FAISS index and metadata
+                faiss_client.clear_all_documents()
+                
+                # Also clear any conversation files from database
+                from ...infrastructure.conversation_management.repositories.conversation_repository import ConversationRepository
+                from ...infrastructure.conversation_management.repositories.database import DatabaseManager
+                
+                db_manager = DatabaseManager()
+                db_manager.initialize()
+                
+                # Clear conversation_files table
+                with db_manager.get_session() as session:
+                    from ...infrastructure.conversation_management.models.database_models import ConversationFileModel
+                    deleted_files = session.query(ConversationFileModel).count()
+                    session.query(ConversationFileModel).delete()
+                    session.commit()
+                
+                QMessageBox.information(
+                    self,
+                    "Purge Complete",
+                    f"✅ Successfully purged all RAG documents and embeddings.\n\n"
+                    f"Cleared {deleted_files} file associations and all vector embeddings.\n"
+                    "All document data has been permanently deleted."
+                )
+                logger.info(f"Purged all RAG documents and {deleted_files} file associations")
+                
+            except Exception as e:
+                QMessageBox.critical(
+                    self,
+                    "Purge Failed",
+                    f"❌ Failed to purge documents:\n\n{str(e)}"
+                )
+                logger.error(f"Failed to purge documents: {e}")
     
     def _save_config(self):
         """Save current configuration to a file."""

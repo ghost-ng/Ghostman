@@ -1,10 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(find:*)",
-      "Bash(for file in CLEAN_ICON_STYLING_IMPLEMENTATION.md CODE_FONT_PRESERVATION_FIX.md CODE_SNIPPET_ENHANCEMENT_SUMMARY.md IMPLEMENTATION_GUIDE.md)",
-      "Bash(do mv \"$file\" docs/)",
-      "Bash(echo:*)"
+      "Bash(awk:*)",
+      "Read(//c/Users/miguel/**)",
+      "Bash(ls:*)",
+      "Bash(echo:*)",
+      "Bash(python apply_rag_optimization.py:*)",
+      "Bash(cat:*)",
+      "Bash(python apply_rag_optimization_v2.py:*)",
+      "Bash(python:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": [],

@@ -168,7 +168,8 @@ class ConversationManager:
         status: Optional[ConversationStatus] = None,
         limit: Optional[int] = 20,
         offset: int = 0,
-        sort_order: SortOrder = SortOrder.UPDATED_DESC
+        sort_order: SortOrder = SortOrder.UPDATED_DESC,
+        include_deleted: bool = False
     ) -> List[Conversation]:
         """List conversations with filtering."""
         if not self._initialized:
@@ -179,11 +180,23 @@ class ConversationManager:
                 status=status,
                 limit=limit,
                 offset=offset,
-                sort_order=sort_order
+                sort_order=sort_order,
+                include_deleted=include_deleted
             )
         except Exception as e:
             logger.error(f"✗ Failed to list conversations: {e}")
             return []
+    
+    async def get_conversations_with_file_info(self, conversation_ids: List[str]) -> Dict[str, List[Dict[str, Any]]]:
+        """Get file info for multiple conversations in a single batch query."""
+        if not self._initialized:
+            return {}
+        
+        try:
+            return await self.conversation_service.get_conversations_with_file_info(conversation_ids)
+        except Exception as e:
+            logger.error(f"✗ Failed to get conversations file info: {e}")
+            return {}
     
     async def search_conversations(self, query: SearchQuery) -> SearchResults:
         """Search conversations."""

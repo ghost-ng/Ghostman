@@ -7,6 +7,7 @@ Core data models for the conversation management system.
 from .conversation import Conversation, Message, ConversationSummary, ConversationMetadata
 from .enums import MessageRole, ConversationStatus, ExportFormat
 from .search import SearchQuery, SearchResult
+from .database_models import ConversationFileModel
 
 __all__ = [
     'Conversation',
@@ -17,5 +18,6 @@ __all__ = [
     'ConversationStatus', 
     'ExportFormat',
     'SearchQuery',
-    'SearchResult'
+    'SearchResult',
+    'ConversationFileModel'
 ]

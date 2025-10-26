@@ -8,6 +8,8 @@ import sys
 import os
 import logging
 import argparse
+import signal
+import atexit
 from typing import Optional
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer
@@ -32,6 +34,7 @@ class GhostmanApplication:
     def __init__(self):
         self.app: Optional[QApplication] = None
         self.coordinator: Optional[AppCoordinator] = None
+        self._setup_signal_handlers()
     
     def setup_qt_application(self) -> QApplication:
         """Setup and configure the Qt application."""
@@ -117,6 +120,34 @@ class GhostmanApplication:
             logger.debug("Could not install Qt message handler - PyQt6 not available")
         except Exception as e:
             logger.debug(f"Failed to install Qt message handler: {e}")
+    
+    def _setup_signal_handlers(self):
+        """Setup signal handlers for graceful shutdown."""
+        def signal_handler(signum, frame):
+            logger.info(f"Received signal {signum}, initiating graceful shutdown...")
+            if self.coordinator:
+                self.coordinator.shutdown()
+            sys.exit(0)
+        
+        def cleanup_handler():
+            """Final cleanup on exit."""
+            logger.debug("Performing final cleanup on exit...")
+            if self.coordinator:
+                self.coordinator.shutdown()
+        
+        # Register signal handlers
+        try:
+            signal.signal(signal.SIGTERM, signal_handler)
+            signal.signal(signal.SIGINT, signal_handler)
+            if hasattr(signal, 'SIGHUP'):  # Unix only
+                signal.signal(signal.SIGHUP, signal_handler)
+            
+            # Register atexit handler as final fallback
+            atexit.register(cleanup_handler)
+            
+            logger.debug("Signal handlers registered for graceful shutdown")
+        except Exception as e:
+            logger.debug(f"Could not register signal handlers: {e}")
     
     def initialize_coordinator(self) -> bool:
         """Initialize the application coordinator."""

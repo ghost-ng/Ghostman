@@ -6,24 +6,41 @@ Manages multiple conversation tabs with context switching and state isolation.
 
 import logging
 import uuid
-from typing import Dict, List, Optional
-from PyQt6.QtWidgets import QWidget, QPushButton, QFrame, QHBoxLayout, QMenu
+from typing import Dict, List, Optional, Any
+from PyQt6.QtWidgets import QWidget, QPushButton, QFrame, QHBoxLayout, QMenu, QStackedWidget
 from PyQt6.QtCore import pyqtSignal, QObject, Qt
 from PyQt6.QtGui import QAction
+
+# Import MixedContentDisplay for per-tab output widgets
+from .mixed_content_display import MixedContentDisplay
 
 logger = logging.getLogger("ghostman.tab_conversation_manager")
 
 
 class ConversationTab:
     """Represents a single conversation tab with its state and UI button."""
-    
-    def __init__(self, tab_id: str, title: str = "New Conversation"):
+
+    def __init__(self, tab_id: str, title: str = "New Conversation", theme_manager=None):
         self.tab_id = tab_id
         self.conversation_id: Optional[str] = None
         self.is_active = False
         self.is_modified = False
         self.button: Optional[QPushButton] = None
-        
+
+        # Each tab owns its own output display widget - NO MORE SHARED WIDGET!
+        # Note: MixedContentDisplay doesn't accept theme_manager parameter
+        # Theme will be applied via the global theme system
+        self.output_display = MixedContentDisplay()
+
+        # Each tab owns its own file browser widget - per-tab file isolation
+        from .file_browser_bar import FileBrowserBar
+        self.file_browser = FileBrowserBar(theme_manager=theme_manager)
+        self.file_browser.setVisible(False)  # Initially hidden
+
+        # Per-tab state storage for sandboxing
+        self.file_ids: List[str] = []  # Files associated with THIS tab
+        self.file_browser_visible: bool = False  # File browser visibility state
+
         # Initialize title using the setter to ensure proper truncation
         self.set_title(title)
         
@@ -54,26 +71,42 @@ class TabConversationManager(QObject):
     """Manages tabbed conversations with context switching."""
     
     # Signals
-    tab_switched = pyqtSignal(str)  # tab_id
+    tab_switched = pyqtSignal(str, str)  # old_tab_id, new_tab_id
     tab_created = pyqtSignal(str)   # tab_id
     tab_closed = pyqtSignal(str)    # tab_id
+    conversation_context_switched = pyqtSignal(str)  # conversation_id (empty for new conversation)
     new_tab_requested = pyqtSignal()
     
-    def __init__(self, parent_repl_widget, tab_frame: QFrame, tab_layout: QHBoxLayout, create_initial_tab: bool = True):
+    def __init__(self, parent_repl_widget, tab_frame: QFrame, tab_layout: QHBoxLayout, output_container_layout=None, create_initial_tab: bool = True):
         super().__init__()
         self.parent_repl = parent_repl_widget
         self.tab_frame = tab_frame
         self.tab_layout = tab_layout
-        
+
         # Tab management
         self.tabs: Dict[str, ConversationTab] = {}
         self.active_tab_id: Optional[str] = None
         self.tab_order: List[str] = []
-        
+
+        # Stacked widget to hold all tab output displays
+        # Each tab's output_display will be added here and we'll switch between them
+        self.output_stack = QStackedWidget()
+        self.output_stack.setMinimumHeight(300)
+
+        # Stacked widget to hold all tab file browsers
+        # Each tab's file_browser will be added here and we'll switch between them
+        self.file_browser_stack = QStackedWidget()
+        self.file_browser_stack.setVisible(False)  # Initially hidden
+
+        # NOTE: We create the QStackedWidget here but DON'T add it to the layout yet
+        # The parent (REPLWidget) will add it in the correct position in its layout
+        # This ensures proper ordering: tab_bar → title_bar → output_stack → input
+        self.output_container_layout = output_container_layout
+
         # Initialize with first tab if requested
         if create_initial_tab:
             self._create_initial_tab()
-        
+
         logger.info(f"TabConversationManager initialized (initial_tab={create_initial_tab})")
     
     def _create_initial_tab(self):
@@ -82,19 +115,43 @@ class TabConversationManager(QObject):
         self.create_tab(initial_id, "New Conversation", activate=True)
     
     def create_tab(self, tab_id: str = None, title: str = "New Conversation", activate: bool = True) -> str:
-        """Create a new conversation tab."""
+        """Create a new conversation tab with max limit enforcement."""
         if not tab_id:
             tab_id = f"tab-{str(uuid.uuid4())[:8]}"
-        
+
         # Check if tab already exists
         if tab_id in self.tabs:
             if activate:
                 self.switch_to_tab(tab_id)
             return tab_id
+
+        # Enforce tab limit (max 6 tabs)
+        MAX_TABS = 6
+        if len(self.tabs) >= MAX_TABS:
+            logger.warning(f"Tab limit reached ({MAX_TABS} tabs). Cannot create more tabs.")
+            # Optionally show a message to user
+            if hasattr(self.parent_repl, 'append_output'):
+                self.parent_repl.append_output(
+                    f"⚠ Maximum {MAX_TABS} tabs allowed. Close a tab to create a new one.",
+                    "warning"
+                )
+            return None
         
         # Create tab object
-        tab = ConversationTab(tab_id, title)
-        
+        logger.info(f"")
+        logger.info(f"{'='*80}")
+        logger.info(f"🆕 CREATING NEW TAB")
+        logger.info(f"{'='*80}")
+        logger.info(f"   Tab ID: {tab_id}")
+        logger.info(f"   Title: {title}")
+        logger.info(f"   Activate: {activate}")
+
+        # Get theme_manager from parent REPL widget if available
+        theme_manager = getattr(self.parent_repl, 'theme_manager', None)
+
+        tab = ConversationTab(tab_id, title, theme_manager=theme_manager)
+        logger.info(f"   ✅ Tab object created with its own output display widget")
+
         # Create tab button
         tab_button = QPushButton(title)
         tab_button.setObjectName(f"tab_button_{tab_id}")
@@ -129,38 +186,62 @@ class TabConversationManager(QObject):
         # Store tab
         self.tabs[tab_id] = tab
         self.tab_order.append(tab_id)
-        
+
+        # Add tab's output display widget to the stacked widget
+        self.output_stack.addWidget(tab.output_display)
+        logger.info(f"   📺 Added tab's output widget to QStackedWidget (index: {self.output_stack.count() - 1})")
+
+        # Add tab's file browser widget to the file browser stacked widget
+        self.file_browser_stack.addWidget(tab.file_browser)
+        logger.info(f"   📁 Added tab's file browser to QStackedWidget (index: {self.file_browser_stack.count() - 1})")
+
+        # Connect file browser signals to parent REPL widget
+        if hasattr(self.parent_repl, '_connect_file_browser_signals'):
+            self.parent_repl._connect_file_browser_signals(tab.file_browser)
+            logger.debug(f"   ✅ Connected file browser signals for tab {tab_id[:8]}")
+
         # Activate if requested
         if activate:
+            logger.info(f"   🔄 Activating new tab...")
             self.switch_to_tab(tab_id)
-        
-        logger.info(f"Created tab: {tab_id} - {title}")
+
+        logger.info(f"   ✅ Tab creation complete: {tab_id}")
+        logger.info(f"   📢 Emitting tab_created signal...")
+        logger.info(f"{'='*80}")
+        logger.info(f"")
+
         self.tab_created.emit(tab_id)
-        
+
         return tab_id
     
     def close_tab(self, tab_id: str) -> bool:
         """Close a conversation tab."""
         if tab_id not in self.tabs:
             return False
-        
+
         # Don't close the last tab
         if len(self.tabs) <= 1:
             logger.debug("Cannot close the last tab")
             return False
-        
+
         tab = self.tabs[tab_id]
-        
+
         # Remove button from layout
         if tab.button:
             self.tab_layout.removeWidget(tab.button)
             tab.button.deleteLater()
-        
+
+        # Remove tab's output widget from stacked widget
+        if tab.output_display:
+            self.output_stack.removeWidget(tab.output_display)
+            tab.output_display.deleteLater()
+            logger.debug(f"Removed tab {tab_id[:8]}'s output widget from QStackedWidget")
+
         # Remove from tracking
         del self.tabs[tab_id]
         if tab_id in self.tab_order:
             self.tab_order.remove(tab_id)
-        
+
         # Switch to another tab if this was active
         if self.active_tab_id == tab_id:
             # Find next tab to activate
@@ -169,40 +250,62 @@ class TabConversationManager(QObject):
                 self.switch_to_tab(next_tab_id)
             else:
                 self.active_tab_id = None
-        
+
         logger.info(f"Closed tab: {tab_id}")
         self.tab_closed.emit(tab_id)
-        
+
         return True
     
     def switch_to_tab(self, tab_id: str):
-        """Switch to a specific tab."""
+        """Switch to a specific tab - simply shows the tab's widget, no save/restore needed."""
         if tab_id not in self.tabs:
             logger.warning(f"Tab not found: {tab_id}")
             return
-        
-        # Update previous active tab styling
+
+        old_tab_id = self.active_tab_id
+
+        # Debug: show all tab-conversation associations
+        logger.info(f"📋 Current tab-conversation map:")
+        for tid, tab in self.tabs.items():
+            logger.info(f"   {tid[:12]}: {tab.conversation_id[:8] if tab.conversation_id else 'None'}")
+
+        # Update old tab styling
         if self.active_tab_id and self.active_tab_id in self.tabs:
-            prev_tab = self.tabs[self.active_tab_id]
-            if prev_tab.button:
-                self._style_tab_button(prev_tab.button, active=False)
-            prev_tab.is_active = False
-        
+            old_tab = self.tabs[self.active_tab_id]
+            if old_tab.button:
+                self._style_tab_button(old_tab.button, active=False)
+            old_tab.is_active = False
+
         # Update new active tab
         tab = self.tabs[tab_id]
         if tab.button:
             self._style_tab_button(tab.button, active=True)
         tab.is_active = True
-        
+
         self.active_tab_id = tab_id
-        
+
         # Move to end of order (most recently used)
         if tab_id in self.tab_order:
             self.tab_order.remove(tab_id)
         self.tab_order.append(tab_id)
-        
-        logger.debug(f"Switched to tab: {tab_id}")
-        self.tab_switched.emit(tab_id)
+
+        # Switch to this tab's output widget in the stacked widget
+        # Each tab owns its own MixedContentDisplay widget - just show it!
+        self.output_stack.setCurrentWidget(tab.output_display)
+        logger.info(f"🔄 Switched QStackedWidget to tab {tab_id[:8]}'s output display")
+
+        # Switch to this tab's file browser widget in the file browser stacked widget
+        self.file_browser_stack.setCurrentWidget(tab.file_browser)
+        logger.debug(f"🔄 Switched file browser stack to tab {tab_id[:8]}'s file browser")
+        logger.debug(f"Switched to tab: {tab_id} (from {old_tab_id})")
+
+        # Emit tab switch with both old and new IDs
+        self.tab_switched.emit(old_tab_id or "", tab_id)
+
+        # Emit conversation context switch
+        conversation_id = tab.conversation_id or ""
+        self.conversation_context_switched.emit(conversation_id)
+        logger.debug(f"Tab {tab_id} conversation context: {conversation_id or 'NEW'}")
     
     def get_active_tab(self) -> Optional[ConversationTab]:
         """Get the currently active tab."""
@@ -215,6 +318,54 @@ class TabConversationManager(QObject):
         if tab_id in self.tabs:
             self.tabs[tab_id].set_title(new_title)
             logger.debug(f"Updated tab {tab_id} title to: {new_title}")
+    
+    def associate_conversation_with_tab(self, tab_id: str, conversation_id: str, conversation_title: str = None):
+        """Associate a conversation with a specific tab."""
+        if tab_id not in self.tabs:
+            logger.warning(f"Cannot associate conversation - tab not found: {tab_id}")
+            return False
+
+        tab = self.tabs[tab_id]
+        logger.info(f"🔗 BEFORE: tab.conversation_id = {tab.conversation_id}")
+        tab.conversation_id = conversation_id
+        logger.info(f"🔗 AFTER: tab.conversation_id = {tab.conversation_id[:8]}")
+
+        # Update tab title if conversation title provided
+        if conversation_title:
+            tab.set_title(conversation_title)
+
+        logger.info(f"Associated conversation {conversation_id} with tab {tab_id}")
+
+        # Verify the association stuck
+        verify = self.tabs[tab_id].conversation_id
+        if verify == conversation_id:
+            logger.info(f"✅ Association verified: {tab_id[:12]} → {conversation_id[:8]}")
+        else:
+            logger.error(f"❌ Association FAILED: Expected {conversation_id[:8]}, got {verify}")
+
+        return True
+    
+    def get_conversation_for_tab(self, tab_id: str) -> Optional[str]:
+        """Get the conversation ID associated with a tab."""
+        if tab_id in self.tabs:
+            conv_id = self.tabs[tab_id].conversation_id
+            logger.info(f"🔍 get_conversation_for_tab({tab_id[:12]}): {conv_id[:8] if conv_id else 'None'}")
+            return conv_id
+        logger.warning(f"🔍 get_conversation_for_tab({tab_id[:12]}): TAB NOT FOUND")
+        return None
+    
+    def get_active_conversation_id(self) -> Optional[str]:
+        """Get the conversation ID for the currently active tab."""
+        if self.active_tab_id:
+            return self.get_conversation_for_tab(self.active_tab_id)
+        return None
+    
+    def find_tab_for_conversation(self, conversation_id: str) -> Optional[str]:
+        """Find the tab associated with a specific conversation."""
+        for tab_id, tab in self.tabs.items():
+            if tab.conversation_id == conversation_id:
+                return tab_id
+        return None
     
     def _style_tab_button(self, button: QPushButton, active: bool):
         """Apply theme-aware styling to a tab button with consistent sizing."""

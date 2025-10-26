@@ -40,7 +40,7 @@ class ConversationContext:
     """Manages conversation history and context."""
     messages: List[ConversationMessage] = field(default_factory=list)
     max_messages: int = 50  # Maximum messages to keep in context
-    max_tokens: int = 8000  # Approximate token limit for context
+    max_tokens: int = 32768  # Increased token limit for context (suitable for modern models)
     
     def add_message(self, role: str, content: str) -> ConversationMessage:
         """Add a message to the conversation."""
@@ -162,7 +162,7 @@ class AIService:
             'base_url': settings.get('ai_model.base_url', 'https://api.openai.com/v1'),
             'api_key': settings.get('ai_model.api_key', ''),
             'temperature': settings.get('ai_model.temperature', 0.7),
-            'max_tokens': settings.get('ai_model.max_tokens', 2000),
+            'max_tokens': settings.get('ai_model.max_tokens', 16384),  # Increased default for modern models
             'system_prompt': settings.get('ai_model.system_prompt', 'You are Spector, a helpful AI assistant.')
         }
         
@@ -341,23 +341,21 @@ class AIService:
                     api_params['reasoning_effort'] = 'low'
                     logger.debug(f"Using reasoning_effort 'low' for {model_name}")
                     
-                    # Adjust max_tokens for gpt-5-nano to account for reasoning tokens
-                    current_max_tokens = api_params.get('max_tokens', 2000)
+                    # Handle max_tokens for gpt-5-nano properly (remove hard cap)
+                    current_max_tokens = api_params.get('max_tokens', 16384)
                     if current_max_tokens:
-                        # gpt-5-nano uses reasoning tokens + response tokens
-                        # We need to ensure enough tokens for both reasoning and actual response
+                        # gpt-5-nano supports up to 128k tokens, don't artificially limit it
+                        # Only adjust for very small requests that need reasoning overhead
                         if current_max_tokens < 200:
                             # Small requests need more tokens for reasoning overhead
-                            adjusted_tokens = max(200, current_max_tokens * 3)
-                        elif current_max_tokens > 4096:
-                            # Large requests should be capped but still allow reasoning
-                            adjusted_tokens = 4096
+                            adjusted_tokens = max(200, current_max_tokens * 2)
+                            api_params['max_tokens'] = adjusted_tokens
+                            logger.info(f"Adjusted max_tokens from {current_max_tokens} to {adjusted_tokens} for {model_name} (small request reasoning buffer)")
                         else:
-                            # Medium requests - add buffer for reasoning tokens
-                            adjusted_tokens = min(4096, current_max_tokens + 100)
-                        
-                        api_params['max_tokens'] = adjusted_tokens
-                        logger.info(f"Adjusted max_tokens from {current_max_tokens} to {adjusted_tokens} for {model_name} (reasoning + response)")
+                            # For normal and large requests, respect user's token setting
+                            # gpt-5-nano can handle up to 128k tokens efficiently
+                            logger.info(f"Using user-specified max_tokens {current_max_tokens} for {model_name} (no artificial cap)")
+                            # Keep the original max_tokens value - don't cap it
             
             # Make API request
             response = self.client.chat_completion(**api_params)
@@ -666,7 +664,7 @@ class AIService:
                 "model": model_name,
                 "messages": messages,
                 "temperature": self._config.get('temperature', 0.7),
-                "max_tokens": self._config.get('max_tokens', 2000),
+                "max_tokens": self._config.get('max_tokens', 16384),  # Updated default
                 "stream": stream
             }
             
@@ -682,7 +680,7 @@ class AIService:
                     logger.debug(f"Using reasoning_effort 'low' for {model_name} (title generation)")
                     
                     # Limit max_tokens for gpt-5-nano to avoid issues (titles should be short anyway)
-                    current_max_tokens = api_params.get('max_tokens', 2000)
+                    current_max_tokens = api_params.get('max_tokens', 16384)
                     if current_max_tokens and current_max_tokens > 100:
                         api_params['max_tokens'] = 100
                         logger.info(f"Reduced max_tokens from {current_max_tokens} to 100 for {model_name} title generation")
