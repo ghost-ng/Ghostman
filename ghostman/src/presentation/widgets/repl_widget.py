@@ -4820,18 +4820,20 @@ class REPLWidget(QWidget):
                         detail_text = f"Using existing: {chunks} chunks, {tokens} tokens"
                         style = "info"
                     else:
-                        status_icon = "✅"  
+                        status_icon = "✅"
                         status_text = f"File <strong>{filename}</strong> processed successfully"
                         detail_text = f"Created: {chunks} chunks, {tokens} tokens"
                         style = "info"
-                    
-                    # Create HTML message with consistent styling
-                    message_html = f"""
-                    <div style="background-color: rgba(34, 139, 34, 0.1); border-left: 3px solid #228B22; padding: 8px; margin: 4px 0; border-radius: 4px;">
-                        <div style="font-weight: bold; color: #228B22;">{status_icon} {status_text}</div>
-                        <div style="font-size: 0.9em; color: #666; margin-top: 2px;">{detail_text}</div>
-                    </div>
-                    """
+
+                    # Only show success messages in debug mode
+                    if self._is_debug_mode_enabled():
+                        # Create HTML message with consistent styling
+                        message_html = f"""
+                        <div style="background-color: rgba(34, 139, 34, 0.1); border-left: 3px solid #228B22; padding: 8px; margin: 4px 0; border-radius: 4px;">
+                            <div style="font-weight: bold; color: #228B22;">{status_icon} {status_text}</div>
+                            <div style="font-size: 0.9em; color: #666; margin-top: 2px;">{detail_text}</div>
+                        </div>
+                        """
                 else:
                     # Handle the case where success is False but status is completed
                     # Use enhanced error handler for better error messages
@@ -4878,16 +4880,18 @@ class REPLWidget(QWidget):
             
             logger.info(f"🔍 DEBUG: Created message HTML for {filename}, about to check output_display")
             logger.info(f"🔍 DEBUG: hasattr output_display: {hasattr(self, 'output_display')}")
-            
-            # Add the message to chat using the proven stable MixedContentDisplay
-            if hasattr(self, 'output_display') and self.output_display:
-                logger.info(f"🔍 DEBUG: About to add HTML content to chat for file status: {filename} - {status}")
-                self.output_display.add_html_content(message_html, style)
-                logger.info(f"📢 File status displayed in chat: {filename} - {status}")
-            else:
-                logger.warning(f"❌ MixedContentDisplay not available for file status - hasattr: {hasattr(self, 'output_display')}")
-                if hasattr(self, 'output_display'):
-                    logger.warning(f"❌ output_display is None: {self.output_display is None}")
+
+            # Only display file processing status in debug mode
+            if self._is_debug_mode_enabled():
+                # Add the message to chat using the proven stable MixedContentDisplay
+                if hasattr(self, 'output_display') and self.output_display:
+                    logger.info(f"🔍 DEBUG: About to add HTML content to chat for file status: {filename} - {status}")
+                    self.output_display.add_html_content(message_html, style)
+                    logger.info(f"📢 File status displayed in chat: {filename} - {status}")
+                else:
+                    logger.warning(f"❌ MixedContentDisplay not available for file status - hasattr: {hasattr(self, 'output_display')}")
+                    if hasattr(self, 'output_display'):
+                        logger.warning(f"❌ output_display is None: {self.output_display is None}")
                 
         except Exception as e:
             logger.error(f"Error displaying file status in chat: {e}")
@@ -4906,17 +4910,19 @@ class REPLWidget(QWidget):
             if hasattr(self, 'mixed_content_display'):
                 logger.info(f"🔍 DEBUG: output_display is not None: {self.output_display is not None}")
             
-            message_html = f"""
-            <div style="background-color: rgba(30, 144, 255, 0.1); border-left: 3px solid #1E90FF; padding: 8px; margin: 4px 0; border-radius: 4px;">
-                <div style="font-weight: bold; color: #1E90FF;">🔄 Processing file <strong>{filename}</strong>...</div>
-                <div style="font-size: 0.9em; color: #666; margin-top: 2px;">Creating embeddings for file context</div>
-            </div>
-            """
-            
-            if hasattr(self, 'output_display') and self.output_display:
-                logger.info(f"🔍 DEBUG: About to add HTML content to chat for: {filename}")
-                self.output_display.add_html_content(message_html, "info")
-                logger.info(f"📢 Processing started message displayed in chat: {filename}")
+            # Only show processing messages in debug mode
+            if self._is_debug_mode_enabled():
+                message_html = f"""
+                <div style="background-color: rgba(30, 144, 255, 0.1); border-left: 3px solid #1E90FF; padding: 8px; margin: 4px 0; border-radius: 4px;">
+                    <div style="font-weight: bold; color: #1E90FF;">🔄 Processing file <strong>{filename}</strong>...</div>
+                    <div style="font-size: 0.9em; color: #666; margin-top: 2px;">Creating embeddings for file context</div>
+                </div>
+                """
+
+                if hasattr(self, 'output_display') and self.output_display:
+                    logger.info(f"🔍 DEBUG: About to add HTML content to chat for: {filename}")
+                    self.output_display.add_html_content(message_html, "info")
+                    logger.info(f"📢 Processing started message displayed in chat: {filename}")
             else:
                 logger.warning(f"❌ MixedContentDisplay not available for processing status - hasattr: {hasattr(self, 'output_display')}")
                 if hasattr(self, 'output_display'):

@@ -483,55 +483,129 @@ class FileContextItem(QFrame):
         
         # Modern smooth design with interface designer recommendations
         self.setStyleSheet(f"""
+            /* === FILE BADGE STYLING === */
             FileContextItem {{
+                /* Badge background - subtle gradient from top to bottom */
                 background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
-                    stop: 0 {pill_bg},
-                    stop: 1 {ColorUtils.darken(pill_bg, 0.05)});
+                    stop: 0 {pill_bg},  /* Top color */
+                    stop: 1 {ColorUtils.darken(pill_bg, 0.05)});  /* Bottom slightly darker */
+
+                /* Badge text color */
                 color: {pill_text};
+
+                /* Badge border - thin outline around badge */
                 border: 1px solid {pill_border};
-                border-radius: 10px;  /* Smooth rounded corners (not too round) */
-                padding: 2px 4px;  /* Minimal padding - tight to boundary */
-                margin: 2px 3px;  /* Reduced margin for better spacing */
+
+                /* Badge corner rounding - 10px for smooth pill shape */
+                border-radius: 10px;
+
+                /* Badge internal padding - space between text and badge edge (vertical horizontal) */
+                /* Smaller values = text closer to edge, larger = more breathing room */
+                padding: 2px 4px;
+
+                /* Badge external margin - space between badge and other elements (vertical horizontal) */
+                /* First value = top/bottom gap, second = left/right gap between badges */
+                margin: 2px 10px;
+
+                /* Badge transparency - 1.0 = fully opaque, lower = more transparent */
                 opacity: {opacity};
+
+                /* Badge text size in pixels */
                 font-size: 11px;
+
+                /* Badge text thickness - 500 is medium weight */
                 font-weight: 500;
+
+                /* Badge minimum height - prevents badge from being too short */
                 min-height: 26px;
+
+                /* Badge maximum height - prevents badge from being too tall */
                 max-height: 30px;
             }}
+
+            /* === FILE BADGE HOVER STATE === */
             FileContextItem:hover {{
+                /* Hover background - brighter gradient when mouse over badge */
                 background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
                     stop: 0 {hover_bg},
                     stop: 1 {ColorUtils.darken(hover_bg, 0.05)});
+
+                /* Hover border color - changes border when mouse over */
                 border-color: {hover_border};
+
+                /* Hover opacity - fully opaque on hover */
                 opacity: 1.0;
+
+                /* Hover shadow - subtle shadow effect on hover */
                 box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             }}
+
+            /* === TEXT LABELS INSIDE BADGE === */
             QLabel {{
+                /* Label text color */
                 color: {pill_text};
+
+                /* Label background - transparent to show badge background */
                 background: transparent;
+
+                /* Label border - no border */
                 border: none;
+
+                /* Label inherits font weight from parent badge */
                 font-weight: inherit;
+
+                /* Label inherits font size from parent badge */
                 font-size: inherit;
+
+                /* Label has no margin */
                 margin: 0;
+
+                /* Label has no padding */
                 padding: 0;
             }}
+
+            /* === REMOVE BUTTON (X) INSIDE BADGE === */
             QToolButton {{
+                /* Button background - transparent */
                 background-color: transparent;
+
+                /* Button border - subtle white outline */
                 border: 1px solid rgba(255, 255, 255, 0.3);
+
+                /* Button text color */
                 color: {pill_text};
+
+                /* Button text size */
                 font-size: 10px;
+
+                /* Button text weight - bold */
                 font-weight: bold;
-                border-radius: 8px;  /* Circular close button */
-                width: 16px;
-                height: 16px;
+
+                /* Button corner rounding - circular button */
+                border-radius: 8px;
+
+                /* Button width */
+                width: 10px;
+
+                /* Button height */
+                height: 10px;
+
+                /* Button left margin - space between filename and X */
                 margin-left: 4px;
             }}
+
+            /* === REMOVE BUTTON HOVER STATE === */
             QToolButton:hover {{
-                background-color: rgba(220, 53, 69, 0.8);  /* Red on hover */
+                /* Hover background - red to indicate delete action */
+                background-color: rgba(220, 53, 69, 0.8);
+
+                /* Hover border - solid red */
                 border-color: rgba(220, 53, 69, 1.0);
+
+                /* Hover text - white for contrast */
                 color: white;
             }}
-        """)    
+        """)
     
     def update_status(self, status: str, progress: float = 0.0, already_processed: bool = False):
         """Update processing status and progress."""
@@ -812,93 +886,208 @@ class FileBrowserBar(QFrame):
         logger.info(f"🎨 Retrieved colors - text_primary: {text_color}, bg: {bg_color}, accent: {accent_color}")
         
         self.setStyleSheet(f"""
+            /* === MAIN FILE BROWSER CONTAINER === */
             FileBrowserBar {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, 
+                /* Container background - subtle gradient from top to bottom */
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                     stop:0 {bg_color}, stop:1 {ColorUtils.darken(bg_color, 0.1)});
+
+                /* Container border - thin outline around entire browser */
                 border: 1px solid {ColorUtils.lighten(border_color, 0.2)};
-                border-radius: 4px;  /* Further reduced to prevent any clipping */
-                margin: 0px;  /* Remove margin that might cause overlap */
-                padding: 12px;  /* Increased padding */
-                padding-top: 8px;  /* Normal top padding */
-                padding-bottom: 16px;  /* Increased bottom padding for buttons */
-                min-height: 60px;  /* Increased minimum height to match widget */
-                max-height: 120px;  /* Ensure consistent height */
+
+                /* Container corner rounding */
+                border-radius: 4px;
+
+                /* Container external margin - space outside file browser */
+                margin: 0px;
+
+                /* Container internal padding - space inside container walls */
+                padding: 12px;  /* General padding */
+                padding-top: 8px;  /* Top padding (above "Attachments" title) */
+                padding-bottom: 16px;  /* Bottom padding (below status line) */
+
+                /* Container minimum height */
+                min-height: 60px;
+
+                /* Container maximum height */
+                max-height: 120px;
             }}
+
+            /* === FRAME ELEMENTS (internal containers) === */
             QFrame {{
+                /* All internal frames are transparent */
                 background-color: transparent;
+
+                /* All internal frames have no border */
                 border: none;
             }}
+
+            /* === ALL TEXT LABELS (generic) === */
             QLabel {{
+                /* Default label text color */
                 color: {text_color};
+
+                /* Default label background - transparent */
                 background: transparent;
+
+                /* Default label border - none */
                 border: none;
+
+                /* Default label text weight */
                 font-weight: 500;
             }}
+
+            /* === STATUS LINE TEXT ("1 file" or "No files loaded") === */
             QLabel#status_label {{
-                color: {text_color};  /* Use primary text color as requested */
+                /* Status text color */
+                color: {text_color};
             }}
+
+            /* === "ATTACHMENTS" HEADER TEXT === */
             QLabel#title_label {{
-                color: {text_color};  /* Ensure title uses primary text color */
+                /* Attachments title text color */
+                color: {text_color};
             }}
+            /* === PUSH BUTTONS (generic fallback, not used) === */
             QPushButton {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, 
+                /* Button background gradient */
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                     stop:0 {accent_color}, stop:1 {ColorUtils.darken(accent_color, 0.15)});
+
+                /* Button text color */
                 color: white;
+
+                /* Button border - none */
                 border: none;
+
+                /* Button corner rounding */
                 border-radius: 8px;
+
+                /* Button internal padding */
                 padding: 6px 12px;
+
+                /* Button text size */
                 font-size: 10px;
+
+                /* Button text weight */
                 font-weight: 600;
             }}
+
+            /* === PUSH BUTTON HOVER STATE === */
             QPushButton:hover {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, 
-                    stop:0 {ColorUtils.lighten(accent_color, 0.1)}, 
+                /* Hover background - lighter gradient */
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 {ColorUtils.lighten(accent_color, 0.1)},
                     stop:1 {ColorUtils.darken(accent_color, 0.05)});
             }}
+
+            /* === PUSH BUTTON PRESSED STATE === */
             QPushButton:pressed {{
+                /* Pressed background - darker */
                 background: {ColorUtils.darken(accent_color, 0.2)};
             }}
+
+            /* === UPLOAD & CLEAR BUTTONS (QToolButton in header) === */
             QToolButton {{
+                /* Button background - subtle transparent white */
                 background-color: rgba(255,255,255,0.1);
+
+                /* Button border - very subtle outline */
                 border: 1px solid rgba(255,255,255,0.15);
-                border-radius: 4px;  /* Reduced to match container */
+
+                /* Button corner rounding */
+                border-radius: 4px;
+
+                /* Button icon/text color */
                 color: {text_color};
+
+                /* Button icon size */
                 font-size: 12px;
-                min-width: 28px;  /* Increased to match setMinimumSize */
-                min-height: 28px;  /* Increased to match setMinimumSize */
-                max-width: 32px;  /* Ensure consistent sizing */
-                max-height: 32px;  /* Ensure consistent sizing */
-                padding: 2px;  /* Slightly increased padding for better appearance */
+
+                /* Button minimum width */
+                min-width: 28px;
+
+                /* Button minimum height */
+                min-height: 28px;
+
+                /* Button maximum width */
+                max-width: 32px;
+
+                /* Button maximum height */
+                max-height: 32px;
+
+                /* Button internal padding */
+                padding: 2px;
             }}
+
+            /* === UPLOAD & CLEAR BUTTONS HOVER STATE === */
             QToolButton:hover {{
+                /* Hover background - accent color highlight */
                 background-color: {accent_color};
+
+                /* Hover border - accent color */
                 border-color: {accent_color};
+
+                /* Hover text/icon - white for contrast */
                 color: white;
             }}
+
+            /* === UPLOAD & CLEAR BUTTONS PRESSED STATE === */
             QToolButton:pressed {{
+                /* Pressed background - darker accent */
                 background-color: {ColorUtils.darken(accent_color, 0.2)};
+
+                /* Pressed border - darker accent */
                 border-color: {ColorUtils.darken(accent_color, 0.2)};
             }}
+            /* === SCROLL AREA (for file badges overflow) === */
             QScrollArea {{
+                /* Scroll area background - transparent */
                 background-color: transparent;
+
+                /* Scroll area border - very subtle outline */
                 border: 1px solid rgba(255,255,255,0.1);
+
+                /* Scroll area corner rounding */
                 border-radius: 8px;
             }}
+
+            /* === HORIZONTAL SCROLLBAR TRACK === */
             QScrollBar:horizontal {{
+                /* Scrollbar track background */
                 background-color: rgba(255,255,255,0.05);
+
+                /* Scrollbar track height */
                 height: 8px;
+
+                /* Scrollbar track corner rounding */
                 border-radius: 4px;
+
+                /* Scrollbar track margin */
                 margin: 0;
             }}
+
+            /* === HORIZONTAL SCROLLBAR HANDLE (draggable part) === */
             QScrollBar::handle:horizontal {{
+                /* Scrollbar handle color */
                 background-color: {accent_color};
+
+                /* Scrollbar handle corner rounding */
                 border-radius: 4px;
+
+                /* Scrollbar handle minimum width */
                 min-width: 20px;
             }}
+
+            /* === HORIZONTAL SCROLLBAR HANDLE HOVER STATE === */
             QScrollBar::handle:horizontal:hover {{
+                /* Hover handle color - lighter */
                 background-color: {ColorUtils.lighten(accent_color, 0.2)};
             }}
+
+            /* === HORIZONTAL SCROLLBAR ARROWS (hidden) === */
             QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+                /* Hide scrollbar arrows */
                 border: none;
                 background: none;
                 width: 0px;
