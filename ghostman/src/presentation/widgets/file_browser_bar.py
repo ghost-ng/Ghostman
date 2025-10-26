@@ -245,7 +245,7 @@ class FileContextItem(QFrame):
         self.remove_btn.setStyleSheet("""
             QToolButton {
                 padding: 0px;
-                margin: -1px 0px 0px 0px;  /* Negative top margin to raise X button */
+                margin: -3px 0px 0px 0px;  /* Negative top margin to raise X button higher */
                 border: none;
                 background-color: transparent;
                 color: #ff6b6b;
@@ -258,7 +258,7 @@ class FileContextItem(QFrame):
                 background-color: rgba(255, 107, 107, 0.2);
                 color: #ff4444;
                 padding: 0px;
-                margin: -1px 0px 0px 0px;  /* Keep same margin on hover */
+                margin: -3px 0px 0px 0px;  /* Keep same margin on hover */
                 border-radius: 7px;
             }
         """)
@@ -509,9 +509,9 @@ class FileContextItem(QFrame):
                 /* Badge corner rounding - 10px for smooth pill shape */
                 border-radius: 10px;
 
-                /* Badge internal padding - ZERO vertical to fill full height */
-                /* Minimal horizontal padding - X button closer to edge */
-                padding: 0px 2px;
+                /* Badge internal padding - ZERO vertical, asymmetric horizontal */
+                /* Less padding on right to bring X button very close to edge */
+                padding: 0px 1px 0px 3px;  /* top right bottom left */
 
                 /* Badge external margin - minimal spacing */
                 margin: 0px 1px;
