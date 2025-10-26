@@ -3404,11 +3404,11 @@ class REPLWidget(QWidget):
             # Clear enabled files tracking
             if hasattr(self, '_enabled_files'):
                 self._enabled_files.clear()
-            
-            # Hide browser bar
+
+            # Clear files from browser bar UI (keeps header visible)
             if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
-                self.file_browser_bar.setVisible(False)
-            
+                self.file_browser_bar.clear_all_files()
+
             # Log clear result
             if clear_success:
                 logger.info("✅ Successfully cleared all files from RAG pipeline and tracking")
@@ -9775,12 +9775,12 @@ def test_theme():
                         
                         # Refresh conversation list
                         await self._load_conversations()
-                        self.append_output("✓ Started new conversation", "system")
+                        #self.append_output("✓ Started new conversation", "system")
                         if save_current and current_id:
                             self.append_output("💾 Previous conversation saved with auto-generated title", "system")
                         
                         # Add welcome message for new conversation
-                        self.append_output("💬 Ghostman Conversation Manager v2.0", "system")
+                        #self.append_output("💬 Ghostman Conversation Manager v2.0", "system")
                         self.append_output("🚀 New conversation started - type your message or 'help' for commands", "system")
                     else:
                         self.append_output("✗ Failed to start new conversation", "error")
