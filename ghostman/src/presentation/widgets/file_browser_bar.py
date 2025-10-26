@@ -239,6 +239,8 @@ class FileContextItem(QFrame):
         self.remove_btn.setText("×")
         self.remove_btn.clicked.connect(lambda: self.remove_requested.emit(self.file_id))
         self.remove_btn.setFixedSize(14, 14)  # Very compact size
+        # Center the X text within the button
+        self.remove_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
         # Apply styling with no border
         self.remove_btn.setStyleSheet("""
             QToolButton {
@@ -247,11 +249,14 @@ class FileContextItem(QFrame):
                 color: #ff6b6b;
                 font-weight: bold;
                 font-size: 11px;  /* Smaller font size */
+                padding: 0px;  /* No padding - X fills button completely */
+                margin: 0px;  /* No margin */
             }
             QToolButton:hover {
                 background-color: rgba(255, 107, 107, 0.2);  /* Subtle hover background */
                 color: #ff4444;  /* Darker red on hover */
                 border-radius: 7px;  /* Subtle rounded corners on hover */
+                padding: 0px;  /* Keep no padding on hover */
             }
         """)
         # Add button with vertical center alignment
