@@ -269,7 +269,7 @@ class FileContextItem(QFrame):
         # Use Preferred policy to allow natural sizing within min/max constraints
         # This allows the badge to grow to fit content up to max width
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.setFixedHeight(24)  # Very compact pill height
+        self.setFixedHeight(20)  # Thinner badge height
         self.setMinimumWidth(120)  # Increased minimum to accommodate typical filenames
         self.setMaximumWidth(220)  # Increased maximum to prevent clipping
 
@@ -509,9 +509,9 @@ class FileContextItem(QFrame):
                 /* Badge corner rounding - 10px for smooth pill shape */
                 border-radius: 10px;
 
-                /* Badge internal padding - ZERO vertical to fill full 24px height */
-                /* Minimal horizontal padding for tighter appearance */
-                padding: 0px 3px;
+                /* Badge internal padding - ZERO vertical to fill full height */
+                /* Minimal horizontal padding - X button closer to edge */
+                padding: 0px 2px;
 
                 /* Badge external margin - minimal spacing */
                 margin: 0px 1px;
@@ -525,11 +525,11 @@ class FileContextItem(QFrame):
                 /* Badge text thickness - 500 is medium weight */
                 font-weight: 500;
 
-                /* Badge minimum height - matches setFixedHeight(24) */
-                min-height: 24px;
+                /* Badge minimum height - matches setFixedHeight(20) */
+                min-height: 20px;
 
-                /* Badge maximum height - matches setFixedHeight(24) */
-                max-height: 24px;
+                /* Badge maximum height - matches setFixedHeight(20) */
+                max-height: 20px;
             }}
 
             /* === FILE BADGE HOVER STATE === */
