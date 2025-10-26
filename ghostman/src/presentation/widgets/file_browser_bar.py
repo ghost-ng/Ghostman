@@ -196,7 +196,7 @@ class FileContextItem(QFrame):
     def _init_ui(self):
         """Initialize pill-style UI components."""
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(6, 0, 6, 0)  # Minimal horizontal padding, no vertical padding
+        layout.setContentsMargins(4, 0, 4, 0)  # Reduced horizontal padding to prevent clipping
         layout.setSpacing(3)  # Minimal spacing between elements
 
         # Status indicator - very compact size
@@ -226,9 +226,9 @@ class FileContextItem(QFrame):
         font.setPointSize(7)  # Smaller font
         font.setBold(False)
         self.filename_label.setFont(font)
-        # Set size constraints and eliding to prevent overflow
-        self.filename_label.setMaximumWidth(140)  # Leave room for icons and buttons
-        self.filename_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        # Remove maximum width constraint - let it size naturally within badge constraints
+        # Use Expanding policy to fill available space and prevent clipping
+        self.filename_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.filename_label.setTextFormat(Qt.TextFormat.PlainText)
         # Note: QLabel doesn't support native eliding, but we handle truncation in _get_pill_name()
         layout.addWidget(self.filename_label, 1)  # Stretch factor allows it to use available space
@@ -256,11 +256,12 @@ class FileContextItem(QFrame):
         layout.addWidget(self.remove_btn)
 
         # Set size policy for grid pill layout with bottom margin
-        # Use Maximum instead of Expanding to prevent badge from growing beyond maxWidth
-        self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        # Use Preferred policy to allow natural sizing within min/max constraints
+        # This allows the badge to grow to fit content up to max width
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.setFixedHeight(24)  # Very compact pill height
-        self.setMinimumWidth(100)  # Smaller minimum width
-        self.setMaximumWidth(180)  # Smaller maximum width
+        self.setMinimumWidth(120)  # Increased minimum to accommodate typical filenames
+        self.setMaximumWidth(220)  # Increased maximum to prevent clipping
 
         # Add bottom margin to badge for visual separation
         self.setContentsMargins(0, 0, 0, 2)  # Small bottom margin
@@ -489,8 +490,8 @@ class FileContextItem(QFrame):
                 color: {pill_text};
                 border: 1px solid {pill_border};
                 border-radius: 10px;  /* Smooth rounded corners (not too round) */
-                padding: 6px 10px;
-                margin: 3px 4px;
+                padding: 4px 8px;  /* Reduced padding to prevent clipping */
+                margin: 2px 3px;  /* Reduced margin for better spacing */
                 opacity: {opacity};
                 font-size: 11px;
                 font-weight: 500;
@@ -758,7 +759,8 @@ class FileBrowserBar(QFrame):
         pills_scroll = QScrollArea()
         pills_scroll.setWidget(self.pills_container)
         pills_scroll.setWidgetResizable(True)
-        pills_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # Enable horizontal scrollbar to prevent forced compression when parent is narrow
+        pills_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         pills_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         pills_scroll.setFrameShape(QFrame.Shape.NoFrame)
 
@@ -1204,16 +1206,16 @@ class FileBrowserBar(QFrame):
             # Ensure row widget doesn't expand beyond content
             row_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             self.pills_grid.addWidget(row_widget)
-            
+
             self.pills_in_current_row = 0
-        
-        # Add item to current row
-        self.current_row_layout.addWidget(item)
+
+        # Add item to current row with NO stretch factor initially
+        # This prevents the item from being compressed by stretch spacers
+        self.current_row_layout.addWidget(item, 0, Qt.AlignmentFlag.AlignLeft)
         self.pills_in_current_row += 1
-        
-        # Add stretch to fill remaining space in row
-        if self.pills_in_current_row < self.max_pills_per_row:
-            self.current_row_layout.addStretch()
+
+        # REMOVED: addStretch() was forcing badges to minimum width
+        # Instead, let badges size naturally within their constraints
         self.file_items[file_id] = item
         
         # Update status
@@ -1563,10 +1565,8 @@ class FileBrowserBar(QFrame):
                 
                 self.pills_in_current_row = 0
             
-            # Add item to current row
-            self.current_row_layout.addWidget(item)
+            # Add item to current row with proper alignment
+            self.current_row_layout.addWidget(item, 0, Qt.AlignmentFlag.AlignLeft)
             self.pills_in_current_row += 1
-            
-            # Add stretch to fill remaining space in row
-            if self.pills_in_current_row < self.max_pills_per_row:
-                self.current_row_layout.addStretch()
+
+            # REMOVED: addStretch() was causing badges to compress to minimum width
