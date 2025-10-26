@@ -245,7 +245,7 @@ class FileContextItem(QFrame):
         self.remove_btn.setStyleSheet("""
             QToolButton {
                 padding: 0px;
-                margin: 0px;
+                margin: -1px 0px 0px 0px;  /* Negative top margin to raise X button */
                 border: none;
                 background-color: transparent;
                 color: #ff6b6b;
@@ -258,7 +258,7 @@ class FileContextItem(QFrame):
                 background-color: rgba(255, 107, 107, 0.2);
                 color: #ff4444;
                 padding: 0px;
-                margin: 0px;
+                margin: -1px 0px 0px 0px;  /* Keep same margin on hover */
                 border-radius: 7px;
             }
         """)
