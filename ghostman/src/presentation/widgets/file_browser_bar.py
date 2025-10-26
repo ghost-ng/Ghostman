@@ -196,8 +196,8 @@ class FileContextItem(QFrame):
     def _init_ui(self):
         """Initialize pill-style UI components."""
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(2, 0, 2, 0)  # Minimal horizontal padding - tight to boundary
-        layout.setSpacing(2)  # Minimal spacing between elements
+        layout.setContentsMargins(1, 0, 1, 0)  # Tighter horizontal padding
+        layout.setSpacing(1)  # Tighter spacing between elements
 
         # Status indicator - very compact size
         self.status_indicator = QLabel()
@@ -510,12 +510,11 @@ class FileContextItem(QFrame):
                 border-radius: 10px;
 
                 /* Badge internal padding - ZERO vertical to fill full 24px height */
-                /* Horizontal padding gives text breathing room from edges */
-                padding: 0px 4px;
+                /* Minimal horizontal padding for tighter appearance */
+                padding: 0px 3px;
 
-                /* Badge external margin - space around badge */
-                /* Top/bottom margin between badge rows, left/right between badges */
-                margin: 1px 2px;
+                /* Badge external margin - minimal spacing */
+                margin: 0px 1px;
 
                 /* Badge transparency - 1.0 = fully opaque, lower = more transparent */
                 opacity: {opacity};
@@ -534,27 +533,10 @@ class FileContextItem(QFrame):
             }}
 
             /* === FILE BADGE HOVER STATE === */
-            /* DISABLED - Testing to identify source of visual distortion */
-            /*
             FileContextItem:hover {{
-                background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
-                    stop: 0 {hover_bg},
-                    stop: 1 {ColorUtils.darken(hover_bg, 0.05)});
-                color: {pill_text};
+                /* Simple border highlight only - no color or size changes */
                 border: 1px solid {hover_border};
-                border-radius: 10px;
-                opacity: {opacity};
-                padding: 0px 4px;
-                margin: 1px 2px;
-                min-height: 24px;
-                max-height: 24px;
-                min-width: 120px;
-                max-width: 220px;
-                font-size: 11px;
-                font-weight: 500;
-                line-height: normal;
             }}
-            */
 
             /* === TEXT LABELS INSIDE BADGE === */
             QLabel {{
