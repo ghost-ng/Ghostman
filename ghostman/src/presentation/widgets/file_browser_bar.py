@@ -739,7 +739,7 @@ class FileBrowserBar(QFrame):
         # Files section (grid layout pills)
         self.files_frame = QFrame()
         files_layout = QVBoxLayout(self.files_frame)
-        files_layout.setContentsMargins(8, 0, 8, 0)  # No top or bottom margin - badges directly below header
+        files_layout.setContentsMargins(8, 0, 8, 4)  # No top margin, bottom margin to prevent badge cutoff
         files_layout.setSpacing(0)  # No spacing between elements
         
         # Grid container for Bootstrap-style pills
@@ -773,7 +773,7 @@ class FileBrowserBar(QFrame):
         # Status section (summary info)
         self.status_frame = QFrame()
         status_layout = QHBoxLayout(self.status_frame)
-        status_layout.setContentsMargins(4, 0, 4, 0)  # No vertical margins
+        status_layout.setContentsMargins(4, 4, 4, 0)  # Top margin to separate from badges
         status_layout.setSpacing(8)
         
         self.status_label = QLabel("No files loaded")
