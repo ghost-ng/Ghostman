@@ -211,15 +211,15 @@ class FileContextItem(QFrame):
                 font-weight: bold;
             }
         """)
-        layout.addWidget(self.status_indicator)
+        layout.addWidget(self.status_indicator, 0, Qt.AlignmentFlag.AlignVCenter)
 
         # File type icon (smaller)
         self.type_label = QLabel()
         self.type_label.setFixedSize(12, 12)
         self.type_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._update_type_icon()
-        layout.addWidget(self.type_label)
-        
+        layout.addWidget(self.type_label, 0, Qt.AlignmentFlag.AlignVCenter)
+
         # Filename (main content)
         self.filename_label = QLabel(self._get_pill_name())
         font = self.filename_label.font()
@@ -231,7 +231,8 @@ class FileContextItem(QFrame):
         self.filename_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.filename_label.setTextFormat(Qt.TextFormat.PlainText)
         # Note: QLabel doesn't support native eliding, but we handle truncation in _get_pill_name()
-        layout.addWidget(self.filename_label, 1)  # Stretch factor allows it to use available space
+        # Add with vertical center alignment for perfect centering
+        layout.addWidget(self.filename_label, 1, Qt.AlignmentFlag.AlignVCenter)  # Stretch factor allows it to use available space
 
         # Remove button (×) - very compact with no border
         self.remove_btn = QToolButton()
@@ -253,7 +254,8 @@ class FileContextItem(QFrame):
                 border-radius: 7px;  /* Subtle rounded corners on hover */
             }
         """)
-        layout.addWidget(self.remove_btn)
+        # Add button with vertical center alignment
+        layout.addWidget(self.remove_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
         # Set size policy for grid pill layout with bottom margin
         # Use Preferred policy to allow natural sizing within min/max constraints
