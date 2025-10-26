@@ -2817,7 +2817,7 @@ class REPLWidget(QWidget):
             icon_variant = self._get_icon_variant()
             filebar_icon_path = os.path.join(
                 os.path.dirname(__file__), "..", "..", "..", 
-                "assets", "icons", f"filebar_{icon_variant}.png"
+                "assets", "icons", f"upload_{icon_variant}.png"
             )
             
             if os.path.exists(filebar_icon_path):
@@ -2826,7 +2826,7 @@ class REPLWidget(QWidget):
                     self.upload_btn.setIcon(filebar_icon)
                     from PyQt6.QtCore import QSize
                     self.upload_btn.setIconSize(QSize(16, 16))
-                    logger.debug(f"Set filebar icon: filebar_{icon_variant}.png")
+                    logger.debug(f"Set filebar icon: upload_{icon_variant}.png")
                 else:
                     self.upload_btn.setText("📁")
             else:
@@ -6062,7 +6062,7 @@ class REPLWidget(QWidget):
             
             filebar_icon_path = os.path.join(
                 os.path.dirname(__file__), "..", "..", "..", 
-                "assets", "icons", f"filebar_{icon_variant}.png"
+                "assets", "icons", f"upload_{icon_variant}.png"
             )
             logger.info(f"🎨 ICON: Looking for icon at: {filebar_icon_path}")
             
@@ -6086,7 +6086,7 @@ class REPLWidget(QWidget):
                         logger.error("❌ ICON: Icon is null after setting!")
                         self.upload_btn.setText("📁")  # Fallback
                     else:
-                        logger.info(f"✅ ICON: Icon successfully set and verified: filebar_{icon_variant}.png")
+                        logger.info(f"✅ ICON: Icon successfully set and verified: upload_{icon_variant}.png")
                         # Clear any text when icon is set successfully
                         self.upload_btn.setText("")
                     
