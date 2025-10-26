@@ -591,49 +591,8 @@ class FileContextItem(QFrame):
             }}
 
             /* === REMOVE BUTTON (X) INSIDE BADGE === */
-            QToolButton {{
-                /* Button background - transparent */
-                background-color: transparent;
-
-                /* Button border - none for cleaner look */
-                border: none;
-
-                /* Button text color - red X */
-                color: #ff6b6b;
-
-                /* Button text size */
-                font-size: 11px;
-
-                /* Button text weight - bold */
-                font-weight: bold;
-
-                /* Button corner rounding - circular button */
-                border-radius: 7px;
-
-                /* Button size is controlled by setFixedSize(14,14) in Python code */
-                /* Don't set width/height here to avoid CSS/Python conflicts */
-
-                /* Button has NO margin - sits tight in layout */
-                margin: 0px;
-
-                /* Button has NO padding - X fills button completely */
-                padding: 0px;
-
-                /* Center text horizontally and vertically */
-                text-align: center;
-            }}
-
-            /* === REMOVE BUTTON HOVER STATE === */
-            QToolButton:hover {{
-                /* Hover background - red to indicate delete action */
-                background-color: rgba(220, 53, 69, 0.8);
-
-                /* Hover border - solid red */
-                border-color: rgba(220, 53, 69, 1.0);
-
-                /* Hover text - white for contrast */
-                color: white;
-            }}
+            /* NOTE: QToolButton styling is handled by inline stylesheet in _init_ui */
+            /* Inline stylesheet takes precedence and prevents conflicts */
         """)
     
     def update_status(self, status: str, progress: float = 0.0, already_processed: bool = False):
