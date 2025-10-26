@@ -241,24 +241,7 @@ class FileContextItem(QFrame):
         self.remove_btn.setFixedSize(14, 14)  # Very compact size
         # Center the X text within the button
         self.remove_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
-        # Apply styling with no border
-        self.remove_btn.setStyleSheet("""
-            QToolButton {
-                background-color: transparent;  /* No background */
-                border: none;  /* No border */
-                color: #ff6b6b;
-                font-weight: bold;
-                font-size: 11px;  /* Smaller font size */
-                padding: 0px;  /* No padding - X fills button completely */
-                margin: 0px;  /* No margin */
-            }
-            QToolButton:hover {
-                background-color: rgba(255, 107, 107, 0.2);  /* Subtle hover background */
-                color: #ff4444;  /* Darker red on hover */
-                border-radius: 7px;  /* Subtle rounded corners on hover */
-                padding: 0px;  /* Keep no padding on hover */
-            }
-        """)
+        # Note: Styling is applied by _apply_styling() method, not inline
         # Add button with vertical center alignment
         layout.addWidget(self.remove_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
@@ -582,8 +565,8 @@ class FileContextItem(QFrame):
                 /* Button text color - red X */
                 color: #ff6b6b;
 
-                /* Button text size - matches setFixedSize(14,14) */
-                font-size: 12px;
+                /* Button text size */
+                font-size: 11px;
 
                 /* Button text weight - bold */
                 font-weight: bold;
@@ -591,17 +574,17 @@ class FileContextItem(QFrame):
                 /* Button corner rounding - circular button */
                 border-radius: 7px;
 
-                /* Button width - matches setFixedSize(14,14) */
-                width: 14px;
-
-                /* Button height - matches setFixedSize(14,14) */
-                height: 14px;
+                /* Button size is controlled by setFixedSize(14,14) in Python code */
+                /* Don't set width/height here to avoid CSS/Python conflicts */
 
                 /* Button has NO margin - sits tight in layout */
                 margin: 0px;
 
-                /* Button has NO padding - X fills button */
+                /* Button has NO padding - X fills button completely */
                 padding: 0px;
+
+                /* Center text horizontally and vertically */
+                text-align: center;
             }}
 
             /* === REMOVE BUTTON HOVER STATE === */
