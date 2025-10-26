@@ -540,17 +540,25 @@ class FileContextItem(QFrame):
                     stop: 0 {hover_bg},
                     stop: 1 {ColorUtils.darken(hover_bg, 0.05)});
 
-                /* Hover border color - changes border when mouse over */
-                border-color: {hover_border};
+                /* Hover text color - MUST match normal state */
+                color: {pill_text};
+
+                /* Hover border - MUST maintain same width to prevent size change */
+                border: 1px solid {hover_border};
+
+                /* Hover border radius - MUST maintain same rounding */
+                border-radius: 10px;
 
                 /* Hover opacity - fully opaque on hover */
                 opacity: 1.0;
 
-                /* Keep exact same dimensions on hover to prevent distortion */
+                /* Keep EXACT same dimensions on hover to prevent distortion */
                 padding: 0px 4px;  /* Same as normal state */
                 margin: 1px 2px;   /* Same as normal state */
                 min-height: 24px;  /* Same as normal state */
                 max-height: 24px;  /* Same as normal state */
+                font-size: 11px;   /* Same as normal state */
+                font-weight: 500;  /* Same as normal state */
 
                 /* No box-shadow to prevent visual expansion */
             }}
