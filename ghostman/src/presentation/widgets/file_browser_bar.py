@@ -499,13 +499,13 @@ class FileContextItem(QFrame):
                 /* Badge corner rounding - 10px for smooth pill shape */
                 border-radius: 10px;
 
-                /* Badge internal padding - space between text and badge edge (vertical horizontal) */
-                /* Smaller values = text closer to edge, larger = more breathing room */
-                padding: 2px 4px;
+                /* Badge internal padding - ZERO vertical to fill full 24px height */
+                /* Horizontal padding gives text breathing room from edges */
+                padding: 0px 4px;
 
-                /* Badge external margin - space between badge and other elements (vertical horizontal) */
-                /* First value = top/bottom gap, second = left/right gap between badges */
-                margin: 2px 10px;
+                /* Badge external margin - space around badge */
+                /* Top/bottom margin between badge rows, left/right between badges */
+                margin: 1px 2px;
 
                 /* Badge transparency - 1.0 = fully opaque, lower = more transparent */
                 opacity: {opacity};
@@ -516,11 +516,11 @@ class FileContextItem(QFrame):
                 /* Badge text thickness - 500 is medium weight */
                 font-weight: 500;
 
-                /* Badge minimum height - prevents badge from being too short */
-                min-height: 26px;
+                /* Badge minimum height - matches setFixedHeight(24) */
+                min-height: 24px;
 
-                /* Badge maximum height - prevents badge from being too tall */
-                max-height: 30px;
+                /* Badge maximum height - matches setFixedHeight(24) */
+                max-height: 24px;
             }}
 
             /* === FILE BADGE HOVER STATE === */
@@ -569,29 +569,32 @@ class FileContextItem(QFrame):
                 /* Button background - transparent */
                 background-color: transparent;
 
-                /* Button border - subtle white outline */
-                border: 1px solid rgba(255, 255, 255, 0.3);
+                /* Button border - none for cleaner look */
+                border: none;
 
-                /* Button text color */
-                color: {pill_text};
+                /* Button text color - red X */
+                color: #ff6b6b;
 
-                /* Button text size */
-                font-size: 10px;
+                /* Button text size - matches setFixedSize(14,14) */
+                font-size: 12px;
 
                 /* Button text weight - bold */
                 font-weight: bold;
 
                 /* Button corner rounding - circular button */
-                border-radius: 8px;
+                border-radius: 7px;
 
-                /* Button width */
-                width: 10px;
+                /* Button width - matches setFixedSize(14,14) */
+                width: 14px;
 
-                /* Button height */
-                height: 10px;
+                /* Button height - matches setFixedSize(14,14) */
+                height: 14px;
 
-                /* Button left margin - space between filename and X */
-                margin-left: 4px;
+                /* Button has NO margin - sits tight in layout */
+                margin: 0px;
+
+                /* Button has NO padding - X fills button */
+                padding: 0px;
             }}
 
             /* === REMOVE BUTTON HOVER STATE === */
