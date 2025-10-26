@@ -534,37 +534,27 @@ class FileContextItem(QFrame):
             }}
 
             /* === FILE BADGE HOVER STATE === */
+            /* DISABLED - Testing to identify source of visual distortion */
+            /*
             FileContextItem:hover {{
-                /* Hover background - brighter gradient when mouse over badge */
                 background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
                     stop: 0 {hover_bg},
                     stop: 1 {ColorUtils.darken(hover_bg, 0.05)});
-
-                /* Hover text color - MUST match normal state */
                 color: {pill_text};
-
-                /* Hover border - MUST maintain same width to prevent size change */
                 border: 1px solid {hover_border};
-
-                /* Hover border radius - MUST maintain same rounding */
                 border-radius: 10px;
-
-                /* Hover opacity - KEEP SAME as normal to prevent visual expansion */
                 opacity: {opacity};
-
-                /* Lock ALL dimensions on hover to prevent ANY size change */
-                padding: 0px 4px;     /* Same as normal state */
-                margin: 1px 2px;      /* Same as normal state */
-                min-height: 24px;     /* Same as normal state */
-                max-height: 24px;     /* Same as normal state */
-                min-width: 120px;     /* Match Python setMinimumWidth */
-                max-width: 220px;     /* Match Python setMaximumWidth */
-                font-size: 11px;      /* Same as normal state */
-                font-weight: 500;     /* Same as normal state */
-                line-height: normal;  /* Prevent line-height changes */
-
-                /* No box-shadow to prevent visual expansion */
+                padding: 0px 4px;
+                margin: 1px 2px;
+                min-height: 24px;
+                max-height: 24px;
+                min-width: 120px;
+                max-width: 220px;
+                font-size: 11px;
+                font-weight: 500;
+                line-height: normal;
             }}
+            */
 
             /* === TEXT LABELS INSIDE BADGE === */
             QLabel {{
