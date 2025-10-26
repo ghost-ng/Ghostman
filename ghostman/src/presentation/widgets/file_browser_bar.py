@@ -1463,7 +1463,8 @@ class FileBrowserBar(QFrame):
         """Clear all files from the browser."""
         for file_id in list(self.file_items.keys()):
             self.remove_file(file_id)
-        self.setVisible(False)
+        # Don't hide the entire widget - remove_file() will handle visibility
+        # when the last file is removed
         logger.debug("Cleared all file items")
     
     def hide_files_for_conversation(self, conversation_id: str):
