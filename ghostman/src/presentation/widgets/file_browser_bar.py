@@ -423,9 +423,9 @@ class FileContextItem(QFrame):
                 text_color = text_secondary
                 opacity = "0.6"
             
-            # Calculate hover states
-            hover_bg = ColorUtils.lighten(base_color, 0.1)
-            hover_border = ColorUtils.lighten(base_color, 0.15)
+            # Calculate hover states - SUBTLE change to prevent visual expansion
+            hover_bg = ColorUtils.lighten(base_color, 0.03)  # Much more subtle - only 3% lighter
+            hover_border = ColorUtils.lighten(base_color, 0.08)  # Subtle border highlight
             
             return {
                 'background': base_color,
@@ -549,8 +549,8 @@ class FileContextItem(QFrame):
                 /* Hover border radius - MUST maintain same rounding */
                 border-radius: 10px;
 
-                /* Hover opacity - fully opaque on hover */
-                opacity: 1.0;
+                /* Hover opacity - KEEP SAME as normal to prevent visual expansion */
+                opacity: {opacity};
 
                 /* Lock ALL dimensions on hover to prevent ANY size change */
                 padding: 0px 4px;     /* Same as normal state */
