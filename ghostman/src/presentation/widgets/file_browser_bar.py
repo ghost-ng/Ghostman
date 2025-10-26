@@ -229,7 +229,6 @@ class FileContextItem(QFrame):
         # Set size constraints and eliding to prevent overflow
         self.filename_label.setMaximumWidth(140)  # Leave room for icons and buttons
         self.filename_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
-        from PyQt6.QtCore import Qt
         self.filename_label.setTextFormat(Qt.TextFormat.PlainText)
         # Note: QLabel doesn't support native eliding, but we handle truncation in _get_pill_name()
         layout.addWidget(self.filename_label, 1)  # Stretch factor allows it to use available space
