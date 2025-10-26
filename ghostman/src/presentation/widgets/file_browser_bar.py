@@ -238,7 +238,7 @@ class FileContextItem(QFrame):
         self.remove_btn = QToolButton()
         self.remove_btn.setText("×")
         self.remove_btn.clicked.connect(lambda: self.remove_requested.emit(self.file_id))
-        self.remove_btn.setFixedSize(14, 14)  # Very compact size
+        self.remove_btn.setFixedSize(6, 6)  # Very compact size
         # Center the X text within the button
         self.remove_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
         # Use inline stylesheet to force perfect centering with line-height
@@ -251,12 +251,14 @@ class FileContextItem(QFrame):
                 color: #ff6b6b;
                 font-weight: bold;
                 font-size: 11px;
-                line-height: 14px;  /* Match button height for vertical centering */
+                line-height: 6px;  /* Match button height for vertical centering */
                 qproperty-alignment: AlignCenter;
             }
             QToolButton:hover {
                 background-color: rgba(255, 107, 107, 0.2);
                 color: #ff4444;
+                padding: 0px;
+                margin: 0px;
                 border-radius: 7px;
             }
         """)
@@ -544,8 +546,13 @@ class FileContextItem(QFrame):
                 /* Hover opacity - fully opaque on hover */
                 opacity: 1.0;
 
-                /* Hover shadow - subtle shadow effect on hover */
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                /* Keep exact same dimensions on hover to prevent distortion */
+                padding: 0px 4px;  /* Same as normal state */
+                margin: 1px 2px;   /* Same as normal state */
+                min-height: 24px;  /* Same as normal state */
+                max-height: 24px;  /* Same as normal state */
+
+                /* No box-shadow to prevent visual expansion */
             }}
 
             /* === TEXT LABELS INSIDE BADGE === */
