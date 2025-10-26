@@ -678,12 +678,12 @@ class FileBrowserBar(QFrame):
         logger.info("🔧 FB_INIT: Initializing FileBrowserBar UI...")
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(8, 2, 8, 4)  # Minimal top margin, compact bottom
-        main_layout.setSpacing(2)  # Minimal spacing
+        main_layout.setSpacing(0)  # No spacing between header and badges
 
         # Header section
         header_frame = QFrame()
         header_layout = QHBoxLayout(header_frame)
-        header_layout.setContentsMargins(4, 0, 4, 2)  # No top margin, minimal bottom
+        header_layout.setContentsMargins(4, 0, 4, 0)  # No top or bottom margin
         header_layout.setSpacing(6)  # Reduced spacing for better alignment
         
         # Title with file count
@@ -739,8 +739,8 @@ class FileBrowserBar(QFrame):
         # Files section (grid layout pills)
         self.files_frame = QFrame()
         files_layout = QVBoxLayout(self.files_frame)
-        files_layout.setContentsMargins(8, 2, 8, 0)  # No bottom margin
-        files_layout.setSpacing(2)  # Minimal spacing between elements
+        files_layout.setContentsMargins(8, 0, 8, 0)  # No top or bottom margin - badges directly below header
+        files_layout.setSpacing(0)  # No spacing between elements
         
         # Grid container for Bootstrap-style pills
         self.pills_container = QWidget()
