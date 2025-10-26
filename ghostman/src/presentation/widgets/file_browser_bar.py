@@ -265,7 +265,7 @@ class FileContextItem(QFrame):
         # Add button with vertical center alignment
         layout.addWidget(self.remove_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        # Set size policy for grid pill layout with bottom margin
+        # Set size policy for grid pill layout
         # Use Preferred policy to allow natural sizing within min/max constraints
         # This allows the badge to grow to fit content up to max width
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
@@ -273,8 +273,8 @@ class FileContextItem(QFrame):
         self.setMinimumWidth(120)  # Increased minimum to accommodate typical filenames
         self.setMaximumWidth(220)  # Increased maximum to prevent clipping
 
-        # Add bottom margin to badge for visual separation
-        self.setContentsMargins(0, 0, 0, 2)  # Small bottom margin
+        # No widget margins - spacing handled by CSS margin property
+        self.setContentsMargins(0, 0, 0, 0)
         
         
         # Initialize spinner animation
