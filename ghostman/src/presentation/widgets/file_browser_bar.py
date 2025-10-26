@@ -552,13 +552,16 @@ class FileContextItem(QFrame):
                 /* Hover opacity - fully opaque on hover */
                 opacity: 1.0;
 
-                /* Keep EXACT same dimensions on hover to prevent distortion */
-                padding: 0px 4px;  /* Same as normal state */
-                margin: 1px 2px;   /* Same as normal state */
-                min-height: 24px;  /* Same as normal state */
-                max-height: 24px;  /* Same as normal state */
-                font-size: 11px;   /* Same as normal state */
-                font-weight: 500;  /* Same as normal state */
+                /* Lock ALL dimensions on hover to prevent ANY size change */
+                padding: 0px 4px;     /* Same as normal state */
+                margin: 1px 2px;      /* Same as normal state */
+                min-height: 24px;     /* Same as normal state */
+                max-height: 24px;     /* Same as normal state */
+                min-width: 120px;     /* Match Python setMinimumWidth */
+                max-width: 220px;     /* Match Python setMaximumWidth */
+                font-size: 11px;      /* Same as normal state */
+                font-weight: 500;     /* Same as normal state */
+                line-height: normal;  /* Prevent line-height changes */
 
                 /* No box-shadow to prevent visual expansion */
             }}
