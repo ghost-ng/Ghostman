@@ -196,8 +196,8 @@ class FileContextItem(QFrame):
     def _init_ui(self):
         """Initialize pill-style UI components."""
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(4, 0, 4, 0)  # Reduced horizontal padding to prevent clipping
-        layout.setSpacing(3)  # Minimal spacing between elements
+        layout.setContentsMargins(2, 0, 2, 0)  # Minimal horizontal padding - tight to boundary
+        layout.setSpacing(2)  # Minimal spacing between elements
 
         # Status indicator - very compact size
         self.status_indicator = QLabel()
@@ -490,7 +490,7 @@ class FileContextItem(QFrame):
                 color: {pill_text};
                 border: 1px solid {pill_border};
                 border-radius: 10px;  /* Smooth rounded corners (not too round) */
-                padding: 4px 8px;  /* Reduced padding to prevent clipping */
+                padding: 2px 4px;  /* Minimal padding - tight to boundary */
                 margin: 2px 3px;  /* Reduced margin for better spacing */
                 opacity: {opacity};
                 font-size: 11px;
@@ -749,7 +749,7 @@ class FileBrowserBar(QFrame):
         # Use a flow layout-like approach with QHBoxLayout and wrapping
         self.pills_grid = QVBoxLayout(self.pills_container)  # Vertical for rows
         self.pills_grid.setContentsMargins(0, 0, 0, 0)
-        self.pills_grid.setSpacing(4)  # Minimal spacing between badge rows
+        self.pills_grid.setSpacing(2)  # Minimal spacing between badge rows
 
         self.current_row_layout = None
         self.pills_in_current_row = 0
@@ -1198,7 +1198,7 @@ class FileBrowserBar(QFrame):
         if not self.current_row_layout or self.pills_in_current_row >= self.max_pills_per_row:
             # Create new row
             self.current_row_layout = QHBoxLayout()
-            self.current_row_layout.setSpacing(4)  # Consistent with pills_grid spacing
+            self.current_row_layout.setSpacing(2)  # Minimal spacing between badges in a row
             self.current_row_layout.setContentsMargins(0, 0, 0, 0)
 
             row_widget = QWidget()
@@ -1554,7 +1554,7 @@ class FileBrowserBar(QFrame):
             if not self.current_row_layout or self.pills_in_current_row >= self.max_pills_per_row:
                 # Create new row
                 self.current_row_layout = QHBoxLayout()
-                self.current_row_layout.setSpacing(4)  # Consistent with pills_grid spacing
+                self.current_row_layout.setSpacing(2)  # Minimal spacing between badges in a row
                 self.current_row_layout.setContentsMargins(0, 0, 0, 0)
 
                 row_widget = QWidget()
