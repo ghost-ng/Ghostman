@@ -226,7 +226,13 @@ class FileContextItem(QFrame):
         font.setPointSize(7)  # Smaller font
         font.setBold(False)
         self.filename_label.setFont(font)
-        layout.addWidget(self.filename_label)
+        # Set size constraints and eliding to prevent overflow
+        self.filename_label.setMaximumWidth(140)  # Leave room for icons and buttons
+        self.filename_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        from PyQt6.QtCore import Qt
+        self.filename_label.setTextFormat(Qt.TextFormat.PlainText)
+        # Note: QLabel doesn't support native eliding, but we handle truncation in _get_pill_name()
+        layout.addWidget(self.filename_label, 1)  # Stretch factor allows it to use available space
 
         # Remove button (×) - very compact with no border
         self.remove_btn = QToolButton()
@@ -249,9 +255,10 @@ class FileContextItem(QFrame):
             }
         """)
         layout.addWidget(self.remove_btn)
-        
+
         # Set size policy for grid pill layout with bottom margin
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        # Use Maximum instead of Expanding to prevent badge from growing beyond maxWidth
+        self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         self.setFixedHeight(24)  # Very compact pill height
         self.setMinimumWidth(100)  # Smaller minimum width
         self.setMaximumWidth(180)  # Smaller maximum width
@@ -1190,11 +1197,13 @@ class FileBrowserBar(QFrame):
         if not self.current_row_layout or self.pills_in_current_row >= self.max_pills_per_row:
             # Create new row
             self.current_row_layout = QHBoxLayout()
-            self.current_row_layout.setSpacing(8)
+            self.current_row_layout.setSpacing(4)  # Consistent with pills_grid spacing
             self.current_row_layout.setContentsMargins(0, 0, 0, 0)
-            
+
             row_widget = QWidget()
             row_widget.setLayout(self.current_row_layout)
+            # Ensure row widget doesn't expand beyond content
+            row_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             self.pills_grid.addWidget(row_widget)
             
             self.pills_in_current_row = 0
@@ -1544,11 +1553,13 @@ class FileBrowserBar(QFrame):
             if not self.current_row_layout or self.pills_in_current_row >= self.max_pills_per_row:
                 # Create new row
                 self.current_row_layout = QHBoxLayout()
-                self.current_row_layout.setSpacing(8)
+                self.current_row_layout.setSpacing(4)  # Consistent with pills_grid spacing
                 self.current_row_layout.setContentsMargins(0, 0, 0, 0)
-                
+
                 row_widget = QWidget()
                 row_widget.setLayout(self.current_row_layout)
+                # Ensure row widget doesn't expand beyond content
+                row_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
                 self.pills_grid.addWidget(row_widget)
                 
                 self.pills_in_current_row = 0
