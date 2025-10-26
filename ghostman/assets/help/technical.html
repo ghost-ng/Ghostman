@@ -1,0 +1,1241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ghostman Technical Documentation</title>
+    <link rel="stylesheet" href="css/help.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <h1><img src="../avatar.png" alt="Spector Avatar" style="width: 32px; height: 32px; vertical-align: middle; margin-right: 8px; border-radius: 50%;"> Ghostman</h1>
+                    <span class="version">Technical Documentation - RAG Architecture & Implementation</span>
+                </div>
+                <nav class="nav">
+                    <a href="index.html" class="nav-link">User Guide</a>
+                    <a href="#rag-architecture" class="nav-link">RAG System</a>
+                    <a href="#faiss-vector-store" class="nav-link">FAISS</a>
+                    <a href="#embeddings" class="nav-link">Embeddings</a>
+                    <a href="#configuration" class="nav-link">Configuration</a>
+                </nav>
+            </div>
+        </header>
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-content">
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="Search documentation...">
+                </div>
+
+                <nav class="sidebar-nav">
+                    <div class="nav-section">
+                        <h3>Overview</h3>
+                        <ul>
+                            <li><a href="#introduction">Introduction</a></li>
+                            <li><a href="#architecture-overview">Architecture Overview</a></li>
+                            <li><a href="#design-decisions">Design Decisions</a></li>
+                        </ul>
+                    </div>
+
+                    <div class="nav-section">
+                        <h3>RAG System</h3>
+                        <ul>
+                            <li><a href="#rag-architecture">RAG Architecture</a></li>
+                            <li><a href="#document-pipeline">Document Pipeline</a></li>
+                            <li><a href="#query-flow">Query Flow</a></li>
+                            <li><a href="#context-retrieval">Context Retrieval</a></li>
+                        </ul>
+                    </div>
+
+                    <div class="nav-section">
+                        <h3>Vector Store</h3>
+                        <ul>
+                            <li><a href="#faiss-vector-store">FAISS Vector Store</a></li>
+                            <li><a href="#faiss-implementation">Implementation</a></li>
+                            <li><a href="#conversation-isolation">Conversation Isolation</a></li>
+                            <li><a href="#performance">Performance</a></li>
+                        </ul>
+                    </div>
+
+                    <div class="nav-section">
+                        <h3>Embeddings</h3>
+                        <ul>
+                            <li><a href="#embedding-system">Embedding System</a></li>
+                            <li><a href="#embedding-models">Models</a></li>
+                            <li><a href="#caching">Caching</a></li>
+                        </ul>
+                    </div>
+
+                    <div class="nav-section">
+                        <h3>File Processing</h3>
+                        <ul>
+                            <li><a href="#file-loaders">File Loaders</a></li>
+                            <li><a href="#text-chunking">Text Chunking</a></li>
+                            <li><a href="#supported-formats">Supported Formats</a></li>
+                        </ul>
+                    </div>
+
+                    <div class="nav-section">
+                        <h3>Configuration</h3>
+                        <ul>
+                            <li><a href="#configuration">Configuration System</a></li>
+                            <li><a href="#environment-vars">Environment Variables</a></li>
+                            <li><a href="#database-schema">Database Schema</a></li>
+                        </ul>
+                    </div>
+
+                    <div class="nav-section">
+                        <h3>Reference</h3>
+                        <ul>
+                            <li><a href="index.html">User Guide</a></li>
+                            <li><a href="#optimizations">Optimizations</a></li>
+                            <li><a href="#troubleshooting-tech">Technical Troubleshooting</a></li>
+                        </ul>
+                    </div>
+                </nav>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Introduction -->
+            <section id="introduction" class="content-section">
+                <div class="hero">
+                    <h1>Ghostman Technical Documentation</h1>
+                    <p class="hero-subtitle">Deep dive into the RAG architecture, FAISS vector store implementation, and technical design decisions powering Ghostman's context-aware file search capabilities.</p>
+                </div>
+
+                <div class="info-box">
+                    <p><strong>For Users:</strong> Looking for usage instructions? See the <a href="index.html">User Guide</a> instead.</p>
+                </div>
+            </section>
+
+            <!-- Architecture Overview -->
+            <section id="architecture-overview" class="content-section">
+                <h2>Architecture Overview</h2>
+                <p>Ghostman implements a sophisticated RAG (Retrieval-Augmented Generation) system that combines document retrieval with AI generation to provide context-aware responses based on uploaded files.</p>
+
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h4>Core Components</h4>
+                        <ul>
+                            <li><strong>RAG Pipeline:</strong> Orchestrates document ingestion and retrieval</li>
+                            <li><strong>FAISS Vector Store:</strong> High-performance similarity search</li>
+                            <li><strong>Embedding Service:</strong> Converts text to semantic vectors</li>
+                            <li><strong>Document Loaders:</strong> Extracts text from various file types</li>
+                            <li><strong>Text Splitter:</strong> Chunks documents for optimal retrieval</li>
+                            <li><strong>Conversation Manager:</strong> Maintains context isolation per tab</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>Technology Stack</h4>
+                        <ul>
+                            <li><strong>Vector Database:</strong> FAISS (Facebook AI Similarity Search)</li>
+                            <li><strong>Embeddings:</strong> OpenAI text-embedding-3-small</li>
+                            <li><strong>Vector Dimension:</strong> 1536-dimensional embeddings</li>
+                            <li><strong>Similarity Metric:</strong> Cosine similarity (inner product)</li>
+                            <li><strong>Text Processing:</strong> Recursive character splitting</li>
+                            <li><strong>UI Framework:</strong> PyQt6 with async support</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- RAG Architecture -->
+            <section id="rag-architecture" class="content-section">
+                <h2>RAG (Retrieval-Augmented Generation) Architecture</h2>
+
+                <div class="subsection">
+                    <h3>What is RAG?</h3>
+                    <p>RAG combines two powerful techniques:</p>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Document Retrieval</h4>
+                            <p>When you ask a question, the system searches through your uploaded documents to find the most relevant sections using semantic similarity.</p>
+                            <ul>
+                                <li>Converts your query to a vector embedding</li>
+                                <li>Searches FAISS index for similar document chunks</li>
+                                <li>Returns top-k most relevant passages</li>
+                                <li>Filters by conversation context</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>AI Generation</h4>
+                            <p>The AI uses the retrieved context to generate informed, accurate responses grounded in your documents.</p>
+                            <ul>
+                                <li>Receives relevant document chunks as context</li>
+                                <li>Generates response based on actual content</li>
+                                <li>Cites sources from retrieved documents</li>
+                                <li>Avoids hallucination by grounding in facts</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="document-pipeline" class="subsection">
+                    <h3>Document Processing Pipeline</h3>
+                    <p>When you upload a file, it goes through a sophisticated processing pipeline:</p>
+
+                    <div class="code-block">
+                        <h4>Pipeline Stages</h4>
+                        <pre><code>1. File Upload → User selects file via upload button
+   ↓
+2. Text Extraction → File loader extracts text content
+   ↓
+3. Text Chunking → Recursive splitter creates 1000-char chunks
+   ↓
+4. Embedding Generation → OpenAI API creates 1536-dim vectors
+   ↓
+5. Vector Storage → FAISS indexes normalized embeddings
+   ↓
+6. Metadata Storage → Database stores file associations
+   ↓
+7. Status Update → UI shows "completed" badge</code></pre>
+                    </div>
+
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Stage 1: Text Extraction</h4>
+                            <p>Specialized loaders extract text from different file types:</p>
+                            <ul>
+                                <li><strong>PDF:</strong> PyMuPDF (fitz) for robust text extraction</li>
+                                <li><strong>DOCX:</strong> python-docx for Word documents</li>
+                                <li><strong>TXT/MD:</strong> Direct UTF-8 text loading</li>
+                                <li><strong>HTML:</strong> BeautifulSoup for web content</li>
+                                <li><strong>Code:</strong> Syntax-preserving extraction</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Stage 2: Text Chunking</h4>
+                            <p>Documents are split into overlapping chunks:</p>
+                            <ul>
+                                <li><strong>Chunk Size:</strong> 1000 characters</li>
+                                <li><strong>Overlap:</strong> 200 characters</li>
+                                <li><strong>Splitter:</strong> Recursive character splitting</li>
+                                <li><strong>Boundaries:</strong> Respects sentence boundaries</li>
+                                <li><strong>Metadata:</strong> Preserves source information</li>
+                            </ul>
+                            <div class="info-box" style="margin-top: 1rem;">
+                                <p><strong>Why Overlap?</strong> The 200-character overlap ensures that context isn't lost at chunk boundaries, improving retrieval quality.</p>
+                            </div>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Stage 3: Embedding Generation</h4>
+                            <p>Each chunk is converted to a dense vector:</p>
+                            <ul>
+                                <li><strong>Model:</strong> text-embedding-3-small</li>
+                                <li><strong>Dimensions:</strong> 1536</li>
+                                <li><strong>Processing:</strong> Batch API requests</li>
+                                <li><strong>Caching:</strong> LRU cache with TTL</li>
+                                <li><strong>Rate Limiting:</strong> Respects API limits</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Stage 4: Vector Indexing</h4>
+                            <p>Embeddings are stored in FAISS for fast search:</p>
+                            <ul>
+                                <li><strong>Normalization:</strong> L2 norm for cosine similarity</li>
+                                <li><strong>Index Type:</strong> IndexFlatIP (inner product)</li>
+                                <li><strong>Conversation ID:</strong> Tagged for isolation</li>
+                                <li><strong>Persistence:</strong> Saved to disk automatically</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="query-flow" class="subsection">
+                    <h3>Query Processing Flow</h3>
+                    <p>When you ask a question about your files:</p>
+
+                    <div class="code-block">
+                        <h4>Query Pipeline</h4>
+                        <pre><code>1. User Query → "What are the main findings?"
+   ↓
+2. Query Embedding → Convert question to 1536-dim vector
+   ↓
+3. Similarity Search → FAISS finds top-k similar chunks
+   ↓
+4. Conversation Filtering → Filter by current tab's conversation ID
+   ↓
+5. Score Ranking → Sort by similarity score (cosine)
+   ↓
+6. Context Assembly → Combine top chunks with metadata
+   ↓
+7. AI Prompt → Send context + query to AI model
+   ↓
+8. Response Generation → AI generates answer with citations
+   ↓
+9. UI Display → Show response with source references</code></pre>
+                    </div>
+
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Similarity Search Details</h4>
+                            <ul>
+                                <li><strong>Search Space:</strong> Only searches conversation's documents</li>
+                                <li><strong>Top-K:</strong> Retrieves 5 most similar chunks (configurable)</li>
+                                <li><strong>Metric:</strong> Inner product (normalized = cosine)</li>
+                                <li><strong>Speed:</strong> Sub-millisecond search on thousands of chunks</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Context Assembly</h4>
+                            <ul>
+                                <li><strong>Deduplication:</strong> Removes overlapping chunks</li>
+                                <li><strong>Max Length:</strong> 4000 characters total context</li>
+                                <li><strong>Source Tracking:</strong> Maintains file names and locations</li>
+                                <li><strong>Score Thresholding:</strong> Minimum similarity of 0.7</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- FAISS Vector Store -->
+            <section id="faiss-vector-store" class="content-section">
+                <h2>FAISS Vector Store Implementation</h2>
+
+                <div class="info-box">
+                    <p><strong>Design Decision:</strong> Ghostman uses FAISS instead of ChromaDB due to stability issues with ChromaDB's SQLite backend causing segmentation faults in PyQt6 applications.</p>
+                </div>
+
+                <div class="subsection">
+                    <h3>What is FAISS?</h3>
+                    <p>FAISS (Facebook AI Similarity Search) is a library for efficient similarity search and clustering of dense vectors. It's optimized for speed and memory efficiency.</p>
+
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Key Advantages</h4>
+                            <ul>
+                                <li><strong>Performance:</strong> Millions of vectors searched in milliseconds</li>
+                                <li><strong>Memory Efficient:</strong> Optimized data structures</li>
+                                <li><strong>Thread Safe:</strong> No SQLite threading issues</li>
+                                <li><strong>Scalable:</strong> Handles large document collections</li>
+                                <li><strong>Reliable:</strong> Production-tested by Facebook/Meta</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Why Not ChromaDB?</h4>
+                            <ul>
+                                <li><strong>SQLite Issues:</strong> Threading conflicts in PyQt6</li>
+                                <li><strong>Segmentation Faults:</strong> Crashes during concurrent operations</li>
+                                <li><strong>Overhead:</strong> Additional database layer complexity</li>
+                                <li><strong>Stability:</strong> Less mature than FAISS</li>
+                            </ul>
+                            <div class="info-box" style="margin-top: 1rem;">
+                                <p><strong>Note:</strong> ChromaDB support exists in code but FAISS is the default and recommended option.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="faiss-implementation" class="subsection">
+                    <h3>Implementation Details</h3>
+
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Index Configuration</h4>
+                            <div class="code-block">
+                                <pre><code>Index Type: IndexFlatIP
+Metric: METRIC_INNER_PRODUCT
+Dimension: 1536
+Normalization: L2 normalized vectors</code></pre>
+                            </div>
+                            <ul>
+                                <li><strong>IndexFlatIP:</strong> Exact search using inner product</li>
+                                <li><strong>Normalized Vectors:</strong> Inner product = cosine similarity</li>
+                                <li><strong>No Compression:</strong> Full precision for accuracy</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Data Structures</h4>
+                            <div class="code-block">
+                                <pre><code>_index: FAISS IndexFlatIP
+_documents: [(chunk_id, content, metadata)]
+_id_to_index: {chunk_id: faiss_index}
+_conversation_index: {conv_id: [indices]}</code></pre>
+                            </div>
+                            <ul>
+                                <li><strong>Index:</strong> Stores normalized embedding vectors</li>
+                                <li><strong>Documents:</strong> Stores chunk content and metadata</li>
+                                <li><strong>Mappings:</strong> Links FAISS indices to chunks and conversations</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Persistence</h4>
+                            <ul>
+                                <li><strong>Index File:</strong> optimized_faiss_index.bin</li>
+                                <li><strong>Metadata File:</strong> optimized_metadata.pkl</li>
+                                <li><strong>Location:</strong> %APPDATA%/Ghostman/db/faiss_db/</li>
+                                <li><strong>Auto-Save:</strong> After each document addition</li>
+                                <li><strong>Format:</strong> Binary FAISS format + Python pickle</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Thread Safety</h4>
+                            <ul>
+                                <li><strong>QMutex:</strong> PyQt6 mutex for thread-safe operations</li>
+                                <li><strong>QMutexLocker:</strong> RAII-style lock management</li>
+                                <li><strong>Synchronous API:</strong> No async overhead in PyQt6</li>
+                                <li><strong>Thread Pool:</strong> 2 worker threads for background tasks</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="conversation-isolation" class="subsection">
+                    <h3>Conversation Isolation</h3>
+                    <p>Each tab maintains completely separate file context through conversation-based filtering:</p>
+
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>How It Works</h4>
+                            <ul>
+                                <li>Each tab has a unique conversation_id</li>
+                                <li>Document chunks tagged with conversation_id</li>
+                                <li>FAISS search filtered by conversation_id</li>
+                                <li>Results only include current tab's documents</li>
+                                <li>Complete context isolation between tabs</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Implementation</h4>
+                            <div class="code-block">
+                                <pre><code># Conversation-specific index mapping
+_conversation_index = {
+    "conv_123": [0, 5, 12, 18],  # FAISS indices
+    "conv_456": [1, 3, 7, 22],
+}
+
+# Search filters by conversation
+def search_by_conversation(query, conv_id):
+    # Search entire index
+    scores, indices = faiss.search(query)
+
+    # Filter to conversation's indices
+    conv_indices = _conversation_index[conv_id]
+    results = [r for r in results
+               if r.index in conv_indices]</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="performance" class="subsection">
+                    <h3>Performance Characteristics</h3>
+
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Search Performance</h4>
+                            <ul>
+                                <li><strong>Typical Search:</strong> <1ms for 1000 chunks</li>
+                                <li><strong>Large Index:</strong> <10ms for 100,000 chunks</li>
+                                <li><strong>Memory Usage:</strong> ~6MB per 1000 chunks (1536-dim)</li>
+                                <li><strong>Index Loading:</strong> Lazy loading on first access</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Indexing Performance</h4>
+                            <ul>
+                                <li><strong>Single Document:</strong> ~2-5s (depends on API)</li>
+                                <li><strong>Bottleneck:</strong> Embedding API calls, not FAISS</li>
+                                <li><strong>Batch Processing:</strong> 100 chunks per batch</li>
+                                <li><strong>Persistence:</strong> ~100ms save time</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Embedding System -->
+            <section id="embedding-system" class="content-section">
+                <h2>Embedding System</h2>
+
+                <div id="embedding-models" class="subsection">
+                    <h3>Embedding Model Selection</h3>
+                    <p>Ghostman uses OpenAI's text-embedding-3-small model for several reasons:</p>
+
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>text-embedding-3-small</h4>
+                            <ul>
+                                <li><strong>Dimensions:</strong> 1536</li>
+                                <li><strong>Context Window:</strong> 8191 tokens</li>
+                                <li><strong>Cost:</strong> $0.02 per 1M tokens</li>
+                                <li><strong>Performance:</strong> High quality semantic similarity</li>
+                                <li><strong>Speed:</strong> Fast inference times</li>
+                            </ul>
+                            <div class="info-box" style="margin-top: 1rem;">
+                                <p><strong>Why This Model?</strong> Optimal balance of quality, speed, and cost. Significantly cheaper than ada-002 with similar performance.</p>
+                            </div>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Alternative Models</h4>
+                            <p>Configurable through RAG config:</p>
+                            <ul>
+                                <li><strong>text-embedding-3-large:</strong> 3072 dimensions, higher quality</li>
+                                <li><strong>text-embedding-ada-002:</strong> 1536 dimensions, older model</li>
+                                <li><strong>Custom Endpoints:</strong> OpenAI-compatible APIs</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <h3>Similarity Metric</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Cosine Similarity</h4>
+                            <p>Measures the angle between vectors, not their magnitude:</p>
+                            <div class="code-block">
+                                <pre><code>Cosine Similarity = A · B / (||A|| × ||B||)
+
+For L2-normalized vectors:
+Inner Product = Cosine Similarity
+
+FAISS IndexFlatIP with normalized vectors
+= Exact cosine similarity search</code></pre>
+                            </div>
+                            <ul>
+                                <li><strong>Range:</strong> -1 to 1 (higher is more similar)</li>
+                                <li><strong>Threshold:</strong> 0.7 minimum for relevance</li>
+                                <li><strong>Normalization:</strong> Vectors normalized before indexing</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Why Cosine?</h4>
+                            <ul>
+                                <li><strong>Semantic Meaning:</strong> Captures meaning similarity</li>
+                                <li><strong>Length Invariant:</strong> Long/short texts comparable</li>
+                                <li><strong>Industry Standard:</strong> Used by most embedding systems</li>
+                                <li><strong>Efficient:</strong> Fast computation with normalized vectors</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="caching" class="subsection">
+                    <h3>Embedding Caching</h3>
+                    <p>Multi-layer caching system for performance optimization:</p>
+
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>LRU Cache</h4>
+                            <ul>
+                                <li><strong>Size:</strong> 1000 embeddings</li>
+                                <li><strong>TTL:</strong> 24 hours (configurable)</li>
+                                <li><strong>Key:</strong> SHA-256 hash of (model, text)</li>
+                                <li><strong>Hit Rate:</strong> Typically 30-50% for similar queries</li>
+                                <li><strong>Memory:</strong> ~6MB for full cache</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Cache Benefits</h4>
+                            <ul>
+                                <li><strong>Speed:</strong> Instant retrieval vs API call</li>
+                                <li><strong>Cost:</strong> Reduces API usage and costs</li>
+                                <li><strong>Reliability:</strong> Works during API outages</li>
+                                <li><strong>Rate Limiting:</strong> Reduces API request load</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <h3>Batch Processing</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Configuration</h4>
+                            <ul>
+                                <li><strong>Batch Size:</strong> 100 chunks per request</li>
+                                <li><strong>Rate Limiting:</strong> 0.1s delay between requests</li>
+                                <li><strong>Retries:</strong> 3 attempts with exponential backoff</li>
+                                <li><strong>Timeout:</strong> 30s per request</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Error Handling</h4>
+                            <ul>
+                                <li><strong>Graceful Degradation:</strong> Continue on partial failures</li>
+                                <li><strong>Status Tracking:</strong> Per-chunk processing status</li>
+                                <li><strong>Retry Logic:</strong> Automatic retry for transient errors</li>
+                                <li><strong>User Notification:</strong> Failed chunks shown in UI</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- File Processing -->
+            <section id="file-loaders" class="content-section">
+                <h2>File Processing System</h2>
+
+                <div id="supported-formats" class="subsection">
+                    <h3>Supported File Formats</h3>
+
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>PDF Documents</h4>
+                            <ul>
+                                <li><strong>Library:</strong> PyMuPDF (fitz)</li>
+                                <li><strong>Extraction:</strong> Text-layer extraction</li>
+                                <li><strong>Layout:</strong> Preserves paragraph structure</li>
+                                <li><strong>Metadata:</strong> Page numbers, titles</li>
+                                <li><strong>Limitations:</strong> Image-based PDFs not supported</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Word Documents (.docx)</h4>
+                            <ul>
+                                <li><strong>Library:</strong> python-docx</li>
+                                <li><strong>Extraction:</strong> Paragraph and table text</li>
+                                <li><strong>Formatting:</strong> Basic structure preserved</li>
+                                <li><strong>Headers/Footers:</strong> Included in extraction</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Text Files (.txt, .md)</h4>
+                            <ul>
+                                <li><strong>Encoding:</strong> UTF-8 with auto-detection</li>
+                                <li><strong>Markdown:</strong> Preserved for structure</li>
+                                <li><strong>Processing:</strong> Direct text loading</li>
+                                <li><strong>Speed:</strong> Fastest processing</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Code Files (.py, .js, .java, etc.)</h4>
+                            <ul>
+                                <li><strong>Syntax:</strong> Preserved for context</li>
+                                <li><strong>Comments:</strong> Included in chunks</li>
+                                <li><strong>Structure:</strong> Function/class boundaries respected</li>
+                                <li><strong>Languages:</strong> Python, JavaScript, Java, C++, Go, Rust</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>HTML Files (.html, .htm)</h4>
+                            <ul>
+                                <li><strong>Library:</strong> BeautifulSoup</li>
+                                <li><strong>Extraction:</strong> Text content only</li>
+                                <li><strong>Cleaning:</strong> Removes tags and scripts</li>
+                                <li><strong>Structure:</strong> Maintains paragraphs</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>File Size Limits</h4>
+                            <ul>
+                                <li><strong>Maximum Size:</strong> 50MB per file</li>
+                                <li><strong>Practical Limit:</strong> ~10MB for optimal performance</li>
+                                <li><strong>Large Files:</strong> May take longer to process</li>
+                                <li><strong>Recommendation:</strong> Split very large documents</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="text-chunking" class="subsection">
+                    <h3>Text Chunking Strategy</h3>
+                    <p>Documents are split using a recursive character-based algorithm:</p>
+
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Chunking Parameters</h4>
+                            <div class="code-block">
+                                <pre><code>chunk_size: 1000 characters
+chunk_overlap: 200 characters
+splitter_type: RECURSIVE_CHARACTER
+length_function: len (character count)</code></pre>
+                            </div>
+                            <ul>
+                                <li><strong>Recursive Splitting:</strong> Tries paragraph, then sentence, then character breaks</li>
+                                <li><strong>Boundary Respect:</strong> Avoids breaking mid-sentence when possible</li>
+                                <li><strong>Overlap Benefit:</strong> Context continuity across chunks</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Why These Values?</h4>
+                            <ul>
+                                <li><strong>1000 Characters:</strong> Optimal balance of context and precision</li>
+                                <li><strong>~150-250 Words:</strong> Typical chunk contains this range</li>
+                                <li><strong>200 Char Overlap:</strong> Ensures no context loss at boundaries</li>
+                                <li><strong>Embedding Window:</strong> Well within 8191 token limit</li>
+                                <li><strong>Retrieval Quality:</strong> Tuned for best search results</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="info-box">
+                        <p><strong>Configuration:</strong> Chunk size and overlap can be adjusted in RAG config for different use cases (e.g., larger chunks for summarization, smaller for precise retrieval).</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Configuration -->
+            <section id="configuration" class="content-section">
+                <h2>Configuration System</h2>
+
+                <div class="subsection">
+                    <h3>RAG Pipeline Configuration</h3>
+                    <p>Centralized configuration system using Python dataclasses:</p>
+
+                    <div class="code-block">
+                        <h4>Key Configuration Classes</h4>
+                        <pre><code>RAGPipelineConfig
+├── EmbeddingConfig      # Embedding service settings
+├── LLMConfig            # Language model settings
+├── VectorStoreConfig    # FAISS configuration
+├── DocumentLoadingConfig # File loader settings
+├── TextProcessingConfig  # Chunking parameters
+└── RetrievalConfig       # Search and ranking settings</code></pre>
+                    </div>
+
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Default Settings</h4>
+                            <div class="code-block">
+                                <pre><code># Embedding
+model: text-embedding-3-small
+dimensions: 1536
+batch_size: 100
+cache_enabled: true
+
+# Vector Store
+type: FAISS
+index_type: IndexFlatIP
+metric: METRIC_INNER_PRODUCT
+
+# Text Processing
+chunk_size: 1000
+chunk_overlap: 200
+splitter: RECURSIVE_CHARACTER
+
+# Retrieval
+top_k: 5
+similarity_threshold: 0.7
+max_context_length: 4000</code></pre>
+                            </div>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Customization</h4>
+                            <p>Multiple ways to customize configuration:</p>
+                            <ul>
+                                <li><strong>Environment Variables:</strong> RAG_CHUNK_SIZE, RAG_TOP_K, etc.</li>
+                                <li><strong>Config File:</strong> JSON file via GHOSTMAN_RAG_CONFIG</li>
+                                <li><strong>Programmatic:</strong> Direct instantiation in code</li>
+                                <li><strong>Defaults:</strong> Sensible defaults work out-of-box</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="environment-vars" class="subsection">
+                    <h3>Environment Variables</h3>
+
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>API Configuration</h4>
+                            <div class="code-block">
+                                <pre><code># OpenAI API (required for embeddings)
+OPENAI_API_KEY=sk-...
+
+# Custom endpoints (optional)
+RAG_EMBEDDING_ENDPOINT=https://api.openai.com/v1
+RAG_LLM_ENDPOINT=https://api.openai.com/v1</code></pre>
+                            </div>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Model Selection</h4>
+                            <div class="code-block">
+                                <pre><code># Embedding model
+RAG_EMBEDDING_MODEL=text-embedding-3-small
+
+# LLM model
+RAG_LLM_MODEL=gpt-4
+
+# Alternative models
+RAG_EMBEDDING_MODEL=text-embedding-3-large</code></pre>
+                            </div>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Performance Tuning</h4>
+                            <div class="code-block">
+                                <pre><code># Text processing
+RAG_CHUNK_SIZE=1000
+RAG_CHUNK_OVERLAP=200
+
+# Retrieval
+RAG_TOP_K=5
+RAG_SIMILARITY_THRESHOLD=0.7
+
+# Batch processing
+RAG_BATCH_SIZE=100</code></pre>
+                            </div>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Storage Paths</h4>
+                            <div class="code-block">
+                                <pre><code># Data directory
+GHOSTMAN_DATA_DIR=~/.Ghostman
+
+# FAISS database
+RAG_CHROMADB_PATH=%APPDATA%/Ghostman/db
+
+# Config file
+GHOSTMAN_RAG_CONFIG=/path/to/config.json</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="database-schema" class="subsection">
+                    <h3>Database Schema</h3>
+                    <p>SQLite database tracks file associations and conversation context:</p>
+
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>file_contexts Table</h4>
+                            <div class="code-block">
+                                <pre><code>CREATE TABLE file_contexts (
+    file_id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    tab_id TEXT,
+    file_path TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    file_extension TEXT,
+    file_size_bytes INTEGER,
+    status TEXT DEFAULT 'pending',
+    upload_timestamp REAL,
+    processing_start REAL,
+    processing_end REAL,
+    chunk_count INTEGER,
+    token_count INTEGER,
+    error_message TEXT,
+
+    FOREIGN KEY (conversation_id)
+        REFERENCES conversations(conversation_id)
+        ON DELETE CASCADE
+);</code></pre>
+                            </div>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Field Descriptions</h4>
+                            <ul>
+                                <li><strong>file_id:</strong> Unique identifier for uploaded file</li>
+                                <li><strong>conversation_id:</strong> Links to conversation for isolation</li>
+                                <li><strong>status:</strong> pending, processing, completed, failed</li>
+                                <li><strong>chunk_count:</strong> Number of text chunks created</li>
+                                <li><strong>token_count:</strong> Approximate token count</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Conversation Isolation Query</h4>
+                            <div class="code-block">
+                                <pre><code>-- Get all files for a conversation
+SELECT * FROM file_contexts
+WHERE conversation_id = ?
+AND status = 'completed'
+ORDER BY upload_timestamp DESC;</code></pre>
+                            </div>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Status Tracking</h4>
+                            <div class="code-block">
+                                <pre><code>-- Update processing status
+UPDATE file_contexts
+SET status = ?,
+    processing_end = ?,
+    chunk_count = ?,
+    token_count = ?
+WHERE file_id = ?;</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Design Decisions -->
+            <section id="design-decisions" class="content-section">
+                <h2>Technical Design Decisions</h2>
+
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h4>FAISS over ChromaDB</h4>
+                        <p><strong>Rationale:</strong></p>
+                        <ul>
+                            <li><strong>Thread Safety:</strong> FAISS works reliably in PyQt6 multi-threaded environment</li>
+                            <li><strong>No SQLite Issues:</strong> Avoids SQLite threading conflicts that caused segfaults</li>
+                            <li><strong>Performance:</strong> Faster search on large indexes</li>
+                            <li><strong>Memory Efficiency:</strong> Lower overhead than full database</li>
+                            <li><strong>Simplicity:</strong> Direct vector operations without abstraction layers</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>text-embedding-3-small Model</h4>
+                        <p><strong>Rationale:</strong></p>
+                        <ul>
+                            <li><strong>Cost-Effective:</strong> 5x cheaper than ada-002</li>
+                            <li><strong>Quality:</strong> Similar performance to larger models</li>
+                            <li><strong>Speed:</strong> Fast inference for real-time feel</li>
+                            <li><strong>Compatibility:</strong> 1536 dimensions works with existing code</li>
+                            <li><strong>Future-Proof:</strong> Latest OpenAI embedding technology</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>1000/200 Chunking Parameters</h4>
+                        <p><strong>Rationale:</strong></p>
+                        <ul>
+                            <li><strong>Context Balance:</strong> Enough context without noise</li>
+                            <li><strong>Precision:</strong> Specific enough for accurate retrieval</li>
+                            <li><strong>Overlap:</strong> 20% overlap prevents information loss</li>
+                            <li><strong>Performance:</strong> Good trade-off of chunk count vs quality</li>
+                            <li><strong>Empirical:</strong> Tested to provide best results</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>Per-Conversation FAISS Indexes</h4>
+                        <p><strong>Rationale:</strong></p>
+                        <ul>
+                            <li><strong>Isolation:</strong> Complete separation of context</li>
+                            <li><strong>Organization:</strong> Easy to manage per-conversation data</li>
+                            <li><strong>Deletion:</strong> Simple to clear conversation context</li>
+                            <li><strong>Performance:</strong> Smaller indexes = faster search</li>
+                            <li><strong>Privacy:</strong> No cross-conversation information leakage</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>Thread-Safe RAG Sessions</h4>
+                        <p><strong>Rationale:</strong></p>
+                        <ul>
+                            <li><strong>PyQt6 Compatibility:</strong> Works with Qt event loop</li>
+                            <li><strong>Race Condition Prevention:</strong> QMutex protects shared state</li>
+                            <li><strong>Reliability:</strong> Prevents crashes from concurrent access</li>
+                            <li><strong>Simplicity:</strong> Synchronous API easier to reason about</li>
+                            <li><strong>Performance:</strong> Minimal locking overhead</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>Lazy FAISS Index Loading</h4>
+                        <p><strong>Rationale:</strong></p>
+                        <ul>
+                            <li><strong>Startup Speed:</strong> Faster application launch</li>
+                            <li><strong>Memory Efficiency:</strong> Only load what's needed</li>
+                            <li><strong>On-Demand:</strong> Load when first accessing files</li>
+                            <li><strong>Scalability:</strong> Handles many conversations efficiently</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Optimizations -->
+            <section id="optimizations" class="content-section">
+                <h2>Performance Optimizations</h2>
+
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h4>Embedding Caching</h4>
+                        <ul>
+                            <li><strong>LRU Cache:</strong> 1000 most recent embeddings</li>
+                            <li><strong>TTL:</strong> 24-hour expiration</li>
+                            <li><strong>Hit Rate:</strong> 30-50% for typical usage</li>
+                            <li><strong>Savings:</strong> Reduces API calls and costs</li>
+                            <li><strong>Speed:</strong> Instant cache hits vs 100-500ms API calls</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>Batch Processing</h4>
+                        <ul>
+                            <li><strong>Batch Size:</strong> 100 chunks per API request</li>
+                            <li><strong>Parallelism:</strong> Process multiple chunks together</li>
+                            <li><strong>Throughput:</strong> Higher chunks/second rate</li>
+                            <li><strong>Cost:</strong> Same API cost but faster processing</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>Lazy Loading</h4>
+                        <ul>
+                            <li><strong>FAISS Indexes:</strong> Load on first access</li>
+                            <li><strong>Embeddings:</strong> Generate only when needed</li>
+                            <li><strong>Memory:</strong> Reduced RAM footprint</li>
+                            <li><strong>Startup:</strong> Faster application launch</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>Vector Normalization</h4>
+                        <ul>
+                            <li><strong>Pre-Normalization:</strong> Normalize before storage</li>
+                            <li><strong>Cosine = Inner Product:</strong> Faster similarity computation</li>
+                            <li><strong>FAISS Optimization:</strong> IndexFlatIP uses optimized inner product</li>
+                            <li><strong>Search Speed:</strong> No runtime normalization needed</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>Efficient Chunking</h4>
+                        <ul>
+                            <li><strong>Character-Based:</strong> Faster than token-based splitting</li>
+                            <li><strong>Recursive Algorithm:</strong> Smart boundary detection</li>
+                            <li><strong>Minimal Overhead:</strong> Fast text processing</li>
+                            <li><strong>Memory:</strong> Streaming processing for large files</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>Thread Pool Management</h4>
+                        <ul>
+                            <li><strong>Worker Threads:</strong> 2 background threads</li>
+                            <li><strong>Task Queue:</strong> Efficient work distribution</li>
+                            <li><strong>PyQt6 Integration:</strong> Signal-based updates</li>
+                            <li><strong>Resource Control:</strong> Limited concurrency prevents overload</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Technical Troubleshooting -->
+            <section id="troubleshooting-tech" class="content-section">
+                <h2>Technical Troubleshooting</h2>
+
+                <div class="subsection">
+                    <h3>Common Technical Issues</h3>
+
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>FAISS Import Errors</h4>
+                            <p><strong>Error:</strong> ModuleNotFoundError: No module named 'faiss'</p>
+                            <p><strong>Solution:</strong></p>
+                            <div class="code-block">
+                                <pre><code># Install FAISS CPU version
+pip install faiss-cpu
+
+# Or for GPU support (if CUDA available)
+pip install faiss-gpu</code></pre>
+                            </div>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Embedding API Errors</h4>
+                            <p><strong>Error:</strong> 401 Unauthorized or no API key</p>
+                            <p><strong>Solution:</strong></p>
+                            <ul>
+                                <li>Set OPENAI_API_KEY environment variable</li>
+                                <li>Or configure in settings: Settings → AI Model → API Key</li>
+                                <li>Verify key has credits at platform.openai.com</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>FAISS Index Corruption</h4>
+                            <p><strong>Symptom:</strong> Crashes when loading index</p>
+                            <p><strong>Solution:</strong></p>
+                            <div class="code-block">
+                                <pre><code># Delete corrupted index files
+rm %APPDATA%/Ghostman/db/faiss_db/*
+
+# Restart application - will rebuild</code></pre>
+                            </div>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Thread Safety Issues</h4>
+                            <p><strong>Symptom:</strong> Segmentation faults or random crashes</p>
+                            <p><strong>Solution:</strong></p>
+                            <ul>
+                                <li>Ensure using FAISS, not ChromaDB (check config)</li>
+                                <li>Update to latest PyQt6 version</li>
+                                <li>Check logs for threading errors</li>
+                                <li>Reduce concurrent file uploads</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Memory Issues</h4>
+                            <p><strong>Symptom:</strong> High RAM usage or slowdowns</p>
+                            <p><strong>Solution:</strong></p>
+                            <ul>
+                                <li>Reduce embedding cache size in config</li>
+                                <li>Clear old conversations</li>
+                                <li>Process fewer files simultaneously</li>
+                                <li>Use smaller chunk sizes for large documents</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Search Returns No Results</h4>
+                            <p><strong>Symptom:</strong> Queries return empty context</p>
+                            <p><strong>Debugging:</strong></p>
+                            <ul>
+                                <li>Check files are "completed" status (not "failed")</li>
+                                <li>Verify conversation isolation (right tab selected)</li>
+                                <li>Lower similarity threshold in config</li>
+                                <li>Check FAISS index has vectors (get_stats)</li>
+                                <li>Review logs for embedding errors</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <h3>Debugging Tools</h3>
+
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Check FAISS Statistics</h4>
+                            <div class="code-block">
+                                <pre><code>from ghostman.infrastructure.rag_pipeline.vector_store import get_faiss_client
+
+client = get_faiss_client()
+stats = client.get_optimized_stats()
+
+print(f"Total chunks: {stats['total_chunks']}")
+print(f"Conversations: {stats['total_conversations']}")
+print(f"Index size: {stats['index_size']}")
+print(f"Memory: {stats['memory_usage_mb']} MB")</code></pre>
+                            </div>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Verify Embeddings</h4>
+                            <div class="code-block">
+                                <pre><code>from ghostman.infrastructure.rag_pipeline.services import EmbeddingService
+
+service = EmbeddingService(
+    api_endpoint="https://api.openai.com/v1",
+    api_key="your_key"
+)
+
+# Test connection
+if service.test_connection():
+    print("✓ Embedding service working")
+else:
+    print("✗ Embedding service failed")</code></pre>
+                            </div>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Inspect Conversation Index</h4>
+                            <div class="code-block">
+                                <pre><code>from ghostman.infrastructure.rag_pipeline.vector_store import get_faiss_client
+
+client = get_faiss_client()
+docs = client.get_conversation_documents("conversation_id")
+
+for doc in docs:
+    print(f"File: {doc['metadata']['filename']}")
+    print(f"Chunks: {doc['metadata']['chunk_index']}")
+    print(f"Preview: {doc['content_preview'][:100]}")</code></pre>
+                            </div>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Enable Debug Logging</h4>
+                            <div class="code-block">
+                                <pre><code>import logging
+
+# Set log level to DEBUG
+logging.basicConfig(level=logging.DEBUG)
+
+# Or for specific modules
+logging.getLogger("ghostman.rag_pipeline").setLevel(logging.DEBUG)
+logging.getLogger("ghostman.optimized_faiss").setLevel(logging.DEBUG)</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Additional Resources -->
+            <section id="resources" class="content-section">
+                <h2>Additional Resources</h2>
+
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h4>Documentation</h4>
+                        <ul>
+                            <li><a href="index.html">User Guide</a> - End-user documentation</li>
+                            <li><a href="https://github.com/facebookresearch/faiss" target="_blank">FAISS Documentation</a></li>
+                            <li><a href="https://platform.openai.com/docs/guides/embeddings" target="_blank">OpenAI Embeddings Guide</a></li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>Source Code</h4>
+                        <p>Key implementation files:</p>
+                        <ul>
+                            <li><code>rag_pipeline/config/rag_config.py</code></li>
+                            <li><code>rag_pipeline/vector_store/optimized_faiss_client.py</code></li>
+                            <li><code>rag_pipeline/services/embedding_service.py</code></li>
+                            <li><code>file_context/services/enhanced_file_context_service.py</code></li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>Research Papers</h4>
+                        <ul>
+                            <li><a href="https://arxiv.org/abs/2005.11401" target="_blank">RAG: Retrieval-Augmented Generation</a></li>
+                            <li><a href="https://arxiv.org/abs/2401.04088" target="_blank">OpenAI Embeddings v3</a></li>
+                            <li><a href="https://arxiv.org/abs/1603.09320" target="_blank">FAISS: Billion-scale Similarity Search</a></li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4>Community</h4>
+                        <ul>
+                            <li><a href="https://github.com/ghost-ng/Ghostman" target="_blank">GitHub Repository</a></li>
+                            <li><a href="https://github.com/ghost-ng/Ghostman/issues" target="_blank">Issue Tracker</a></li>
+                            <li><a href="https://github.com/ghost-ng/Ghostman/discussions" target="_blank">Discussions</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="js/help.js"></script>
+</body>
+</html>
