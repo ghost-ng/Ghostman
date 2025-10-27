@@ -337,24 +337,27 @@ class ConversationAIService(AIService):
             
             # Immediate save to ensure persistence
             if save_conversation and self._auto_save_conversations:
+                logger.info(f"💾 ATTEMPTING TO SAVE CONVERSATION: {self._current_conversation_id}")
+                logger.info(f"💾 Messages in AI context: {len(self.conversation.messages)}")
                 try:
-                    logger.debug("💾 Starting conversation save using async manager...")
-                    
+                    logger.info("💾 Starting conversation save using async manager...")
+
                     # Import the async manager
                     from ...async_manager import run_async_task_safe
-                    
+
                     def on_save_complete(result, error):
                         if error:
-                            logger.error(f"✗ Failed to save conversation: {error}")
+                            logger.error(f"✗ SAVE CALLBACK - Failed to save conversation: {error}")
                         else:
-                            logger.debug("💾 Conversation saved successfully")
-                    
+                            logger.info(f"✓ SAVE CALLBACK - Conversation saved successfully")
+
                     # Use the async manager to handle the save operation safely
                     run_async_task_safe(
                         self._save_current_conversation(),
                         callback=on_save_complete,
                         timeout=10.0  # 10 second timeout
                     )
+                    logger.info("💾 Save task submitted to async manager")
                     
                     # Also schedule a backup save with delay for safety
                     try:
@@ -401,16 +404,20 @@ class ConversationAIService(AIService):
     async def _save_current_conversation(self):
         """Save current conversation context to persistent storage with robust error handling."""
         try:
+            logger.info("💾 _save_current_conversation() CALLED")
+
             # Ensure we have an active conversation
             if not self._current_conversation_id:
+                logger.warning("💾 No active conversation ID, creating new one...")
                 # Create new conversation if none exists
                 conversation_id = await self.start_new_conversation()
                 if not conversation_id:
-                    logger.error("Failed to create conversation for saving")
+                    logger.error("💾 Failed to create conversation for saving")
                     return
-            
-            logger.debug(f"💾 Saving conversation context for {self._current_conversation_id}")
-            logger.debug(f"💾 Current AI context has {len(self.conversation.messages)} messages")
+                logger.info(f"💾 Created new conversation: {conversation_id}")
+
+            logger.info(f"💾 Saving conversation context for {self._current_conversation_id}")
+            logger.info(f"💾 Current AI context has {len(self.conversation.messages)} messages")
             
             # Get the latest messages that need to be saved
             conversation = await self.conversation_service.get_conversation(
