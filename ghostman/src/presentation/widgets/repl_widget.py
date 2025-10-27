@@ -10713,6 +10713,11 @@ def test_theme():
                         # CRITICAL: Update self.current_conversation to match the tab's conversation
                         # This ensures send_message() uses the correct conversation ID
                         try:
+                            # Load conversation with messages asynchronously
+                            from PyQt6.QtCore import QTimer
+                            QTimer.singleShot(0, lambda: self._restore_tab_conversation_messages(new_conversation_id, new_tab_id))
+
+                            # Load conversation object synchronously for immediate context
                             conversation_service = self.conversation_manager.conversation_service
                             if conversation_service:
                                 conversation_obj = conversation_service.get_conversation(new_conversation_id)
@@ -10739,7 +10744,76 @@ def test_theme():
 
         except Exception as e:
             logger.error(f"Error handling tab switch: {e}")
-    
+
+    def _restore_tab_conversation_messages(self, conversation_id: str, tab_id: str):
+        """
+        Restore and display messages for a conversation when switching to a tab.
+        This is called asynchronously after tab switch to load and display messages.
+        """
+        try:
+            logger.info(f"📜 Restoring messages for conversation {conversation_id[:8]} in tab {tab_id}")
+
+            # Get the tab
+            if not self.tab_manager:
+                logger.warning("Tab manager not available")
+                return
+
+            # Access tab directly from tabs dict
+            if tab_id not in self.tab_manager.tabs:
+                logger.warning(f"Tab {tab_id} not found in tab manager")
+                return
+
+            tab = self.tab_manager.tabs[tab_id]
+            if not tab or not tab.output_display:
+                logger.warning(f"Tab {tab_id} or its output display not found")
+                return
+
+            # Check if messages are already displayed to avoid duplicates
+            # If the output already has content, assume it's been restored
+            if hasattr(tab.output_display, 'content_widgets') and len(tab.output_display.content_widgets) > 0:
+                logger.debug(f"Tab {tab_id} already has {len(tab.output_display.content_widgets)} widgets, skipping message restoration")
+                return
+
+            # Load conversation with messages
+            if not self.conversation_manager:
+                logger.warning("Conversation manager not available")
+                return
+
+            conversation_service = self.conversation_manager.conversation_service
+            if not conversation_service:
+                logger.warning("Conversation service not available")
+                return
+
+            # Get conversation with messages (synchronous call)
+            conversation = conversation_service.get_conversation(conversation_id, include_messages=True)
+
+            if not conversation:
+                logger.warning(f"Conversation {conversation_id[:8]} not found")
+                return
+
+            # Display messages in the tab's output widget
+            if hasattr(conversation, 'messages') and conversation.messages:
+                logger.info(f"📜 Displaying {len(conversation.messages)} messages in tab {tab_id}")
+
+                for message in conversation.messages:
+                    if hasattr(message, 'role') and hasattr(message, 'content'):
+                        if message.role.value == 'user':
+                            tab.output_display.add_html_content(f">>> {message.content}", "input")
+                        elif message.role.value == 'assistant':
+                            tab.output_display.add_html_content(message.content, "response")
+                        elif message.role.value == 'system':
+                            tab.output_display.add_html_content(f"[System] {message.content}", "system")
+
+                logger.info(f"✅ Restored {len(conversation.messages)} messages to tab {tab_id}")
+            else:
+                logger.debug(f"No messages to restore for conversation {conversation_id[:8]}")
+
+            # Load and display files for this conversation
+            self._load_conversation_files(conversation_id)
+
+        except Exception as e:
+            logger.error(f"Failed to restore messages for tab {tab_id}: {e}", exc_info=True)
+
     def _on_tab_created(self, tab_id: str):
         """Handle new tab creation - create a new conversation for the tab."""
         logger.info(f"")
