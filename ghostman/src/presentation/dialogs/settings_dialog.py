@@ -1364,6 +1364,13 @@ class SettingsDialog(QDialog):
                 self.current_theme_label.setText(f"Active: {theme_name}")
                 # Apply the new theme to this dialog as well
                 self._apply_theme()
+
+                # Refresh system tray menu to match new theme
+                if self.app_coordinator and hasattr(self.app_coordinator, 'system_tray'):
+                    system_tray = self.app_coordinator.system_tray
+                    if system_tray and hasattr(system_tray, 'refresh_menu_theme'):
+                        system_tray.refresh_menu_theme()
+                        logger.debug("System tray menu theme refreshed")
             else:
                 logger.error(f"Failed to set theme: {theme_name}")
         except ImportError:
@@ -1595,6 +1602,13 @@ class SettingsDialog(QDialog):
             logger.info("Custom theme applied from editor")
             # Apply the new theme to this dialog
             self._apply_theme()
+
+            # Refresh system tray menu to match new theme
+            if self.app_coordinator and hasattr(self.app_coordinator, 'system_tray'):
+                system_tray = self.app_coordinator.system_tray
+                if system_tray and hasattr(system_tray, 'refresh_menu_theme'):
+                    system_tray.refresh_menu_theme()
+                    logger.debug("System tray menu theme refreshed after custom theme")
         except ImportError:
             logger.warning("Theme system not available")
     

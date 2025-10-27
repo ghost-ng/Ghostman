@@ -63,15 +63,36 @@ class EnhancedSystemTray(QObject):
         logger.debug("System tray icon initialized")
     
     def _get_theme_icon(self, icon_name: str) -> QIcon:
-        """Get dark icon for system tray menu (menus are always lite background)."""
+        """Get theme-aware icon for system tray menu (dark icons for light themes, light icons for dark themes)."""
         try:
+            # Get theme manager to determine if current theme is dark or light
+            from ghostman.src.ui.themes.theme_manager import get_theme_manager
+            theme_manager = get_theme_manager()
+
+            # Determine icon variant based on theme
+            icon_variant = "_lite"  # Default to lite for dark themes
+            if theme_manager and theme_manager.current_theme:
+                # If background is light (luminance > 0.5), use dark icons
+                bg_color = theme_manager.current_theme.background_primary
+                if bg_color:
+                    # Simple luminance check: light backgrounds need dark icons
+                    # Extract RGB from hex color
+                    if bg_color.startswith('#'):
+                        r = int(bg_color[1:3], 16) / 255.0
+                        g = int(bg_color[3:5], 16) / 255.0
+                        b = int(bg_color[5:7], 16) / 255.0
+                        # Calculate relative luminance
+                        luminance = 0.299 * r + 0.587 * g + 0.114 * b
+                        if luminance > 0.5:
+                            icon_variant = "_dark"  # Light theme needs dark icons
+
             from ...utils.resource_resolver import resolve_icon
-            icon_path = resolve_icon(icon_name, "_dark")
+            icon_path = resolve_icon(icon_name, icon_variant)
             if icon_path:
                 return QIcon(str(icon_path))
         except Exception as e:
-            logger.debug(f"Failed to load icon {icon_name}_dark.png: {e}")
-        
+            logger.debug(f"Failed to load icon {icon_name}{icon_variant}.png: {e}")
+
         return QIcon()  # Empty icon as fallback
     
     def _init_context_menu(self):
@@ -291,3 +312,31 @@ class EnhancedSystemTray(QObject):
     def is_visible(self) -> bool:
         """Check if the tray icon is visible."""
         return self.tray_icon.isVisible() if self.tray_icon else False
+
+    def refresh_menu_theme(self):
+        """Refresh menu styling and icons when theme changes."""
+        if not self.context_menu:
+            return
+
+        # Re-apply theme-aware styling
+        self._style_menu(self.context_menu)
+
+        # Update all action icons to match new theme
+        for action in self.context_menu.actions():
+            if action.isSeparator():
+                continue
+
+            text = action.text()
+            # Map action text to icon name
+            icon_map = {
+                "Show Avatar": "chat",
+                "Settings...": "gear",
+                "Help...": "help",
+                "Quit": "exit"
+            }
+
+            if text in icon_map:
+                icon = self._get_theme_icon(icon_map[text])
+                action.setIcon(icon)
+
+        logger.debug("System tray menu theme refreshed")
