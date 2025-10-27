@@ -8109,12 +8109,27 @@ def test_theme():
         # EDGE CASE FIX: Check if user deleted all conversations and needs a new one
         if self.conversation_manager:
             self._ensure_conversation_exists_for_message(message)
-        
-        # Ensure we have an active conversation
-        if not self.current_conversation and self.conversation_manager:
-            logger.info("🆕 Auto-creating conversation for AI interaction")
+
+        # CRITICAL FIX: Get conversation from active tab FIRST before creating temporary conversation
+        active_conversation_id = self._get_safe_conversation_id()
+
+        # Sync AI service with active tab's conversation ID
+        if active_conversation_id and self.conversation_manager and self.conversation_manager.has_ai_service():
+            ai_service = self.conversation_manager.get_ai_service()
+            if ai_service:
+                # Make sure the current conversation is set in the AI service
+                current_ai_conversation = ai_service.get_current_conversation_id()
+                if current_ai_conversation != active_conversation_id:
+                    logger.info(f"🔄 Syncing AI service to active tab conversation: {active_conversation_id[:8]}...")
+                    ai_service.set_current_conversation(active_conversation_id)
+                else:
+                    logger.debug(f"✓ AI service already using tab's conversation: {active_conversation_id[:8]}")
+
+        # Ensure we have an active conversation (only create if tab has no conversation)
+        if not active_conversation_id and not self.current_conversation and self.conversation_manager:
+            logger.info("🆕 Auto-creating conversation for AI interaction (no tab conversation found)")
             self._create_new_conversation_for_message(message)
-            
+
             # User requested that tabs remain fresh - no automatic conversation association
             # Conversations are only loaded when explicitly requested through conversation dialog
             if TAB_SYSTEM_AVAILABLE and hasattr(self, 'tab_manager') and self.tab_manager:
@@ -8122,17 +8137,8 @@ def test_theme():
                 if active_tab:
                     # Keep tab title as "New Conversation" - don't associate with created conversations
                     logger.debug(f"Tab {active_tab.tab_id} remains fresh - no conversation association")
-            
-        # Ensure AI service has the correct conversation context from active tab
-        active_conversation_id = self._get_safe_conversation_id()
-        if active_conversation_id and self.conversation_manager and self.conversation_manager.has_ai_service():
-            ai_service = self.conversation_manager.get_ai_service()
-            if ai_service:
-                # Make sure the current conversation is set in the AI service
-                current_ai_conversation = ai_service.get_current_conversation_id()
-                if current_ai_conversation != active_conversation_id:
-                    logger.debug(f"Syncing AI service to active tab conversation: {active_conversation_id[:8]}...")
-                    ai_service.set_current_conversation(active_conversation_id)
+        elif active_conversation_id:
+            logger.debug(f"✓ Using tab's conversation for message: {active_conversation_id[:8]}")
         
         # Show spinner in prompt instead of "Processing with AI..." message
         self._set_processing_mode(True)
