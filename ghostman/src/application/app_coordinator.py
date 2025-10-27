@@ -487,15 +487,24 @@ class AppCoordinator(QObject):
     
     def _on_state_changed(self, event: StateChangeEvent):
         """Handle state change events from the state machine."""
-        logger.debug(f"State changed: {event.from_state.value} -> {event.to_state.value}")
-        
+        logger.info(f"🔄 State changed: {event.from_state.value} -> {event.to_state.value}")
+
         # Update UI based on new state
-        if event.to_state == AppState.AVATAR:
-            self._show_main_window()
-            self._update_tray_for_avatar_mode()
-        elif event.to_state == AppState.TRAY:
-            self._hide_main_window()
-            self._update_tray_for_tray_mode()
+        try:
+            if event.to_state == AppState.AVATAR:
+                logger.info("  ➜ Transitioning to AVATAR mode...")
+                self._show_main_window()
+                logger.debug("  ➜ Updating tray icon...")
+                self._update_tray_for_avatar_mode()
+                logger.info("✓ AVATAR mode transition complete")
+            elif event.to_state == AppState.TRAY:
+                logger.info("  ➜ Transitioning to TRAY mode...")
+                self._hide_main_window()
+                logger.debug("  ➜ Updating tray icon...")
+                self._update_tray_for_tray_mode()
+                logger.info("✓ TRAY mode transition complete")
+        except Exception as e:
+            logger.error(f"✗ Error during state transition: {e}", exc_info=True)
     
     def _show_avatar_mode(self):
         """Transition to Avatar (maximized) mode."""
@@ -510,10 +519,19 @@ class AppCoordinator(QObject):
     def _show_main_window(self):
         """Show and activate the main window."""
         if self._main_window:
-            self._main_window.show()
-            self._main_window.raise_()
-            self._main_window.activateWindow()
-            logger.debug("Main window shown")
+            logger.info("🖥 Showing main window...")
+            try:
+                logger.debug("  - Calling show()")
+                self._main_window.show()
+                logger.debug("  - Calling raise_()")
+                self._main_window.raise_()
+                logger.debug("  - Calling activateWindow()")
+                self._main_window.activateWindow()
+                logger.info("✓ Main window shown successfully")
+            except Exception as e:
+                logger.error(f"✗ Error showing main window: {e}", exc_info=True)
+        else:
+            logger.warning("⚠ Cannot show main window - window is None")
     
     def _hide_main_window(self):
         """Hide the main window and any floating REPL."""
