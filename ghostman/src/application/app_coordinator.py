@@ -110,23 +110,46 @@ class AppCoordinator(QObject):
 
             # Set initial state based on settings (tray/avatar)
             initial_state = AppState(settings.get('app.current_state', 'tray'))
+            logger.info(f"🎯 Setting initial app state: {initial_state.value}")
+
             if initial_state == AppState.AVATAR:
+                logger.info("📍 BEFORE: Calling _show_avatar_mode()")
                 self._show_avatar_mode()
+                logger.info("✓ AFTER: _show_avatar_mode() returned")
             else:
+                logger.info("📍 BEFORE: Calling _show_tray_mode()")
                 self._show_tray_mode()
-            
+                logger.info("✓ AFTER: _show_tray_mode() returned")
+
+            logger.info("📍 BEFORE: Setting _initialized = True")
             self._initialized = True
-            self.app_initialized.emit()
-            
+            logger.info("✓ AFTER: _initialized set to True")
+
+            logger.info("📍 BEFORE: Emitting app_initialized signal")
+            try:
+                self.app_initialized.emit()
+                logger.info("✓ AFTER: app_initialized signal emitted successfully")
+            except Exception as e:
+                logger.error(f"✗ CRASH during app_initialized.emit(): {e}", exc_info=True)
+                raise
+
             # Show startup notification with avatar icon
+            logger.info("📍 BEFORE: Showing system tray notification")
             if self._system_tray:
-                # Use the same icon as the tray icon (which includes the avatar)
-                self._system_tray.show_message(
-                    "Spector",
-                    "AI Assistant is ready in system tray",
-                    QSystemTrayIcon.MessageIcon.Information,
-                    2000
-                )
+                try:
+                    # Use the same icon as the tray icon (which includes the avatar)
+                    self._system_tray.show_message(
+                        "Spector",
+                        "AI Assistant is ready in system tray",
+                        QSystemTrayIcon.MessageIcon.Information,
+                        2000
+                    )
+                    logger.info("✓ AFTER: System tray notification shown")
+                except Exception as e:
+                    logger.error(f"✗ CRASH during show_message(): {e}", exc_info=True)
+                    raise
+            else:
+                logger.warning("⚠ System tray is None, skipping notification")
 
             # NOTE: Initial conversation creation is handled by REPLWidget creating the first tab
             # No need to create additional conversations here to avoid duplicates
@@ -508,8 +531,14 @@ class AppCoordinator(QObject):
     
     def _show_avatar_mode(self):
         """Transition to Avatar (maximized) mode."""
+        logger.info("🔄 _show_avatar_mode() called")
         if self._state_machine:
-            self._state_machine.to_avatar_mode("user_request")
+            logger.debug("  - Calling state_machine.to_avatar_mode()")
+            result = self._state_machine.to_avatar_mode("user_request")
+            logger.debug(f"  - State machine returned: {result}")
+            logger.info("✓ _show_avatar_mode() completed")
+        else:
+            logger.warning("⚠ Cannot show avatar mode - state machine is None")
     
     def _show_tray_mode(self):
         """Transition to Tray (minimized) mode."""
@@ -523,13 +552,20 @@ class AppCoordinator(QObject):
             try:
                 logger.debug("  - Calling show()")
                 self._main_window.show()
+                logger.debug("  - show() returned successfully")
+
                 logger.debug("  - Calling raise_()")
                 self._main_window.raise_()
+                logger.debug("  - raise_() returned successfully")
+
                 logger.debug("  - Calling activateWindow()")
                 self._main_window.activateWindow()
+                logger.debug("  - activateWindow() returned successfully")
+
                 logger.info("✓ Main window shown successfully")
             except Exception as e:
                 logger.error(f"✗ Error showing main window: {e}", exc_info=True)
+                raise  # Re-raise to make crash visible
         else:
             logger.warning("⚠ Cannot show main window - window is None")
     
