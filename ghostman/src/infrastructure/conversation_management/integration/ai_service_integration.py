@@ -246,14 +246,41 @@ class ConversationAIService(AIService):
         
         # NUCLEAR DEBUG: Log the AI service state before RAG enhancement
         logger.warning(f"🚨 NUCLEAR DEBUG: AI Service conversation ID: {self._current_conversation_id}")
+
+        # Check if current conversation exists in database (handle deleted conversations)
+        conversation_exists = False
+        if self._current_conversation_id:
+            try:
+                # Check if conversation exists in database (synchronously)
+                import asyncio
+                loop = asyncio.new_event_loop()
+                try:
+                    test_conv = loop.run_until_complete(
+                        self.conversation_service.get_conversation(
+                            self._current_conversation_id, include_messages=False
+                        )
+                    )
+                    conversation_exists = test_conv is not None
+                finally:
+                    loop.close()
+
+                if not conversation_exists:
+                    logger.error(f"⚠️ Conversation {self._current_conversation_id} not found in database (may have been deleted)")
+                    logger.info("🔄 Clearing invalid conversation ID and will create new one")
+                    self._current_conversation_id = None
+            except Exception as e:
+                logger.error(f"Failed to load conversation {self._current_conversation_id} for context: {e}")
+                logger.info("🔄 Clearing invalid conversation ID and will create new one")
+                self._current_conversation_id = None
+
         if not self._current_conversation_id:
             logger.error("🚨 NUCLEAR CRITICAL: AI Service has NO conversation ID - this will cause isolation failure")
             logger.error("🚫 Files uploaded to this conversation may not be findable")
-        
+
         # Enhance message with RAG context if available (with strict conversation isolation)
         enhanced_message = self._enhance_message_with_rag_context(message)
-        
-        # Ensure we have a conversation to save to
+
+        # Ensure we have a conversation to save to (create if none exists OR if conversation was deleted)
         if save_conversation and self._auto_save_conversations and not self._current_conversation_id:
             logger.info("🆕 No active conversation, creating new one for message")
             try:
