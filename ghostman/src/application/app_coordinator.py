@@ -127,12 +127,11 @@ class AppCoordinator(QObject):
                     QSystemTrayIcon.MessageIcon.Information,
                     2000
                 )
-            
-            # Auto-create a new conversation on app startup immediately (no delay)
-            # This prevents race conditions with file uploads
-            from PyQt6.QtCore import QTimer
-            QTimer.singleShot(50, self._create_startup_conversation)  # Minimal delay just for UI to be ready
-            
+
+            # NOTE: Initial conversation creation is handled by REPLWidget creating the first tab
+            # No need to create additional conversations here to avoid duplicates
+            # The tab creation in REPLWidget automatically creates its conversation
+
             logger.info("Ghostman application initialized successfully")
             # Diagnostic path logging
             try:
