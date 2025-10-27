@@ -334,6 +334,9 @@ class SimpleConversationBrowser(QDialog):
         self.conversations_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.conversations_table.setAlternatingRowColors(True)
         self.conversations_table.verticalHeader().setVisible(False)
+
+        # Make table read-only - disable all editing
+        self.conversations_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         
         # Set up context menu
         self.conversations_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
