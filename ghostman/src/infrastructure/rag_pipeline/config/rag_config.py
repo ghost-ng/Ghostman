@@ -171,8 +171,16 @@ class VectorStoreConfig:
             logger.info(f"FAISS database persist directory initialized: {self.persist_directory}")
         except Exception as e:
             logger.error(f"Failed to create FAISS persist directory {self.persist_directory}: {e}")
-            # Try fallback location
-            fallback_dir = os.path.join(os.path.expanduser("~"), ".ghostman_faiss_db")
+            # Try fallback location in AppData
+            if os.name == 'nt':  # Windows
+                appdata = os.environ.get('APPDATA')
+                if appdata:
+                    fallback_dir = os.path.join(appdata, "Ghostman", "rag", "faiss_db")
+                else:
+                    fallback_dir = os.path.join(os.path.expanduser("~"), ".Ghostman", "rag", "faiss_db")
+            else:  # Linux/Mac
+                fallback_dir = os.path.join(os.path.expanduser("~"), ".Ghostman", "rag", "faiss_db")
+
             try:
                 os.makedirs(fallback_dir, exist_ok=True)
                 self.persist_directory = fallback_dir
@@ -306,12 +314,22 @@ class RAGPipelineConfig:
     def __post_init__(self):
         """Post-initialization validation and setup."""
         if not self.data_directory:
-            self.data_directory = os.getenv("GHOSTMAN_DATA_DIR", 
-                                          os.path.expanduser("~/.Ghostman"))
-        
+            # Use platform-specific AppData location (same as settings_manager)
+            if os.name == 'nt':  # Windows
+                appdata = os.environ.get('APPDATA')
+                if appdata:
+                    self.data_directory = os.path.join(appdata, "Ghostman", "rag")
+                else:
+                    self.data_directory = os.path.expanduser("~/.Ghostman/rag")
+            else:  # Linux/Mac
+                self.data_directory = os.path.expanduser("~/.Ghostman/rag")
+
+            # Allow override from environment variable
+            self.data_directory = os.getenv("GHOSTMAN_DATA_DIR", self.data_directory)
+
         # Ensure data directory exists
         Path(self.data_directory).mkdir(parents=True, exist_ok=True)
-        
+
         # Setup logging
         self._setup_logging()
     
