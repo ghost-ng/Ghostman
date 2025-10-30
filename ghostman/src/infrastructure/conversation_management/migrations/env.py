@@ -43,11 +43,22 @@ def get_database_url():
         settings_dir = Path(settings_paths['settings_dir'])
         ghostman_root = settings_dir.parent
         db_dir = ghostman_root / "db"
+        db_dir.mkdir(parents=True, exist_ok=True)  # Ensure db directory exists
         db_path = db_dir / "conversations.db"
         return f"sqlite:///{db_path}"
-    except Exception:
-        # Fallback for development/testing
-        return "sqlite:///conversations.db"
+    except Exception as e:
+        # Fallback for development/testing - still use db subdirectory
+        import os
+        if os.name == 'nt':  # Windows
+            appdata = os.environ.get('APPDATA')
+            if appdata:
+                db_dir = Path(appdata) / "Ghostman" / "db"
+                db_dir.mkdir(parents=True, exist_ok=True)
+                return f"sqlite:///{db_dir / 'conversations.db'}"
+        # Last resort fallback
+        db_dir = Path.home() / ".Ghostman" / "db"
+        db_dir.mkdir(parents=True, exist_ok=True)
+        return f"sqlite:///{db_dir / 'conversations.db'}"
 
 
 def run_migrations_offline() -> None:

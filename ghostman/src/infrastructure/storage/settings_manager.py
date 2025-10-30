@@ -87,13 +87,6 @@ class SettingsManager:
                 'max_size': {'width': None, 'height': None}  # Unlimited
             }
         },
-        'ai': {
-            'provider': 'openai',
-            'model': 'gpt-3.5-turbo',
-            'max_tokens': 16384,  # Increased for modern AI models
-            'temperature': 0.7,
-            'stream_responses': True
-        },
         'app': {
             'current_state': 'tray',  # 'tray' or 'avatar'
             'log_level': 'INFO',
