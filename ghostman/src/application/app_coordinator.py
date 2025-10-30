@@ -110,29 +110,51 @@ class AppCoordinator(QObject):
 
             # Set initial state based on settings (tray/avatar)
             initial_state = AppState(settings.get('app.current_state', 'tray'))
+            logger.info(f"🎯 Setting initial app state: {initial_state.value}")
+
             if initial_state == AppState.AVATAR:
+                logger.info("📍 BEFORE: Calling _show_avatar_mode()")
                 self._show_avatar_mode()
+                logger.info("✓ AFTER: _show_avatar_mode() returned")
             else:
+                logger.info("📍 BEFORE: Calling _show_tray_mode()")
                 self._show_tray_mode()
-            
+                logger.info("✓ AFTER: _show_tray_mode() returned")
+
+            logger.info("📍 BEFORE: Setting _initialized = True")
             self._initialized = True
-            self.app_initialized.emit()
-            
+            logger.info("✓ AFTER: _initialized set to True")
+
+            logger.info("📍 BEFORE: Emitting app_initialized signal")
+            try:
+                self.app_initialized.emit()
+                logger.info("✓ AFTER: app_initialized signal emitted successfully")
+            except Exception as e:
+                logger.error(f"✗ CRASH during app_initialized.emit(): {e}", exc_info=True)
+                raise
+
             # Show startup notification with avatar icon
+            logger.info("📍 BEFORE: Showing system tray notification")
             if self._system_tray:
-                # Use the same icon as the tray icon (which includes the avatar)
-                self._system_tray.show_message(
-                    "Spector",
-                    "AI Assistant is ready in system tray",
-                    QSystemTrayIcon.MessageIcon.Information,
-                    2000
-                )
-            
-            # Auto-create a new conversation on app startup immediately (no delay)
-            # This prevents race conditions with file uploads
-            from PyQt6.QtCore import QTimer
-            QTimer.singleShot(50, self._create_startup_conversation)  # Minimal delay just for UI to be ready
-            
+                try:
+                    # Use the same icon as the tray icon (which includes the avatar)
+                    self._system_tray.show_message(
+                        "Spector",
+                        "AI Assistant is ready in system tray",
+                        QSystemTrayIcon.MessageIcon.Information,
+                        2000
+                    )
+                    logger.info("✓ AFTER: System tray notification shown")
+                except Exception as e:
+                    logger.error(f"✗ CRASH during show_message(): {e}", exc_info=True)
+                    raise
+            else:
+                logger.warning("⚠ System tray is None, skipping notification")
+
+            # NOTE: Initial conversation creation is handled by REPLWidget creating the first tab
+            # No need to create additional conversations here to avoid duplicates
+            # The tab creation in REPLWidget automatically creates its conversation
+
             logger.info("Ghostman application initialized successfully")
             # Diagnostic path logging
             try:
@@ -488,20 +510,35 @@ class AppCoordinator(QObject):
     
     def _on_state_changed(self, event: StateChangeEvent):
         """Handle state change events from the state machine."""
-        logger.debug(f"State changed: {event.from_state.value} -> {event.to_state.value}")
-        
+        logger.info(f"🔄 State changed: {event.from_state.value} -> {event.to_state.value}")
+
         # Update UI based on new state
-        if event.to_state == AppState.AVATAR:
-            self._show_main_window()
-            self._update_tray_for_avatar_mode()
-        elif event.to_state == AppState.TRAY:
-            self._hide_main_window()
-            self._update_tray_for_tray_mode()
+        try:
+            if event.to_state == AppState.AVATAR:
+                logger.info("  ➜ Transitioning to AVATAR mode...")
+                self._show_main_window()
+                logger.debug("  ➜ Updating tray icon...")
+                self._update_tray_for_avatar_mode()
+                logger.info("✓ AVATAR mode transition complete")
+            elif event.to_state == AppState.TRAY:
+                logger.info("  ➜ Transitioning to TRAY mode...")
+                self._hide_main_window()
+                logger.debug("  ➜ Updating tray icon...")
+                self._update_tray_for_tray_mode()
+                logger.info("✓ TRAY mode transition complete")
+        except Exception as e:
+            logger.error(f"✗ Error during state transition: {e}", exc_info=True)
     
     def _show_avatar_mode(self):
         """Transition to Avatar (maximized) mode."""
+        logger.info("🔄 _show_avatar_mode() called")
         if self._state_machine:
-            self._state_machine.to_avatar_mode("user_request")
+            logger.debug("  - Calling state_machine.to_avatar_mode()")
+            result = self._state_machine.to_avatar_mode("user_request")
+            logger.debug(f"  - State machine returned: {result}")
+            logger.info("✓ _show_avatar_mode() completed")
+        else:
+            logger.warning("⚠ Cannot show avatar mode - state machine is None")
     
     def _show_tray_mode(self):
         """Transition to Tray (minimized) mode."""
@@ -511,10 +548,26 @@ class AppCoordinator(QObject):
     def _show_main_window(self):
         """Show and activate the main window."""
         if self._main_window:
-            self._main_window.show()
-            self._main_window.raise_()
-            self._main_window.activateWindow()
-            logger.debug("Main window shown")
+            logger.info("🖥 Showing main window...")
+            try:
+                logger.debug("  - Calling show()")
+                self._main_window.show()
+                logger.debug("  - show() returned successfully")
+
+                logger.debug("  - Calling raise_()")
+                self._main_window.raise_()
+                logger.debug("  - raise_() returned successfully")
+
+                logger.debug("  - Calling activateWindow()")
+                self._main_window.activateWindow()
+                logger.debug("  - activateWindow() returned successfully")
+
+                logger.info("✓ Main window shown successfully")
+            except Exception as e:
+                logger.error(f"✗ Error showing main window: {e}", exc_info=True)
+                raise  # Re-raise to make crash visible
+        else:
+            logger.warning("⚠ Cannot show main window - window is None")
     
     def _hide_main_window(self):
         """Hide the main window and any floating REPL."""

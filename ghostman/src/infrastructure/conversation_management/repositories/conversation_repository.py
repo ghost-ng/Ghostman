@@ -220,11 +220,13 @@ class ConversationRepository:
     
     async def update_conversation(self, conversation: Conversation) -> bool:
         """Update existing conversation using SQLAlchemy ORM."""
-        # Check if conversation has become empty and should be deleted instead
-        if self._is_empty_conversation(conversation):
-            logger.debug(f"Conversation {conversation.id} is empty, marking as deleted")
-            conversation.delete()
-            
+        # REMOVED AUTO-DELETION: Conversations should only be deleted when explicitly requested by user,
+        # not automatically during updates. This was causing conversations to be marked as deleted
+        # when update_conversation() was called before messages were added.
+        #
+        # The previous code would mark conversations as "deleted" if they had no messages,
+        # which caused new conversations to appear as deleted before messages were saved.
+
         try:
             with self.db.get_session() as session:
                 conv_model = session.query(ConversationModel).filter(
@@ -262,25 +264,74 @@ class ConversationRepository:
                 conv_model = session.query(ConversationModel).filter(
                     ConversationModel.id == conversation_id
                 ).first()
-                
+
                 if not conv_model:
                     logger.warning(f"Conversation {conversation_id} not found for deletion")
                     return False
-                
+
                 if soft_delete:
                     # Soft delete - just mark as deleted
                     conv_model.status = ConversationStatus.DELETED.value
                     conv_model.updated_at = datetime.utcnow()
                 else:
+                    # Hard delete - get file records before deleting conversation
+                    from ..models.database_models import ConversationFileModel
+                    file_records = session.query(ConversationFileModel).filter(
+                        ConversationFileModel.conversation_id == conversation_id
+                    ).all()
+
+                    # Delete physical files from disk
+                    if file_records:
+                        logger.info(f"🗑 Deleting {len(file_records)} physical files for conversation {conversation_id[:8]}...")
+                        for file_record in file_records:
+                            self._delete_physical_file(file_record)
+
+                    # Delete FAISS index for this conversation
+                    self._delete_conversation_faiss_index(conversation_id)
+
                     # Hard delete - remove from database (cascading will handle related records)
                     session.delete(conv_model)
-                
+
                 logger.info(f"{'Soft' if soft_delete else 'Hard'} deleted conversation: {conversation_id}")
                 return True
-                
+
         except SQLAlchemyError as e:
             logger.error(f"✗ Failed to delete conversation {conversation_id}: {e}")
             return False
+
+    def _delete_physical_file(self, file_record) -> None:
+        """Delete a physical file from disk if it exists."""
+        try:
+            if hasattr(file_record, 'file_path') and file_record.file_path:
+                from pathlib import Path
+                file_path = Path(file_record.file_path)
+                if file_path.exists() and file_path.is_file():
+                    file_path.unlink()
+                    logger.debug(f"  ✓ Deleted physical file: {file_path.name}")
+                else:
+                    logger.debug(f"  ⚠ File not found on disk: {file_path}")
+        except Exception as e:
+            logger.warning(f"  ✗ Failed to delete physical file {file_record.filename}: {e}")
+
+    def _delete_conversation_faiss_index(self, conversation_id: str) -> None:
+        """Delete FAISS index directory for a conversation."""
+        try:
+            from pathlib import Path
+            # FAISS indexes are stored in: ghostman_data/rag_indexes/<conversation_id>/
+            from ...storage.settings_manager import settings
+            settings_paths = settings.get_paths()
+            settings_dir = Path(settings_paths['settings_dir'])
+            ghostman_root = settings_dir.parent
+            indexes_dir = ghostman_root / "rag_indexes" / conversation_id
+
+            if indexes_dir.exists() and indexes_dir.is_dir():
+                import shutil
+                shutil.rmtree(indexes_dir)
+                logger.info(f"  ✓ Deleted FAISS index: {indexes_dir}")
+            else:
+                logger.debug(f"  ℹ No FAISS index found for conversation {conversation_id[:8]}")
+        except Exception as e:
+            logger.warning(f"  ✗ Failed to delete FAISS index for {conversation_id[:8]}: {e}")
     
     async def list_conversations(
         self, 
@@ -433,16 +484,19 @@ class ConversationRepository:
                 conv_model = session.query(ConversationModel).filter(
                     ConversationModel.id == message.conversation_id
                 ).first()
-                
+
                 if conv_model:
                     old_count = conv_model.message_count
+                    # Flush the session first to ensure the new message is visible in the query
+                    session.flush()
+                    # Count messages after adding the new one (no +1 needed)
                     new_count = session.query(MessageModel).filter(
                         MessageModel.conversation_id == message.conversation_id
-                    ).count() + 1  # +1 for the message we're adding
-                    
+                    ).count()
+
                     conv_model.updated_at = message.timestamp
                     conv_model.message_count = new_count
-                    
+
                     logger.debug(f"📊 Updated conversation message count: {old_count} -> {new_count}")
                 else:
                     logger.warning(f"⚠ Conversation {message.conversation_id} not found for message count update")

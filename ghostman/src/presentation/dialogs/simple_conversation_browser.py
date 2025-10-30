@@ -243,7 +243,7 @@ class SimpleConversationBrowser(QDialog):
     def _init_ui(self):
         """Initialize clean, simple UI."""
         self.setWindowTitle("Conversations")
-        self.setModal(True)
+        self.setModal(False)  # Allow interaction with main app while browser is open
         self.resize(800, 600)
         
         layout = QVBoxLayout(self)
@@ -334,6 +334,9 @@ class SimpleConversationBrowser(QDialog):
         self.conversations_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.conversations_table.setAlternatingRowColors(True)
         self.conversations_table.verticalHeader().setVisible(False)
+
+        # Make table read-only - disable all editing
+        self.conversations_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         
         # Set up context menu
         self.conversations_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
