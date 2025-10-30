@@ -177,14 +177,32 @@
                         <p class="caption">File browser bar with upload, clear, and hide/show controls</p>
                     </div>
 
+                    <div class="screenshot">
+                        <img src="images/file_context_rag.png" alt="File badges showing uploaded files with status">
+                        <p class="caption">File badges displaying uploaded file names with visual status indicators</p>
+                    </div>
+
                     <div class="feature-grid">
                         <div class="feature-card">
-                            <h4>How to Upload Files</h4>
+                            <h4>Two Ways to Upload Files</h4>
                             <ol class="step-list">
-                                <li><strong>Click Upload Button:</strong> Look for the upload icon in the file browser bar</li>
-                                <li><strong>Select Files:</strong> Choose one or more files from your computer</li>
-                                <li><strong>Wait for Processing:</strong> Files are automatically processed and embedded</li>
-                                <li><strong>See File Badges:</strong> Uploaded files appear as badges with status indicators</li>
+                                <li><strong>Method 1 - Click Upload Button:</strong>
+                                    <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
+                                        <li>Click the 📎 attach/upload icon in the file browser bar</li>
+                                        <li>Select one or more files from the file picker dialog</li>
+                                        <li>Files are added to the current conversation's context</li>
+                                    </ul>
+                                </li>
+                                <li><strong>Method 2 - Drag and Drop:</strong>
+                                    <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
+                                        <li>Drag files directly from your file explorer</li>
+                                        <li>Drop them anywhere in the Ghostman window</li>
+                                        <li>Files are automatically added and processed</li>
+                                        <li>No clicking required - fastest method!</li>
+                                    </ul>
+                                </li>
+                                <li><strong>Wait for Processing:</strong> Files are automatically embedded using AI</li>
+                                <li><strong>See File Badges:</strong> Uploaded files appear as color-coded badges</li>
                                 <li><strong>Start Querying:</strong> Ask questions about your uploaded content</li>
                             </ol>
                         </div>
@@ -204,12 +222,20 @@
                         </div>
 
                         <div class="feature-card">
-                            <h4>File Processing Status</h4>
+                            <h4>Understanding File Badges</h4>
+                            <p style="margin-bottom: 1rem;">Each uploaded file is displayed as a badge showing:</p>
                             <ul>
-                                <li><strong>Pending (⏳):</strong> Waiting to be processed</li>
-                                <li><strong>Processing (🔄):</strong> Currently being embedded</li>
-                                <li><strong>Completed (✓):</strong> Ready for search queries</li>
-                                <li><strong>Failed (✗):</strong> Processing error occurred</li>
+                                <li><strong>File Name:</strong> Truncated if too long (hover for full name)</li>
+                                <li><strong>Status Indicator:</strong> Visual feedback on processing state</li>
+                                <li><strong>Toggle Button:</strong> Enable/disable file in current context</li>
+                                <li><strong>Remove Button (×):</strong> Delete file from conversation</li>
+                            </ul>
+                            <p style="margin-top: 1rem;"><strong>Badge Colors:</strong></p>
+                            <ul>
+                                <li><strong>Green:</strong> Successfully processed and ready</li>
+                                <li><strong>Yellow/Amber:</strong> Processing or pending</li>
+                                <li><strong>Red:</strong> Processing failed (hover for error details)</li>
+                                <li><strong>Gray:</strong> Disabled (not included in context)</li>
                             </ul>
                         </div>
 
