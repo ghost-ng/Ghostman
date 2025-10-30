@@ -433,17 +433,21 @@ class CodeSnippetWidget(QFrame):
                     font-size: 12px;
                     font-weight: 500;
                     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+                    opacity: 1.0;
                 }}
                 QPushButton#code-snippet-copy-button:hover {{
                     background-color: {colors.interactive_hover};
                     border-color: {colors.border_focus};
+                    opacity: 1.0;
                 }}
                 QPushButton#code-snippet-copy-button:pressed {{
                     background-color: {colors.interactive_active};
+                    opacity: 1.0;
                 }}
                 QPushButton#code-snippet-copy-button:disabled {{
                     background-color: {colors.interactive_disabled};
                     color: {colors.text_disabled};
+                    opacity: 1.0;
                 }}
                 """
                 
@@ -477,13 +481,22 @@ class CodeSnippetWidget(QFrame):
         
         copy_style = f"""
         QPushButton#code-snippet-copy-button {{
-            background-color: rgba(200, 200, 200, 0.5);
+            background-color: #E0E0E0;
             color: {colors.text_primary if hasattr(colors, 'text_primary') else '#333333'};
-            border: 1px solid rgba(150, 150, 150, 0.8);
+            border: 1px solid #A0A0A0;
             border-radius: 4px;
             padding: 4px 8px;
             font-size: 12px;
             font-weight: 500;
+            opacity: 1.0;
+        }}
+        QPushButton#code-snippet-copy-button:hover {{
+            background-color: #D0D0D0;
+            opacity: 1.0;
+        }}
+        QPushButton#code-snippet-copy-button:pressed {{
+            background-color: #C0C0C0;
+            opacity: 1.0;
         }}
         """
         
