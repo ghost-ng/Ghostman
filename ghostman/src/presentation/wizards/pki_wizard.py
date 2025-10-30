@@ -143,7 +143,13 @@ class PKISetupWizard(QWizard):
             font-size: 12px;
             margin-bottom: 15px;
         }}
-        
+
+        QLabel[role="option_desc"] {{
+            color: {colors.text_secondary};
+            font-size: 10px;
+            margin-left: 20px;
+        }}
+
         QPushButton {{
             background-color: {colors.interactive_normal};
             border: 1px solid {colors.border_primary};
@@ -250,7 +256,13 @@ class PKISetupWizard(QWizard):
             font-size: 12px;
             margin-bottom: 15px;
         }
-        
+
+        QLabel[role="option_desc"] {
+            color: #cccccc;
+            font-size: 10px;
+            margin-left: 20px;
+        }
+
         QPushButton {
             background-color: #404040;
             border: 1px solid #555555;
@@ -389,34 +401,34 @@ class ModeSelectionPage(QWizardPage):
         
         # Enterprise PKI option
         self.enterprise_radio = QRadioButton("Enterprise PKI Authentication")
-        enterprise_desc = QLabel("""
+        self.enterprise_desc = QLabel("""
         • Use client certificates for authentication
         • Required for enterprise environments with PKI infrastructure
         • Supports P12 certificate files with password protection
         • Includes certificate chain validation
         """)
-        enterprise_desc.setStyleSheet("margin-left: 20px; color: #cccccc; font-size: 10px;")
-        
+        self.enterprise_desc.setProperty("role", "option_desc")
+
         # Standard authentication option
         self.standard_radio = QRadioButton("Standard Authentication (Recommended)")
         self.standard_radio.setChecked(True)  # Default to standard
-        standard_desc = QLabel("""
+        self.standard_desc = QLabel("""
         • Use API keys and standard authentication methods
         • Suitable for most cloud services and APIs (OpenAI, Anthropic, etc.)
         • No certificate management required
         • Simpler setup - works immediately
         • Can enable PKI later if needed
         """)
-        standard_desc.setStyleSheet("margin-left: 20px; color: #cccccc; font-size: 10px;")
+        self.standard_desc.setProperty("role", "option_desc")
         
         self.button_group.addButton(self.enterprise_radio, 0)
         self.button_group.addButton(self.standard_radio, 1)
-        
+
         mode_layout.addWidget(self.enterprise_radio)
-        mode_layout.addWidget(enterprise_desc)
+        mode_layout.addWidget(self.enterprise_desc)
         mode_layout.addSpacing(15)
         mode_layout.addWidget(self.standard_radio)
-        mode_layout.addWidget(standard_desc)
+        mode_layout.addWidget(self.standard_desc)
         
         mode_group.setLayout(mode_layout)
         layout.addWidget(mode_group)

@@ -133,23 +133,19 @@ class AppCoordinator(QObject):
                 logger.error(f"✗ CRASH during app_initialized.emit(): {e}", exc_info=True)
                 raise
 
-            # Show startup notification with avatar icon
-            logger.info("📍 BEFORE: Showing system tray notification")
-            if self._system_tray:
+            # Connect to REPL widget's startup_fully_complete signal to show toast only when ready
+            # This prevents race conditions with clicking the toast before everything loads
+            if self._main_window and hasattr(self._main_window, 'repl_widget'):
                 try:
-                    # Use the same icon as the tray icon (which includes the avatar)
-                    self._system_tray.show_message(
-                        "Spector",
-                        "AI Assistant is ready in system tray",
-                        QSystemTrayIcon.MessageIcon.Information,
-                        2000
-                    )
-                    logger.info("✓ AFTER: System tray notification shown")
+                    logger.info("📍 Connecting to startup_fully_complete signal for delayed toast")
+                    self._main_window.repl_widget.startup_fully_complete.connect(self._show_startup_toast)
                 except Exception as e:
-                    logger.error(f"✗ CRASH during show_message(): {e}", exc_info=True)
-                    raise
+                    logger.error(f"✗ Failed to connect startup signal: {e}")
+                    # Fallback: show toast immediately if connection fails
+                    self._show_startup_toast()
             else:
-                logger.warning("⚠ System tray is None, skipping notification")
+                logger.warning("⚠ Main window or REPL widget not available, showing toast immediately")
+                self._show_startup_toast()
 
             # NOTE: Initial conversation creation is handled by REPLWidget creating the first tab
             # No need to create additional conversations here to avoid duplicates
@@ -172,7 +168,25 @@ class AppCoordinator(QObject):
         except Exception as e:
             logger.error(f"Failed to initialize application: {e}")
             return False
-    
+
+    def _show_startup_toast(self):
+        """Show startup toast notification after all async initialization is complete."""
+        logger.info("📍 STARTUP FULLY COMPLETE: Showing system tray notification")
+        if self._system_tray:
+            try:
+                # Use the same icon as the tray icon (which includes the avatar)
+                self._system_tray.show_message(
+                    "Spector",
+                    "AI Assistant is ready in system tray",
+                    QSystemTrayIcon.MessageIcon.Information,
+                    2000
+                )
+                logger.info("✓ System tray notification shown after full startup")
+            except Exception as e:
+                logger.error(f"✗ CRASH during show_message(): {e}", exc_info=True)
+        else:
+            logger.warning("⚠ System tray is None, skipping notification")
+
     def _initialize_ui_components(self):
         """Initialize UI components - MainWindow and SystemTray."""
         try:

@@ -1274,6 +1274,7 @@ class REPLWidget(QWidget):
     help_requested = pyqtSignal()
     attach_toggle_requested = pyqtSignal(bool)
     pin_toggle_requested = pyqtSignal(bool)
+    startup_fully_complete = pyqtSignal()  # Emitted when all async startup tasks are done
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -2424,11 +2425,17 @@ class REPLWidget(QWidget):
             if hasattr(self, '_refresh_conversation_selector'):
                 QTimer.singleShot(50, self._refresh_conversation_selector)
 
+            # Emit signal that startup is fully complete (after a small delay to ensure UI is ready)
+            QTimer.singleShot(200, lambda: self.startup_fully_complete.emit())
+            logger.info("✅ Startup fully complete signal will be emitted")
+
         except Exception as e:
             logger.error(f"✗ Failed to load conversations: {e}", exc_info=True)
             # Ensure state is valid even if conversation loading fails
             self.conversations_list = []
             self.current_conversation = None
+            # Still emit the signal even if loading failed to avoid blocking the toast
+            QTimer.singleShot(200, lambda: self.startup_fully_complete.emit())
     
     def _get_status_icon(self, conversation: Optional[Conversation]) -> str:
         """Get status icon for conversation."""

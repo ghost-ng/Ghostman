@@ -108,15 +108,16 @@ class CertificateManager:
     def __init__(self):
         """Initialize certificate manager."""
         self.pki_dir = self._get_pki_directory()
+        # NOTE: config_file is DEPRECATED - now using main settings
         self.config_file = self.pki_dir / "pki_config.json"
         self._config: Optional[PKIConfig] = None
-        
+
         # Ensure PKI directory exists
         self.pki_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Load existing configuration
+
+        # Load existing configuration from main settings
         self.load_config()
-        
+
         logger.info(f"PKI Certificate Manager initialized: {self.pki_dir}")
     
     def _get_pki_directory(self) -> Path:
@@ -131,31 +132,54 @@ class CertificateManager:
             return Path(home) / ".Ghostman" / "pki"
     
     def load_config(self) -> PKIConfig:
-        """Load PKI configuration from file."""
-        if self.config_file.exists():
-            try:
-                with open(self.config_file, 'r') as f:
-                    data = json.load(f)
-                self._config = PKIConfig.from_dict(data)
-                logger.debug("PKI configuration loaded")
-            except Exception as e:
-                logger.error(f"Failed to load PKI config: {e}")
+        """Load PKI configuration from main settings."""
+        try:
+            from ..storage.settings_manager import settings
+            pki_data = settings.get('pki', {})
+
+            if pki_data and isinstance(pki_data, dict):
+                self._config = PKIConfig(
+                    enabled=pki_data.get('enabled', False),
+                    client_cert_path=pki_data.get('client_cert_path'),
+                    client_key_path=pki_data.get('client_key_path'),
+                    ca_chain_path=pki_data.get('ca_chain_path'),
+                    p12_file_hash=pki_data.get('p12_file_hash'),
+                    last_validation=pki_data.get('last_validation'),
+                    certificate_info=pki_data.get('certificate_info')
+                )
+                logger.debug("PKI configuration loaded from main settings")
+            else:
                 self._config = PKIConfig()
-        else:
+                logger.debug("No PKI configuration found, using defaults")
+
+        except Exception as e:
+            logger.error(f"Failed to load PKI config from settings: {e}")
             self._config = PKIConfig()
-        
+
         return self._config
     
     def save_config(self) -> bool:
-        """Save PKI configuration to file."""
+        """Save PKI configuration to main settings."""
         try:
             if self._config:
-                with open(self.config_file, 'w') as f:
-                    json.dump(self._config.to_dict(), f, indent=2)
-                logger.debug("PKI configuration saved")
+                from ..storage.settings_manager import settings
+
+                # Convert config to dict
+                pki_data = self._config.to_dict()
+
+                # Save to main settings
+                settings.set('pki.enabled', pki_data.get('enabled', False))
+                settings.set('pki.client_cert_path', pki_data.get('client_cert_path'))
+                settings.set('pki.client_key_path', pki_data.get('client_key_path'))
+                settings.set('pki.ca_chain_path', pki_data.get('ca_chain_path'))
+                settings.set('pki.p12_file_hash', pki_data.get('p12_file_hash'))
+                settings.set('pki.last_validation', pki_data.get('last_validation'))
+                settings.set('pki.certificate_info', pki_data.get('certificate_info'))
+
+                logger.debug("PKI configuration saved to main settings")
                 return True
         except Exception as e:
-            logger.error(f"Failed to save PKI config: {e}")
+            logger.error(f"Failed to save PKI config to settings: {e}")
         return False
     
     def import_p12_file(self, p12_path: str, password: str) -> bool:

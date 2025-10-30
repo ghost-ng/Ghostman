@@ -104,6 +104,15 @@ class SettingsManager:
             'show_animations': True,
             'status_tooltips': True,
             'context_menu_items': ['show', 'settings', 'about', 'quit']
+        },
+        'pki': {
+            'enabled': False,
+            'client_cert_path': None,
+            'client_key_path': None,
+            'ca_chain_path': None,
+            'p12_file_hash': None,
+            'last_validation': None,
+            'certificate_info': None
         }
     }
     
@@ -315,6 +324,58 @@ class SettingsManager:
         
         return current, keys[-1]
     
+    def _migrate_pki_config(self):
+        """Migrate PKI configuration from old location (pki/pki_config.json) to main settings."""
+        try:
+            # Check if PKI config already exists in main settings
+            pki_cfg = self._settings.get('pki', {})
+            if pki_cfg.get('enabled') or pki_cfg.get('client_cert_path'):
+                logger.debug("PKI config already in main settings, skipping migration")
+                return
+
+            # Get PKI directory (same logic as certificate_manager)
+            if os.name == 'nt':  # Windows
+                appdata = os.environ.get('APPDATA', '')
+                if not appdata:
+                    return
+                pki_dir = Path(appdata) / "Ghostman" / "pki"
+            else:  # Linux/Mac
+                home = os.path.expanduser("~")
+                pki_dir = Path(home) / ".Ghostman" / "pki"
+
+            old_config_file = pki_dir / "pki_config.json"
+
+            # If old config file exists, migrate it
+            if old_config_file.exists():
+                logger.info(f"Migrating PKI config from {old_config_file}")
+                with open(old_config_file, 'r') as f:
+                    old_pki_data = json.load(f)
+
+                # Copy all PKI fields to main settings
+                self._settings.setdefault('pki', {})
+                self._settings['pki']['enabled'] = old_pki_data.get('enabled', False)
+                self._settings['pki']['client_cert_path'] = old_pki_data.get('client_cert_path')
+                self._settings['pki']['client_key_path'] = old_pki_data.get('client_key_path')
+                self._settings['pki']['ca_chain_path'] = old_pki_data.get('ca_chain_path')
+                self._settings['pki']['p12_file_hash'] = old_pki_data.get('p12_file_hash')
+                self._settings['pki']['last_validation'] = old_pki_data.get('last_validation')
+                self._settings['pki']['certificate_info'] = old_pki_data.get('certificate_info')
+
+                # Save to main settings
+                self.save()
+                logger.info("✅ PKI config migrated to main settings file")
+
+                # Optionally rename old file to .bak to preserve it
+                try:
+                    backup_file = old_config_file.with_suffix('.json.bak')
+                    old_config_file.rename(backup_file)
+                    logger.info(f"Old PKI config backed up to {backup_file}")
+                except Exception as e:
+                    logger.warning(f"Could not backup old PKI config: {e}")
+
+        except Exception as e:
+            logger.warning(f"PKI config migration failed: {e}")
+
     def load(self):
         """Load settings from file or create defaults."""
         try:
@@ -339,6 +400,9 @@ class SettingsManager:
                             self.save()
                 except Exception as e:  # pragma: no cover
                     logger.warning(f"Opacity migration failed: {e}")
+
+                # Migrate PKI config from old location if needed
+                self._migrate_pki_config()
             else:
                 self._settings = self.DEFAULT_SETTINGS.copy()
                 self.save()

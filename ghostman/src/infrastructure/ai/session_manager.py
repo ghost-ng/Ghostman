@@ -65,11 +65,11 @@ class SessionManager:
         pool_connections: int = 10,
         pool_maxsize: int = 20,
         pool_block: bool = False,
-        disable_ssl_verification: bool = False
+        disable_ssl_verification: bool = None  # DEPRECATED: Use ssl_service instead
     ) -> None:
         """
         Configure the session with connection pooling and retry settings.
-        
+
         Args:
             timeout: Default timeout for requests in seconds
             max_retries: Maximum number of retries for failed requests
@@ -77,7 +77,7 @@ class SessionManager:
             pool_connections: Number of connection pools to cache
             pool_maxsize: Maximum number of connections in each pool
             pool_block: Whether to block when pool is at max capacity
-            disable_ssl_verification: Whether to disable SSL certificate verification
+            disable_ssl_verification: DEPRECATED - SSL verification is now managed by ssl_service
         """
         with self._session_lock:
             # Close existing session if it exists
@@ -132,16 +132,35 @@ class SessionManager:
             # Apply PKI configuration if available
             if self._pki_config:
                 self._apply_pki_config()
-            
-            # Disable SSL verification if requested
-            if disable_ssl_verification:
-                self._session.verify = False
-                # Suppress SSL warnings
-                import urllib3
-                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-                logger.info("SSL verification disabled globally for session")
-            
-            logger.info(f"Session configured: timeout={timeout}s, retries={max_retries}, pool_size={pool_maxsize}, ssl_verify={not disable_ssl_verification}")
+
+            # Get SSL verification setting from centralized ssl_service
+            try:
+                from ..ssl.ssl_service import ssl_service
+                verify_param = ssl_service.get_verify_parameter()
+                self._session.verify = verify_param
+
+                # If explicitly disabled, suppress warnings
+                if verify_param is False:
+                    import urllib3
+                    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                    logger.info("SSL verification disabled globally for session (via ssl_service)")
+                elif isinstance(verify_param, str):
+                    logger.info(f"SSL verification enabled with custom CA: {verify_param}")
+                else:
+                    logger.info("SSL verification enabled with system CA bundle")
+
+            except Exception as e:
+                logger.warning(f"Could not get SSL configuration from ssl_service, using default: {e}")
+                # Fallback to deprecated parameter if ssl_service fails
+                if disable_ssl_verification is not None:
+                    logger.warning("Using deprecated disable_ssl_verification parameter")
+                    if disable_ssl_verification:
+                        self._session.verify = False
+                        import urllib3
+                        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                        logger.info("SSL verification disabled (deprecated parameter)")
+
+            logger.info(f"Session configured: timeout={timeout}s, retries={max_retries}, pool_size={pool_maxsize}")
     
     def configure_pki(
         self,
@@ -182,22 +201,38 @@ class SessionManager:
         """Apply PKI configuration to the current session."""
         if not self._session or not self._pki_config:
             return
-        
+
         cert_path, key_path, ca_path = self._pki_config
-        
+
         try:
             # Set client certificate and key
             self._session.cert = (cert_path, key_path)
-            
-            # Set CA certificate for server verification if provided
-            if ca_path:
-                self._session.verify = ca_path
-            else:
-                # Use default CA verification
-                self._session.verify = True
-            
+
+            # Get SSL verification setting from ssl_service
+            # PKI should not override ssl_service's decision
+            try:
+                from ..ssl.ssl_service import ssl_service
+                verify_param = ssl_service.get_verify_parameter()
+
+                # Only use PKI CA if SSL verification is enabled and CA path exists
+                if verify_param is not False and ca_path:
+                    self._session.verify = ca_path
+                    logger.debug(f"PKI CA chain applied: {ca_path}")
+                else:
+                    # Use ssl_service's setting (might be False, True, or a custom CA path)
+                    self._session.verify = verify_param
+                    logger.debug(f"Using ssl_service verification setting: {verify_param}")
+
+            except Exception as e:
+                logger.warning(f"Could not get SSL config from ssl_service, using PKI CA: {e}")
+                # Fallback: use PKI CA if available, otherwise default to True
+                if ca_path:
+                    self._session.verify = ca_path
+                else:
+                    self._session.verify = True
+
             logger.debug("PKI configuration applied to session")
-            
+
         except Exception as e:
             logger.error(f"Failed to apply PKI configuration: {e}")
             raise

@@ -1366,11 +1366,13 @@ class SettingsDialog(QDialog):
                 self._apply_theme()
 
                 # Refresh system tray menu to match new theme
-                if self.app_coordinator and hasattr(self.app_coordinator, 'system_tray'):
-                    system_tray = self.app_coordinator.system_tray
-                    if system_tray and hasattr(system_tray, 'refresh_menu_theme'):
-                        system_tray.refresh_menu_theme()
-                        logger.debug("System tray menu theme refreshed")
+                if self.parent() and hasattr(self.parent(), 'app_coordinator'):
+                    app_coordinator = self.parent().app_coordinator
+                    if app_coordinator and hasattr(app_coordinator, 'system_tray'):
+                        system_tray = app_coordinator.system_tray
+                        if system_tray and hasattr(system_tray, 'refresh_menu_theme'):
+                            system_tray.refresh_menu_theme()
+                            logger.debug("System tray menu theme refreshed")
             else:
                 logger.error(f"Failed to set theme: {theme_name}")
         except ImportError:
@@ -1604,11 +1606,13 @@ class SettingsDialog(QDialog):
             self._apply_theme()
 
             # Refresh system tray menu to match new theme
-            if self.app_coordinator and hasattr(self.app_coordinator, 'system_tray'):
-                system_tray = self.app_coordinator.system_tray
-                if system_tray and hasattr(system_tray, 'refresh_menu_theme'):
-                    system_tray.refresh_menu_theme()
-                    logger.debug("System tray menu theme refreshed after custom theme")
+            if self.parent() and hasattr(self.parent(), 'app_coordinator'):
+                app_coordinator = self.parent().app_coordinator
+                if app_coordinator and hasattr(app_coordinator, 'system_tray'):
+                    system_tray = app_coordinator.system_tray
+                    if system_tray and hasattr(system_tray, 'refresh_menu_theme'):
+                        system_tray.refresh_menu_theme()
+                        logger.debug("System tray menu theme refreshed after custom theme")
         except ImportError:
             logger.warning("Theme system not available")
     
