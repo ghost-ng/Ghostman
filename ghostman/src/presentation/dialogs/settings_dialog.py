@@ -525,15 +525,21 @@ class SettingsDialog(QDialog):
         self.tab_widget.addTab(tab, "Fonts")
     
     def _apply_preview_label_style(self, label):
-        """Apply theme-aware style to preview labels."""
+        """Apply theme-aware style to preview labels matching REPL background."""
         try:
             from ...ui.themes.theme_manager import get_theme_manager
             theme_manager = get_theme_manager()
             colors = theme_manager.current_theme
-            label.setStyleSheet(f"padding: 10px; border: 1px solid {colors.border_primary}; background-color: {colors.background_secondary};")
+            label.setStyleSheet(f"""
+                padding: 10px;
+                border: 1px solid {colors.border_primary};
+                background-color: {colors.background_secondary};
+                color: {colors.text_primary};
+                border-radius: 5px;
+            """)
         except ImportError:
             # Fallback to dark theme style
-            label.setStyleSheet("padding: 10px; border: 1px solid #555; background-color: #2a2a2a;")
+            label.setStyleSheet("padding: 10px; border: 1px solid #555; background-color: #2a2a2a; color: #f0f0f0; border-radius: 5px;")
     
     def _update_font_previews(self):
         """Update font preview labels when font settings change."""
@@ -2724,10 +2730,16 @@ class SettingsDialog(QDialog):
             # Update PKI placeholder theme if it exists
             if hasattr(self, 'pki_placeholder') and self.pki_placeholder:
                 self._apply_pki_placeholder_theme(theme_manager.current_theme)
-            
+
+            # Update font preview labels to match new theme
+            if hasattr(self, 'ai_preview_label') and self.ai_preview_label:
+                self._apply_preview_label_style(self.ai_preview_label)
+            if hasattr(self, 'user_preview_label') and self.user_preview_label:
+                self._apply_preview_label_style(self.user_preview_label)
+
             # Update button styles to match new theme
             self._apply_uniform_button_styles()
-                
+
             logger.debug(f"Applied theme: {theme_manager.current_theme_name}")
         except ImportError:
             logger.warning("Theme system not available, using fallback dark theme")
