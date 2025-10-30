@@ -249,11 +249,21 @@ class AppCoordinator(QObject):
                 logger.warning("Cannot connect validator to banner - validator not initialized")
                 return
 
-            if not self._main_window or not hasattr(self._main_window, 'repl_widget'):
+            # Get REPL widget from main_window.floating_repl.repl_widget
+            repl_widget = None
+            if self._main_window:
+                if hasattr(self._main_window, 'floating_repl') and self._main_window.floating_repl:
+                    if hasattr(self._main_window.floating_repl, 'repl_widget'):
+                        repl_widget = self._main_window.floating_repl.repl_widget
+                        logger.debug("Found REPL widget via floating_repl.repl_widget")
+                elif hasattr(self._main_window, 'repl_widget'):
+                    repl_widget = self._main_window.repl_widget
+                    logger.debug("Found REPL widget via main_window.repl_widget")
+
+            if not repl_widget:
                 logger.warning("Cannot connect validator to banner - REPL widget not available")
                 return
 
-            repl_widget = self._main_window.repl_widget
             if not hasattr(repl_widget, 'api_error_banner') or not repl_widget.api_error_banner:
                 logger.warning("Cannot connect validator to banner - banner not initialized")
                 return
