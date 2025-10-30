@@ -14,8 +14,6 @@ import json
 
 import numpy as np
 import requests
-from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
 
 logger = logging.getLogger("ghostman.embedding_service")
 
@@ -62,31 +60,27 @@ class EmbeddingService:
         self.model = model
         self.rate_limit_delay = rate_limit_delay
         self.cache_ttl = cache_ttl
-        
-        # Configure HTTP session with retries
-        self.session = requests.Session()
-        retry_strategy = Retry(
-            total=max_retries,
-            backoff_factor=1,
-            status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["POST"]
-        )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        self.session.mount("http://", adapter)
-        self.session.mount("https://", adapter)
-        
-        # Set default headers
-        self.session.headers.update({
+        self.timeout = timeout
+
+        # Use centralized session manager for PKI/SSL support
+        from ...ai.session_manager import session_manager
+        self.session_manager = session_manager
+
+        # Ensure session manager is configured
+        if not self.session_manager.is_configured:
+            self.session_manager.configure_session(
+                timeout=int(timeout),
+                max_retries=max_retries
+            )
+
+        # Prepare headers for requests
+        self.headers = {
             'Content-Type': 'application/json',
             'User-Agent': 'Ghostman-RAGPipeline/1.0'
-        })
-        
+        }
+
         if self.api_key:
-            self.session.headers.update({
-                'Authorization': f'Bearer {self.api_key}'
-            })
-        
-        self.session.timeout = timeout
+            self.headers['Authorization'] = f'Bearer {self.api_key}'
         
         # Initialize caching
         self._setup_cache(cache_size)
@@ -241,11 +235,14 @@ class EmbeddingService:
             request_data.update(self._get_provider_params())
             
             logger.debug(f"Creating embedding for {len(text)} characters")
-            
-            # Make API request
-            response = self.session.post(
-                f"{self.api_endpoint}/embeddings",
-                json=request_data
+
+            # Make API request using centralized session manager (has PKI/SSL config)
+            response = self.session_manager.make_request(
+                method="POST",
+                url=f"{self.api_endpoint}/embeddings",
+                json=request_data,
+                headers=self.headers,
+                timeout=self.timeout
             )
             
             self.stats['requests_made'] += 1
@@ -423,4 +420,5 @@ class EmbeddingService:
     
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit with cleanup."""
-        self.session.close()
+        # Session is managed centrally, no need to close here
+        pass
