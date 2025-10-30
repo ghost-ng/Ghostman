@@ -48,7 +48,8 @@ class AppCoordinator(QObject):
         self._initialized = False
         self._single_instance: Optional[SingleInstanceDetector] = None
         self._rag_coordinator = None  # RAG coordinator instance
-        
+        self._api_validator = None  # Periodic API validator instance
+
         logger.info("AppCoordinator created")
     
     def initialize(self) -> bool:
@@ -94,7 +95,10 @@ class AppCoordinator(QObject):
             
             # Initialize UI components (will be implemented)
             self._initialize_ui_components()
-            
+
+            # Initialize periodic API validator
+            self._initialize_api_validator()
+
             # Initialize RAG coordinator
             self._initialize_rag_system()
             
@@ -220,30 +224,51 @@ class AppCoordinator(QObject):
             self._system_tray = None
             self._main_window = None
     
+    def _initialize_api_validator(self):
+        """Initialize periodic API validation service."""
+        try:
+            from ..infrastructure.ai.periodic_api_validator import PeriodicAPIValidator
+
+            self._api_validator = PeriodicAPIValidator()
+
+            # Connect signals - these will trigger banner actions
+            if self._main_window and hasattr(self._main_window, 'repl_widget'):
+                # validation_failed signal will be connected to banner once banner is created in REPL
+                # validation_succeeded will auto-hide banner
+                pass  # Signals connected in REPL widget initialization
+
+            # Start periodic validation checks
+            self._api_validator.start_periodic_checks()
+            logger.info("Periodic API validator initialized (10-minute intervals)")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize API validator: {e}")
+            self._api_validator = None
+
     def _initialize_rag_system(self):
         """Initialize RAG system integration."""
         try:
             # Import conversation service
             from ..infrastructure.conversation_management.services.conversation_service import ConversationService
             from ..infrastructure.conversation_management.repositories.conversation_repository import ConversationRepository
-            
+
             # Initialize conversation service (if not already available)
             if not hasattr(self, '_conversation_service'):
                 repo = ConversationRepository()
                 self._conversation_service = ConversationService(repo)
-            
+
             # Initialize RAG coordinator
             self._rag_coordinator = initialize_rag_coordinator(self._conversation_service)
-            
+
             if self._rag_coordinator.is_enabled():
                 logger.info("RAG system initialized successfully")
-                
+
                 # Enhance main window REPL if available
                 self._enhance_main_window_rag()
             else:
                 status = self._rag_coordinator.get_status()
                 logger.info(f"RAG system disabled: {status.get('error', 'Unknown reason')}")
-            
+
         except Exception as e:
             logger.error(f"Failed to initialize RAG system: {e}")
     
@@ -418,8 +443,13 @@ class AppCoordinator(QObject):
     def _cleanup_on_shutdown(self):
         """Comprehensive cleanup operations on application shutdown."""
         logger.info("🧹 Running comprehensive cleanup operations...")
-        
+
         try:
+            # Shutdown API validator
+            if self._api_validator:
+                self._api_validator.shutdown()
+                logger.info("API validator shut down")
+
             # Cleanup RAG system first
             if self._rag_coordinator:
                 cleanup_rag_coordinator()
@@ -751,11 +781,22 @@ class AppCoordinator(QObject):
                 settings_applied += len(config["interface"]) if isinstance(config["interface"], dict) else 1
                 logger.info("✓ Interface settings applied")
             
-            # Apply AI model settings  
+            # Apply AI model settings
             if "ai_model" in config:
                 logger.info("🤖 Applying AI model settings...")
                 self._apply_ai_model_settings(config["ai_model"])
                 settings_applied += len(config["ai_model"]) if isinstance(config["ai_model"], dict) else 1
+
+                # Reset API validator state when API settings change
+                if self._api_validator:
+                    logger.info("🔄 Resetting API validator due to AI model settings change")
+                    self._api_validator.reset_failure_state()
+                    # Reset banner dismissal in REPL widget if available
+                    if self._main_window and hasattr(self._main_window, 'repl_widget'):
+                        if hasattr(self._main_window.repl_widget, 'api_error_banner'):
+                            self._main_window.repl_widget.api_error_banner.reset_dismissal()
+                    # Trigger immediate validation
+                    self._api_validator.validate_now()
                 logger.info("✓ AI model settings applied")
             
             # Apply advanced settings

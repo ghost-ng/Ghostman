@@ -181,11 +181,14 @@ class GhostmanApplication:
             
             # Setup Qt application
             self.app = self.setup_qt_application()
-            
+
             # Initialize coordinator
             if not self.initialize_coordinator():
                 logger.error("Failed to initialize application")
                 return 1
+
+            # Make coordinator accessible from QApplication for widgets
+            self.app.coordinator = self.coordinator
             
             # Start in tray mode
             self.coordinator.start_in_tray_mode()
