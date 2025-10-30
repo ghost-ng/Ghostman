@@ -246,6 +246,8 @@ class APIErrorBanner(QFrame):
             error_message: Error message to display
             provider_name: Name of the API provider (e.g., "OpenAI API")
         """
+        logger.info(f"🔔 show_error() called - provider: {provider_name}, dismissed: {self._is_dismissed_by_user}")
+
         # Don't show if user dismissed it
         if self._is_dismissed_by_user:
             logger.debug("Banner dismissed by user, not showing again")
@@ -257,6 +259,7 @@ class APIErrorBanner(QFrame):
 
         # Set message text
         self.message_label.setText(f"API Connection Lost - {provider_name}")
+        logger.debug(f"Banner message set: API Connection Lost - {provider_name}")
 
         # Generate hints based on error message
         hints = self._generate_hints(error_message)

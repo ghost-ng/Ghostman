@@ -3132,20 +3132,10 @@ class REPLWidget(QWidget):
             # Add to layout
             parent_layout.addWidget(self.api_error_banner)
 
-            # Connect to API validator if available (from app coordinator)
-            try:
-                # Import app to get coordinator
-                from PyQt6.QtWidgets import QApplication
-                app = QApplication.instance()
-                if app and hasattr(app, 'coordinator'):
-                    coordinator = app.coordinator
-                    if coordinator and hasattr(coordinator, '_api_validator') and coordinator._api_validator:
-                        # Connect validator signals to banner
-                        coordinator._api_validator.validation_failed.connect(self._on_api_validation_failed)
-                        coordinator._api_validator.validation_succeeded.connect(self._on_api_validation_succeeded)
-                        logger.info("API error banner connected to validator")
-            except Exception as e:
-                logger.warning(f"Could not connect banner to API validator: {e}")
+            # Connect to API validator via coordinator (deferred to ensure both are ready)
+            # Use QTimer to ensure coordinator connection happens after full initialization
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(100, self._connect_banner_to_validator)
 
             logger.debug("API error banner initialized")
 
@@ -3153,14 +3143,34 @@ class REPLWidget(QWidget):
             logger.error(f"Failed to initialize API error banner: {e}")
             self.api_error_banner = None
 
+    def _connect_banner_to_validator(self):
+        """Connect banner to validator (called after initialization)."""
+        try:
+            from PyQt6.QtWidgets import QApplication
+            app = QApplication.instance()
+            if app and hasattr(app, 'coordinator'):
+                coordinator = app.coordinator
+                if coordinator and hasattr(coordinator, '_connect_api_validator_to_banner'):
+                    coordinator._connect_api_validator_to_banner()
+                    logger.info("✓ Banner connection to validator requested")
+                else:
+                    logger.warning("Coordinator or connection method not available")
+            else:
+                logger.warning("QApplication or coordinator not available for banner connection")
+        except Exception as e:
+            logger.error(f"Failed to connect banner to validator: {e}")
+
     def _on_api_validation_failed(self, result):
         """Handle API validation failure (show banner)."""
         try:
+            logger.info(f"🔴 API validation failed signal received: {result.provider_name}")
             if self.api_error_banner:
                 error_message = result.error_message or "Unknown error"
                 provider_name = result.provider_name or "API"
                 self.api_error_banner.show_error(error_message, provider_name)
-                logger.info(f"Banner shown for API failure: {provider_name}")
+                logger.info(f"✓ Banner shown for API failure: {provider_name}")
+            else:
+                logger.error("❌ Banner not available to show error")
         except Exception as e:
             logger.error(f"Failed to show API error banner: {e}")
 

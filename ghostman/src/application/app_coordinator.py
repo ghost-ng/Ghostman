@@ -231,11 +231,8 @@ class AppCoordinator(QObject):
 
             self._api_validator = PeriodicAPIValidator()
 
-            # Connect signals - these will trigger banner actions
-            if self._main_window and hasattr(self._main_window, 'repl_widget'):
-                # validation_failed signal will be connected to banner once banner is created in REPL
-                # validation_succeeded will auto-hide banner
-                pass  # Signals connected in REPL widget initialization
+            # Signals will be connected after REPL widget initializes its banner
+            # Connection happens in _connect_api_validator_to_banner()
 
             # Start periodic validation checks
             self._api_validator.start_periodic_checks()
@@ -244,6 +241,31 @@ class AppCoordinator(QObject):
         except Exception as e:
             logger.error(f"Failed to initialize API validator: {e}")
             self._api_validator = None
+
+    def _connect_api_validator_to_banner(self):
+        """Connect API validator signals to banner (called after banner is created)."""
+        try:
+            if not self._api_validator:
+                logger.warning("Cannot connect validator to banner - validator not initialized")
+                return
+
+            if not self._main_window or not hasattr(self._main_window, 'repl_widget'):
+                logger.warning("Cannot connect validator to banner - REPL widget not available")
+                return
+
+            repl_widget = self._main_window.repl_widget
+            if not hasattr(repl_widget, 'api_error_banner') or not repl_widget.api_error_banner:
+                logger.warning("Cannot connect validator to banner - banner not initialized")
+                return
+
+            # Connect validator signals to REPL widget handlers
+            self._api_validator.validation_failed.connect(repl_widget._on_api_validation_failed)
+            self._api_validator.validation_succeeded.connect(repl_widget._on_api_validation_succeeded)
+
+            logger.info("✓ API validator connected to error banner")
+
+        except Exception as e:
+            logger.error(f"Failed to connect validator to banner: {e}")
 
     def _initialize_rag_system(self):
         """Initialize RAG system integration."""
