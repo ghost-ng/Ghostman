@@ -114,29 +114,45 @@ class ConversationAIService(AIService):
             if self.conversation.messages and self.conversation.messages[0].role == 'system':
                 system_prompt = self.conversation.messages[0].content
             
-            # Create new conversation with force_create=True to allow empty conversations
-            conversation = await self.conversation_service.create_conversation(
+            # Create new conversation in-memory only (don't save to DB yet)
+            # It will be saved automatically when the first user message is sent
+            from ..models.conversation import Conversation
+            from ..models.metadata import ConversationMetadata
+
+            conversation = Conversation.create(
                 title=title or "New Conversation",
                 initial_message=system_prompt,
-                tags=tags,
-                category=category,
-                force_create=True
+                metadata=ConversationMetadata(
+                    tags=tags or set(),
+                    category=category
+                )
             )
-            
-            # Set as active
+
+            # Set as active (in-memory only for now)
             self._current_conversation_id = conversation.id
-            self.conversation_service.set_active_conversation(conversation.id)
-            
-            # Clear current context and reload from conversation
+            # Don't call set_active_conversation since conversation isn't in DB yet
+            logger.info(f"✓ Created in-memory conversation: {conversation.id} (will save on first message)")
+
+            # Clear current context and set to new empty conversation
             logger.info(f"🔍 NEW CONVERSATION - Before clear: {len(self.conversation.messages)} messages")
             self.conversation.clear()
             logger.info(f"🔍 NEW CONVERSATION - After clear: {len(self.conversation.messages)} messages")
-            
-            await self._load_conversation_context(conversation.id)
-            logger.info(f"🔍 NEW CONVERSATION - After load: {len(self.conversation.messages)} messages")
+
+            # Add system prompt if provided
+            if system_prompt:
+                from ..models.message import Message, MessageRole
+                system_message = Message(
+                    role=MessageRole.SYSTEM,
+                    content=system_prompt,
+                    conversation_id=conversation.id
+                )
+                self.conversation.add_message(system_message)
+                logger.info(f"Added system prompt to new conversation")
+
+            logger.info(f"🔍 NEW CONVERSATION - After setup: {len(self.conversation.messages)} messages")
             logger.info(f"🔍 NEW CONVERSATION - Conversation ID: {conversation.id}")
             logger.info(f"🔍 NEW CONVERSATION - Current active ID: {self._current_conversation_id}")
-            
+
             logger.info(f"✓ Started new conversation: {conversation.id}")
             return conversation.id
             
@@ -472,8 +488,31 @@ class ConversationAIService(AIService):
                 self._current_conversation_id, include_messages=True
             )
             if not conversation:
-                logger.error(f"Active conversation not found: {self._current_conversation_id}")
-                return
+                # Conversation doesn't exist in DB yet (in-memory only)
+                # Create it now since we have messages to save
+                logger.info(f"💾 Conversation {self._current_conversation_id} not in DB, creating it now...")
+                try:
+                    # Create conversation in database with current messages
+                    from ..models.conversation import Conversation as ConvModel
+                    # Build conversation object from current context
+                    conv_to_save = ConvModel(
+                        id=self._current_conversation_id,
+                        title="New Conversation",
+                        messages=self.conversation.messages.copy()
+                    )
+                    # Save to database (will skip if empty, but we checked len > 0 above)
+                    await self.conversation_service.repository.create_conversation(conv_to_save, force_create=False)
+                    logger.info(f"✓ Created conversation in DB with {len(self.conversation.messages)} messages")
+                    # Now get it from DB for normal processing
+                    conversation = await self.conversation_service.get_conversation(
+                        self._current_conversation_id, include_messages=True
+                    )
+                    if not conversation:
+                        logger.error("Failed to retrieve newly created conversation")
+                        return
+                except Exception as create_error:
+                    logger.error(f"Failed to create conversation in DB: {create_error}")
+                    return
 
             # Check if we have new messages to save
             existing_message_count = len(conversation.messages)
