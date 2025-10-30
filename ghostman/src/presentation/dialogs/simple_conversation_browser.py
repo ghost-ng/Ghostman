@@ -243,7 +243,7 @@ class SimpleConversationBrowser(QDialog):
     def _init_ui(self):
         """Initialize clean, simple UI."""
         self.setWindowTitle("Conversations")
-        self.setModal(True)
+        self.setModal(False)  # Allow interaction with main app while browser is open
         self.resize(800, 600)
         
         layout = QVBoxLayout(self)

@@ -11,11 +11,11 @@ from datetime import datetime
 from pathlib import Path
 
 from PyQt6.QtWidgets import (
-    QFrame, QHBoxLayout, QVBoxLayout, QLabel, QScrollArea, 
+    QFrame, QHBoxLayout, QVBoxLayout, QLabel, QScrollArea,
     QWidget, QPushButton, QProgressBar, QToolButton, QSizePolicy,
-    QMenu, QWidgetAction, QCheckBox, QSpacerItem
+    QMenu, QWidgetAction, QCheckBox, QSpacerItem, QLayout, QLayoutItem
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QPropertyAnimation, QEasingCurve, QRect, QPoint
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QPropertyAnimation, QEasingCurve, QRect, QPoint, QSize
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont, QAction, QCursor
 
 # Import ColorUtils and theme system for advanced color manipulation
@@ -50,6 +50,171 @@ except ImportError:
         return fallbacks.get(color_name, fallback or '#ecf0f1')
 
 logger = logging.getLogger("ghostman.file_browser_bar")
+
+
+class FlowLayout(QLayout):
+    """
+    Custom flow layout that automatically wraps widgets to new lines.
+
+    Features:
+    - Automatic horizontal flow with wrapping
+    - Dynamic reflow on window resize
+    - Maintains widget natural sizes
+    - Efficient layout calculations
+    """
+
+    def __init__(self, parent=None, margin=0, h_spacing=-1, v_spacing=-1):
+        super().__init__(parent)
+
+        self._item_list = []
+        self._h_spacing = h_spacing
+        self._v_spacing = v_spacing
+
+        # Set layout margins
+        self.setContentsMargins(margin, margin, margin, margin)
+
+    def __del__(self):
+        """Clean up layout items."""
+        item = self.takeAt(0)
+        while item:
+            item = self.takeAt(0)
+
+    def addItem(self, item: QLayoutItem):
+        """Add item to the layout."""
+        self._item_list.append(item)
+
+    def horizontalSpacing(self) -> int:
+        """Get horizontal spacing between items."""
+        if self._h_spacing >= 0:
+            return self._h_spacing
+        else:
+            return self._smart_spacing(Qt.Orientation.Horizontal)
+
+    def verticalSpacing(self) -> int:
+        """Get vertical spacing between items."""
+        if self._v_spacing >= 0:
+            return self._v_spacing
+        else:
+            return self._smart_spacing(Qt.Orientation.Vertical)
+
+    def count(self) -> int:
+        """Return number of items in layout."""
+        return len(self._item_list)
+
+    def itemAt(self, index: int) -> QLayoutItem:
+        """Get item at specific index."""
+        if 0 <= index < len(self._item_list):
+            return self._item_list[index]
+        return None
+
+    def takeAt(self, index: int) -> QLayoutItem:
+        """Remove and return item at index."""
+        if 0 <= index < len(self._item_list):
+            return self._item_list.pop(index)
+        return None
+
+    def expandingDirections(self) -> Qt.Orientation:
+        """Return which directions this layout can expand."""
+        return Qt.Orientation(0)  # Don't expand
+
+    def hasHeightForWidth(self) -> bool:
+        """Layout height depends on width (for wrapping)."""
+        return True
+
+    def heightForWidth(self, width: int) -> int:
+        """Calculate required height for given width."""
+        return self._do_layout(QRect(0, 0, width, 0), test_only=True)
+
+    def setGeometry(self, rect: QRect):
+        """Set layout geometry and position all items."""
+        super().setGeometry(rect)
+        self._do_layout(rect, test_only=False)
+
+    def sizeHint(self) -> QSize:
+        """Calculate preferred size."""
+        return self.minimumSize()
+
+    def minimumSize(self) -> QSize:
+        """Calculate minimum size needed."""
+        size = QSize()
+
+        for item in self._item_list:
+            size = size.expandedTo(item.minimumSize())
+
+        margins = self.contentsMargins()
+        size += QSize(margins.left() + margins.right(),
+                     margins.top() + margins.bottom())
+
+        return size
+
+    def _do_layout(self, rect: QRect, test_only: bool) -> int:
+        """
+        Perform the actual layout calculation and positioning.
+
+        Args:
+            rect: Available rectangle for layout
+            test_only: If True, only calculate height without positioning
+
+        Returns:
+            Required height for the layout
+        """
+        left, top, right, bottom = self.getContentsMargins()
+        effective_rect = rect.adjusted(left, top, -right, -bottom)
+
+        x = effective_rect.x()
+        y = effective_rect.y()
+        line_height = 0
+
+        h_spacing = self.horizontalSpacing()
+        v_spacing = self.verticalSpacing()
+
+        for item in self._item_list:
+            widget = item.widget()
+
+            # Skip invisible widgets
+            if widget and not widget.isVisible():
+                continue
+
+            space_x = h_spacing
+            space_y = v_spacing
+
+            next_x = x + item.sizeHint().width() + space_x
+
+            # Check if we need to wrap to next line
+            if next_x - space_x > effective_rect.right() and line_height > 0:
+                x = effective_rect.x()
+                y = y + line_height + space_y
+                next_x = x + item.sizeHint().width() + space_x
+                line_height = 0
+
+            if not test_only:
+                item.setGeometry(QRect(QPoint(x, y), item.sizeHint()))
+
+            x = next_x
+            line_height = max(line_height, item.sizeHint().height())
+
+        return y + line_height - rect.y() + bottom
+
+    def _smart_spacing(self, orientation: Qt.Orientation) -> int:
+        """Get smart spacing from parent widget style."""
+        parent = self.parent()
+        if not parent:
+            return -1
+
+        if parent.isWidgetType():
+            if orientation == Qt.Orientation.Horizontal:
+                return parent.style().layoutSpacing(
+                    QSizePolicy.ControlType.PushButton,
+                    QSizePolicy.ControlType.PushButton,
+                    Qt.Orientation.Horizontal
+                )
+            else:
+                return parent.style().layoutSpacing(
+                    QSizePolicy.ControlType.PushButton,
+                    QSizePolicy.ControlType.PushButton,
+                    Qt.Orientation.Vertical
+                )
+        return -1
 
 
 class FileStatusIndicator(QWidget):
@@ -157,19 +322,19 @@ class FileStatusIndicator(QWidget):
 
 class FileContextItem(QFrame):
     """Pill-style file context item widget (Bootstrap pill inspired)."""
-    
+
     remove_requested = pyqtSignal(str)  # file_id
     view_requested = pyqtSignal(str)    # file_id
     toggle_requested = pyqtSignal(str, bool)  # file_id, enabled
     processing_completed = pyqtSignal(str, str)  # file_id, status (completed/failed)
-    
+
     def __init__(self, file_id: str, filename: str, file_size: int = 0, file_type: str = "", theme_manager=None, conversation_id: str = None, tab_id: str = None):
         super().__init__()
-        
+
         # DEBUG: Log constructor parameters
         logger.info(f"🔍 FileContextItem.__init__: file_id={file_id}, conversation_id={conversation_id}, tab_id={tab_id}")
         print(f"🔍 FileContextItem.__init__: file_id={file_id}, conversation_id={conversation_id}, tab_id={tab_id}")
-        
+
         self.file_id = file_id
         self.filename = filename
         self.file_size = file_size
@@ -180,18 +345,24 @@ class FileContextItem(QFrame):
         self.tokens_used = 0
         self.relevance_score = 0.0
         self.is_enabled = True  # Whether file is included in context
-        
+
+        # Error handling attributes
+        self.has_error = False
+        self.error_message = ""
+        self._toggle_disabled = False
+
         # CRITICAL FIX: Add conversation and tab association
         self.conversation_id = conversation_id
         self.tab_id = tab_id
-        
+
         # DEBUG: Verify attributes were set
         logger.info(f"🔍 FileContextItem: Set conversation_id={self.conversation_id}, tab_id={self.tab_id}")
         print(f"🔍 FileContextItem: Set conversation_id={self.conversation_id}, tab_id={self.tab_id}")
-        
+
         self._init_ui()
         self._apply_styling()
         self._setup_toggle_functionality()
+        self._setup_tooltips()
     
     def _init_ui(self):
         """Initialize pill-style UI components."""
@@ -270,7 +441,7 @@ class FileContextItem(QFrame):
         # This allows the badge to grow to fit content up to max width
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.setFixedHeight(20)  # Thinner badge height
-        self.setMinimumWidth(120)  # Increased minimum to accommodate typical filenames
+        self.setMinimumWidth(150)  # Increased minimum to 150px for better readability
         self.setMaximumWidth(220)  # Increased maximum to prevent clipping
 
         # No widget margins - spacing handled by CSS margin property
@@ -628,9 +799,89 @@ class FileContextItem(QFrame):
         """Setup click-to-toggle functionality."""
         # Make the pill clickable (except for the remove button)
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        
+
+    def _setup_tooltips(self):
+        """Setup tooltips to show full filename when truncated."""
+        # Show full filename if it's truncated
+        if len(self.filename) > 18:  # Same max_length as _get_pill_name
+            self.setToolTip(self.filename)
+        else:
+            self.setToolTip("")
+
+    def _update_error_tooltip(self):
+        """Update tooltip to show error message when file has error."""
+        if self.has_error and self.error_message:
+            # Extract meaningful lines from error message (skip generic headers)
+            error_lines = self.error_message.split('\n')
+            meaningful_lines = []
+
+            # Skip generic headers and collect meaningful content
+            for line in error_lines:
+                line = line.strip()
+                # Skip empty lines and generic headers
+                if not line:
+                    continue
+                if line.startswith('Failed to upload'):
+                    continue
+                if line.startswith('Error:') and len(line) < 20:  # Generic "Error: X" lines
+                    continue
+                if line.startswith('If this persists'):
+                    break  # Stop at the "If this persists" section
+
+                # Add meaningful lines
+                if line:
+                    meaningful_lines.append(line)
+
+            # Build error summary (first 2-3 meaningful lines)
+            if meaningful_lines:
+                error_summary = '\n'.join(meaningful_lines[:3])
+            else:
+                error_summary = "File processing failed"
+
+            # Build tooltip
+            if len(self.filename) > 18:
+                # Truncated filename + error
+                error_tooltip = f"📄 {self.filename}\n\n❌ {error_summary}"
+            else:
+                # Just error (filename visible in badge)
+                error_tooltip = f"❌ {error_summary}"
+
+            self.setToolTip(error_tooltip)
+        elif len(self.filename) > 18:
+            self.setToolTip(self.filename)
+        else:
+            self.setToolTip("")
+
+    def _disable_toggle(self):
+        """Disable toggle functionality when file has error."""
+        self._toggle_disabled = True
+        self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
+
+    def set_error(self, error_message: str):
+        """Set error state for this file and disable toggling."""
+        self.has_error = True
+        self.error_message = error_message
+        self.processing_status = "failed"
+        self._disable_toggle()
+        self._update_error_tooltip()
+        self._apply_styling()
+        logger.info(f"File {self.file_id} set to error state: {error_message}")
+
+    def clear_error(self):
+        """Clear error state for this file."""
+        self.has_error = False
+        self.error_message = ""
+        self._toggle_disabled = False
+        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self._setup_tooltips()
+        self._apply_styling()
+        logger.info(f"File {self.file_id} error state cleared")
+
     def toggle_enabled(self):
         """Toggle the enabled state of this file."""
+        # Don't allow toggling if disabled due to error
+        if self._toggle_disabled:
+            return
         self.is_enabled = not self.is_enabled
         self._apply_styling()
         self.toggle_requested.emit(self.file_id, self.is_enabled)
@@ -647,6 +898,8 @@ class FileContextItem(QFrame):
         if event.button() == Qt.MouseButton.LeftButton:
             # Check if click was on the remove button area
             remove_btn_rect = self.remove_btn.geometry()
+
+            # Only toggle if not clicking on remove button
             if not remove_btn_rect.contains(event.position().toPoint()):
                 self.toggle_enabled()
         super().mousePressEvent(event)
@@ -680,12 +933,7 @@ class FileBrowserBar(QFrame):
         self.file_items: Dict[str, FileContextItem] = {}
         self.max_visible_files = 20  # More files in grid
         self._animation = None
-        
-        # Grid layout tracking
-        self.current_row_layout = None
-        self.pills_in_current_row = 0
-        self.max_pills_per_row = 4
-        
+
         self.setVisible(False)  # Initially hidden
 
         # Set flexible size constraints for file badges
@@ -776,18 +1024,12 @@ class FileBrowserBar(QFrame):
         files_layout.setContentsMargins(8, 0, 8, 4)  # No top margin, bottom margin to prevent badge cutoff
         files_layout.setSpacing(0)  # No spacing between elements
         
-        # Grid container for Bootstrap-style pills
+        # Container for Bootstrap-style pills with FlowLayout
         self.pills_container = QWidget()
         self.pills_container.setObjectName("pills_container")
 
-        # Use a flow layout-like approach with QHBoxLayout and wrapping
-        self.pills_grid = QVBoxLayout(self.pills_container)  # Vertical for rows
-        self.pills_grid.setContentsMargins(0, 0, 0, 0)
-        self.pills_grid.setSpacing(2)  # Minimal spacing between badge rows
-
-        self.current_row_layout = None
-        self.pills_in_current_row = 0
-        self.max_pills_per_row = 4  # Grid layout
+        # Use FlowLayout for automatic wrapping
+        self.pills_flow = FlowLayout(self.pills_container, margin=0, h_spacing=4, v_spacing=4)
 
         # Wrap pills container in scroll area for overflow handling
         pills_scroll = QScrollArea()
@@ -1342,29 +1584,9 @@ class FileBrowserBar(QFrame):
         item.view_requested.connect(self.file_viewed.emit)
         item.toggle_requested.connect(self.file_toggled.emit)
         item.processing_completed.connect(self._on_file_processing_completed)
-        
-        # Add to grid layout
-        if not self.current_row_layout or self.pills_in_current_row >= self.max_pills_per_row:
-            # Create new row
-            self.current_row_layout = QHBoxLayout()
-            self.current_row_layout.setSpacing(2)  # Minimal spacing between badges in a row
-            self.current_row_layout.setContentsMargins(0, 0, 0, 0)
 
-            row_widget = QWidget()
-            row_widget.setLayout(self.current_row_layout)
-            # Ensure row widget doesn't expand beyond content
-            row_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-            self.pills_grid.addWidget(row_widget)
-
-            self.pills_in_current_row = 0
-
-        # Add item to current row with NO stretch factor initially
-        # This prevents the item from being compressed by stretch spacers
-        self.current_row_layout.addWidget(item, 0, Qt.AlignmentFlag.AlignLeft)
-        self.pills_in_current_row += 1
-
-        # REMOVED: addStretch() was forcing badges to minimum width
-        # Instead, let badges size naturally within their constraints
+        # Add to flow layout - simple one-line addition
+        self.pills_flow.addWidget(item)
         self.file_items[file_id] = item
         
         # Update status
@@ -1381,7 +1603,7 @@ class FileBrowserBar(QFrame):
         """Handle file removal request."""
         self.remove_file(file_id)
         self.file_removed.emit(file_id)
-    
+
     def _on_file_processing_completed(self, file_id: str, status: str):
         """Handle file processing completion - hide spinner and propagate signal."""
         logger.info(f"🔄 _on_file_processing_completed called: {file_id} - {status}")
@@ -1419,8 +1641,13 @@ class FileBrowserBar(QFrame):
             self._update_status_display()
             logger.debug(f"Removed file item: {file_id}")
     
-    def update_file_status(self, file_id: str, status: str, progress: float = 0.0):
-        """Update file processing status."""
+    def update_file_status(self, file_id: str, status: str, progress: float = 0.0) -> str:
+        """
+        Update file processing status.
+
+        Returns:
+            The actual file_id used (may differ from input if filename match was used)
+        """
         logger.info(f"🔍 DEBUG: update_file_status called - file_id: {file_id}, status: {status}")
         logger.info(f"🔍 DEBUG: Available file IDs: {list(self.file_items.keys())}")
         try:
@@ -1430,6 +1657,7 @@ class FileBrowserBar(QFrame):
                 logger.info(f"🔍 DEBUG: Updated status for {file_id}")
                 self._update_status_display()
                 logger.info(f"🔍 DEBUG: Updated status display for {file_id}")
+                return file_id
             else:
                 logger.warning(f"🔍 DEBUG: File item not found for {file_id}")
                 logger.info(f"🔍 DEBUG: Trying to find by filename match...")
@@ -1439,8 +1667,9 @@ class FileBrowserBar(QFrame):
                         logger.info(f"🔍 DEBUG: Found match by filename: {item_id} -> {item.filename}")
                         item.update_status(status, progress)
                         self._update_status_display()
-                        return
+                        return item_id  # Return the actual file_id
                 logger.warning(f"🔍 DEBUG: No filename match found either")
+                return file_id  # Return original if not found
         except Exception as e:
             logger.error(f"🔍 DEBUG: Exception in update_file_status: {e}")
             raise
@@ -1688,35 +1917,26 @@ class FileBrowserBar(QFrame):
         ]
     
     def _rebuild_grid_layout(self):
-        """Rebuild the grid layout after item removal."""
+        """Rebuild the flow layout after item removal."""
         # Clear current layout
-        for i in reversed(range(self.pills_grid.count())):
-            child = self.pills_grid.itemAt(i).widget()
-            if child:
-                child.deleteLater()
-        
-        # Reset grid tracking
-        self.current_row_layout = None
-        self.pills_in_current_row = 0
-        
-        # Re-add all items
+        while self.pills_flow.count() > 0:
+            item = self.pills_flow.takeAt(0)
+            if item and item.widget():
+                # Don't delete the widget, just remove from layout
+                pass
+
+        # Re-add all items to flow layout
         for file_id, item in self.file_items.items():
-            if not self.current_row_layout or self.pills_in_current_row >= self.max_pills_per_row:
-                # Create new row
-                self.current_row_layout = QHBoxLayout()
-                self.current_row_layout.setSpacing(2)  # Minimal spacing between badges in a row
-                self.current_row_layout.setContentsMargins(0, 0, 0, 0)
+            self.pills_flow.addWidget(item)
 
-                row_widget = QWidget()
-                row_widget.setLayout(self.current_row_layout)
-                # Ensure row widget doesn't expand beyond content
-                row_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-                self.pills_grid.addWidget(row_widget)
-                
-                self.pills_in_current_row = 0
-            
-            # Add item to current row with proper alignment
-            self.current_row_layout.addWidget(item, 0, Qt.AlignmentFlag.AlignLeft)
-            self.pills_in_current_row += 1
-
-            # REMOVED: addStretch() was causing badges to compress to minimum width
+    def resizeEvent(self, event):
+        """Handle resize events to trigger layout reflow and update tooltips."""
+        super().resizeEvent(event)
+        # FlowLayout automatically handles reflow, but we update tooltips
+        # in case filename truncation needs adjustment
+        for item in self.file_items.values():
+            # Use _update_error_tooltip if file has error, otherwise _setup_tooltips
+            if hasattr(item, '_update_error_tooltip') and item.has_error:
+                item._update_error_tooltip()
+            elif hasattr(item, '_setup_tooltips'):
+                item._setup_tooltips()

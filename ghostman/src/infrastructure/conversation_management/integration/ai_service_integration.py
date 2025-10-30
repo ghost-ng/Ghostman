@@ -277,6 +277,9 @@ class ConversationAIService(AIService):
             logger.error("🚨 NUCLEAR CRITICAL: AI Service has NO conversation ID - this will cause isolation failure")
             logger.error("🚫 Files uploaded to this conversation may not be findable")
 
+        # Store the original message (without RAG context) for conversation history
+        original_message = message
+
         # Enhance message with RAG context if available (with strict conversation isolation)
         enhanced_message = self._enhance_message_with_rag_context(message)
 
@@ -338,14 +341,27 @@ class ConversationAIService(AIService):
             except Exception as e:
                 logger.error(f"✗ Failed to create conversation for message: {e}")
         
-        # Call parent method with enhanced message
+        # Call parent method with enhanced message for API, but replace with original for conversation history
+        # The parent will add the message to self.conversation.messages, so we temporarily use enhanced
         result = super().send_message(enhanced_message, stream)
-        
+
+        # IMPORTANT: Replace the last user message in conversation history with the original (without RAG context)
+        # This ensures that when we save to the database, we save the clean user message without RAG metadata
+        if result.get('success') and len(self.conversation.messages) >= 2:
+            # The last two messages should be: user message (enhanced) and assistant response
+            # Replace the user message with the original
+            for i in range(len(self.conversation.messages) - 1, -1, -1):
+                if self.conversation.messages[i].role == 'user':
+                    # Found the user message, replace its content with original
+                    self.conversation.messages[i].content = original_message
+                    logger.debug(f"✓ Replaced enhanced message with original in conversation history")
+                    break
+
         # Debug: Log what the parent method returned
         logger.info(f"🔍 CONVERSATION AI SERVICE - Parent result: success={result.get('success')}")
         logger.info(f"🔍 CONVERSATION AI SERVICE - Parent response length: {len(result.get('response', '')) if result.get('response') else 0}")
         logger.info(f"🔍 CONVERSATION AI SERVICE - Parent response content: '{result.get('response', '')}'")
-        
+
         # Log the result with updated context info
         if result.get('success'):
             logger.info(f"✓ Message sent successfully. Context now has: {len(self.conversation.messages)} messages")
@@ -445,7 +461,12 @@ class ConversationAIService(AIService):
 
             logger.info(f"💾 Saving conversation context for {self._current_conversation_id}")
             logger.info(f"💾 Current AI context has {len(self.conversation.messages)} messages")
-            
+
+            # RULE: Do not save conversations with 0 messages
+            if len(self.conversation.messages) == 0:
+                logger.info("💾 Skipping save - conversation has 0 messages")
+                return
+
             # Get the latest messages that need to be saved
             conversation = await self.conversation_service.get_conversation(
                 self._current_conversation_id, include_messages=True
@@ -453,13 +474,13 @@ class ConversationAIService(AIService):
             if not conversation:
                 logger.error(f"Active conversation not found: {self._current_conversation_id}")
                 return
-            
+
             # Check if we have new messages to save
             existing_message_count = len(conversation.messages)
             current_message_count = len(self.conversation.messages)
-            
+
             logger.debug(f"💾 Database has {existing_message_count} messages, AI context has {current_message_count} messages")
-            
+
             if current_message_count > existing_message_count:
                 # Save new messages
                 new_messages = self.conversation.messages[existing_message_count:]

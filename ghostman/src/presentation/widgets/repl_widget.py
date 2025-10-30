@@ -3978,8 +3978,217 @@ class REPLWidget(QWidget):
         except Exception as e:
             logger.error(f"Failed to handle upload files from browser: {e}")
     
+    def _get_specific_error_message(self, error: Exception, filename: str, file_path: str) -> str:
+        """
+        Generate a user-friendly, specific error message based on the exception type.
+
+        Args:
+            error: The exception that was raised
+            filename: Name of the file being processed
+            file_path: Path to the file
+
+        Returns:
+            A detailed, actionable error message for the user
+        """
+        import os
+        from pathlib import Path
+
+        error_type = type(error).__name__
+        error_str = str(error).lower()
+
+        # FileNotFoundError - file was moved or deleted
+        if isinstance(error, FileNotFoundError) or "no such file" in error_str or "file not found" in error_str:
+            return (
+                f"File '{filename}' could not be found.\n\n"
+                f"The file may have been moved, renamed, or deleted after selection.\n\n"
+                f"Please verify the file exists and try again."
+            )
+
+        # PermissionError - no read access
+        if isinstance(error, PermissionError) or "permission denied" in error_str or "access denied" in error_str:
+            return (
+                f"Permission denied for file '{filename}'.\n\n"
+                f"You may not have permission to read this file. Check that:\n"
+                f"• The file is not locked by another program\n"
+                f"• You have read permissions for the file\n"
+                f"• The file is not in a restricted system directory"
+            )
+
+        # IsADirectoryError - tried to upload a directory
+        if isinstance(error, IsADirectoryError) or (file_path and os.path.isdir(file_path)):
+            return (
+                f"Cannot upload '{filename}' - it is a directory.\n\n"
+                f"Please select individual files instead.\n\n"
+                f"To upload multiple files from a folder, select them individually."
+            )
+
+        # File too large (> 50MB)
+        try:
+            if file_path and os.path.exists(file_path):
+                file_size = os.path.getsize(file_path)
+                if file_size > 50 * 1024 * 1024:  # 50MB
+                    size_mb = file_size / (1024 * 1024)
+                    return (
+                        f"File '{filename}' is too large to upload ({size_mb:.1f}MB).\n\n"
+                        f"Maximum file size: 50MB\n\n"
+                        f"Try:\n"
+                        f"• Compressing the file\n"
+                        f"• Splitting it into smaller files\n"
+                        f"• Removing unnecessary content"
+                    )
+        except Exception:
+            pass
+
+        # Check for "too large" in error message
+        if "too large" in error_str or ("size" in error_str and "maximum" in error_str):
+            return (
+                f"File '{filename}' is too large to upload.\n\n"
+                f"Maximum file size: 50MB\n\n"
+                f"Try:\n"
+                f"• Compressing the file\n"
+                f"• Splitting it into smaller files\n"
+                f"• Removing unnecessary content"
+            )
+
+        # UnicodeDecodeError - encoding issues
+        if isinstance(error, UnicodeDecodeError) or "encoding" in error_str or "decode" in error_str or "codec" in error_str:
+            encoding = getattr(error, 'encoding', 'unknown') if isinstance(error, UnicodeDecodeError) else 'unknown'
+            return (
+                f"File '{filename}' contains invalid or unsupported characters.\n\n"
+                f"Encoding: {encoding}\n\n"
+                f"This usually means:\n"
+                f"• The file uses an unsupported text encoding\n"
+                f"• The file is binary but was detected as text\n"
+                f"• The file contains corrupted data\n\n"
+                f"Try:\n"
+                f"• Converting the file to UTF-8 encoding\n"
+                f"• Verifying the file is not corrupted\n"
+                f"• Using a different file format"
+            )
+
+        # MemoryError - file too large to process
+        if isinstance(error, MemoryError) or "memory" in error_str:
+            return (
+                f"Insufficient memory to process '{filename}'.\n\n"
+                f"The file is too large for available system memory.\n\n"
+                f"Try:\n"
+                f"• Closing other applications to free memory\n"
+                f"• Splitting the file into smaller parts\n"
+                f"• Processing a smaller version of the file"
+            )
+
+        # TimeoutError - processing took too long
+        if isinstance(error, TimeoutError) or "timeout" in error_str or "timed out" in error_str:
+            return (
+                f"Processing '{filename}' took too long and timed out.\n\n"
+                f"This can happen with:\n"
+                f"• Very large files\n"
+                f"• Complex file formats\n"
+                f"• Slow network connections (for remote files)\n\n"
+                f"Try:\n"
+                f"• Using a smaller file\n"
+                f"• Checking your network connection\n"
+                f"• Simplifying the file content"
+            )
+
+        # No meaningful content extracted
+        if "no meaningful content" in error_str or "empty" in error_str:
+            return (
+                f"File '{filename}' appears to be empty or contains no readable content.\n\n"
+                f"This can happen with:\n"
+                f"• Empty files\n"
+                f"• Files with only whitespace\n"
+                f"• Corrupted files\n"
+                f"• Unsupported file formats\n\n"
+                f"Please:\n"
+                f"• Verify the file contains actual content\n"
+                f"• Try opening the file to check it's not corrupted\n"
+                f"• Ensure the file format is supported"
+            )
+
+        # ChromaDB/RAG/API/embedding errors
+        if "chroma" in error_str or "embedding" in error_str or "api" in error_str or "model" in error_str:
+            return (
+                f"Failed to create embeddings for '{filename}'.\n\n"
+                f"This is usually due to:\n"
+                f"• API configuration issues\n"
+                f"• Network connectivity problems\n"
+                f"• API rate limits or quota exceeded\n"
+                f"• Invalid API credentials\n\n"
+                f"Please:\n"
+                f"• Check your API configuration in settings\n"
+                f"• Verify your network connection\n"
+                f"• Check your API usage limits\n"
+                f"• Try again in a few moments"
+            )
+
+        # API key errors
+        if "api key" in error_str or "api_key" in error_str or "authentication" in error_str:
+            return (
+                f"API authentication error for '{filename}'.\n\n"
+                f"Your API credentials appear to be invalid or missing.\n\n"
+                f"Please:\n"
+                f"• Check your API key configuration in settings\n"
+                f"• Verify your API key is valid and active\n"
+                f"• Ensure you have sufficient API credits"
+            )
+
+        # Unsupported file format
+        file_ext = Path(file_path).suffix.lower() if file_path else ""
+        supported_extensions = {'.txt', '.py', '.js', '.json', '.md', '.csv', '.html', '.css', '.xml', '.yaml', '.yml', '.java', '.cpp', '.c', '.h', '.rs', '.go', '.rb', '.php', '.ts', '.tsx', '.jsx', '.sh', '.bat', '.sql', '.r', '.scala', '.kt', '.swift', '.m', '.mm'}
+
+        if (file_ext and file_ext not in supported_extensions) or "unsupported" in error_str or "format" in error_str:
+            if file_ext:
+                return (
+                    f"File format '{file_ext}' is not supported for '{filename}'.\n\n"
+                    f"Supported formats include:\n"
+                    f"• Text files (.txt, .md, .csv)\n"
+                    f"• Code files (.py, .js, .java, .cpp, etc.)\n"
+                    f"• Documents (.pdf, .docx)\n"
+                    f"• Data files (.json, .xml, .yaml)\n\n"
+                    f"Try:\n"
+                    f"• Converting the file to a supported format\n"
+                    f"• Exporting as plain text"
+                )
+            else:
+                return (
+                    f"Unsupported file format for '{filename}'.\n\n"
+                    f"Please use a supported file format such as:\n"
+                    f"• Text files (.txt, .md, .csv)\n"
+                    f"• Code files (.py, .js, .java, .cpp, etc.)\n"
+                    f"• Data files (.json, .xml, .yaml)"
+                )
+
+        # OSError - various OS-level issues
+        if isinstance(error, OSError):
+            return (
+                f"System error while accessing '{filename}'.\n\n"
+                f"{str(error)}\n\n"
+                f"This could be due to:\n"
+                f"• File system issues\n"
+                f"• Disk errors\n"
+                f"• File in use by another program\n"
+                f"• Insufficient disk space\n\n"
+                f"Try:\n"
+                f"• Closing programs that might be using the file\n"
+                f"• Checking disk space\n"
+                f"• Verifying file system integrity"
+            )
+
+        # Generic error with context
+        return (
+            f"Failed to upload '{filename}'.\n\n"
+            f"Error: {error_type}\n"
+            f"{str(error)}\n\n"
+            f"If this persists:\n"
+            f"• Check the file is not corrupted\n"
+            f"• Try a different file\n"
+            f"• Review the application logs for details"
+        )
+
     def _process_uploaded_files(self, file_paths):
         """Process the uploaded files for context with immediate embeddings processing."""
+        failed_files = []  # Track files that failed to upload
         try:
             # CRITICAL FIX: Always ensure we have a conversation before uploading files
             current_conversation_id = self._get_safe_conversation_id()
@@ -4066,23 +4275,67 @@ class REPLWidget(QWidget):
                 import os
                 from pathlib import Path
                 from datetime import datetime
-                
-                filename = os.path.basename(file_path)
-                file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
-                
-                # Detect file type
-                file_ext = os.path.splitext(filename)[1].lower().lstrip('.')
-                
-                # Generate unique file_id for RAG pipeline
-                path_obj = Path(file_path)
-                timestamp = datetime.now().timestamp()
-                file_id = f"file_{path_obj.stem}_{int(timestamp)}"
+
+                try:
+                    # Validate file exists and is readable
+                    if not os.path.exists(file_path):
+                        error_msg = self._get_specific_error_message(FileNotFoundError(), os.path.basename(file_path), file_path)
+                        failed_files.append(error_msg)
+                        logger.error(f"File not found: {file_path}")
+                        continue
+
+                    if os.path.isdir(file_path):
+                        error_msg = self._get_specific_error_message(Exception("Is a directory"), os.path.basename(file_path), file_path)
+                        failed_files.append(error_msg)
+                        logger.error(f"Cannot upload directory: {file_path}")
+                        continue
+
+                    # Check file permissions
+                    if not os.access(file_path, os.R_OK):
+                        error_msg = self._get_specific_error_message(PermissionError(), os.path.basename(file_path), file_path)
+                        failed_files.append(error_msg)
+                        logger.error(f"Permission denied: {file_path}")
+                        continue
+
+                    filename = os.path.basename(file_path)
+                    file_size = os.path.getsize(file_path)
+
+                    # Check file size (50MB limit)
+                    if file_size > 50 * 1024 * 1024:
+                        error_msg = self._get_specific_error_message(Exception(f"File too large: {file_size} bytes"), filename, file_path)
+                        failed_files.append(error_msg)
+                        logger.error(error_msg)
+                        continue
+
+                    # Detect file type
+                    file_ext = os.path.splitext(filename)[1].lower().lstrip('.')
+
+                    # Validate file extension
+                    supported_extensions = {'txt', 'py', 'js', 'json', 'md', 'csv', 'html', 'css', 'xml', 'yaml', 'yml', 'java', 'cpp', 'c', 'h', 'rs', 'go', 'rb', 'php', 'ts', 'tsx', 'jsx'}
+                    if file_ext not in supported_extensions:
+                        error_msg = self._get_specific_error_message(Exception(f"Unsupported format: .{file_ext}"), filename, file_path)
+                        failed_files.append(error_msg)
+                        logger.error(error_msg)
+                        continue
+
+                    # Generate unique file_id for RAG pipeline
+                    path_obj = Path(file_path)
+                    timestamp = datetime.now().timestamp()
+                    file_id = f"file_{path_obj.stem}_{int(timestamp)}"
+
+                except Exception as validation_error:
+                    error_msg = self._get_specific_error_message(validation_error, os.path.basename(file_path) if file_path else "unknown", file_path)
+                    failed_files.append(error_msg)
+                    logger.error(f"File validation error: {validation_error}")
+                    continue
                 
                 # Save file association to database if we have a conversation
                 if current_conversation_id and hasattr(self, 'conversation_manager'):
                     try:
                         conv_service = self.conversation_manager.conversation_service
-                        if conv_service:
+                        if not conv_service:
+                            logger.warning(f"⚠️ No conversation service available - skipping database save for {filename}")
+                        elif conv_service:
                             # Add file to conversation in database
                             import asyncio
                             
@@ -4217,19 +4470,23 @@ class REPLWidget(QWidget):
                 
                 # Add to UI with generated file_id and conversation association
                 if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
-                    # Use the tab_id retrieved at the start of the method
-                    # No need to retrieve again - already got it before the loop
-
-                    self.file_browser_bar.add_file(
-                        file_id=file_id,  # Use generated file_id as first parameter
-                        filename=filename,
-                        file_size=file_size,
-                        file_type=file_ext,
-                        status="queued",
-                        conversation_id=current_conversation_id,
-                        tab_id=current_tab_id  # ✅ ALWAYS PASSED - retrieved before loop
-                    )
-                    logger.info(f"📄 Added file to browser: {filename} (ID: {file_id}, conversation: {current_conversation_id[:8] if current_conversation_id else 'None'}, tab: {current_tab_id})")
+                    try:
+                        # Use the tab_id retrieved at the start of the method
+                        # No need to retrieve again - already got it before the loop
+                        self.file_browser_bar.add_file(
+                            file_id=file_id,  # Use generated file_id as first parameter
+                            filename=filename,
+                            file_size=file_size,
+                            file_type=file_ext,
+                            status="queued",
+                            conversation_id=current_conversation_id,
+                            tab_id=current_tab_id if current_tab_id else None  # type: ignore[arg-type]
+                        )
+                        logger.info(f"📄 Added file to browser: {filename} (ID: {file_id}, conversation: {current_conversation_id[:8] if current_conversation_id else 'None'}, tab: {current_tab_id})")
+                    except Exception as ui_error:
+                        logger.error(f"❌ Failed to add {filename} to file browser UI: {ui_error}")
+                        import traceback
+                        traceback.print_exc()
                 
                 # Track uploaded files with file_id
                 if not hasattr(self, '_uploaded_files'):
@@ -4245,14 +4502,68 @@ class REPLWidget(QWidget):
                 if not hasattr(self, '_file_id_to_path_map'):
                     self._file_id_to_path_map = {}
                 self._file_id_to_path_map[file_id] = file_path
-                
+
                 # Start embeddings processing with file_id
-                self._start_immediate_embeddings_processing(file_path, filename, file_id)
-            
-            logger.info(f"🚀 Started immediate processing for {len(file_paths)} files")
-                    
+                try:
+                    self._start_immediate_embeddings_processing(file_path, filename, file_id)
+                    logger.debug(f"✅ Started embeddings processing for {filename}")
+                except Exception as embed_error:
+                    logger.error(f"❌ Failed to start embeddings processing for {filename}: {embed_error}")
+                    # Don't crash the entire upload - continue with other files
+                    import traceback
+                    traceback.print_exc()
+
+            logger.info(f"🚀 Completed processing {len(file_paths)} files")
+
+            # Show error dialog if any files failed
+            if failed_files:
+                from PyQt6.QtWidgets import QMessageBox
+                try:
+                    error_count = len(failed_files)
+                    success_count = len(file_paths) - error_count
+
+                    if success_count > 0:
+                        title = "Some Files Failed to Upload"
+                        message = f"{success_count} file(s) uploaded successfully, but {error_count} file(s) failed:\n\n"
+                    else:
+                        title = "File Upload Failed"
+                        message = f"All {error_count} file(s) failed to upload:\n\n"
+
+                    # Add up to 5 error messages
+                    for i, error_msg in enumerate(failed_files[:5]):
+                        message += f"{i + 1}. {error_msg}\n\n"
+
+                    if len(failed_files) > 5:
+                        message += f"... and {len(failed_files) - 5} more error(s).\n\n"
+
+                    message += "Check the logs for full details."
+
+                    QMessageBox.warning(
+                        self,
+                        title,
+                        message,
+                        QMessageBox.StandardButton.Ok
+                    )
+                except Exception as msg_error:
+                    logger.error(f"Failed to show error dialog: {msg_error}")
+
         except Exception as e:
-            logger.error(f"Failed to process uploaded files: {e}")
+            logger.error(f"❌ Failed to process uploaded files: {e}")
+            import traceback
+            traceback.print_exc()
+
+            # Show user-friendly error message
+            from PyQt6.QtWidgets import QMessageBox
+            try:
+                error_msg = self._get_specific_error_message(e, "multiple files", "")
+                QMessageBox.critical(
+                    self,
+                    "File Upload Error",
+                    f"{error_msg}\n\nPlease check the logs for details.",
+                    QMessageBox.StandardButton.Ok
+                )
+            except Exception as msg_error:
+                logger.error(f"Failed to show error dialog: {msg_error}")
     
     def _ensure_conversation_for_files(self) -> Optional[str]:
         """Ensure there's a conversation for file uploads, creating one if needed."""
@@ -4355,7 +4666,7 @@ class REPLWidget(QWidget):
             logger.error(f"Failed to ensure active conversation for files: {e}")
         
         return None
-    
+
     def _start_immediate_embeddings_processing(self, file_path: str, filename: str, file_id: str = None):
         """Start immediate embeddings processing for a single file."""
         try:
@@ -4670,23 +4981,33 @@ class REPLWidget(QWidget):
                 logger.info("🔍 DEBUG: About to finish processing completion handler")
                 
             else:
-                # Import enhanced error handler
+                # Get enhanced error message
+                error_message = result.get('error', 'Unknown error')
                 try:
-                    from ghostman.src.infrastructure.error_handling.enhanced_file_error_handler import get_enhanced_error_message
-                    from pathlib import Path
-                    file_path = Path(result.get('file_path', filename)) if result.get('file_path') else None
-                    enhanced_error = get_enhanced_error_message(result, file_path)
-                    logger.error(f"💥 Embeddings failed for {filename}: {enhanced_error}")
-                except ImportError:
-                    logger.error(f"💥 Embeddings failed for {filename}: {result.get('error', 'Unknown error')}")
+                    # Try to get more specific error message
+                    error_obj = Exception(error_message)
+                    error_message = self._get_specific_error_message(error_obj, filename, file_path)
+                except:
+                    pass
+
+                logger.error(f"💥 Embeddings failed for {filename}: {error_message}")
+
                 # Display file processing failure in chat instead of separate widget
                 self._display_file_status_in_chat(filename, result, "failed")
-                
-                # Update file browser bar status to "failed"
+
+                # Update file browser bar status to "failed" with error message
                 if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
                     try:
                         file_id = result.get('file_id', filename)
-                        self.file_browser_bar.update_file_status(file_id, "failed")
+                        # Get the actual file_id (may be different if filename match was used)
+                        actual_file_id = self.file_browser_bar.update_file_status(file_id, "failed")
+
+                        # Set error on the file item to show retry button and error tooltip
+                        if actual_file_id in self.file_browser_bar.file_items:
+                            file_item = self.file_browser_bar.file_items[actual_file_id]
+                            file_item.set_error(error_message)
+                            logger.info(f"✅ Set error tooltip on file badge: {actual_file_id}")
+
                         logger.info(f"📄 Updated browser bar status to 'failed' for: {filename}")
                     except Exception as bar_error:
                         logger.error(f"Failed to update browser bar status: {bar_error}")
@@ -7745,9 +8066,23 @@ class REPLWidget(QWidget):
             style: Style type for color coding (normal, input, response, system, info, warning, error)
             force_plain: If True, bypasses markdown processing for plain text rendering
         """
+        # DEBUG: Log every append_output call during restoration
+        logger.info(f"🔍 append_output() called - style: {style}, text_preview: {text[:50] if text else '(empty)'}")
+
         # Defensive check: if no output_display (no tabs yet), skip silently
         if not self.output_display:
-            logger.debug(f"Skipping output append - no tabs created yet: {text[:50]}")
+            logger.warning(f"⚠️ Skipping output append - self.output_display is None! text: {text[:50]}")
+            # DEBUG: Also check tab system state
+            if hasattr(self, 'tab_manager') and self.tab_manager:
+                logger.warning(f"🔍   tab_manager exists, active_tab_id: {self.tab_manager.active_tab_id}")
+                active_tab = self.tab_manager.get_active_tab()
+                if active_tab:
+                    logger.warning(f"🔍   active_tab exists: {active_tab.title}")
+                    logger.warning(f"🔍   active_tab.output_display exists: {hasattr(active_tab, 'output_display') and active_tab.output_display is not None}")
+                else:
+                    logger.warning(f"🔍   active_tab is None")
+            else:
+                logger.warning(f"🔍   no tab_manager")
             return
 
         if not hasattr(self, '_markdown_renderer'):
@@ -7755,6 +8090,7 @@ class REPLWidget(QWidget):
 
         # Render content with markdown support
         try:
+            logger.info(f"🔍 About to add content to output_display widget")
             if force_plain:
                 # Plain text rendering - use add_plain_text method
                 self.output_display.add_plain_text(text, style)
@@ -7762,6 +8098,8 @@ class REPLWidget(QWidget):
                 html_content = self._markdown_renderer.render(text, style, force_plain)
                 # Use the MixedContentDisplay method to add HTML content with code block extraction
                 self.output_display.add_html_content(html_content, style)
+
+            logger.info(f"✅ Successfully added content to output_display")
 
             # Performance optimization: limit content size for very long conversations
             self._manage_document_size()
@@ -8761,101 +9099,226 @@ def test_theme():
         return None
     
     def restore_conversation(self, conversation_id: str):
-        """Restore a specific conversation by ID."""
+        """Restore a specific conversation by ID - uses existing event loop."""
         if not self.conversation_manager:
             logger.warning("Cannot restore conversation - no conversation manager available")
             return
-            
+
         try:
-            logger.debug(f"Attempting to restore conversation: {conversation_id}")
-            
-            # Use async manager to handle the restore operation safely
-            from ...infrastructure.async_manager import run_async_task_safe
-            
-            def on_restore_complete(result, error):
-                if error:
-                    logger.error(f"✗ Failed to restore conversation {conversation_id}: {error}")
-                    self.append_output(f"✗ Failed to restore conversation: {error}", "error")
-                else:
-                    logger.debug(f"✓ Successfully restored conversation: {conversation_id}")
-            
-            # Run the async operation safely
-            run_async_task_safe(
-                self._restore_conversation_async(conversation_id),
-                callback=on_restore_complete,
-                timeout=30.0  # 30 second timeout for conversation restoration
-            )
-                
-        except Exception as e:
-            logger.error(f"✗ Failed to schedule conversation restore {conversation_id}: {e}", exc_info=True)
-    
-    async def _restore_conversation_async(self, conversation_id: str):
-        """Restore conversation asynchronously."""
-        try:
-            # Save current conversation if it has messages
-            if self.current_conversation and self._has_unsaved_messages():
-                await self._save_current_conversation_before_switch()
-            
-            # Simple atomic database operation: set this conversation as active, all others as pinned
-            success = self.conversation_manager.set_conversation_active_simple(conversation_id)
-            if not success:
-                logger.error(f"✗ Failed to set conversation {conversation_id} as active in database")
-                self.append_output("✗ Failed to restore conversation", "error")
+            logger.info(f"🔍 RESTORE START - conversation_id: {conversation_id[:8]}")
+
+            # Load conversation using the existing event loop via async manager
+            from ...infrastructure.async_manager import get_async_manager
+            import asyncio
+
+            async_manager = get_async_manager()
+            if not async_manager or not async_manager._loop:
+                logger.error("✗ Async manager not available or not initialized")
                 return
-            
-            # Load the conversation from database with messages
-            conversation = await self.conversation_manager.get_conversation(conversation_id, include_messages=True)
-            
-            if conversation:
-                # Set as current conversation and update AI context
-                self.current_conversation = conversation
-                logger.info(f"✓ Restored conversation: {conversation.title}")
-                
-                # Start autosave timer for the restored conversation
-                self._start_autosave_timer()
-                
-                # Update AI service context
-                if self.conversation_manager and self.conversation_manager.has_ai_service():
-                    ai_service = self.conversation_manager.get_ai_service()
-                    if ai_service:
-                        ai_service.set_current_conversation(conversation.id)
-                        logger.info(f"🔄 AI service context updated for restored conversation")
-                
-                # Clear REPL and load conversation messages
-                self.clear_output()
-                self.append_output(f"📂 Restored conversation: {conversation.title}", "system")
-                
-                # Display conversation history
-                if hasattr(conversation, 'messages') and conversation.messages:
-                    logger.info(f"📜 Restoring {len(conversation.messages)} messages")
-                    for message in conversation.messages:
-                        if hasattr(message, 'role') and hasattr(message, 'content'):
-                            if message.role.value == 'user':
-                                self.append_output(f">>> {message.content}", "input")
-                            elif message.role.value == 'assistant':
-                                self.append_output(message.content, "response")
-                            elif message.role.value == 'system':
-                                self.append_output(f"[System] {message.content}", "system")
-                else:
-                    logger.debug("No messages found for conversation")
-                
-                # Load conversation files and update file browser bar
-                self._load_conversation_files(conversation.id)
-                
-                self.append_output("", "system")  # Add spacing
-                self.append_output("💬 Conversation restored. Continue chatting...", "system")
-                
-                # Update idle detector
-                self.idle_detector.reset_activity(conversation_id)
-                
-            else:
-                logger.warning(f"⚠  Conversation {conversation_id} not found in database")
-                self.append_output(f"⚠ Could not restore conversation {conversation_id[:8]}... (not found)", "warning")
-                
+
+            # Schedule the coroutine on the existing event loop and wait for result
+            logger.info("📥 Loading conversation from database...")
+            future = asyncio.run_coroutine_threadsafe(
+                self.conversation_manager.get_conversation(conversation_id, include_messages=True),
+                async_manager._loop
+            )
+
+            # Wait for the result with a timeout
+            try:
+                conversation = future.result(timeout=10.0)
+            except TimeoutError:
+                logger.error("✗ Timeout waiting for conversation to load")
+                return
+            except Exception as e:
+                logger.error(f"✗ Error loading conversation: {e}", exc_info=True)
+                return
+
+            if not conversation:
+                logger.warning(f"⚠  Conversation {conversation_id} not found")
+                return
+
+            message_count = len(conversation.messages) if hasattr(conversation, 'messages') and conversation.messages else 0
+            logger.info(f"✓ Loaded conversation: {conversation.title} with {message_count} messages")
+
+            # RULE: Do not restore conversations with 0 messages
+            if message_count == 0:
+                logger.warning(f"⚠  Skipping restore - conversation has 0 messages")
+                from PyQt6.QtWidgets import QMessageBox
+                QMessageBox.information(
+                    self,
+                    "Cannot Restore",
+                    f"Cannot restore conversation '{conversation.title}' because it has no messages.",
+                    QMessageBox.StandardButton.Ok
+                )
+                return
+
+            # Check tab system
+            if not (hasattr(self, 'tab_manager') and self.tab_manager):
+                logger.error(f"✗ Tab manager not available")
+                return
+
+            # Create tab WITHOUT activating (to avoid _on_tab_created creating a new conversation)
+            logger.info(f"📝 Creating new tab...")
+            new_tab_id = self.tab_manager.create_tab(title=conversation.title, activate=False)
+            if not new_tab_id:
+                logger.error(f"✗ Failed to create tab")
+                return
+
+            logger.info(f"✅ Created tab: {new_tab_id[:8]}")
+
+            # Associate conversation with tab
+            self.tab_manager.associate_conversation_with_tab(new_tab_id, conversation.id)
+            logger.info(f"✅ Associated conversation with tab")
+
+            # Switch to the tab
+            self.tab_manager.switch_to_tab(new_tab_id)
+            logger.info(f"✅ Switched to tab")
+
+            # Update current conversation
+            self.current_conversation = conversation
+
+            # Update AI context
+            if self.conversation_manager and self.conversation_manager.has_ai_service():
+                ai_service = self.conversation_manager.get_ai_service()
+                if ai_service:
+                    ai_service.set_current_conversation(conversation.id)
+
+            # Load and restore file attachments for this conversation
+            try:
+                logger.info(f"📎 Loading file attachments for conversation...")
+                # Get files asynchronously via conversation_service
+                future = asyncio.run_coroutine_threadsafe(
+                    self.conversation_manager.conversation_service.get_conversation_files(conversation.id),
+                    async_manager._loop
+                )
+
+                try:
+                    files = future.result(timeout=5.0)
+                    if files:
+                        logger.info(f"📎 Found {len(files)} file attachments")
+                        # Get the current tab's file browser and populate it
+                        current_tab = self.tab_manager.get_active_tab()
+                        if current_tab and hasattr(current_tab, 'file_browser') and current_tab.file_browser:
+                            for file_info in files:
+                                # Add file to the file browser with proper parameters
+                                current_tab.file_browser.add_file(
+                                    file_id=file_info.get('file_id', ''),
+                                    filename=file_info.get('filename', 'unknown'),
+                                    file_size=file_info.get('file_size', 0),
+                                    file_type=file_info.get('file_type', ''),
+                                    status=file_info.get('processing_status', 'completed'),
+                                    conversation_id=conversation.id,
+                                    tab_id=new_tab_id
+                                )
+                            logger.info(f"✅ Restored {len(files)} file attachments to file browser")
+                        else:
+                            logger.warning(f"⚠️  File browser not available on current tab")
+                    else:
+                        logger.debug(f"No file attachments found for this conversation")
+                except TimeoutError:
+                    logger.warning(f"⚠️  Timeout loading file attachments")
+                except Exception as e:
+                    logger.warning(f"⚠️  Error loading file attachments: {e}")
+            except Exception as e:
+                logger.warning(f"⚠️  Failed to load file attachments: {e}")
+
+            # Display messages with proper formatting matching normal conversation display
+            if hasattr(conversation, 'messages') and conversation.messages:
+                logger.info(f"📜 Displaying {len(conversation.messages)} messages")
+                import html
+                for message in conversation.messages:
+                    if hasattr(message, 'role') and hasattr(message, 'content'):
+                        if message.role.value == 'user':
+                            # Clean RAG context metadata from old conversations (legacy data cleanup)
+                            clean_content = self._strip_rag_context(message.content)
+                            # Unescape HTML entities that may have been stored in the database
+                            clean_content = html.unescape(clean_content)
+
+                            # Display user message with role label, matching normal conversation format
+                            self.append_output(f"👤 **You:**\n{clean_content}", "input")
+                            self.append_output("", "normal")  # Add spacing after user message
+                        elif message.role.value == 'assistant':
+                            # Unescape HTML entities that may have been stored in the database
+                            clean_content = html.unescape(message.content)
+
+                            # Display assistant message with role label, matching normal conversation format
+                            self.append_output("🤖 **Spector:**", "response")
+                            self.append_output(clean_content, "response")
+                            # Add spacing and divider after assistant message (matching active REPL format)
+                            self.append_output("", "normal")
+                            self.append_output("\n--------------------------------------------------\n", "normal")
+                        elif message.role.value == 'system':
+                            # Unescape HTML entities that may have been stored in the database
+                            clean_content = html.unescape(message.content)
+
+                            self.append_output(f"⚙️ **System:**\n{clean_content}", "system")
+                            self.append_output("", "normal")  # Add spacing after system message
+
+            logger.info(f"✅ Conversation restored successfully")
+
         except Exception as e:
-            logger.error(f"✗ Failed to restore conversation {conversation_id}: {e}", exc_info=True)
-            self.append_output(f"✗ Failed to restore conversation: {str(e)}", "error")
-    
+            logger.error(f"✗ Failed to restore conversation: {e}", exc_info=True)
+
+    def _strip_rag_context(self, content: str) -> str:
+        """
+        Strip RAG context metadata from message content (for legacy conversations).
+
+        Removes lines that match the pattern:
+        - [CONVERSATION: path/to/file.txt (relevance: 0.XXX)]
+        - [PENDING: path/to/file.txt (relevance: 0.XXX)]
+        - Context from files: ...
+        - And the file content that follows these markers
+
+        Extracts the actual user query which typically appears after "User question:" marker.
+        """
+        import re
+
+        # Special case: if there's a "User question:" marker, extract everything after it
+        user_question_match = re.search(r'User question:\s*(.+?)$', content, re.DOTALL)
+        if user_question_match:
+            return user_question_match.group(1).strip()
+
+        # Otherwise, try to clean up the RAG context
+        lines = content.split('\n')
+
+        # Find where RAG context starts and ends
+        in_rag_context = False
+        clean_lines = []
+
+        for line in lines:
+            # Check if this line starts RAG context section
+            if line.strip().startswith('Context from files:'):
+                in_rag_context = True
+                continue
+
+            # Check if this is a file marker
+            if re.match(r'^\[(CONVERSATION|PENDING):\s+', line):
+                in_rag_context = True
+                continue
+
+            # Skip lines that are part of RAG file content
+            if in_rag_context:
+                # Check if this line looks like it's part of the injected file content
+                # (starts with # for markdown headers, or common dependency patterns)
+                if (line.startswith('#') or
+                    line.startswith('python-') or
+                    line.startswith('  ') or
+                    'requirements' in line.lower() or
+                    '&gt;=' in line or
+                    line.strip() == ''):
+                    continue
+                else:
+                    # Likely end of RAG context, start collecting user content
+                    in_rag_context = False
+                    clean_lines.append(line)
+            else:
+                clean_lines.append(line)
+
+        cleaned = '\n'.join(clean_lines).strip()
+
+        # If we couldn't extract anything meaningful, return original
+        return cleaned if cleaned else content
+
     def _has_unsaved_messages(self) -> bool:
         """Check if current conversation has unsaved messages and user messages."""
         if not self.current_conversation:
@@ -10089,6 +10552,13 @@ def test_theme():
             new_visibility = not current_visibility
             stack.setVisible(new_visibility)
             active_tab.file_browser_visible = new_visibility
+
+            # Force layout update
+            stack.updateGeometry()
+            layout = self.layout()
+            if layout:
+                layout.update()
+                layout.activate()
 
             # Update upload button visual state
             self._update_upload_button_state()

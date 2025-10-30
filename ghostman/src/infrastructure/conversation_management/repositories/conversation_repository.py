@@ -220,11 +220,13 @@ class ConversationRepository:
     
     async def update_conversation(self, conversation: Conversation) -> bool:
         """Update existing conversation using SQLAlchemy ORM."""
-        # Check if conversation has become empty and should be deleted instead
-        if self._is_empty_conversation(conversation):
-            logger.debug(f"Conversation {conversation.id} is empty, marking as deleted")
-            conversation.delete()
-            
+        # REMOVED AUTO-DELETION: Conversations should only be deleted when explicitly requested by user,
+        # not automatically during updates. This was causing conversations to be marked as deleted
+        # when update_conversation() was called before messages were added.
+        #
+        # The previous code would mark conversations as "deleted" if they had no messages,
+        # which caused new conversations to appear as deleted before messages were saved.
+
         try:
             with self.db.get_session() as session:
                 conv_model = session.query(ConversationModel).filter(
@@ -482,16 +484,19 @@ class ConversationRepository:
                 conv_model = session.query(ConversationModel).filter(
                     ConversationModel.id == message.conversation_id
                 ).first()
-                
+
                 if conv_model:
                     old_count = conv_model.message_count
+                    # Flush the session first to ensure the new message is visible in the query
+                    session.flush()
+                    # Count messages after adding the new one (no +1 needed)
                     new_count = session.query(MessageModel).filter(
                         MessageModel.conversation_id == message.conversation_id
-                    ).count() + 1  # +1 for the message we're adding
-                    
+                    ).count()
+
                     conv_model.updated_at = message.timestamp
                     conv_model.message_count = new_count
-                    
+
                     logger.debug(f"📊 Updated conversation message count: {old_count} -> {new_count}")
                 else:
                     logger.warning(f"⚠ Conversation {message.conversation_id} not found for message count update")
