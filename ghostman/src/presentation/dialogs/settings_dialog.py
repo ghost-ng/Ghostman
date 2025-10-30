@@ -1047,7 +1047,7 @@ class SettingsDialog(QDialog):
         code_display_layout = QFormLayout(code_display_group)
         
         # Auto detect code language checkbox
-        self.auto_detect_code_language_check = QCheckBox("Auto Detect Code Language")
+        self.auto_detect_code_language_check = QCheckBox("Auto Detect Code Language (Experimental)")
         self.auto_detect_code_language_check.setChecked(False)  # Default to unchecked
         self.auto_detect_code_language_check.setToolTip(
             "When enabled, attempts to automatically detect the programming language "
@@ -1057,12 +1057,10 @@ class SettingsDialog(QDialog):
         code_display_layout.addRow("", self.auto_detect_code_language_check)
         
         # Code syntax highlighting checkbox
-        self.enable_code_lexing_check = QCheckBox("Enable Code Syntax Highlighting")
+        self.enable_code_lexing_check = QCheckBox("Enable Code Syntax Highlighting (Experimental)")
         self.enable_code_lexing_check.setChecked(False)  # Default to unchecked
         self.enable_code_lexing_check.setToolTip(
             "When enabled, applies syntax highlighting (lexing) to code snippets using Pygments. "
-            "When disabled, code appears in plain monospace font without color highlighting. "
-            "Disabling can improve performance with large code blocks."
         )
         code_display_layout.addRow("", self.enable_code_lexing_check)
         
@@ -1071,8 +1069,6 @@ class SettingsDialog(QDialog):
         self.enable_debug_commands_check.setChecked(False)  # Default to unchecked
         self.enable_debug_commands_check.setToolTip(
             "When enabled, debug commands are shown in the REPL help menu. "
-            "When disabled, only basic commands (help, clear, history, resend, exit) are shown. "
-            "Debug commands provide additional diagnostic and development features."
         )
         code_display_layout.addRow("", self.enable_debug_commands_check)
         
