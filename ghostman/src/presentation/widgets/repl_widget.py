@@ -5701,19 +5701,28 @@ class REPLWidget(QWidget):
     def _apply_move_button_toggle_style(self, button: QToolButton):
         """
         Apply unified toggle styling to move button.
-        Uses the new ButtonStyleManager with special warning colors.
+        Uses theme warning color instead of bright hardcoded yellow.
         """
         colors = self.theme_manager.current_theme if self.theme_manager and THEME_SYSTEM_AVAILABLE else None
         emoji_font_stack = self._get_emoji_font_stack()
-        
-        # Special colors for move button toggle state (warning/amber)
-        special_colors = {
-            "background": "rgba(255, 215, 0, 0.8)",
-            "text": "black",
-            "hover": "rgba(255, 215, 0, 0.9)",
-            "active": "rgba(255, 215, 0, 1.0)"
-        }
-        
+
+        # Use theme warning color for better dark theme compatibility
+        if colors:
+            special_colors = {
+                "background": colors.status_warning,
+                "text": colors.text_primary,
+                "hover": colors.status_warning,  # Same color, rely on ButtonStyleManager
+                "active": colors.interactive_active
+            }
+        else:
+            # Fallback to subdued amber
+            special_colors = {
+                "background": "#f57c00",  # Darker amber
+                "text": "#000000",
+                "hover": "#fb8c00",
+                "active": "#e65100"
+            }
+
         ButtonStyleManager.apply_unified_button_style(
             button, colors, "tool", "icon", "normal", special_colors, emoji_font_stack
         )
@@ -5721,19 +5730,28 @@ class REPLWidget(QWidget):
     def _apply_pin_button_toggle_style(self, button: QToolButton):
         """
         Apply unified toggle styling to pin button.
-        Uses the same colors as move button for consistency.
+        Uses theme warning color for better dark theme compatibility (same as move button).
         """
         colors = self.theme_manager.current_theme if self.theme_manager and THEME_SYSTEM_AVAILABLE else None
         emoji_font_stack = self._get_emoji_font_stack()
-        
-        # Special colors for pin button toggle state (same as move button)
-        special_colors = {
-            "background": "rgba(255, 215, 0, 0.8)",
-            "text": "black",
-            "hover": "rgba(255, 215, 0, 0.9)",
-            "active": "rgba(255, 215, 0, 1.0)"
-        }
-        
+
+        # Use theme warning color for better dark theme compatibility (same as move button)
+        if colors:
+            special_colors = {
+                "background": colors.status_warning,
+                "text": colors.text_primary,
+                "hover": colors.status_warning,  # Same color, rely on ButtonStyleManager
+                "active": colors.interactive_active
+            }
+        else:
+            # Fallback to subdued amber
+            special_colors = {
+                "background": "#f57c00",  # Darker amber
+                "text": "#000000",
+                "hover": "#fb8c00",
+                "active": "#e65100"
+            }
+
         ButtonStyleManager.apply_unified_button_style(
             button, colors, "tool", "icon", "normal", special_colors, emoji_font_stack
         )
@@ -6220,14 +6238,24 @@ class REPLWidget(QWidget):
             colors = self.theme_manager.current_theme if self.theme_manager and THEME_SYSTEM_AVAILABLE else None
             
             if is_attached:
-                # Use success state for attached state
+                # Use a subdued success state for attached state (not bright green)
                 state = "success"
-                special_colors = {
-                    "background": colors.status_success if colors else "#4CAF50",
-                    "text": colors.background_primary if colors else "#ffffff",
-                    "hover": colors.primary_hover if colors else "#66bb6a",
-                    "active": colors.status_success if colors else "#45a049"
-                }
+                # Use primary color instead of bright status_success for better dark theme compatibility
+                if colors:
+                    special_colors = {
+                        "background": colors.primary,  # Use theme primary instead of bright green
+                        "text": colors.text_primary,
+                        "hover": colors.primary_hover,
+                        "active": colors.interactive_active  # Darken when pressed
+                    }
+                else:
+                    # Fallback to subdued green
+                    special_colors = {
+                        "background": "#2e7d32",  # Darker, subdued green
+                        "text": "#ffffff",
+                        "hover": "#388e3c",
+                        "active": "#1b5e20"
+                    }
             else:
                 # Apply theme-aware darker styling for better visibility (all themes)
                 state = "normal"
@@ -6254,19 +6282,28 @@ class REPLWidget(QWidget):
     def _apply_pin_button_toggle_style(self, button: QToolButton):
         """
         Apply unified toggle styling to pin button.
-        Uses the new ButtonStyleManager with special warning colors - SAME AS MOVE BUTTON.
+        Uses theme warning color for better dark theme compatibility - SAME AS MOVE BUTTON.
         """
         colors = self.theme_manager.current_theme if self.theme_manager and THEME_SYSTEM_AVAILABLE else None
         emoji_font_stack = self._get_emoji_font_stack()
-        
-        # Special colors for pin button toggle state (warning/amber) - IDENTICAL to move button
-        special_colors = {
-            "background": "rgba(255, 215, 0, 0.8)",
-            "text": "black",
-            "hover": "rgba(255, 215, 0, 0.9)",
-            "active": "rgba(255, 215, 0, 1.0)"
-        }
-        
+
+        # Use theme warning color for better dark theme compatibility - IDENTICAL to move button
+        if colors:
+            special_colors = {
+                "background": colors.status_warning,
+                "text": colors.text_primary,
+                "hover": colors.status_warning,  # Same color, rely on ButtonStyleManager
+                "active": colors.interactive_active
+            }
+        else:
+            # Fallback to subdued amber
+            special_colors = {
+                "background": "#f57c00",  # Darker amber
+                "text": "#000000",
+                "hover": "#fb8c00",
+                "active": "#e65100"
+            }
+
         ButtonStyleManager.apply_unified_button_style(
             button, colors, "tool", "icon", "normal", special_colors, emoji_font_stack
         )
