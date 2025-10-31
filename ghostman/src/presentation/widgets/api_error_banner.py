@@ -48,7 +48,6 @@ class APIErrorBanner(QFrame):
     """
 
     # Signals
-    dismissed = pyqtSignal()  # User manually dismissed the banner
     retry_requested = pyqtSignal()  # User clicked "Retry Now"
     settings_requested = pyqtSignal()  # User clicked "Open Settings"
 
@@ -63,9 +62,9 @@ class APIErrorBanner(QFrame):
         super().__init__(parent)
 
         self.theme_manager = theme_manager
-        self._is_dismissed_by_user = False
         self._last_error_message = ""
         self._provider_name = ""
+        self._is_visible = False  # Track if banner is currently shown
 
         # Banner is initially hidden
         self.setVisible(False)
@@ -95,66 +94,39 @@ class APIErrorBanner(QFrame):
         icon_font = QFont()
         icon_font.setPointSize(16)
         self.icon_label.setFont(icon_font)
-        main_layout.addWidget(self.icon_label)
+        main_layout.addWidget(self.icon_label, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        # Content area (message + actions)
-        content_layout = QVBoxLayout()
-        content_layout.setSpacing(4)
-
-        # Error message label
+        # Error message label (single line, centered vertically)
         self.message_label = QLabel()
-        self.message_label.setWordWrap(True)
+        self.message_label.setWordWrap(False)  # Single line
         message_font = QFont()
         message_font.setBold(True)
         message_font.setPointSize(10)
         self.message_label.setFont(message_font)
-        content_layout.addWidget(self.message_label)
+        main_layout.addWidget(self.message_label, 1, Qt.AlignmentFlag.AlignVCenter)
 
-        # Action hints (bullet points)
+        # Action hints (hidden by default, can be shown later if needed)
         self.hints_label = QLabel()
         self.hints_label.setWordWrap(True)
+        self.hints_label.setVisible(False)  # Hide hints to keep banner single-line
         hints_font = QFont()
         hints_font.setPointSize(9)
         self.hints_label.setFont(hints_font)
-        content_layout.addWidget(self.hints_label)
-
-        main_layout.addLayout(content_layout, stretch=1)
-
-        # Action buttons container
-        buttons_layout = QHBoxLayout()
-        buttons_layout.setSpacing(8)
+        # Don't add hints_label to layout since it's hidden
 
         # Open Settings button
         self.settings_button = QPushButton("Open Settings")
         self.settings_button.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.settings_button.setFixedHeight(28)
         self.settings_button.clicked.connect(self._on_settings_clicked)
-        buttons_layout.addWidget(self.settings_button)
+        main_layout.addWidget(self.settings_button, 0, Qt.AlignmentFlag.AlignVCenter)
 
         # Retry Now button
         self.retry_button = QPushButton("Retry Now")
         self.retry_button.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.retry_button.setFixedHeight(28)
         self.retry_button.clicked.connect(self._on_retry_clicked)
-        buttons_layout.addWidget(self.retry_button)
-
-        # Spacer
-        buttons_layout.addSpacerItem(QSpacerItem(
-            20, 20, QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum
-        ))
-
-        # Dismiss button (X)
-        self.dismiss_button = QPushButton("×")
-        self.dismiss_button.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.dismiss_button.setFixedSize(28, 28)
-        dismiss_font = QFont()
-        dismiss_font.setPointSize(14)
-        dismiss_font.setBold(True)
-        self.dismiss_button.setFont(dismiss_font)
-        self.dismiss_button.clicked.connect(self._on_dismiss_clicked)
-        buttons_layout.addWidget(self.dismiss_button)
-
-        main_layout.addLayout(buttons_layout)
+        main_layout.addWidget(self.retry_button, 0, Qt.AlignmentFlag.AlignVCenter)
 
     def _apply_theme_styling(self):
         """Apply theme-aware styling to banner."""
@@ -165,11 +137,6 @@ class APIErrorBanner(QFrame):
                 # Get error color
                 error_color = colors.status_error if hasattr(colors, 'status_error') else '#e74c3c'
                 text_color = colors.text_primary if hasattr(colors, 'text_primary') else '#ffffff'
-                primary_color = colors.primary if hasattr(colors, 'primary') else '#3498db'
-
-                # Calculate background with transparency
-                bg_color = error_color
-                border_color = ColorUtils.darken(error_color, 0.2)
 
                 # Ensure text has good contrast
                 # For error backgrounds, white text usually works best
@@ -177,16 +144,15 @@ class APIErrorBanner(QFrame):
 
             else:
                 # Fallback colors
-                bg_color = '#e74c3c'
-                border_color = '#c0392b'
+                error_color = '#e74c3c'
                 text_color = '#ffffff'
-                primary_color = '#3498db'
+                colors = None
 
-            # Apply banner frame styling
+            # Apply banner frame styling (no border)
             self.setStyleSheet(f"""
                 QFrame {{
-                    background-color: {bg_color};
-                    border: 1px solid {border_color};
+                    background-color: {error_color};
+                    border: none;
                     border-radius: 6px;
                 }}
             """)
@@ -195,43 +161,45 @@ class APIErrorBanner(QFrame):
             self.message_label.setStyleSheet(f"color: {text_color};")
             self.hints_label.setStyleSheet(f"color: {text_color}; opacity: 0.9;")
 
-            # Apply button styling
-            button_style = f"""
-                QPushButton {{
-                    background-color: {primary_color};
-                    color: #ffffff;
-                    border: none;
-                    border-radius: 4px;
-                    padding: 4px 12px;
-                    font-weight: bold;
-                }}
-                QPushButton:hover {{
-                    background-color: {ColorUtils.lighten(primary_color, 0.1)};
-                }}
-                QPushButton:pressed {{
-                    background-color: {ColorUtils.darken(primary_color, 0.1)};
-                }}
-            """
-            self.settings_button.setStyleSheet(button_style)
-            self.retry_button.setStyleSheet(button_style)
+            # Use EXACT same styling as conversation tab buttons
+            if colors:
+                try:
+                    from ...ui.themes.style_templates import StyleTemplates
+                    # Use the same style as active conversation tabs
+                    tab_button_style = StyleTemplates.get_conversation_tab_button_style(colors, active=True)
 
-            # Dismiss button (transparent background)
-            dismiss_style = f"""
-                QPushButton {{
-                    background-color: transparent;
-                    color: {text_color};
-                    border: 1px solid {text_color};
-                    border-radius: 14px;
-                    padding: 0px;
-                }}
-                QPushButton:hover {{
-                    background-color: rgba(255, 255, 255, 0.2);
-                }}
-                QPushButton:pressed {{
-                    background-color: rgba(255, 255, 255, 0.3);
-                }}
-            """
-            self.dismiss_button.setStyleSheet(dismiss_style)
+                    # Apply to both buttons
+                    self.settings_button.setStyleSheet(tab_button_style)
+                    self.retry_button.setStyleSheet(tab_button_style)
+                    logger.debug("Applied conversation tab button styling to banner buttons")
+                except ImportError:
+                    # Fall through to fallback styling below
+                    pass
+
+            if not colors or not hasattr(self.settings_button, 'styleSheet') or not self.settings_button.styleSheet():
+                # Fallback styling if colors is None or import failed
+                # Fallback to legacy styling if ButtonStyleManager not available
+                primary_color = colors.primary if colors and hasattr(colors, 'primary') else '#3498db'
+                button_text_color = colors.text_primary if colors and hasattr(colors, 'text_primary') else '#00ff41'
+                button_style = f"""
+                    QPushButton {{
+                        background-color: {primary_color};
+                        color: {button_text_color};
+                        border: none;
+                        border-radius: 4px;
+                        padding: 6px 12px;
+                        font-weight: bold;
+                        font-size: 12px;
+                    }}
+                    QPushButton:hover {{
+                        background-color: {ColorUtils.lighten(primary_color, 0.1)};
+                    }}
+                    QPushButton:pressed {{
+                        background-color: {ColorUtils.darken(primary_color, 0.1)};
+                    }}
+                """
+                self.settings_button.setStyleSheet(button_style)
+                self.retry_button.setStyleSheet(button_style)
 
             logger.debug("Theme styling applied to API error banner")
 
@@ -246,29 +214,25 @@ class APIErrorBanner(QFrame):
             error_message: Error message to display
             provider_name: Name of the API provider (e.g., "OpenAI API")
         """
-        logger.info(f"🔔 show_error() called - provider: {provider_name}, dismissed: {self._is_dismissed_by_user}")
-
-        # Don't show if user dismissed it
-        if self._is_dismissed_by_user:
-            logger.debug("Banner dismissed by user, not showing again")
-            return
+        logger.info(f"🔔 show_error() called - provider: {provider_name}")
 
         # Update message
         self._last_error_message = error_message
         self._provider_name = provider_name
+        self._is_visible = True  # Set flag when showing
 
         # Set message text
-        self.message_label.setText(f"API Connection Lost - {provider_name}")
-        logger.debug(f"Banner message set: API Connection Lost - {provider_name}")
+        self.message_label.setText("Check your network settings")
+        logger.debug(f"Banner message set: Internet Issue - {provider_name}")
 
         # Generate hints based on error message
-        hints = self._generate_hints(error_message)
-        self.hints_label.setText(hints)
+        #hints = self._generate_hints(error_message)
+        #self.hints_label.setText(hints)
 
         # Show banner with animation
         self._show_with_animation()
 
-        logger.info(f"API error banner shown: {provider_name} - {error_message}")
+        logger.info(f"✓ API error banner shown: {provider_name} - flag set to True")
 
     def _generate_hints(self, error_message: str) -> str:
         """
@@ -290,8 +254,8 @@ class APIErrorBanner(QFrame):
 
         # Network errors
         elif any(term in error_lower for term in ['connection', 'network', 'timeout', 'unreachable']):
-            hints.append("• Check your internet connection")
-            hints.append("• API endpoint may be temporarily unavailable")
+            hints.append("• Check your network configuration")
+            hints.append("• Verify internet connectivity")
 
         # Rate limiting
         elif any(term in error_lower for term in ['rate limit', '429', 'too many']):
@@ -318,24 +282,22 @@ class APIErrorBanner(QFrame):
 
     def hide_banner(self):
         """Hide banner with animation."""
+        self._is_visible = False  # Clear flag when hiding
         self._hide_with_animation()
-        logger.debug("API error banner hidden")
+        logger.info("✓ API error banner hidden - flag set to False")
 
-    def reset_dismissal(self):
-        """
-        Reset dismissal state to allow banner to show again.
-        Call this when settings change or connection restored.
-        """
-        self._is_dismissed_by_user = False
-        logger.debug("Banner dismissal state reset")
+    def is_banner_visible(self):
+        """Check if banner is currently visible."""
+        return self._is_visible
+
 
     def _show_with_animation(self):
         """Show banner with slide-down animation."""
         if self.isVisible():
             return  # Already visible
 
-        # Target height (will be calculated based on content)
-        target_height = 80
+        # Target height (reduced to 74% of original 80px = 59px)
+        target_height = 59
 
         # Make visible but keep height at 0
         self.setVisible(True)
@@ -366,12 +328,6 @@ class APIErrorBanner(QFrame):
         self.animation.finished.connect(lambda: self.setVisible(False))
         self.animation.start()
 
-    def _on_dismiss_clicked(self):
-        """Handle dismiss button click."""
-        self._is_dismissed_by_user = True
-        self._hide_with_animation()
-        self.dismissed.emit()
-        logger.info("API error banner dismissed by user")
 
     def _on_retry_clicked(self):
         """Handle retry button click."""

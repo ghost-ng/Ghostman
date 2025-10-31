@@ -231,51 +231,16 @@ class AppCoordinator(QObject):
 
             self._api_validator = PeriodicAPIValidator()
 
-            # Signals will be connected after REPL widget initializes its banner
-            # Connection happens in _connect_api_validator_to_banner()
+            # Signals are connected directly by FloatingREPLWindow's floating banner
+            # No manual connection needed here
 
             # Start periodic validation checks
             self._api_validator.start_periodic_checks()
-            logger.info("Periodic API validator initialized (10-minute intervals)")
+            logger.info("Periodic API validator initialized (5-minute intervals)")
 
         except Exception as e:
             logger.error(f"Failed to initialize API validator: {e}")
             self._api_validator = None
-
-    def _connect_api_validator_to_banner(self):
-        """Connect API validator signals to banner (called after banner is created)."""
-        try:
-            if not self._api_validator:
-                logger.warning("Cannot connect validator to banner - validator not initialized")
-                return
-
-            # Get REPL widget from main_window.floating_repl.repl_widget
-            repl_widget = None
-            if self._main_window:
-                if hasattr(self._main_window, 'floating_repl') and self._main_window.floating_repl:
-                    if hasattr(self._main_window.floating_repl, 'repl_widget'):
-                        repl_widget = self._main_window.floating_repl.repl_widget
-                        logger.debug("Found REPL widget via floating_repl.repl_widget")
-                elif hasattr(self._main_window, 'repl_widget'):
-                    repl_widget = self._main_window.repl_widget
-                    logger.debug("Found REPL widget via main_window.repl_widget")
-
-            if not repl_widget:
-                logger.warning("Cannot connect validator to banner - REPL widget not available")
-                return
-
-            if not hasattr(repl_widget, 'api_error_banner') or not repl_widget.api_error_banner:
-                logger.warning("Cannot connect validator to banner - banner not initialized")
-                return
-
-            # Connect validator signals to REPL widget handlers
-            self._api_validator.validation_failed.connect(repl_widget._on_api_validation_failed)
-            self._api_validator.validation_succeeded.connect(repl_widget._on_api_validation_succeeded)
-
-            logger.info("✓ API validator connected to error banner")
-
-        except Exception as e:
-            logger.error(f"Failed to connect validator to banner: {e}")
 
     def _initialize_rag_system(self):
         """Initialize RAG system integration."""
@@ -823,12 +788,10 @@ class AppCoordinator(QObject):
                 if self._api_validator:
                     logger.info("🔄 Resetting API validator due to AI model settings change")
                     self._api_validator.reset_failure_state()
-                    # Reset banner dismissal in REPL widget if available
-                    if self._main_window and hasattr(self._main_window, 'repl_widget'):
-                        if hasattr(self._main_window.repl_widget, 'api_error_banner'):
-                            self._main_window.repl_widget.api_error_banner.reset_dismissal()
-                    # Trigger immediate validation
-                    self._api_validator.validate_now()
+                    # Trigger immediate validation (non-blocking, will run in background)
+                    # Use QTimer to ensure it doesn't block settings dialog
+                    from PyQt6.QtCore import QTimer
+                    QTimer.singleShot(100, self._api_validator.validate_now)
                 logger.info("✓ AI model settings applied")
             
             # Apply advanced settings

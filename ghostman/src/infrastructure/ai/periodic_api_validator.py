@@ -125,27 +125,30 @@ class PeriodicAPIValidator(QObject):
         """Initialize periodic API validator."""
         super().__init__()
 
-        # Timer for periodic checks (10 minutes = 600000 ms)
+        # Timer for periodic checks (5 minutes)
         self._timer = QTimer()
         self._timer.timeout.connect(self._perform_validation)
-        self._validation_interval = 600000  # 10 minutes
+        self._validation_interval = 300000  # 5 minutes (300000 ms)
 
         # State tracking
         self._last_validation_success = None  # None = never validated, True/False = last result
-        self._is_first_failure = True
+        self._consecutive_failures = 0  # Track consecutive failures
+        self._failure_threshold = 1  # 🧪 TESTING: Show banner on FIRST failure (production: 3)
         self._worker = None
         self._thread = None
 
-        logger.info("Periodic API validator initialized (10-minute intervals)")
+        logger.info("Periodic API validator initialized (5-minute intervals, threshold=1)")
 
     def start_periodic_checks(self):
         """Start periodic validation checks."""
         if not self._timer.isActive():
             self._timer.start(self._validation_interval)
-            logger.info("Periodic API validation started")
+            logger.info("⏰ Periodic API validation timer started (interval: 5 minutes)")
+            logger.debug(f"📊 Timer active: {self._timer.isActive()}, interval: {self._timer.interval()}ms")
 
             # Run first check immediately (but after a short delay to avoid startup congestion)
-            QTimer.singleShot(5000, self._perform_validation)  # 5 seconds after startup
+            logger.debug("⏰ Scheduling first validation check in 30 seconds...")
+            QTimer.singleShot(30000, self._perform_validation)  # 30 seconds after startup
 
     def stop_periodic_checks(self):
         """Stop periodic validation checks."""
@@ -162,8 +165,14 @@ class PeriodicAPIValidator(QObject):
         self.start_periodic_checks()
 
     def validate_now(self):
-        """Trigger an immediate validation check."""
-        logger.info("Manual validation triggered")
+        """Trigger an immediate validation check and resume periodic checks."""
+        logger.info("Manual validation triggered (will resume periodic checks if paused)")
+
+        # Resume periodic checks (in case they were paused)
+        if not self._timer.isActive():
+            self.start_periodic_checks()
+            logger.info("▶️ Resumed periodic validation after manual retry")
+
         self._perform_validation()
 
     def reset_failure_state(self):
@@ -171,12 +180,14 @@ class PeriodicAPIValidator(QObject):
         Reset failure state to allow banner to show again.
         Call this when settings change or user explicitly requests re-validation.
         """
-        self._is_first_failure = True
+        self._consecutive_failures = 0
         self._last_validation_success = None
         logger.debug("Validation failure state reset")
 
     def _perform_validation(self):
         """Perform API validation check in background thread."""
+        logger.debug("🔍 Starting periodic API validation check...")
+
         # Prevent multiple simultaneous validations
         if self._thread and self._thread.isRunning():
             logger.debug("Validation already in progress, skipping")
@@ -189,6 +200,8 @@ class PeriodicAPIValidator(QObject):
                 'base_url': settings.get('ai_model.base_url', 'https://api.openai.com/v1'),
                 'model_name': settings.get('ai_model.model_name', 'gpt-3.5-turbo')
             }
+
+            logger.debug(f"📊 API Config: base_url={api_config['base_url']}, has_key={bool(api_config['api_key'])}")
 
             # Create worker and thread
             self._worker = ValidationWorker(api_config)
@@ -203,7 +216,7 @@ class PeriodicAPIValidator(QObject):
 
             # Start validation
             self._thread.start()
-            logger.debug("Background validation check started")
+            logger.debug("✅ Background validation check started")
 
         except Exception as e:
             logger.error(f"Failed to start validation: {e}")
@@ -216,36 +229,52 @@ class PeriodicAPIValidator(QObject):
             result: ValidationResult from worker
         """
         try:
-            logger.debug(f"Validation complete: success={result.success}, provider={result.provider_name}")
+            logger.debug(f"📊 Validation result: success={result.success}, provider={result.provider_name}, error={result.error_message}")
+            logger.debug(f"📈 State tracking: consecutive_failures={self._consecutive_failures}, last_success={self._last_validation_success}")
 
             # Determine if state changed
             state_changed = self._last_validation_success != result.success
 
             if result.success:
                 # Validation succeeded
-                if state_changed and self._last_validation_success is False:
-                    # Connection restored!
-                    logger.info("✓ API connection restored")
-                    self.validation_succeeded.emit()
-                    self._is_first_failure = True  # Reset for next failure
+                logger.info(f"✅ Validation SUCCESS - consecutive_failures={self._consecutive_failures}, last_success={self._last_validation_success}")
 
+                # ALWAYS emit validation_succeeded on success to hide any visible banner
+                # The banner should disappear on ANY successful test, not just after failures
+                logger.info("🔔 EMITTING validation_succeeded signal - banner should hide if visible")
+                self.validation_succeeded.emit()
+                logger.info("✅ validation_succeeded signal emitted")
+
+                # Reset failure counter on success
+                self._consecutive_failures = 0
                 self._last_validation_success = True
+                logger.debug("✅ Validation passed, failure counter reset to 0")
 
             else:
                 # Validation failed
-                if state_changed or self._is_first_failure:
-                    # First failure or state change from success to failure
-                    logger.warning(f"✗ API validation failed: {result.error_message}")
+                self._consecutive_failures += 1
+                logger.warning(f"✗ API validation failed ({self._consecutive_failures}/{self._failure_threshold}): {result.error_message}")
 
-                    # Only emit signal if this is the first failure
-                    if self._is_first_failure:
+                # Only emit signal after reaching threshold
+                if self._consecutive_failures >= self._failure_threshold:
+                    if self._consecutive_failures == self._failure_threshold:
+                        # First time reaching threshold - emit signal and pause checks
+                        logger.error(f"🚨 API validation failed {self._failure_threshold} times - emitting validation_failed signal")
+                        logger.debug(f"🎯 About to emit validation_failed signal with result: provider={result.provider_name}, error={result.error_message}")
                         self.validation_failed.emit(result)
-                        self._is_first_failure = False
+                        logger.debug("✅ validation_failed signal emitted successfully")
+
+                        # Pause periodic checks after showing banner (resume via retry button)
+                        self.pause_checks()
+                        logger.info("⏸️ Periodic API validation paused after banner shown (retry to resume)")
+                    else:
+                        # Already shown banner, just log
+                        logger.debug(f"⏭️ Banner already shown (failure #{self._consecutive_failures})")
 
                 self._last_validation_success = False
 
         except Exception as e:
-            logger.error(f"Error processing validation result: {e}")
+            logger.error(f"Error processing validation result: {e}", exc_info=True)
 
     def _cleanup_thread(self):
         """Clean up validation thread."""

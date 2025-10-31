@@ -3115,108 +3115,6 @@ class REPLWidget(QWidget):
         
         parent_layout.addWidget(self.search_frame)
 
-    def _init_api_error_banner(self, parent_layout):
-        """Initialize API error banner (initially hidden)."""
-        try:
-            from .api_error_banner import APIErrorBanner
-
-            # Create banner widget
-            self.api_error_banner = APIErrorBanner(self.theme_manager, self)
-            self.api_error_banner.setVisible(False)
-
-            # Connect banner signals
-            self.api_error_banner.retry_requested.connect(self._on_banner_retry_requested)
-            self.api_error_banner.settings_requested.connect(self._on_banner_settings_requested)
-            self.api_error_banner.dismissed.connect(self._on_banner_dismissed)
-
-            # Add to layout
-            parent_layout.addWidget(self.api_error_banner)
-
-            # Connect to API validator via coordinator (deferred to ensure both are ready)
-            # Use QTimer to ensure coordinator connection happens after full initialization
-            from PyQt6.QtCore import QTimer
-            QTimer.singleShot(100, self._connect_banner_to_validator)
-
-            logger.debug("API error banner initialized")
-
-        except Exception as e:
-            logger.error(f"Failed to initialize API error banner: {e}")
-            self.api_error_banner = None
-
-    def _connect_banner_to_validator(self):
-        """Connect banner to validator (called after initialization)."""
-        try:
-            from PyQt6.QtWidgets import QApplication
-            app = QApplication.instance()
-            if app and hasattr(app, 'coordinator'):
-                coordinator = app.coordinator
-                if coordinator and hasattr(coordinator, '_connect_api_validator_to_banner'):
-                    coordinator._connect_api_validator_to_banner()
-                    logger.info("✓ Banner connection to validator requested")
-                else:
-                    logger.warning("Coordinator or connection method not available")
-            else:
-                logger.warning("QApplication or coordinator not available for banner connection")
-        except Exception as e:
-            logger.error(f"Failed to connect banner to validator: {e}")
-
-    def _on_api_validation_failed(self, result):
-        """Handle API validation failure (show banner)."""
-        try:
-            logger.info(f"🔴 API validation failed signal received: {result.provider_name}")
-            if self.api_error_banner:
-                error_message = result.error_message or "Unknown error"
-                provider_name = result.provider_name or "API"
-                self.api_error_banner.show_error(error_message, provider_name)
-                logger.info(f"✓ Banner shown for API failure: {provider_name}")
-            else:
-                logger.error("❌ Banner not available to show error")
-        except Exception as e:
-            logger.error(f"Failed to show API error banner: {e}")
-
-    def _on_api_validation_succeeded(self):
-        """Handle API validation success (hide banner)."""
-        try:
-            if self.api_error_banner:
-                self.api_error_banner.hide_banner()
-                self.api_error_banner.reset_dismissal()  # Allow banner to show again if it fails later
-                logger.info("Banner hidden - API connection restored")
-        except Exception as e:
-            logger.error(f"Failed to hide API error banner: {e}")
-
-    def _on_banner_retry_requested(self):
-        """Handle retry button click from banner."""
-        try:
-            # Trigger immediate API validation
-            from PyQt6.QtWidgets import QApplication
-            app = QApplication.instance()
-            if app and hasattr(app, 'coordinator'):
-                coordinator = app.coordinator
-                if coordinator and hasattr(coordinator, '_api_validator') and coordinator._api_validator:
-                    coordinator._api_validator.validate_now()
-                    logger.info("Manual API validation triggered from banner")
-        except Exception as e:
-            logger.error(f"Failed to trigger API retry: {e}")
-
-    def _on_banner_settings_requested(self):
-        """Handle settings button click from banner."""
-        try:
-            # Open settings dialog to AI Model tab
-            from PyQt6.QtWidgets import QApplication
-            app = QApplication.instance()
-            if app and hasattr(app, 'coordinator'):
-                coordinator = app.coordinator
-                if coordinator:
-                    # Request settings dialog
-                    coordinator._show_settings()
-                    logger.info("Settings dialog requested from banner")
-        except Exception as e:
-            logger.error(f"Failed to open settings from banner: {e}")
-
-    def _on_banner_dismissed(self):
-        """Handle banner dismissal by user."""
-        logger.info("API error banner dismissed by user")
-
     def _reapply_search_button_sizing(self):
         """Re-apply compact size constraints to search buttons after theme changes."""
         try:
@@ -7027,9 +6925,6 @@ class REPLWidget(QWidget):
         if self.tab_manager and hasattr(self.tab_manager, 'file_browser_stack'):
             layout.addWidget(self.tab_manager.file_browser_stack)
             logger.debug("Added tab_manager.file_browser_stack to layout")
-
-        # API Error Banner (initially hidden, appears on API connection failures)
-        self._init_api_error_banner(layout)
 
         # Input area with background styling for prompt
         input_layout = QHBoxLayout()
