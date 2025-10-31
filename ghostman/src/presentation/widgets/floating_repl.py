@@ -89,13 +89,16 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
         
         self._init_ui()
         self._setup_window()
-        
+
         # Direct arrow resize implementation (bypassing mixin complexity)
         self._setup_direct_arrows()
-        
+
         # Setup keyboard shortcuts
         self._setup_keyboard_shortcuts()
-        
+
+        # Create floating banner window (initially hidden)
+        self._init_floating_banner()
+
         logger.info("FloatingREPLWindow initialized")
     
     def _setup_direct_arrows(self):
@@ -198,11 +201,14 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
 
         # REPL widget already loads its own opacity from settings in its constructor
         # No need to override it here since REPLWidget._load_opacity_from_settings() handles this
-        
+
         # Connect REPL signals
         self.repl_widget.minimize_requested.connect(self.close)
         self.repl_widget.command_entered.connect(self.command_entered.emit)
-        
+
+        # API error banner will be managed by REPLWidget
+        # Access it via self.repl_widget.api_error_banner if needed
+
         logger.debug("FloatingREPL UI initialized")
     
     def _setup_window(self):
@@ -416,7 +422,136 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
         """Set only the panel (frame) opacity (content/text remains fully opaque)."""
         if self.repl_widget:
             self.repl_widget.set_panel_opacity(opacity)
-    
+
+    # Floating Banner Management -----------------------------------------
+    def _init_floating_banner(self):
+        """Initialize the floating banner window."""
+        try:
+            from .floating_banner import FloatingBannerWindow
+            from ...ui.themes.theme_manager import get_theme_manager
+
+            theme_manager = get_theme_manager()
+            self.floating_banner = FloatingBannerWindow(self, theme_manager)
+
+            # Connect banner signals
+            self.floating_banner.banner.retry_requested.connect(self._on_banner_retry)
+            self.floating_banner.banner.settings_requested.connect(self._on_banner_settings)
+
+            # Connect to validator (deferred)
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(100, self._connect_banner_to_validator)
+
+            logger.info("Floating banner window created")
+
+        except Exception as e:
+            logger.error(f"Failed to create floating banner: {e}")
+            self.floating_banner = None
+
+    def _connect_banner_to_validator(self):
+        """Connect banner to validator (called after initialization)."""
+        try:
+            from PyQt6.QtWidgets import QApplication
+            app = QApplication.instance()
+            if app and hasattr(app, 'coordinator'):
+                coordinator = app.coordinator
+                if coordinator and hasattr(coordinator, '_api_validator') and coordinator._api_validator:
+                    # Connect validator signals directly to our handlers
+                    coordinator._api_validator.validation_failed.connect(self._on_api_validation_failed)
+                    coordinator._api_validator.validation_succeeded.connect(self._on_api_validation_succeeded)
+                    logger.info("✓ FloatingREPL banner connected to validator")
+                else:
+                    logger.warning("Coordinator or validator not available")
+            else:
+                logger.warning("QApplication or coordinator not available for banner connection")
+        except Exception as e:
+            logger.error(f"Failed to connect banner to validator: {e}")
+
+    def _on_api_validation_failed(self, result):
+        """Handle API validation failure (show banner)."""
+        try:
+            logger.info(f"📨 FloatingREPL._on_api_validation_failed() called")
+            logger.debug(f"📊 Signal data: provider={result.provider_name}, error={result.error_message}")
+            logger.debug(f"📊 Banner state: floating_banner exists={self.floating_banner is not None}")
+
+            if self.floating_banner:
+                error_message = result.error_message or "Unknown error"
+                provider_name = result.provider_name or "API"
+                logger.debug(f"✅ Calling floating_banner.show_error() with provider={provider_name}")
+                self.floating_banner.show_error(error_message, provider_name)
+                logger.info(f"✓ Banner show_error() completed for: {provider_name}")
+            else:
+                logger.error("❌ Banner not available to show error")
+        except Exception as e:
+            logger.error(f"Failed to show API error banner: {e}", exc_info=True)
+
+    def _on_api_validation_succeeded(self):
+        """Handle API validation success (hide banner if visible)."""
+        try:
+            if self.floating_banner and hasattr(self.floating_banner, 'banner'):
+                banner = self.floating_banner.banner
+                # Only hide if banner is actually visible
+                if hasattr(banner, 'is_banner_visible') and banner.is_banner_visible():
+                    banner.hide_banner()
+                    logger.info("✓ Banner was visible - hiding it now (API connection restored)")
+                else:
+                    logger.debug("Banner not visible - nothing to hide")
+        except Exception as e:
+            logger.error(f"Failed to hide API error banner: {e}")
+
+    def _on_banner_retry(self):
+        """Handle retry button click from banner."""
+        try:
+            from PyQt6.QtWidgets import QApplication
+            app = QApplication.instance()
+            if app and hasattr(app, 'coordinator'):
+                coordinator = app.coordinator
+                if coordinator and hasattr(coordinator, '_api_validator') and coordinator._api_validator:
+                    coordinator._api_validator.validate_now()
+                    logger.info("Manual API validation triggered from banner")
+        except Exception as e:
+            logger.error(f"Failed to trigger API retry: {e}")
+
+    def _on_banner_settings(self):
+        """Handle settings button click from banner."""
+        try:
+            from PyQt6.QtWidgets import QApplication
+            app = QApplication.instance()
+            if app and hasattr(app, 'coordinator'):
+                coordinator = app.coordinator
+                if coordinator:
+                    coordinator._show_settings()
+                    logger.info("Settings dialog requested from banner")
+        except Exception as e:
+            logger.error(f"Failed to open settings from banner: {e}")
+
+
+    # Window Event Handlers -----------------------------------------------
+    def moveEvent(self, event):
+        """Handle window move events to update banner position."""
+        super().moveEvent(event)
+        if hasattr(self, 'floating_banner') and self.floating_banner:
+            self.floating_banner.track_parent_movement()
+
+    def resizeEvent(self, event):
+        """Handle window resize events to update banner width."""
+        super().resizeEvent(event)
+        if hasattr(self, 'floating_banner') and self.floating_banner:
+            self.floating_banner.track_parent_movement()
+
+    def showEvent(self, event):
+        """Handle window show events to position banner."""
+        super().showEvent(event)
+        if hasattr(self, 'floating_banner') and self.floating_banner and self.floating_banner.isVisible():
+            from PyQt6.QtCore import QTimer
+            # Delay slightly to ensure window is fully positioned
+            QTimer.singleShot(10, self.floating_banner.track_parent_movement)
+
+    def hideEvent(self, event):
+        """Handle window hide events to hide banner."""
+        super().hideEvent(event)
+        if hasattr(self, 'floating_banner') and self.floating_banner:
+            self.floating_banner.hide()
+
     def __del__(self):
         """Cleanup when widget is destroyed."""
         try:

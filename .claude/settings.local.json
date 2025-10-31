@@ -14,7 +14,8 @@
       "Bash(git push:*)",
       "Bash(tasklist:*)",
       "Bash(findstr:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(timeout /t 10 /nobreak)"
     ],
     "deny": [],
     "ask": [],

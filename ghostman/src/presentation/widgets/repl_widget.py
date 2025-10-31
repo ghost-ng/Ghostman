@@ -2270,37 +2270,26 @@ class REPLWidget(QWidget):
             self.conversation_manager = None
     
     def _perform_startup_tasks(self):
-        """Perform application startup tasks and display preamble."""
+        """Perform application startup tasks (API validation now handled by periodic validator)."""
         # Prevent multiple executions during theme switching or re-initialization
         if self._startup_tasks_completed:
             logger.debug("Startup tasks already completed - skipping duplicate execution")
             return
-            
+
         try:
             logger.info("Performing startup tasks...")
-            
-            # Perform startup tasks
-            startup_result = startup_service.perform_startup_tasks()
-            
-            # Only show preamble if there's an issue (API failure, errors, etc)
-            api_status = startup_result.get('api_status', True)
-            errors = startup_result.get('errors', [])
-            
-            if not api_status or errors:
-                # Show error message if API failed or there are errors
-                if not api_status:
-                    self.append_output("⚠️ API connection failed - check settings", "warning")
-                for error in errors:
-                    self.append_output(f"❌ {error}", "error")
-                self.append_output("-" * 50, "system")
-            # Otherwise show nothing - clean start
-            
-            logger.info(f"Startup tasks completed - first_run: {startup_result.get('first_run')}, api_status: {api_status}")
-            
-            # Don't auto-create conversations on startup - wait for user to actually send a message
-            
-            # Mark startup tasks as completed to prevent re-execution during theme switching
+
+            # NOTE: API validation removed from startup - now handled by periodic validator
+            # This speeds up startup and shows errors in banner instead of REPL output
+
+            # Check for first run
+            is_first_run = startup_service.check_first_run()
+
+            # Mark startup tasks as completed
             self._startup_tasks_completed = True
+            logger.info(f"✓ Startup tasks completed - first_run: {is_first_run}")
+
+            # No preamble display - API errors will appear in banner if validation fails
             
         except Exception as e:
             logger.error(f"✗ Failed to perform startup tasks: {e}")
@@ -3125,7 +3114,7 @@ class REPLWidget(QWidget):
         self.search_debounce_ms = 300  # Faster debounce for in-conversation search
         
         parent_layout.addWidget(self.search_frame)
-    
+
     def _reapply_search_button_sizing(self):
         """Re-apply compact size constraints to search buttons after theme changes."""
         try:
@@ -6936,7 +6925,7 @@ class REPLWidget(QWidget):
         if self.tab_manager and hasattr(self.tab_manager, 'file_browser_stack'):
             layout.addWidget(self.tab_manager.file_browser_stack)
             logger.debug("Added tab_manager.file_browser_stack to layout")
-        
+
         # Input area with background styling for prompt
         input_layout = QHBoxLayout()
         

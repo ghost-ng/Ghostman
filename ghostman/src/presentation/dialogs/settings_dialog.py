@@ -1951,6 +1951,9 @@ class SettingsDialog(QDialog):
             self._finish_test(True, "✓ Connection successful")
             if result.details and logger.isEnabledFor(logging.DEBUG):
                 logger.debug(f"Connection test details: {result.details}")
+
+            # Hide the error banner if connection test succeeds
+            self._hide_error_banner_on_success()
         else:
             self._finish_test(False, result.message)
             logger.warning(f"Connection test failed after {result.total_attempts} attempts: {result.message}")
@@ -1959,13 +1962,55 @@ class SettingsDialog(QDialog):
         """Finish the connection test and update UI."""
         self.test_btn.setEnabled(True)
         self.test_status_label.setText(message)
-        
+
         if success:
             self.test_status_label.setStyleSheet("color: green; font-weight: bold;")
         else:
             self.test_status_label.setStyleSheet("color: red; font-weight: bold;")
-        
+
         logger.info(f"Connection test completed: {success} - {message}")
+
+    def _hide_error_banner_on_success(self):
+        """Hide the API error banner when manual connection test succeeds."""
+        try:
+            logger.info("🔔 _hide_error_banner_on_success() called")
+            from PyQt6.QtWidgets import QApplication
+            app = QApplication.instance()
+            logger.debug(f"  App instance: {app is not None}")
+
+            if app and hasattr(app, 'coordinator'):
+                coordinator = app.coordinator
+                logger.debug(f"  Coordinator: {coordinator is not None}")
+
+                if coordinator and hasattr(coordinator, '_main_window'):
+                    main_window = coordinator._main_window
+                    logger.debug(f"  Main window: {main_window is not None}")
+
+                    # Check for floating REPL with banner
+                    if hasattr(main_window, 'floating_repl') and main_window.floating_repl:
+                        logger.debug(f"  Floating REPL: exists")
+
+                        if hasattr(main_window.floating_repl, 'floating_banner') and main_window.floating_repl.floating_banner:
+                            logger.debug(f"  Floating banner: exists")
+                            # Get the actual banner widget
+                            floating_banner = main_window.floating_repl.floating_banner
+                            banner = floating_banner.banner if hasattr(floating_banner, 'banner') else None
+                            if banner and hasattr(banner, 'is_banner_visible') and banner.is_banner_visible():
+                                logger.info("  Banner is visible - hiding it now")
+                                banner.hide_banner()
+                                logger.info("✓ API error banner hidden after successful manual connection test")
+                            else:
+                                logger.debug("  Banner is not visible - nothing to hide")
+                        else:
+                            logger.warning("  ✗ Floating banner not found or is None")
+                    else:
+                        logger.warning("  ✗ Floating REPL not found or is None")
+                else:
+                    logger.warning("  ✗ Main window not found")
+            else:
+                logger.warning("  ✗ App coordinator not found")
+        except Exception as e:
+            logger.error(f"Could not hide banner after manual test: {e}", exc_info=True)
     
     def _show_models(self):
         """Show available models from the API endpoint."""
