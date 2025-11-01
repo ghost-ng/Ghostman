@@ -472,6 +472,12 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
             logger.info(f"📨 FloatingREPL._on_api_validation_failed() called")
             logger.debug(f"📊 Signal data: provider={result.provider_name}, error={result.error_message}")
             logger.debug(f"📊 Banner state: floating_banner exists={self.floating_banner is not None}")
+            logger.debug(f"📊 REPL window visible: {self.isVisible()}")
+
+            # Only show banner if REPL window is visible (not in system tray)
+            if not self.isVisible():
+                logger.info("⊗ REPL window hidden (in system tray) - not showing banner")
+                return
 
             if self.floating_banner:
                 error_message = result.error_message or "Unknown error"
