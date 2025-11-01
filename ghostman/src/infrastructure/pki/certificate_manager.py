@@ -553,8 +553,7 @@ class CertificateManager:
                 logger.info(f"Found {cert_count} certificate(s) in PEM data")
 
                 # Validate the certificate(s) in PEM format
-                from cryptography.hazmat.primitives.serialization import load_pem_x509_certificates
-                certificates = load_pem_x509_certificates(chain_pem)
+                certificates = x509.load_pem_x509_certificates(chain_pem)
                 if not certificates:
                     raise PKIError("No valid certificates found in CA chain file")
 
