@@ -138,15 +138,8 @@ class CertificateManager:
             pki_data = settings.get('pki', {})
 
             if pki_data and isinstance(pki_data, dict):
-                self._config = PKIConfig(
-                    enabled=pki_data.get('enabled', False),
-                    client_cert_path=pki_data.get('client_cert_path'),
-                    client_key_path=pki_data.get('client_key_path'),
-                    ca_chain_path=pki_data.get('ca_chain_path'),
-                    p12_file_hash=pki_data.get('p12_file_hash'),
-                    last_validation=pki_data.get('last_validation'),
-                    certificate_info=pki_data.get('certificate_info')
-                )
+                # Use from_dict to properly convert certificate_info dict to CertificateInfo object
+                self._config = PKIConfig.from_dict(pki_data)
                 logger.debug("PKI configuration loaded from main settings")
             else:
                 self._config = PKIConfig()
@@ -682,15 +675,24 @@ class CertificateManager:
         status['last_validation'] = self._config.last_validation
         
         if self._config.certificate_info:
-            status['certificate_info'] = self._config.certificate_info.to_dict()
-            
+            # Handle both CertificateInfo object and dict (for backwards compatibility)
+            if isinstance(self._config.certificate_info, dict):
+                status['certificate_info'] = self._config.certificate_info
+                cert_info = self._config.certificate_info
+                days_until_expiry = cert_info.get('days_until_expiry', 999)
+                is_valid = cert_info.get('is_valid', False)
+            else:
+                status['certificate_info'] = self._config.certificate_info.to_dict()
+                days_until_expiry = self._config.certificate_info.days_until_expiry
+                is_valid = self._config.certificate_info.is_valid
+
             # Check for warnings
-            if self._config.certificate_info.days_until_expiry <= 30:
+            if days_until_expiry <= 30:
                 status['warnings'].append(
-                    f"Certificate expires in {self._config.certificate_info.days_until_expiry} days"
+                    f"Certificate expires in {days_until_expiry} days"
                 )
-            
-            if not self._config.certificate_info.is_valid:
+
+            if not is_valid:
                 status['errors'].append("Certificate is not valid")
             else:
                 status['valid'] = True
