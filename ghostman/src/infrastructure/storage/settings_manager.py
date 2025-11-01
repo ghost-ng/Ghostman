@@ -53,7 +53,7 @@ class SettingsManager:
             'repl_window_size': {'width': 520, 'height': 450}
         },
         'interface': {  # new namespace for percent-based values
-            'opacity': 90  # percent (10-100)
+            'opacity': 97  # percent (10-100)
         },
         'fonts': {
             'ai_response': {
