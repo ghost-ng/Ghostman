@@ -576,8 +576,21 @@ class CertificateManager:
             
             # Save CA chain to PKI directory
             chain_dest = self.pki_dir / "ca_chain.pem"
+            logger.info(f"Writing CA chain to {chain_dest}")
+            logger.info(f"Chain PEM size: {len(chain_pem)} bytes")
+            logger.info(f"Certificates in chain_pem before write: {chain_pem.count(b'-----BEGIN CERTIFICATE-----')}")
+
             with open(chain_dest, 'wb') as f:
-                f.write(chain_pem)
+                bytes_written = f.write(chain_pem)
+                logger.info(f"Bytes written to file: {bytes_written}")
+
+            # Verify what was actually written
+            with open(chain_dest, 'rb') as f:
+                written_data = f.read()
+                certs_in_file = written_data.count(b'-----BEGIN CERTIFICATE-----')
+                logger.info(f"Verification: {certs_in_file} certificate(s) found in written file")
+                if certs_in_file != cert_count:
+                    logger.error(f"MISMATCH: Expected {cert_count} certs, but file contains {certs_in_file} certs!")
             
             # Update configuration
             self._config.ca_chain_path = str(chain_dest)
