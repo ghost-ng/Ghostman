@@ -552,32 +552,57 @@ class CertificateManager:
                 cert_count = chain_pem.count(b'-----BEGIN CERTIFICATE-----')
                 logger.info(f"Found {cert_count} certificate(s) in PEM data")
 
-                # Validate the certificate(s) in PEM format
-                certificates = x509.load_pem_x509_certificates(chain_pem)
+                # Validate certificates individually to identify problematic ones
+                certificates = []
+                valid_chain_pem = b""
+
+                # Split the PEM data into individual certificates
+                cert_blocks = chain_pem.split(b'-----BEGIN CERTIFICATE-----')
+                for i, block in enumerate(cert_blocks):
+                    if not block.strip():
+                        continue
+
+                    # Reconstruct the full PEM certificate
+                    cert_pem = b'-----BEGIN CERTIFICATE-----' + block
+
+                    try:
+                        # Try to parse this individual certificate
+                        cert = x509.load_pem_x509_certificate(cert_pem)
+                        certificates.append(cert)
+                        valid_chain_pem += cert_pem
+
+                        # Log certificate details
+                        subject = cert.subject.rfc4514_string()
+                        issuer = cert.issuer.rfc4514_string()
+                        logger.info(f"Certificate {len(certificates)}:")
+                        logger.info(f"  Subject: {subject}")
+                        logger.info(f"  Issuer: {issuer}")
+
+                    except Exception as e:
+                        logger.warning(f"Skipping certificate {i} - parsing failed: {e}")
+                        continue
+
                 if not certificates:
                     raise PKIError("No valid certificates found in CA chain file")
 
-                logger.info(f"Successfully loaded {len(certificates)} certificate(s) from CA chain")
+                logger.info(f"Successfully loaded {len(certificates)} valid certificate(s) from CA chain")
 
                 if len(certificates) != cert_count:
-                    logger.warning(f"Certificate count mismatch: found {cert_count} in PEM, but loaded {len(certificates)}")
+                    logger.warning(f"Certificate count mismatch: found {cert_count} in PEM, but loaded {len(certificates)} valid")
 
-                # Log certificate details for debugging
-                for i, cert in enumerate(certificates, 1):
-                    subject = cert.subject.rfc4514_string()
-                    issuer = cert.issuer.rfc4514_string()
-                    logger.info(f"Certificate {i}:")
-                    logger.info(f"  Subject: {subject}")
-                    logger.info(f"  Issuer: {issuer}")
-                    
+                # Use the validated chain PEM (only valid certificates)
+                chain_pem = valid_chain_pem
+                # Update cert_count to reflect only valid certificates
+                cert_count = len(certificates)
+
             except Exception as e:
                 raise PKIError(f"Failed to parse CA chain file: {e}")
-            
+
             # Save CA chain to PKI directory
             chain_dest = self.pki_dir / "ca_chain.pem"
             logger.info(f"Writing CA chain to {chain_dest}")
             logger.info(f"Chain PEM size: {len(chain_pem)} bytes")
-            logger.info(f"Certificates in chain_pem before write: {chain_pem.count(b'-----BEGIN CERTIFICATE-----')}")
+            logger.info(f"Valid certificates to write: {cert_count}")
 
             with open(chain_dest, 'wb') as f:
                 bytes_written = f.write(chain_pem)
@@ -590,6 +615,8 @@ class CertificateManager:
                 logger.info(f"Verification: {certs_in_file} certificate(s) found in written file")
                 if certs_in_file != cert_count:
                     logger.error(f"MISMATCH: Expected {cert_count} certs, but file contains {certs_in_file} certs!")
+                else:
+                    logger.info(f"✓ All {cert_count} valid certificates written successfully")
             
             # Update configuration
             self._config.ca_chain_path = str(chain_dest)
