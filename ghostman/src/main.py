@@ -214,6 +214,79 @@ class GhostmanApplication:
                 self.coordinator.shutdown()
 
 
+def erase_all_local_data():
+    """
+    Erase all Ghostman local data (AppData on Windows, ~ on Linux/Mac).
+
+    This removes:
+    - All configuration files
+    - All database files
+    - All RAG data
+    - All PKI certificates
+    - All logs
+    """
+    import shutil
+    from pathlib import Path
+
+    print("=" * 60)
+    print("GHOSTMAN DATA ERASURE")
+    print("=" * 60)
+    print("\nThis will delete ALL Ghostman data including:")
+    print("  - Configuration files")
+    print("  - Conversation history")
+    print("  - RAG documents")
+    print("  - PKI certificates")
+    print("  - All logs")
+    print("\nThis action CANNOT be undone!")
+    print("=" * 60)
+
+    # Ask for confirmation
+    confirmation = input("\nType 'DELETE' to confirm: ").strip()
+    if confirmation != "DELETE":
+        print("Aborted - no data was deleted")
+        return False
+
+    print("\nErasing data...")
+
+    # Get data directories based on platform
+    if sys.platform == "win32":
+        # Windows: %APPDATA%\Ghostman
+        appdata = os.environ.get('APPDATA')
+        if appdata:
+            data_dirs = [Path(appdata) / "Ghostman"]
+        else:
+            print("ERROR: Could not find APPDATA environment variable")
+            return False
+    else:
+        # Linux/Mac: ~/.Ghostman
+        home = Path.home()
+        data_dirs = [home / ".Ghostman", home / ".ghostman"]
+
+    # Delete each directory
+    deleted_count = 0
+    for data_dir in data_dirs:
+        if data_dir.exists():
+            try:
+                print(f"  Removing: {data_dir}")
+                shutil.rmtree(data_dir)
+                deleted_count += 1
+                print(f"    ✓ Deleted")
+            except Exception as e:
+                print(f"    ✗ Error: {e}")
+        else:
+            print(f"  Skipping: {data_dir} (not found)")
+
+    print("\n" + "=" * 60)
+    if deleted_count > 0:
+        print(f"✓ Successfully deleted {deleted_count} data director{'y' if deleted_count == 1 else 'ies'}")
+        print("Ghostman will start fresh on next run")
+    else:
+        print("No data directories found to delete")
+    print("=" * 60)
+
+    return True
+
+
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Ghostman - AI Desktop Assistant")
@@ -232,6 +305,11 @@ def parse_arguments():
         action="version",
         version="Ghostman 1.0.0"
     )
+    parser.add_argument(
+        "--new",
+        action="store_true",
+        help="Erase all local data and start fresh (removes AppData/~ files)"
+    )
     return parser.parse_args()
 
 
@@ -239,7 +317,16 @@ def main():
     """Main entry point."""
     # Parse command line arguments
     args = parse_arguments()
-    
+
+    # Handle --new flag (erase all data and exit)
+    if args.new:
+        if erase_all_local_data():
+            print("\nGhostman data has been erased.")
+            print("Run Ghostman normally to start fresh.")
+            return 0
+        else:
+            return 1
+
     # Setup logging - check settings for detailed mode first
     debug_mode = args.debug
     log_retention_days = 10  # default

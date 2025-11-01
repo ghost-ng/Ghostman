@@ -547,19 +547,29 @@ class CertificateManager:
             # Parse and validate the CA chain file
             try:
                 chain_pem = self._parse_ca_chain_file(ca_data)
-                
+
+                # Count how many certificates are in the PEM data
+                cert_count = chain_pem.count(b'-----BEGIN CERTIFICATE-----')
+                logger.info(f"Found {cert_count} certificate(s) in PEM data")
+
                 # Validate the certificate(s) in PEM format
                 from cryptography.hazmat.primitives.serialization import load_pem_x509_certificates
                 certificates = load_pem_x509_certificates(chain_pem)
                 if not certificates:
                     raise PKIError("No valid certificates found in CA chain file")
-                
+
                 logger.info(f"Successfully loaded {len(certificates)} certificate(s) from CA chain")
-                
+
+                if len(certificates) != cert_count:
+                    logger.warning(f"Certificate count mismatch: found {cert_count} in PEM, but loaded {len(certificates)}")
+
                 # Log certificate details for debugging
                 for i, cert in enumerate(certificates, 1):
                     subject = cert.subject.rfc4514_string()
-                    logger.debug(f"Certificate {i}: {subject}")
+                    issuer = cert.issuer.rfc4514_string()
+                    logger.info(f"Certificate {i}:")
+                    logger.info(f"  Subject: {subject}")
+                    logger.info(f"  Issuer: {issuer}")
                     
             except Exception as e:
                 raise PKIError(f"Failed to parse CA chain file: {e}")
