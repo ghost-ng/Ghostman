@@ -45,7 +45,7 @@ class ThemeManager(QObject):
     def __init__(self):
         super().__init__()
         self._current_theme: Optional[ColorSystem] = None
-        self._current_theme_name: str = "default"
+        self._current_theme_name: str = "cyber"
         self._preset_themes: Dict[str, ColorSystem] = {}
         self._custom_themes: Dict[str, ColorSystem] = {}
         self._theme_history: List[ColorSystem] = []
@@ -100,7 +100,7 @@ class ThemeManager(QObject):
         if not builtin_themes_dir.exists():
             logger.warning(f"Built-in themes directory not found: {builtin_themes_dir}")
             # Fall back to a default theme
-            self._preset_themes = {"openai_like": ColorSystem()}
+            self._preset_themes = {"cyber": ColorSystem()}
             return
         
         # Load all JSON theme files from the built-in directory
@@ -182,15 +182,15 @@ class ThemeManager(QObject):
     def _load_current_theme(self):
         """Load the current theme from settings."""
         try:
-            theme_name = settings.get('ui.theme', 'openai_like')
+            theme_name = settings.get('ui.theme', 'cyber')
             if self.has_theme(theme_name):
                 self.set_theme(theme_name)
             else:
-                logger.warning(f"Saved theme '{theme_name}' not found, using openai_like")
-                self.set_theme('openai_like')
+                logger.warning(f"Saved theme '{theme_name}' not found, using cyber")
+                self.set_theme('cyber')
         except Exception as e:
             logger.error(f"Failed to load current theme: {e}")
-            self.set_theme('openai_like')
+            self.set_theme('cyber')
     
     @property
     def current_theme(self) -> ColorSystem:
@@ -618,9 +618,9 @@ class ThemeManager(QObject):
             if theme_file.exists():
                 theme_file.unlink()
             
-            # If this was the current theme, switch to openai_like
+            # If this was the current theme, switch to cyber
             if self._current_theme_name == name:
-                self.set_theme('openai_like')
+                self.set_theme('cyber')
             
             # Emit signal
             self.theme_deleted.emit(name)
