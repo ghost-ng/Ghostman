@@ -482,8 +482,12 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
             if self.floating_banner:
                 error_message = result.error_message or "Unknown error"
                 provider_name = result.provider_name or "API"
-                logger.debug(f"✅ Calling floating_banner.show_error() with provider={provider_name}")
-                self.floating_banner.show_error(error_message, provider_name)
+
+                # Use error message as custom banner message if it's a config error
+                custom_message = error_message if error_message in ["AI Endpoint not configured", "No API key configured"] else None
+
+                logger.debug(f"✅ Calling floating_banner.show_error() with provider={provider_name}, custom_message={custom_message}")
+                self.floating_banner.show_error(error_message, provider_name, custom_message=custom_message)
                 logger.info(f"✓ Banner show_error() completed for: {provider_name}")
             else:
                 logger.error("❌ Banner not available to show error")

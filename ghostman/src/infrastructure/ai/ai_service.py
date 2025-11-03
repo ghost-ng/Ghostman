@@ -158,14 +158,14 @@ class AIService:
     def _load_config_from_settings(self) -> Dict[str, Any]:
         """Load AI configuration from settings manager."""
         config = {
-            'model_name': settings.get('ai_model.model_name', 'gpt-3.5-turbo'),
-            'base_url': settings.get('ai_model.base_url', 'https://api.openai.com/v1'),
+            'model_name': settings.get('ai_model.model_name', ''),
+            'base_url': settings.get('ai_model.base_url', ''),
             'api_key': settings.get('ai_model.api_key', ''),
             'temperature': settings.get('ai_model.temperature', 0.7),
-            'max_tokens': settings.get('ai_model.max_tokens', 16384),  # Increased default for modern models
+            'max_tokens': settings.get('ai_model.max_tokens', 16384),
             'system_prompt': settings.get('ai_model.system_prompt', 'You are Spector, a helpful AI assistant.')
         }
-        
+
         logger.debug("Configuration loaded from settings")
         return config
     

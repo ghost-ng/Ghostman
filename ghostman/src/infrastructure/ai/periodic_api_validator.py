@@ -45,6 +45,17 @@ class ValidationWorker(QObject):
         try:
             from datetime import datetime
 
+            # Check if base_url is configured
+            if not self.api_config.get('base_url'):
+                result = ValidationResult(
+                    success=False,
+                    error_message="AI Endpoint not configured",
+                    provider_name="AI Configuration",
+                    timestamp=datetime.now().isoformat()
+                )
+                self.finished.emit(result)
+                return
+
             # Check if API key is configured
             if not self.api_config.get('api_key'):
                 result = ValidationResult(
@@ -197,8 +208,8 @@ class PeriodicAPIValidator(QObject):
             # Build API config from settings
             api_config = {
                 'api_key': settings.get('ai_model.api_key'),
-                'base_url': settings.get('ai_model.base_url', 'https://api.openai.com/v1'),
-                'model_name': settings.get('ai_model.model_name', 'gpt-3.5-turbo')
+                'base_url': settings.get('ai_model.base_url', ''),
+                'model_name': settings.get('ai_model.model_name', '')
             }
 
             logger.debug(f"📊 API Config: base_url={api_config['base_url']}, has_key={bool(api_config['api_key'])}")

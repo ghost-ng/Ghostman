@@ -206,13 +206,14 @@ class APIErrorBanner(QFrame):
         except Exception as e:
             logger.error(f"Failed to apply theme styling: {e}")
 
-    def show_error(self, error_message: str, provider_name: str = "API"):
+    def show_error(self, error_message: str, provider_name: str = "API", custom_message: str = None):
         """
         Show error banner with specified message.
 
         Args:
-            error_message: Error message to display
+            error_message: Error message to display (for logging/hints)
             provider_name: Name of the API provider (e.g., "OpenAI API")
+            custom_message: Optional custom message to display in banner (overrides default)
         """
         logger.info(f"🔔 show_error() called - provider: {provider_name}")
 
@@ -221,9 +222,10 @@ class APIErrorBanner(QFrame):
         self._provider_name = provider_name
         self._is_visible = True  # Set flag when showing
 
-        # Set message text
-        self.message_label.setText("Check your network settings")
-        logger.debug(f"Banner message set: Internet Issue - {provider_name}")
+        # Set message text (use custom message if provided, otherwise default)
+        display_message = custom_message if custom_message else "Check your network settings"
+        self.message_label.setText(display_message)
+        logger.debug(f"Banner message set: {display_message} - {provider_name}")
 
         # Generate hints based on error message
         #hints = self._generate_hints(error_message)
