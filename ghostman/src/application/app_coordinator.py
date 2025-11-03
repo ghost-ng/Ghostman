@@ -893,13 +893,13 @@ class AppCoordinator(QObject):
     def _apply_ai_model_settings(self, ai_model_config: dict):
         """Apply AI model settings."""
         logger.info(f"🤖 Processing AI model settings: {len(ai_model_config)} items")
-        
+
         settings_processed = 0
         model_name = ai_model_config.get('model_name', 'not set')
         base_url = ai_model_config.get('base_url', 'not set')
-        
+
         logger.info(f"🤖 AI Model configuration: {model_name} at {base_url}")
-        
+
         # Log all AI model settings with proper masking
         for key, value in ai_model_config.items():
             if key == "api_key" and value:
@@ -908,9 +908,32 @@ class AppCoordinator(QObject):
                 display_value = value
             logger.info(f"  🔧 AI {key}: {display_value}")
             settings_processed += 1
-        
-        # TODO: Update AI service configuration when implemented
-        logger.info("📝 AI service integration pending - settings stored for future use")
+
+        # Reinitialize AI service with new settings
+        logger.info("🔄 Reinitializing AI service with new settings...")
+        try:
+            # Get reference to AI service through REPL widget's conversation manager
+            if self._main_window and hasattr(self._main_window, 'repl_widget'):
+                repl_widget = self._main_window.repl_widget
+                if hasattr(repl_widget, 'conversation_manager') and repl_widget.conversation_manager:
+                    ai_service = repl_widget.conversation_manager.get_ai_service()
+
+                    if ai_service:
+                        # Reinitialize AI service (it will reload settings from settings manager)
+                        if ai_service.initialize():
+                            logger.info(f"✓ AI service reinitialized successfully with model: {model_name}")
+                        else:
+                            logger.error("✗ Failed to reinitialize AI service with new settings")
+                    else:
+                        logger.warning("⚠ AI service not available - settings will apply on next app start")
+                else:
+                    logger.warning("⚠ Conversation manager not available - settings will apply on next app start")
+            else:
+                logger.warning("⚠ REPL widget not available - settings will apply on next app start")
+        except Exception as e:
+            logger.error(f"✗ Error reinitializing AI service: {e}")
+            logger.info("📝 Settings saved - will apply on next app restart")
+
         logger.info(f"🤖 AI model settings processing complete: {settings_processed} items logged")
     
     def _apply_advanced_settings(self, advanced_config: dict):
