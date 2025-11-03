@@ -15,7 +15,8 @@
       "Bash(tasklist:*)",
       "Bash(findstr:*)",
       "Bash(find:*)",
-      "Bash(timeout /t 10 /nobreak)"
+      "Bash(timeout /t 10 /nobreak)",
+      "Bash(dir:*)"
     ],
     "deny": [],
     "ask": [],
