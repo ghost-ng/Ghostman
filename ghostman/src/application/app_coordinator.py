@@ -971,30 +971,37 @@ class AppCoordinator(QObject):
             settings_processed += 1
         
         # Apply SSL verification settings using unified SSL service
+        ssl_or_pki_changed = False
         try:
             from ..infrastructure.ssl.ssl_service import ssl_service
-            
+
             # Configure SSL service from settings (includes both ignore_ssl and PKI integration)
             if ssl_service.configure_from_settings(settings.get_all_settings()):
                 logger.info("✓ SSL verification configured through unified SSL service")
+                ssl_or_pki_changed = True
             else:
                 logger.error("✗ Failed to configure SSL verification through unified service")
             settings_processed += 1
-            
+
         except Exception as e:
             logger.error(f"Failed to apply SSL verification settings: {e}")
             # Fallback to old behavior for backward compatibility
             if "ignore_ssl_verification" in advanced_config:
                 ignore_ssl = advanced_config["ignore_ssl_verification"]
                 logger.info(f"🔒 SSL verification (fallback): {'DISABLED' if ignore_ssl else 'ENABLED'}")
-                
+
                 try:
                     from ..infrastructure.ai.session_manager import session_manager
                     session_manager.configure_session(disable_ssl_verification=ignore_ssl)
                     logger.info(f"✓ SSL verification setting applied to session manager (fallback)")
+                    ssl_or_pki_changed = True
                 except Exception as fallback_e:
                     logger.error(f"Failed to apply SSL verification setting (fallback): {fallback_e}")
             settings_processed += 1
+
+        # Reinitialize SSL/PKI/AI services if SSL or PKI settings changed
+        if ssl_or_pki_changed:
+            self._reinitialize_ssl_pki_services()
         
         # Log any additional advanced settings
         for key, value in advanced_config.items():
@@ -1003,7 +1010,51 @@ class AppCoordinator(QObject):
                 settings_processed += 1
         
         logger.info(f"🔍 Advanced settings processing complete: {settings_processed}/{len(advanced_config)} applied")
-    
+
+    def _reinitialize_ssl_pki_services(self):
+        """
+        Reinitialize SSL/PKI services and AI service to apply new security settings.
+
+        This should be called whenever SSL verification or PKI settings change.
+        """
+        logger.info("🔄 Reinitializing SSL/PKI services...")
+
+        # Reset PKI service initialization to pick up new certificates/settings
+        try:
+            from ..infrastructure.pki import pki_service
+            logger.info("🔄 Resetting PKI service to apply new certificates...")
+            pki_service.reset_initialization()
+
+            # Reinitialize PKI to apply new settings
+            if pki_service.initialize():
+                logger.info("✓ PKI service reinitialized successfully")
+            else:
+                logger.warning("⚠ PKI service reinitialization completed without authentication")
+
+        except Exception as pki_e:
+            logger.error(f"Failed to reinitialize PKI service: {pki_e}")
+
+        # Reinitialize AI service to pick up new SSL/PKI settings
+        try:
+            logger.info("🔄 Reinitializing AI service with new SSL/PKI settings...")
+            if self._main_window and hasattr(self._main_window, 'repl_widget'):
+                repl_widget = self._main_window.repl_widget
+                if hasattr(repl_widget, 'conversation_manager') and repl_widget.conversation_manager:
+                    ai_service = repl_widget.conversation_manager.get_ai_service()
+                    if ai_service:
+                        if ai_service.initialize():
+                            logger.info("✓ AI service reinitialized successfully with new SSL/PKI settings")
+                        else:
+                            logger.warning("⚠ AI service reinitialization returned False")
+                    else:
+                        logger.warning("⚠ No AI service available for reinitialization")
+                else:
+                    logger.warning("⚠ No conversation manager available for AI service reinitialization")
+            else:
+                logger.warning("⚠ No REPL widget available for AI service reinitialization")
+        except Exception as ai_e:
+            logger.error(f"Failed to reinitialize AI service: {ai_e}")
+
     def _apply_font_settings(self, fonts_config: dict):
         """Apply font settings to the UI."""
         logger.info(f"🔤 Processing font settings: {len(fonts_config)} categories")

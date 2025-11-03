@@ -61,7 +61,7 @@ class EmbeddingConfig:
     """Configuration for embedding services."""
     provider: EmbeddingProvider = EmbeddingProvider.OPENAI
     model: str = "text-embedding-3-small"
-    api_endpoint: str = "https://api.openai.com/v1"
+    api_endpoint: str = ""  # Will be loaded from settings in __post_init__
     api_key: Optional[str] = None
     dimensions: Optional[int] = None
     max_retries: int = 3
@@ -76,6 +76,12 @@ class EmbeddingConfig:
     
     def __post_init__(self):
         """Validate configuration after initialization."""
+        # Load API endpoint from settings if not explicitly set
+        if not self.api_endpoint:
+            self.api_endpoint = settings.get("ai_model.base_url", "") if settings else ""
+            if not self.api_endpoint:
+                logger.warning("No API endpoint configured - RAG embeddings will fail")
+
         if self.provider == EmbeddingProvider.OPENAI and not self.api_key:
             # Use API key from settings file first, then fallback to environment
             self.api_key = settings.get("ai_model.api_key") if settings else None
@@ -83,7 +89,7 @@ class EmbeddingConfig:
                 logger.warning("OpenAI API key not found - embeddings will fail")
                 # Don't raise exception here to prevent crashes
                 # The pipeline will handle failed embeddings gracefully
-        
+
         # Set default dimensions based on model
         if not self.dimensions:
             model_dimensions = {
@@ -99,7 +105,7 @@ class LLMConfig:
     """Configuration for LLM services."""
     provider: LLMProvider = LLMProvider.OPENAI
     model: str = "gpt-4"
-    api_endpoint: str = "https://api.openai.com/v1"
+    api_endpoint: str = ""  # Will be loaded from settings in __post_init__
     api_key: Optional[str] = None
     temperature: float = 0.1
     max_tokens: int = 2000
@@ -117,6 +123,12 @@ class LLMConfig:
 
     def __post_init__(self):
         """Validate configuration after initialization."""
+        # Load API endpoint from settings if not explicitly set
+        if not self.api_endpoint:
+            self.api_endpoint = settings.get("ai_model.base_url", "") if settings else ""
+            if not self.api_endpoint:
+                logger.warning("No API endpoint configured - RAG LLM queries will fail")
+
         if self.provider == LLMProvider.OPENAI and not self.api_key:
             # Use API key from settings file first, then fallback to environment
             self.api_key = settings.get("ai_model.api_key") if settings else None

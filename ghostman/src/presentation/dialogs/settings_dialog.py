@@ -1158,15 +1158,40 @@ class SettingsDialog(QDialog):
         """Handle PKI authentication status changes."""
         try:
             logger.info(f"PKI authentication {'enabled' if enabled else 'disabled'}")
-            
-            # You could add additional handling here, such as:
-            # - Updating other parts of the application
-            # - Refreshing connection settings
-            # - Notifying the main application window
-            
+
+            # Reconfigure SSL service to pick up new PKI settings
+            try:
+                from ...infrastructure.ssl.ssl_service import ssl_service
+                from ...infrastructure.storage.settings_manager import settings
+
+                if ssl_service.configure_from_settings(settings.get_all_settings()):
+                    logger.info("✓ SSL service reconfigured after PKI status change")
+                else:
+                    logger.warning("⚠ SSL service reconfiguration returned False")
+            except Exception as ssl_e:
+                logger.error(f"Failed to reconfigure SSL service: {ssl_e}")
+
+            # Notify app coordinator to reinitialize SSL/PKI/AI services
+            # This ensures the changes take effect immediately
+            try:
+                # Get the app coordinator through the parent window
+                parent = self.parent()
+                if parent and hasattr(parent, 'app_coordinator'):
+                    app_coordinator = parent.app_coordinator
+                    if hasattr(app_coordinator, '_reinitialize_ssl_pki_services'):
+                        logger.info("🔄 Triggering SSL/PKI/AI services reinitialization via app coordinator...")
+                        app_coordinator._reinitialize_ssl_pki_services()
+                        logger.info("✓ SSL/PKI/AI services reinitialization triggered")
+                    else:
+                        logger.warning("⚠ App coordinator does not have _reinitialize_ssl_pki_services method")
+                else:
+                    logger.warning("⚠ Cannot access app coordinator to trigger reinitialization")
+            except Exception as coord_e:
+                logger.error(f"Failed to trigger app coordinator reinitialization: {coord_e}")
+
         except Exception as e:
             logger.error(f"Error handling PKI status change: {e}")
-        
+
         # Update config path
     
     def _apply_pki_placeholder_theme(self, colors):

@@ -55,11 +55,11 @@ class StartupService:
         try:
             logger.info("Testing API connection on startup...")
             
-            # Get API configuration
+            # Get API configuration (no fallbacks - require explicit configuration)
             api_config = {
                 'api_key': settings.get('ai_model.api_key'),
-                'base_url': settings.get('ai_model.base_url', 'https://api.openai.com/v1'),
-                'model': settings.get('ai_model.model_name', 'gpt-3.5-turbo'),
+                'base_url': settings.get('ai_model.base_url', ''),
+                'model': settings.get('ai_model.model_name', ''),
                 'temperature': settings.get('ai_model.temperature', 0.7),
                 'max_tokens': settings.get('ai_model.max_tokens', 2000)
             }
