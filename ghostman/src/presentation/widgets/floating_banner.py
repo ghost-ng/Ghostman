@@ -70,19 +70,20 @@ class FloatingBannerWindow(QWidget):
 
         logger.debug("FloatingBanner UI initialized")
 
-    def show_error(self, error_message: str, provider_name: str = "API"):
+    def show_error(self, error_message: str, provider_name: str = "API", custom_message: str = None):
         """
         Show the banner with an error message.
 
         Args:
             error_message: The error message to display
             provider_name: Name of the API provider
+            custom_message: Optional custom message to override default banner text
         """
-        logger.info(f"🔔 FloatingBanner.show_error() called with provider={provider_name}, error={error_message}")
+        logger.info(f"🔔 FloatingBanner.show_error() called with provider={provider_name}, error={error_message}, custom={custom_message}")
         logger.debug(f"📍 Banner current state: isVisible={self.isVisible()}, parent_window exists={self.parent_window is not None}")
 
         # Update banner content
-        self.banner.show_error(error_message, provider_name)
+        self.banner.show_error(error_message, provider_name, custom_message=custom_message)
         logger.debug("✅ Banner content updated")
 
         # Position above parent window
