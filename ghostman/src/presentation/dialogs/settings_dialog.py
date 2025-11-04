@@ -212,7 +212,7 @@ class SettingsDialog(QDialog):
         params_layout.addRow("", temp_description)
         
         self.max_tokens_spin = QSpinBox()
-        self.max_tokens_spin.setRange(1, 32000)
+        self.max_tokens_spin.setRange(1, 200000)  # Support up to 200k tokens for newer models
         self.max_tokens_spin.setValue(2000)
         self.max_tokens_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         
@@ -2127,21 +2127,68 @@ class SettingsDialog(QDialog):
             if "ai_model" not in ai_config:
                 raise ValueError("Invalid AI settings file: missing 'ai_model' section")
 
-            # Apply AI model settings
+            # Apply AI model settings with detailed logging
             ai_model = ai_config["ai_model"]
-            if "model_name" in ai_model:
-                self.model_name_edit.setText(ai_model["model_name"])
-            if "base_url" in ai_model:
-                self.base_url_edit.setText(ai_model["base_url"])
-            if "api_key" in ai_model:
-                self.api_key_edit.setText(ai_model["api_key"])
-            if "temperature" in ai_model:
-                self.temperature_spin.setValue(ai_model["temperature"])
-            if "max_tokens" in ai_model:
-                self.max_tokens_spin.setValue(ai_model["max_tokens"])
-            if "system_prompt" in ai_model:
-                self.user_prompt_edit.setPlainText(ai_model["system_prompt"])
+            logger.info("=== 📥 IMPORTING AI SETTINGS ===")
+            logger.info(f"Source file: {file_path}")
+            logger.info(f"Total keys in ai_model section: {len(ai_model)}")
 
+            imported_count = 0
+
+            if "model_name" in ai_model:
+                value = ai_model["model_name"]
+                self.model_name_edit.setText(value)
+                logger.debug(f"  ✓ Imported model_name: '{value}'")
+                imported_count += 1
+            else:
+                logger.debug("  ⚠ model_name not found in import file")
+
+            if "base_url" in ai_model:
+                value = ai_model["base_url"]
+                self.base_url_edit.setText(value)
+                logger.debug(f"  ✓ Imported base_url: '{value}'")
+                imported_count += 1
+            else:
+                logger.debug("  ⚠ base_url not found in import file")
+
+            if "api_key" in ai_model:
+                value = ai_model["api_key"]
+                self.api_key_edit.setText(value)
+                logger.debug(f"  ✓ Imported api_key: ***MASKED*** (length: {len(value)})")
+                imported_count += 1
+            else:
+                logger.debug("  ⚠ api_key not found in import file")
+
+            if "temperature" in ai_model:
+                value = ai_model["temperature"]
+                self.temperature_spin.setValue(value)
+                logger.debug(f"  ✓ Imported temperature: {value} (type: {type(value).__name__})")
+                imported_count += 1
+            else:
+                logger.debug("  ⚠ temperature not found in import file")
+
+            if "max_tokens" in ai_model:
+                value = ai_model["max_tokens"]
+                logger.debug(f"  📝 max_tokens from file: {value} (type: {type(value).__name__})")
+                logger.debug(f"  📝 max_tokens_spin range: {self.max_tokens_spin.minimum()} - {self.max_tokens_spin.maximum()}")
+                logger.debug(f"  📝 max_tokens_spin current value before: {self.max_tokens_spin.value()}")
+                self.max_tokens_spin.setValue(value)
+                logger.debug(f"  📝 max_tokens_spin current value after: {self.max_tokens_spin.value()}")
+                logger.debug(f"  ✓ Imported max_tokens: {value}")
+                imported_count += 1
+            else:
+                logger.debug("  ⚠ max_tokens not found in import file")
+
+            if "system_prompt" in ai_model:
+                value = ai_model["system_prompt"]
+                self.user_prompt_edit.setPlainText(value)
+                logger.debug(f"  ✓ Imported system_prompt: (length: {len(value)})")
+                imported_count += 1
+            else:
+                logger.debug("  ⚠ system_prompt not found in import file")
+
+            logger.info(f"✅ Import complete: {imported_count}/{len(ai_model)} settings loaded")
+            logger.info("=== 📥 IMPORT COMPLETE ===")
             logger.info(f"AI settings imported from: {file_path}")
             QMessageBox.information(
                 self,
