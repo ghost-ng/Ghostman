@@ -314,7 +314,25 @@ class SettingsDialog(QDialog):
         test_layout.addStretch()
         
         layout.addWidget(test_group)
-        
+
+        # Import/Export Group
+        import_export_group = QGroupBox("Configuration Management")
+        import_export_layout = QHBoxLayout(import_export_group)
+
+        self.export_ai_settings_btn = QPushButton("Export AI Settings")
+        self.export_ai_settings_btn.setToolTip("Save AI model configuration and parameters to a JSON file")
+        self.export_ai_settings_btn.clicked.connect(self._export_ai_settings)
+        import_export_layout.addWidget(self.export_ai_settings_btn)
+
+        self.import_ai_settings_btn = QPushButton("Load AI Settings")
+        self.import_ai_settings_btn.setToolTip("Load AI model configuration and parameters from a JSON file")
+        self.import_ai_settings_btn.clicked.connect(self._import_ai_settings)
+        import_export_layout.addWidget(self.import_ai_settings_btn)
+
+        import_export_layout.addStretch()
+
+        layout.addWidget(import_export_group)
+
         layout.addStretch()
         self.tab_widget.addTab(tab, "AI Settings")
     
@@ -2036,7 +2054,130 @@ class SettingsDialog(QDialog):
                 logger.warning("  ✗ App coordinator not found")
         except Exception as e:
             logger.error(f"Could not hide banner after manual test: {e}", exc_info=True)
-    
+
+    def _export_ai_settings(self):
+        """Export AI model settings and parameters to a JSON file."""
+        try:
+            import json
+            from PyQt6.QtWidgets import QFileDialog, QMessageBox
+
+            # Gather all AI-related settings
+            ai_config = {
+                "ai_model": {
+                    "model_name": self.model_name_edit.text(),
+                    "base_url": self.base_url_edit.text(),
+                    "api_key": self.api_key_edit.text(),
+                    "temperature": self.temperature_spin.value(),
+                    "max_tokens": self.max_tokens_spin.value(),
+                    "system_prompt": self.system_prompt_edit.toPlainText()
+                },
+                "advanced": {
+                    "ignore_ssl_verification": getattr(self, 'ignore_ssl_check', None) and self.ignore_ssl_check.isChecked() if hasattr(self, 'ignore_ssl_check') else False,
+                    "custom_ca_path": getattr(self, 'custom_ca_edit', None) and self.custom_ca_edit.text() if hasattr(self, 'custom_ca_edit') else ""
+                }
+            }
+
+            # Ask user where to save
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Export AI Settings",
+                "ai_settings.json",
+                "JSON Files (*.json);;All Files (*)"
+            )
+
+            if file_path:
+                # Write to file with pretty formatting
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(ai_config, f, indent=2, ensure_ascii=False)
+
+                logger.info(f"AI settings exported to: {file_path}")
+                QMessageBox.information(
+                    self,
+                    "Export Successful",
+                    f"AI settings have been exported to:\n{file_path}"
+                )
+
+        except Exception as e:
+            logger.error(f"Failed to export AI settings: {e}")
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.critical(
+                self,
+                "Export Failed",
+                f"Failed to export AI settings:\n{str(e)}"
+            )
+
+    def _import_ai_settings(self):
+        """Import AI model settings and parameters from a JSON file."""
+        try:
+            import json
+            from PyQt6.QtWidgets import QFileDialog, QMessageBox
+
+            # Ask user to select file
+            file_path, _ = QFileDialog.getOpenFileName(
+                self,
+                "Load AI Settings",
+                "",
+                "JSON Files (*.json);;All Files (*)"
+            )
+
+            if not file_path:
+                return
+
+            # Read from file
+            with open(file_path, 'r', encoding='utf-8') as f:
+                ai_config = json.load(f)
+
+            # Validate structure
+            if "ai_model" not in ai_config:
+                raise ValueError("Invalid AI settings file: missing 'ai_model' section")
+
+            # Apply AI model settings
+            ai_model = ai_config["ai_model"]
+            if "model_name" in ai_model:
+                self.model_name_edit.setText(ai_model["model_name"])
+            if "base_url" in ai_model:
+                self.base_url_edit.setText(ai_model["base_url"])
+            if "api_key" in ai_model:
+                self.api_key_edit.setText(ai_model["api_key"])
+            if "temperature" in ai_model:
+                self.temperature_spin.setValue(ai_model["temperature"])
+            if "max_tokens" in ai_model:
+                self.max_tokens_spin.setValue(ai_model["max_tokens"])
+            if "system_prompt" in ai_model:
+                self.system_prompt_edit.setPlainText(ai_model["system_prompt"])
+
+            # Apply advanced settings if present
+            if "advanced" in ai_config:
+                advanced = ai_config["advanced"]
+                if "ignore_ssl_verification" in advanced and hasattr(self, 'ignore_ssl_check'):
+                    self.ignore_ssl_check.setChecked(advanced["ignore_ssl_verification"])
+                if "custom_ca_path" in advanced and hasattr(self, 'custom_ca_edit'):
+                    self.custom_ca_edit.setText(advanced["custom_ca_path"])
+
+            logger.info(f"AI settings imported from: {file_path}")
+            QMessageBox.information(
+                self,
+                "Import Successful",
+                f"AI settings have been loaded from:\n{file_path}\n\nClick 'Apply' to save these settings."
+            )
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in AI settings file: {e}")
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.critical(
+                self,
+                "Import Failed",
+                f"Invalid JSON file:\n{str(e)}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to import AI settings: {e}")
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.critical(
+                self,
+                "Import Failed",
+                f"Failed to import AI settings:\n{str(e)}"
+            )
+
     def _show_models(self):
         """Show available models from the API endpoint."""
         try:
