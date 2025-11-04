@@ -2061,7 +2061,7 @@ class SettingsDialog(QDialog):
             import json
             from PyQt6.QtWidgets import QFileDialog, QMessageBox
 
-            # Gather all AI-related settings
+            # Gather AI model settings only (not general application settings)
             ai_config = {
                 "ai_model": {
                     "model_name": self.model_name_edit.text(),
@@ -2070,10 +2070,6 @@ class SettingsDialog(QDialog):
                     "temperature": self.temperature_spin.value(),
                     "max_tokens": self.max_tokens_spin.value(),
                     "system_prompt": self.user_prompt_edit.toPlainText()
-                },
-                "advanced": {
-                    "ignore_ssl_verification": getattr(self, 'ignore_ssl_check', None) and self.ignore_ssl_check.isChecked() if hasattr(self, 'ignore_ssl_check') else False,
-                    "custom_ca_path": getattr(self, 'custom_ca_edit', None) and self.custom_ca_edit.text() if hasattr(self, 'custom_ca_edit') else ""
                 }
             }
 
@@ -2145,14 +2141,6 @@ class SettingsDialog(QDialog):
                 self.max_tokens_spin.setValue(ai_model["max_tokens"])
             if "system_prompt" in ai_model:
                 self.user_prompt_edit.setPlainText(ai_model["system_prompt"])
-
-            # Apply advanced settings if present
-            if "advanced" in ai_config:
-                advanced = ai_config["advanced"]
-                if "ignore_ssl_verification" in advanced and hasattr(self, 'ignore_ssl_check'):
-                    self.ignore_ssl_check.setChecked(advanced["ignore_ssl_verification"])
-                if "custom_ca_path" in advanced and hasattr(self, 'custom_ca_edit'):
-                    self.custom_ca_edit.setText(advanced["custom_ca_path"])
 
             logger.info(f"AI settings imported from: {file_path}")
             QMessageBox.information(
