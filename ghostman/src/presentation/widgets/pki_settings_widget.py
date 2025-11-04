@@ -398,9 +398,12 @@ class PKISettingsWidget(QWidget):
     def _refresh_status(self):
         """Refresh PKI status display."""
         try:
+            # Reset PKI service initialization to pick up any changes
+            pki_service.reset_initialization()
+
             # Initialize PKI service
             pki_service.initialize()
-            
+
             # Get current status
             status = pki_service.get_certificate_status()
             self._current_status = status
