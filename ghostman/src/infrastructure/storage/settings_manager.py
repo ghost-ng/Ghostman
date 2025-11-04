@@ -55,6 +55,26 @@ class SettingsManager:
         'interface': {  # new namespace for percent-based values
             'opacity': 97  # percent (10-100)
         },
+        'ai_model': {
+            'preset': 'Custom',
+            'model_name': '',
+            'base_url': '',
+            'api_key': '',
+            'temperature': 0.7,
+            'max_tokens': 16384,
+            'system_prompt': '',
+            'user_prompt': 'Your name is Spector, a friendly ghost AI assistant that helps with anything - be friendly, courteous, and a tadbit sassy!'
+        },
+        'advanced': {
+            'log_level': 'INFO',
+            'log_location': '',
+            'log_retention_days': 10,
+            'ignore_ssl_verification': False,
+            'custom_ca_path': '',
+            'auto_detect_code_language': True,
+            'enable_code_lexing': True,
+            'enable_debug_commands': False
+        },
         'fonts': {
             'ai_response': {
                 'family': 'Segoe UI',  # Font family for AI responses
