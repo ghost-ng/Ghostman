@@ -115,7 +115,12 @@ class EnhancedSystemTray(QObject):
         help_action = QAction(self._get_theme_icon("help"), "Help...", self.context_menu)
         help_action.triggered.connect(self.help_requested.emit)
         self.context_menu.addAction(help_action)
-        
+
+        # Hotkeys action
+        hotkeys_action = QAction(self._get_theme_icon("help"), "Keyboard Shortcuts", self.context_menu)
+        hotkeys_action.triggered.connect(self._on_hotkeys_clicked)
+        self.context_menu.addAction(hotkeys_action)
+
         self.context_menu.addSeparator()
         
         # Quit action
@@ -253,6 +258,22 @@ class EnhancedSystemTray(QObject):
         """Handle tray message clicked."""
         logger.debug("Tray message clicked")
         self.show_avatar_requested.emit()
+
+    def _on_hotkeys_clicked(self):
+        """Handle hotkeys menu item clicked."""
+        import webbrowser
+        try:
+            logger.info("⌨️ Keyboard shortcuts menu item clicked from system tray")
+            # Get the help file path with hotkeys anchor
+            current_dir = os.path.dirname(__file__)
+            # Go up from ui to presentation, then to src, then to ghostman root
+            ghostman_src_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
+            help_file = os.path.join(ghostman_src_root, 'assets', 'help', 'index.html')
+            help_url = f'file:///{help_file.replace(os.sep, "/")}#hotkeys'
+            webbrowser.open(help_url)
+            logger.info(f"⌨️ Opened keyboard shortcuts documentation: {help_url}")
+        except Exception as e:
+            logger.error(f"Failed to open keyboard shortcuts documentation: {e}")
     
     def show(self):
         """Show the system tray icon."""
@@ -332,6 +353,7 @@ class EnhancedSystemTray(QObject):
                 "Show Avatar": "chat",
                 "Settings...": "gear",
                 "Help...": "help",
+                "Keyboard Shortcuts": "help",
                 "Quit": "exit"
             }
 
