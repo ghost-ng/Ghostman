@@ -909,30 +909,12 @@ class AppCoordinator(QObject):
             logger.info(f"  🔧 AI {key}: {display_value}")
             settings_processed += 1
 
-        # Reinitialize AI service with new settings
-        logger.info("🔄 Reinitializing AI service with new settings...")
+        # Reinitialize SSL/PKI services first (in case base_url changed and requires different certs)
+        logger.info("🔄 Reinitializing SSL/PKI services for new network configuration...")
         try:
-            # Get reference to AI service through REPL widget's conversation manager
-            if self._main_window and hasattr(self._main_window, 'repl_widget'):
-                repl_widget = self._main_window.repl_widget
-                if hasattr(repl_widget, 'conversation_manager') and repl_widget.conversation_manager:
-                    ai_service = repl_widget.conversation_manager.get_ai_service()
-
-                    if ai_service:
-                        # Reinitialize AI service (it will reload settings from settings manager)
-                        if ai_service.initialize():
-                            logger.info(f"✓ AI service reinitialized successfully with model: {model_name}")
-                        else:
-                            logger.error("✗ Failed to reinitialize AI service with new settings")
-                    else:
-                        logger.warning("⚠ AI service not available - settings will apply on next app start")
-                else:
-                    logger.warning("⚠ Conversation manager not available - settings will apply on next app start")
-            else:
-                logger.warning("⚠ REPL widget not available - settings will apply on next app start")
+            self._reinitialize_ssl_pki_services()
         except Exception as e:
-            logger.error(f"✗ Error reinitializing AI service: {e}")
-            logger.info("📝 Settings saved - will apply on next app restart")
+            logger.error(f"✗ Error reinitializing SSL/PKI services: {e}")
 
         logger.info(f"🤖 AI model settings processing complete: {settings_processed} items logged")
     
