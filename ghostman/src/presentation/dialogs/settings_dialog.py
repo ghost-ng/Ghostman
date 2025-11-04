@@ -3064,18 +3064,22 @@ class ModelsDialog(QDialog):
                 self.loading_finished.emit()
                 return
             
-            # Import session manager and get ignore_ssl setting
+            # Import session manager and SSL service
             from ...infrastructure.ai.session_manager import session_manager
+            from ...infrastructure.ssl.ssl_service import ssl_service
             from ...infrastructure.storage.settings_manager import settings
-            
-            # Get ignore_ssl setting
-            ignore_ssl = settings.get('advanced.ignore_ssl_verification', True)
-            
-            # Configure session manager with proper SSL settings
+
+            # Configure SSL service from settings
+            try:
+                ssl_service.configure_from_settings(settings.get_all_settings())
+                ssl_service.configure_session_manager()
+            except Exception as ssl_e:
+                logger.warning(f"Failed to configure SSL service, using defaults: {ssl_e}")
+
+            # Configure session manager (SSL already configured via ssl_service)
             session_manager.configure_session(
                 timeout=10,
-                max_retries=2,
-                disable_ssl_verification=ignore_ssl
+                max_retries=2
             )
             
             # Prepare headers

@@ -98,32 +98,21 @@ class SSLVerificationService:
     def configure_session_manager(self) -> bool:
         """
         Configure the global session manager with current SSL settings.
-        
+
         Returns:
             True if configuration was successful
         """
         try:
             from ..ai.session_manager import session_manager
-            
-            # Configure session manager with SSL settings
-            session_manager.configure_session(
-                disable_ssl_verification=self._ignore_ssl
-            )
-            
-            # If we have a custom CA and SSL verification is enabled,
-            # we need to set it on the session
-            if not self._ignore_ssl and self._custom_ca_path:
-                try:
-                    with session_manager.get_session() as session:
-                        session.verify = self._custom_ca_path
-                    logger.debug(f"Session configured to use custom CA: {self._custom_ca_path}")
-                except Exception as e:
-                    logger.error(f"Failed to configure custom CA in session: {e}")
-                    return False
-            
-            logger.debug("Session manager configured with SSL settings")
+
+            # Trigger session reconfiguration to pick up SSL settings
+            # The session_manager.configure_session() will call ssl_service.get_verify_parameter()
+            # to get the current SSL settings, so we don't pass deprecated parameters
+            session_manager.configure_session()
+
+            logger.debug("Session manager configured with SSL settings from ssl_service")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to configure session manager: {e}")
             return False

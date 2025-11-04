@@ -189,12 +189,21 @@ class SessionManager:
         """Disable PKI client authentication for the session."""
         with self._session_lock:
             self._pki_config = None
-            
+
             # If session exists, remove PKI configuration
             if self._session:
                 self._session.cert = None
-                self._session.verify = True  # Reset to default
-            
+
+                # Reset SSL verification to current ssl_service setting (not hardcoded True)
+                try:
+                    from ..ssl.ssl_service import ssl_service
+                    verify_param = ssl_service.get_verify_parameter()
+                    self._session.verify = verify_param
+                    logger.debug(f"SSL verification reset to ssl_service setting: {verify_param}")
+                except Exception as e:
+                    logger.warning(f"Could not get SSL config from ssl_service, defaulting to True: {e}")
+                    self._session.verify = True
+
             logger.info("PKI authentication disabled")
     
     def _apply_pki_config(self) -> None:

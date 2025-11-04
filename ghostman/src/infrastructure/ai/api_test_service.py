@@ -295,14 +295,15 @@ class APITestService(QObject):
                 logger.info(f"SSL verification configured: ignore={ssl_service._ignore_ssl}, custom_ca={bool(ssl_service._custom_ca_path)}")
             
             # Apply SSL configuration to session manager
+            # This will configure the session with SSL settings from ssl_service
             ssl_service.configure_session_manager()
-            
-            # Configure session with NO retries - we handle all retries at the service level
+
+            # Configure additional session parameters (timeout, retries, pool size)
+            # DO NOT pass disable_ssl_verification here - it's already configured by ssl_service above
             self.session_manager.configure_session(
                 timeout=config.timeout,
-                max_retries=0,  # Disable all lower-level retries
-                pool_maxsize=5,
-                disable_ssl_verification=config.disable_ssl_verification
+                max_retries=0,  # Disable all lower-level retries - we handle retries at the service level
+                pool_maxsize=5
             )
             
             logger.info("Session configured for API testing with unified SSL settings")

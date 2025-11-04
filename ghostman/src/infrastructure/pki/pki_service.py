@@ -239,34 +239,15 @@ class PKIService:
         
         last_error = None
         
-        # Configure session based on ignore_ssl setting
-        if ignore_ssl:
-            logger.info("SSL verification disabled for PKI test due to ignore_ssl setting")
-            session_manager.configure_session(
-                timeout=10,
-                max_retries=0,  # Disable all lower-level retries - we handle retries here
-                disable_ssl_verification=True  # Disable SSL verification per setting
-            )
-        else:
-            # Use CA bundle verification when SSL verification is enabled
-            ca_bundle_path = self.cert_manager.get_ca_chain_file()
-            
-            session_manager.configure_session(
-                timeout=10,
-                max_retries=0,  # Disable all lower-level retries - we handle retries here
-                disable_ssl_verification=False  # Use proper SSL verification with CA bundle
-            )
-            
-            # Configure session to use CA bundle if available
-            if ca_bundle_path:
-                try:
-                    with session_manager.get_session() as session:
-                        session.verify = ca_bundle_path
-                    logger.info(f"PKI test configured to use CA bundle: {ca_bundle_path}")
-                except Exception as e:
-                    logger.error(f"Failed to configure CA bundle for PKI test: {e}")
-            else:
-                logger.warning("PKI enabled but no CA bundle available for verification")
+        # Configure session for PKI test
+        # SSL settings are managed by ssl_service, not manually overridden here
+        session_manager.configure_session(
+            timeout=10,
+            max_retries=0  # Disable all lower-level retries - we handle retries here
+        )
+        # Note: SSL verification and CA bundle are automatically configured by
+        # ssl_service and _apply_pki_config() in session_manager
+        logger.info(f"PKI test session configured (ignore_ssl={ignore_ssl})")
         
         for attempt in range(1, max_attempts + 1):
             try:
