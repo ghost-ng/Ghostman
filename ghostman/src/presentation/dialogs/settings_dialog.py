@@ -2069,7 +2069,7 @@ class SettingsDialog(QDialog):
                     "api_key": self.api_key_edit.text(),
                     "temperature": self.temperature_spin.value(),
                     "max_tokens": self.max_tokens_spin.value(),
-                    "system_prompt": self.system_prompt_edit.toPlainText()
+                    "system_prompt": self.user_prompt_edit.toPlainText()
                 },
                 "advanced": {
                     "ignore_ssl_verification": getattr(self, 'ignore_ssl_check', None) and self.ignore_ssl_check.isChecked() if hasattr(self, 'ignore_ssl_check') else False,
@@ -2144,7 +2144,7 @@ class SettingsDialog(QDialog):
             if "max_tokens" in ai_model:
                 self.max_tokens_spin.setValue(ai_model["max_tokens"])
             if "system_prompt" in ai_model:
-                self.system_prompt_edit.setPlainText(ai_model["system_prompt"])
+                self.user_prompt_edit.setPlainText(ai_model["system_prompt"])
 
             # Apply advanced settings if present
             if "advanced" in ai_config:
