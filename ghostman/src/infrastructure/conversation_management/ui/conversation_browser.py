@@ -720,33 +720,191 @@ class ConversationBrowserDialog(QDialog):
         """Search conversations."""
         search_text = self.search_input.text().strip()
         if not search_text:
-            self._load_conversations()
+            # No search text - reload all with current filter
+            filter_text = self.filter_combo.currentText() if self.filter_combo else "All"
+            filtered = self._apply_filter(self.conversations, filter_text)
+            self._populate_filtered_table(filtered)
             return
-        
+
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, 0)
         self.status_bar.showMessage(f"Searching for: {search_text}")
-        
-        # TODO: Implement search functionality
-        QTimer.singleShot(1000, lambda: self._search_complete([]))
-    
-    def _search_complete(self, results):
-        """Handle search completion."""
-        self._populate_table(results)
+
+        # Apply current filter first
+        filter_text = self.filter_combo.currentText() if self.filter_combo else "All"
+        filtered = self._apply_filter(self.conversations, filter_text)
+
+        # Then apply search
+        results = self._apply_search(filtered, search_text)
+
+        # Then apply current sort
+        sort_text = self.sort_combo.currentText() if self.sort_combo else "Updated (Newest)"
+        results = self._apply_sort(results, sort_text)
+
+        self._populate_filtered_table(results)
         self.progress_bar.setVisible(False)
         self.status_bar.showMessage(f"Search completed: {len(results)} results", 3000)
     
     def _filter_changed(self):
         """Handle filter change."""
         filter_text = self.filter_combo.currentText()
-        # TODO: Implement filtering
         logger.info(f"Filter changed to: {filter_text}")
-    
+
+        # Get the current search text if any
+        search_text = self.search_input.text().strip() if self.search_input else ""
+
+        # Re-populate table with filtered results
+        filtered_conversations = self._apply_filter(self.conversations, filter_text)
+
+        # Apply search if there's search text
+        if search_text:
+            filtered_conversations = self._apply_search(filtered_conversations, search_text)
+
+        self._populate_filtered_table(filtered_conversations)
+
     def _sort_changed(self):
         """Handle sort change."""
         sort_text = self.sort_combo.currentText()
-        # TODO: Implement sorting
         logger.info(f"Sort changed to: {sort_text}")
+
+        # Get current filtered conversations (from visible table rows)
+        current_conversations = self._get_visible_conversations()
+
+        # Sort the conversations
+        sorted_conversations = self._apply_sort(current_conversations, sort_text)
+
+        # Re-populate table with sorted results
+        self._populate_filtered_table(sorted_conversations)
+
+    def _apply_filter(self, conversations: List, filter_text: str) -> List:
+        """Apply status filter to conversations."""
+        if filter_text == "All":
+            return conversations
+
+        filtered = []
+        for conv in conversations:
+            status = conv.status.value.lower()
+
+            if filter_text == "Active" and status == "active":
+                filtered.append(conv)
+            elif filter_text == "Pinned" and status == "pinned":
+                filtered.append(conv)
+            elif filter_text == "Archived" and status == "archived":
+                filtered.append(conv)
+            elif filter_text == "Deleted" and status == "deleted":
+                filtered.append(conv)
+
+        return filtered
+
+    def _apply_search(self, conversations: List, search_text: str) -> List:
+        """Filter conversations by search text."""
+        search_lower = search_text.lower()
+        filtered = []
+
+        for conv in conversations:
+            # Search in title
+            if search_lower in conv.title.lower():
+                filtered.append(conv)
+                continue
+
+            # Search in tags
+            if hasattr(conv, 'metadata') and conv.metadata and hasattr(conv.metadata, 'tags'):
+                if any(search_lower in tag.lower() for tag in conv.metadata.tags):
+                    filtered.append(conv)
+                    continue
+
+            # Search in messages (first 100 chars of each message)
+            if hasattr(conv, 'messages') and conv.messages:
+                for msg in conv.messages:
+                    if search_lower in msg.content[:100].lower():
+                        filtered.append(conv)
+                        break
+
+        return filtered
+
+    def _apply_sort(self, conversations: List, sort_text: str) -> List:
+        """Sort conversations by the selected option."""
+        if not conversations:
+            return conversations
+
+        sorted_convs = conversations.copy()
+
+        if sort_text == "Updated (Newest)":
+            sorted_convs.sort(key=lambda c: c.updated_at, reverse=True)
+        elif sort_text == "Updated (Oldest)":
+            sorted_convs.sort(key=lambda c: c.updated_at, reverse=False)
+        elif sort_text == "Created (Newest)":
+            sorted_convs.sort(key=lambda c: c.created_at, reverse=True)
+        elif sort_text == "Created (Oldest)":
+            sorted_convs.sort(key=lambda c: c.created_at, reverse=False)
+        elif sort_text == "Title (A-Z)":
+            sorted_convs.sort(key=lambda c: c.title.lower())
+        elif sort_text == "Title (Z-A)":
+            sorted_convs.sort(key=lambda c: c.title.lower(), reverse=True)
+
+        return sorted_convs
+
+    def _get_visible_conversations(self) -> List:
+        """Get currently visible conversations from the table."""
+        visible = []
+        for row in range(self.conversation_table.rowCount()):
+            if not self.conversation_table.isRowHidden(row):
+                item = self.conversation_table.item(row, 0)
+                if item:
+                    conv_id = item.data(Qt.ItemDataRole.UserRole)
+                    # Find conversation in self.conversations
+                    for conv in self.conversations:
+                        if conv.id == conv_id:
+                            visible.append(conv)
+                            break
+        return visible
+
+    def _populate_filtered_table(self, conversations: List):
+        """Populate table with filtered/sorted conversations."""
+        self.conversation_table.setRowCount(len(conversations))
+
+        for i, conv in enumerate(conversations):
+            # Title
+            title_item = QTableWidgetItem(conv.title)
+            title_item.setData(Qt.ItemDataRole.UserRole, conv.id)
+            self.conversation_table.setItem(i, 0, title_item)
+
+            # Status
+            status_icon = {
+                "active": "🟢",
+                "pinned": "📌",
+                "archived": "📦",
+                "deleted": "🗑️"
+            }.get(conv.status.value.lower(), "❓")
+            status_item = QTableWidgetItem(f"{status_icon} {conv.status.value.title()}")
+            self.conversation_table.setItem(i, 1, status_item)
+
+            # Message count
+            msg_count = len(conv.messages) if hasattr(conv, 'messages') and conv.messages else 0
+            count_item = QTableWidgetItem(str(msg_count))
+            self.conversation_table.setItem(i, 2, count_item)
+
+            # Created date
+            created_item = QTableWidgetItem(conv.created_at.strftime("%Y-%m-%d %H:%M"))
+            self.conversation_table.setItem(i, 3, created_item)
+
+            # Updated date
+            updated_item = QTableWidgetItem(conv.updated_at.strftime("%Y-%m-%d %H:%M"))
+            self.conversation_table.setItem(i, 4, updated_item)
+
+            # Tags
+            tags = ""
+            if hasattr(conv, 'metadata') and conv.metadata and hasattr(conv.metadata, 'tags'):
+                tags = ", ".join(conv.metadata.tags[:3])  # Show first 3 tags
+                if len(conv.metadata.tags) > 3:
+                    tags += "..."
+            tags_item = QTableWidgetItem(tags)
+            self.conversation_table.setItem(i, 5, tags_item)
+
+        count_text = f"{len(conversations)} conversation(s)"
+        if len(conversations) != len(self.conversations):
+            count_text += f" (filtered from {len(self.conversations)})"
+        self.status_bar.showMessage(count_text)
     
     def _create_new_conversation(self):
         """Create a new conversation."""

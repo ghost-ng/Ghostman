@@ -2701,7 +2701,7 @@ class REPLWidget(QWidget):
         # Load plus icon (theme-specific)
         self._load_plus_icon(self.title_new_conv_btn)
         # Icon size is now handled by ButtonStyleManager
-        self.title_new_conv_btn.setToolTip("Start new conversation")
+        self.title_new_conv_btn.setToolTip("Start new conversation (Ctrl+N for new tab)")
         # Don't set popup mode - we'll handle the menu manually
         self.title_new_conv_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         self.title_new_conv_btn.clicked.connect(self._show_new_conv_menu)
@@ -2777,7 +2777,7 @@ class REPLWidget(QWidget):
         # Load chat icon (theme-specific)
         self._load_chat_icon()
         # Icon size is now handled by ButtonStyleManager
-        self.chat_btn.setToolTip("Browse conversations")
+        self.chat_btn.setToolTip("Browse conversations (Ctrl+K)")
         self.chat_btn.clicked.connect(self._on_chat_clicked)
         # Apply uniform button styling with proper padding
         logger.info("Applying uniform styling to chat button")
@@ -5568,7 +5568,7 @@ class REPLWidget(QWidget):
         # Load plus icon (theme-specific)
         self._load_plus_icon(self.toolbar_new_conv_btn)
         # Icon size is now handled by ButtonStyleManager
-        self.toolbar_new_conv_btn.setToolTip("Start new conversation")
+        self.toolbar_new_conv_btn.setToolTip("Start new conversation (Ctrl+N for new tab)")
         # Don't set popup mode - we'll handle the menu manually
         self.toolbar_new_conv_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         self.toolbar_new_conv_btn.clicked.connect(self._show_toolbar_new_conv_menu)
@@ -5603,7 +5603,7 @@ class REPLWidget(QWidget):
         # Browse conversations button
         self.browse_btn = QToolButton()
         self.browse_btn.setText("≡")
-        self.browse_btn.setToolTip("Browse conversations")
+        self.browse_btn.setToolTip("Browse conversations (Ctrl+K)")
         self.browse_btn.clicked.connect(self.browse_requested.emit)
         self._style_tool_button(self.browse_btn)
         toolbar_layout.addWidget(self.browse_btn)
@@ -6971,6 +6971,7 @@ class REPLWidget(QWidget):
         
         # Send button - align to bottom baseline
         self.send_button = QPushButton("Send")
+        self.send_button.setToolTip("Send message (Ctrl+Enter)")
         self.send_button.clicked.connect(self._on_command_entered)
         self.send_button.setFixedHeight(32)  # Match prompt label height
         self._style_send_button()
@@ -7436,28 +7437,64 @@ class REPLWidget(QWidget):
     
     def keyPressEvent(self, event):
         """Handle global keyboard shortcuts."""
-        # Ctrl+F to open search
+        # Ctrl+F to search within conversation
         if event.key() == Qt.Key.Key_F and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
             self._toggle_search()
             return
-        
+
+        # Ctrl+K to open conversation browser (search conversations)
+        elif event.key() == Qt.Key.Key_K and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            self._show_conversation_browser()
+            return
+
+        # Ctrl+N to create new tab
+        elif event.key() == Qt.Key.Key_N and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            self._create_new_tab()
+            return
+
+        # Ctrl+W to close current tab
+        elif event.key() == Qt.Key.Key_W and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            self._close_current_tab()
+            return
+
+        # Ctrl+Tab to switch to next tab
+        elif event.key() == Qt.Key.Key_Tab and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            self._switch_to_next_tab()
+            return
+
+        # Ctrl+Shift+Tab to switch to previous tab
+        elif (event.key() == Qt.Key.Key_Tab and
+              event.modifiers() == (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)):
+            self._switch_to_previous_tab()
+            return
+
         # Ctrl+U to toggle file browser
         elif event.key() == Qt.Key.Key_U and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
             self._toggle_file_browser()
             return
-        
+
+        # Ctrl+Enter to send message
+        elif event.key() == Qt.Key.Key_Return and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            self._send_message()
+            return
+
+        # Escape to cancel streaming response
+        elif event.key() == Qt.Key.Key_Escape and self._streaming:
+            self._cancel_stream()
+            return
+
         # Escape to close search if open
         elif event.key() == Qt.Key.Key_Escape and self.search_frame.isVisible():
             self._close_search()
             return
-        
+
         # Escape to close file browser if open
-        elif (event.key() == Qt.Key.Key_Escape and 
-              hasattr(self, 'file_browser_bar') and 
+        elif (event.key() == Qt.Key.Key_Escape and
+              hasattr(self, 'file_browser_bar') and
               self.file_browser_bar.isVisible()):
             self._close_file_browser()
             return
-        
+
         super().keyPressEvent(event)
     
     def dragEnterEvent(self, event):
@@ -11186,7 +11223,96 @@ def test_theme():
             # Normal tab creation - just create new tab
             new_tab_id = self.tab_manager.create_tab(title="Conversation")
             logger.debug(f"Created new tab: {new_tab_id}")
-    
+
+    def _close_current_tab(self):
+        """Close the current active tab."""
+        if not hasattr(self, 'tab_manager') or not self.tab_manager:
+            logger.warning("Tab manager not available for closing tab")
+            return
+
+        active_tab = self.tab_manager.get_active_tab()
+        if not active_tab:
+            logger.warning("No active tab to close")
+            return
+
+        # Don't close if it's the last tab
+        if len(self.tab_manager.tabs) <= 1:
+            logger.info("Cannot close last tab")
+            return
+
+        # Close the active tab
+        self.tab_manager.close_tab(active_tab.tab_id)
+        logger.debug(f"Closed tab via Ctrl+W: {active_tab.tab_id}")
+
+    def _switch_to_next_tab(self):
+        """Switch to the next tab (Ctrl+Tab)."""
+        if not hasattr(self, 'tab_manager') or not self.tab_manager:
+            return
+
+        tabs = list(self.tab_manager.tabs.values())
+        if len(tabs) <= 1:
+            return  # No other tabs to switch to
+
+        active_tab = self.tab_manager.get_active_tab()
+        if not active_tab:
+            return
+
+        # Find current tab index
+        current_index = -1
+        for i, tab in enumerate(tabs):
+            if tab.tab_id == active_tab.tab_id:
+                current_index = i
+                break
+
+        if current_index == -1:
+            return
+
+        # Switch to next tab (wrap around)
+        next_index = (current_index + 1) % len(tabs)
+        next_tab = tabs[next_index]
+        self.tab_manager.switch_to_tab(next_tab.tab_id)
+        logger.debug(f"Switched to next tab: {next_tab.tab_id}")
+
+    def _switch_to_previous_tab(self):
+        """Switch to the previous tab (Ctrl+Shift+Tab)."""
+        if not hasattr(self, 'tab_manager') or not self.tab_manager:
+            return
+
+        tabs = list(self.tab_manager.tabs.values())
+        if len(tabs) <= 1:
+            return  # No other tabs to switch to
+
+        active_tab = self.tab_manager.get_active_tab()
+        if not active_tab:
+            return
+
+        # Find current tab index
+        current_index = -1
+        for i, tab in enumerate(tabs):
+            if tab.tab_id == active_tab.tab_id:
+                current_index = i
+                break
+
+        if current_index == -1:
+            return
+
+        # Switch to previous tab (wrap around)
+        prev_index = (current_index - 1) % len(tabs)
+        prev_tab = tabs[prev_index]
+        self.tab_manager.switch_to_tab(prev_tab.tab_id)
+        logger.debug(f"Switched to previous tab: {prev_tab.tab_id}")
+
+    def _show_conversation_browser(self):
+        """Show the conversation browser dialog."""
+        self.browse_requested.emit()
+        logger.debug("Conversation browser requested via Ctrl+K")
+
+    def _cancel_stream(self):
+        """Cancel the current streaming response."""
+        if hasattr(self, '_stop_streaming'):
+            self._stop_streaming()
+            logger.info("Streaming cancelled via Escape key")
+
     # --- Tab Event Handlers ---
     
     def _on_tab_switched(self, old_tab_id: str, new_tab_id: str):

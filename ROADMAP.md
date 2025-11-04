@@ -4,196 +4,225 @@ This roadmap outlines planned enhancements and improvements for the Ghostman AI 
 
 ---
 
-## Priority 1: Complete Existing TODOs (Quick Wins)
+## Priority 1: Essential User Experience Features
 
-### Conversation Browser Features (10 incomplete TODOs)
-Location: `ghostman/src/infrastructure/conversation_management/ui/conversation_browser.py`
+1. **Search Functionality** - Search conversation history by keywords, dates, or AI provider with advanced filters (title, message content, file names). Include regex support and saved search queries.
 
-1. **Search Functionality** - Allow users to search through conversation history by keywords, dates, or AI provider
-2. **Filtering System** - Filter by status (active/archived), date range, AI model used, or conversations with file attachments
-3. **Sorting Options** - Sort by date (newest/oldest), title alphabetically, message count, or last updated
-4. **Conversation Archiving** - Move old conversations to archive without deleting them
-5. **Bulk Operations** - Delete multiple conversations, export in batch, archive multiple at once
-6. **Statistics Dashboard** - Show conversation count, total messages, tokens used, most-used AI models, conversation length trends
-7. **Cleanup Dialog** - Auto-delete conversations older than X days, bulk cleanup of empty conversations
+2. **Filtering System** - Multi-level filtering: status (active/archived), date range (today, this week, this month, custom), AI model used, conversations with file attachments, by tags/labels. Combine multiple filters with AND/OR logic.
 
-### File Management Enhancements
-8. **File Content Viewer** - Preview uploaded file contents within the app (code syntax highlighting, PDF viewer, image preview)
-   - Location: `ghostman/src/presentation/widgets/repl_widget.py:3421`
-9. **File Browser Pagination** - Handle large numbers of uploaded files gracefully with scrolling/pagination
-   - Location: `ghostman/src/presentation/widgets/file_browser_bar.py:1870`
+3. **Sorting Options** - Comprehensive sorting: date created (newest/oldest), date last modified, title alphabetically (A-Z/Z-A), message count (high/low), total tokens used, number of files attached. Multi-column sorting support.
 
-### Export Improvements
-10. **Export Dialog with Options** - GUI for choosing export format, including/excluding metadata, selecting date ranges
-    - Location: `ghostman/src/infrastructure/conversation_management/ui/repl_integration.py:423`
+5. **Bulk Operations** - Multi-select conversations for batch operations: delete, export (JSON/TXT/MD), archive, tag, change model settings. Include "Select All" and filter-based selection.
 
----
+7. **Auto-Cleanup Settings** - Settings dialog option to configure automatic conversation cleanup:
+   - Enable/disable auto-cleanup
+   - Cleanup interval (days): 30, 60, 90, 180, 365, custom
+   - What to clean: empty conversations, conversations older than X days, archived conversations
+   - Confirmation before cleanup
+   - Exclude pinned/favorited conversations from cleanup
 
-## Priority 2: User Experience Enhancements
+10. **Export Dialog with Options** - Rich export dialog with format selection (JSON, Markdown, TXT, HTML), options to include/exclude metadata (timestamps, model info, tokens), date range selection, file attachment handling (embed/link/exclude), syntax highlighting in HTML exports.
 
-### Conversation Management
-1. **Conversation Favorites/Pinning** - Star/pin important conversations to top of list
-2. **Conversation Tags/Labels** - Organize conversations with custom tags (e.g., "work", "research", "coding")
-3. **Conversation Templates** - Save conversation starters with pre-configured system prompts and file context
-4. **Conversation Branching** - Fork a conversation at any point to explore different paths
-5. **Message Editing** - Edit previous messages and regenerate AI responses from that point
+11. **Conversation Favorites/Pinning** - Star/pin system with visual indicators (star icon, pin icon). Pinned conversations always appear at top of list regardless of sort order. Quick-pin from conversation header and context menu.
 
-### RAG/File Context Improvements
-6. **File Format Support Expansion** - Add support for more formats:
-   - Office documents (DOCX, XLSX, PPTX)
-   - Code files with language-specific parsing
-   - Email files (MSG, EML)
-   - Web archives (MHTML, HTML)
-   - Audio transcription files
-7. **RAG Quality Controls** - Show chunk boundaries, adjust chunk size per conversation, see what context is being retrieved
-8. **Cross-Conversation RAG** - Option to search across multiple conversations' file contexts
-9. **RAG Source Citations** - Show which file chunks were used to generate each AI response
+12. **File Collections Manager** - Create and manage file collections for reusable context:
+   - Create named collections (e.g., "Project Docs", "Python Utils", "Research Papers")
+   - Add/remove files from collections with drag-drop
+   - Collection browser with search and filter
+   - Attach entire collection to conversation with one click
+   - Collection templates for common use cases
+   - Import/export collections for sharing
+   - Collection size limits and warnings
+   - Per-collection RAG settings (chunk size, overlap)
 
-### UI/UX Polish
-10. **Message Actions** - Copy, regenerate, edit, delete individual messages with right-click menu
-11. **Code Block Enhancements** - One-click copy button, language detection, syntax theme matching app theme
-12. **Response Bookmarking** - Save specific AI responses for later reference
-13. **Keyboard Navigation** - Full keyboard shortcuts for all major actions (conversation switching, file upload, settings)
-14. **Dark/Light Mode Auto-Switch** - Follow system theme automatically
-15. **Custom Keyboard Shortcuts** - Let users rebind all shortcuts in settings
+13. **Conversation Branching** - Fork conversations at any message to explore different paths:
+   - Right-click any message → "Branch from here"
+   - Creates new conversation with history up to that point
+   - Visual indicator showing parent conversation
+   - Option to merge insights back to parent (copy messages)
+   - Branch tree visualization showing all branches from a conversation
 
----
+14. **Message Actions** - Right-click context menu on any message:
+   - Copy message text
+   - Copy as Markdown/Plain Text
+   - Regenerate response (for AI messages)
+   - Edit and regenerate (for user messages)
+   - Delete message (and optionally all after it)
+   - Pin/bookmark message
+   - Search for similar messages
+   - Export single message
 
-## Priority 3: AI Capabilities
-
-### Multi-Modal Features
-1. **Image Upload Support** - Send images to vision-capable models (GPT-4V, Claude 3.5 Sonnet)
-2. **Image Generation Integration** - DALL-E, Stable Diffusion, or Midjourney API integration
-3. **Voice Input** - Speech-to-text for hands-free input (Whisper API integration)
-4. **Voice Output** - Text-to-speech for AI responses (OpenAI TTS or ElevenLabs)
-
-### Advanced AI Features
-5. **Model Comparison Mode** - Send same prompt to multiple models side-by-side
-6. **AI Model Profiles** - Save preset configurations (model + system prompt + temperature) for different use cases
-7. **Streaming Token Count** - Show token usage in real-time during streaming
-8. **Cost Tracking** - Track API costs per conversation with budget alerts
-9. **Response Quality Rating** - Thumbs up/down to track which responses were helpful (local analytics)
-10. **Custom System Prompts Library** - Save and manage multiple system prompts with descriptions
+15. **Code Block Enhancements** - Improve code display in conversations:
+   - One-click copy button (top-right of code block)
+   - Automatic language detection and syntax highlighting
+   - Syntax theme matches current app theme
+   - Line numbers toggle
+   - "Run in terminal" button for shell commands
+   - "Save to file" button
+   - Diff view for code changes
 
 ---
 
-## Priority 4: Collaboration & Sharing
+## Priority 2: AI Capabilities
 
-1. **Conversation Sharing** - Generate shareable links/files for conversations (anonymized)
-2. **Team/Multi-User Mode** - Share conversation database across team (with sync)
-3. **Conversation Import** - Import conversations from ChatGPT/Claude exports
-4. **Prompt Library Sharing** - Community-contributed system prompts/templates
-5. **Conversation Replay Mode** - Show conversation history in chronological order with timing
+16. **Image Upload Support** - Send images to vision-capable models (GPT-4V, Claude 3.5 Sonnet):
+   - Drag-drop images into chat
+   - Paste images from clipboard
+   - Image preview with zoom
+   - Multiple images per message
+   - Image annotation/markup before sending
+   - Image format conversion (HEIC→JPG, etc.)
 
----
+17. **Model Comparison Mode** - Send same prompt to multiple models side-by-side:
+   - Select 2-4 models to compare
+   - Split-pane view showing responses
+   - Response time comparison
+   - Token usage comparison
+   - Quality rating for each response
+   - "Use this response" to continue conversation with preferred model
 
-## Priority 5: Advanced Enterprise Features
-
-### Security & Compliance
-1. **Conversation Encryption** - End-to-end encryption for sensitive conversations
-2. **Audit Logging** - Track all user actions, API calls, file uploads for compliance
-3. **Data Residency Controls** - Configure which regions/servers to use per conversation
-4. **PII Detection** - Warn when sensitive data (SSN, credit cards, emails) is being sent
-
-### Administration
-5. **Usage Analytics Dashboard** - Detailed metrics on API usage, costs, response times
-6. **API Key Rotation** - Schedule automatic rotation of API keys with zero downtime
-7. **Centralized Policy Management** - IT admin controls for allowed models, max tokens, file types
-8. **SSO Integration** - SAML/OAuth login for enterprise deployments
-
----
-
-## Priority 6: Productivity Integrations
-
-1. **Browser Extension** - Capture web content directly into Ghostman with one click
-2. **VS Code Extension** - Send code selections to Ghostman with context
-3. **Clipboard Monitoring** - Auto-capture clipboard content as context (optional)
-4. **Calendar Integration** - Schedule reminders based on conversation action items
-5. **Task Manager Integration** - Convert AI suggestions into tasks (Todoist, Asana, Jira)
-6. **Note-Taking Integration** - Export conversations to Obsidian, Notion, Roam Research
-7. **Email Integration** - Draft emails based on conversation context
+18. **Streaming Token Count** - Real-time token usage display during streaming:
+   - Live counter showing tokens streamed so far
+   - Estimated cost (based on model pricing)
+   - Warning when approaching max_tokens limit
+   - Total conversation token count
+   - Per-message token breakdown
 
 ---
 
-## Priority 7: Performance & Scalability
+## Priority 3: Productivity & Quality of Life
 
-1. **Database Optimization** - Add indexes for faster conversation search
-2. **Lazy Loading** - Load conversation messages on-demand for faster startup
-3. **Vector Store Optimization** - Compress FAISS indices, implement incremental updates
-4. **Memory Management** - Automatic cleanup of old conversation caches
-5. **Background Sync** - Optional cloud backup of conversations (encrypted)
+19. **Keyboard Navigation** - Full keyboard shortcuts for all major actions:
+   - Ctrl+N: New conversation
+   - Ctrl+K: Search conversations
+   - Ctrl+Tab: Next conversation tab
+   - Ctrl+Shift+Tab: Previous conversation tab
+   - Ctrl+W: Close current tab
+   - Ctrl+Shift+F: Focus file upload
+   - Ctrl+Enter: Send message
+   - Escape: Cancel streaming response
+   - All shortcuts shown in tooltips
 
----
+20. **Auto-Save Drafts** - Save unsent messages across sessions:
+   - Auto-save input as you type (debounced)
+   - Per-conversation draft storage
+   - Restore drafts on app restart
+   - Draft indicator in conversation list
+   - "Discard draft" option
 
-## Priority 8: Developer Experience
+21. **Message History Navigation** - Navigate previous sent messages with up/down arrows:
+   - Press Up arrow in empty input to load previous message
+   - Continue pressing Up to go further back
+   - Press Down to go forward in history
+   - Edit and re-send previous messages
+   - Clear history option
 
-1. **Plugin System** - Allow third-party plugins for custom AI providers, themes, exporters
-2. **REST API Server** - Optional local API server to control Ghostman programmatically
-3. **CLI Interface** - Command-line tool for automation/scripting
-4. **Webhook Support** - Trigger external actions when conversations meet certain criteria
-5. **Custom Themes Editor** - GUI for creating themes without editing JSON
-
----
-
-## Priority 9: Quality of Life
-
-1. **Auto-Save Drafts** - Save unsent messages across sessions
-2. **Message History Navigation** - Navigate previous sent messages with up/down arrows (like terminal)
-3. **Conversation Summarization** - Auto-generate multi-paragraph summaries of long conversations
-4. **Smart Notifications** - Desktop notifications when long-running responses complete
-5. **Idle State Detection** - Pause timers/reduce resources when app is idle
-6. **Update Checker** - Notify when new versions available (with changelog)
-7. **Onboarding Tutorial** - Interactive first-run tutorial for new users
-
----
-
-## Priority 10: Fun/Experimental
-
-1. **Avatar Customization** - Multiple avatar options beyond Spector, custom images
-2. **Avatar Animations** - React to AI responses (thinking, excited, confused states)
-3. **Easter Eggs** - Hidden themes, secret keyboard shortcuts
-4. **Conversation Games** - Built-in AI games (20 questions, word association)
-5. **AI Personality Modes** - Quick-switch between persona presets (professional, casual, creative)
+22. **Smart Notifications** - Desktop notifications when long-running responses complete:
+   - Notify only when app is minimized or in background
+   - Show first 100 characters of response in notification
+   - Click notification to restore and focus app
+   - Sound notification toggle
+   - Do Not Disturb mode
 
 ---
 
-## Recommended Implementation Timeline
+## Priority 4: Advanced Features (Future)
 
-### Month 1-2
-Complete Priority 1 TODOs (conversation browser, file viewer, export dialog)
-
-### Month 3-4
-Priority 2 (UX polish - message actions, code blocks, keyboard shortcuts)
-
-### Month 5-6
-Priority 3 (Multi-modal - image upload/generation, voice I/O)
-
-### Month 7-8
-Priority 4 (Collaboration - sharing, import/export)
-
-### Month 9-10
-Priority 6 (Integrations - browser extension, VS Code, note-taking)
-
-### Month 11-12
-Priority 7-9 (Performance, developer experience, QoL)
+23. **Conversation Templates** - Save conversation starters with pre-configured system prompts and file collections
+24. **Voice Input** - Speech-to-text for hands-free input (Whisper API integration)
+25. **Voice Output** - Text-to-speech for AI responses (OpenAI TTS or ElevenLabs)
+26. **AI Model Profiles** - Save preset configurations (model + system prompt + temperature) for different use cases
+27. **Cost Tracking** - Track API costs per conversation with budget alerts
+28. **Custom System Prompts Library** - Save and manage multiple system prompts with descriptions
+29. **Conversation Import** - Import conversations from ChatGPT/Claude exports
+30. **Browser Extension** - Capture web content directly into Ghostman with one click
+31. **VS Code Extension** - Send code selections to Ghostman with context
 
 ---
 
-## Top 5 "Must Have" Features
-Based on User Impact
+## Recommended Implementation Order
 
-1. **Message Actions & Code Block Copy** - Immediate productivity boost for developers
-2. **Image Upload Support** - Unlocks entire category of use cases (Claude 3.5 Sonnet vision)
-3. **Conversation Search/Filter** - Essential for power users with many conversations
-4. **Voice Input/Output** - Game-changer for accessibility and hands-free use
-5. **VS Code Extension** - Seamless integration into developer workflow
+### Phase 1: Foundation (Weeks 1-2)
+1. Search Functionality (#1)
+2. Filtering System (#2)
+3. Sorting Options (#3)
+4. Auto-Cleanup Settings (#7)
+
+### Phase 2: Power User Features (Weeks 3-4)
+5. Bulk Operations (#5)
+6. Export Dialog (#10)
+7. Conversation Favorites/Pinning (#11)
+8. File Collections Manager (#12)
+
+### Phase 3: Interaction Enhancements (Weeks 5-6)
+9. Message Actions (#14)
+10. Code Block Enhancements (#15)
+11. Conversation Branching (#13)
+
+### Phase 4: Productivity (Weeks 7-8)
+12. Keyboard Navigation (#19)
+13. Auto-Save Drafts (#20)
+14. Message History Navigation (#21)
+15. Smart Notifications (#22)
+
+### Phase 5: AI Capabilities (Weeks 9-10)
+16. Image Upload Support (#16)
+17. Streaming Token Count (#18)
+18. Model Comparison Mode (#17)
+
+---
+
+## Top 5 User Experience Tasks to Start NOW
+
+Based on immediate impact and user value:
+
+**1. Code Block Enhancements (#15)**
+   - **Why First:** Developers use code blocks constantly, copy button saves time every single day
+   - **Effort:** Medium (2-3 days)
+   - **Impact:** Immediate productivity boost for every code-related conversation
+   - **Location:** `ghostman/src/presentation/widgets/repl_widget.py` - enhance Pygments code rendering
+
+**2. Search Functionality (#1)**
+   - **Why Second:** Users with 10+ conversations need this desperately
+   - **Effort:** Medium-High (3-4 days)
+   - **Impact:** Makes app usable for power users with many conversations
+   - **Location:** `ghostman/src/infrastructure/conversation_management/ui/conversation_browser.py` - add search bar and filtering logic
+
+**3. Message Actions (#14)**
+   - **Why Third:** Copy message text is requested by users frequently
+   - **Effort:** Medium (2-3 days)
+   - **Impact:** Better message management and workflow
+   - **Location:** `ghostman/src/presentation/widgets/repl_widget.py` - add context menu to messages
+
+**4. Auto-Save Drafts (#20)**
+   - **Why Fourth:** Prevents frustration from lost work if app crashes
+   - **Effort:** Low-Medium (1-2 days)
+   - **Impact:** Safety net that users appreciate daily
+   - **Location:** `ghostman/src/presentation/widgets/repl_widget.py` + `ghostman/src/infrastructure/storage/settings_manager.py`
+
+**5. Keyboard Navigation (#19)** ✅ COMPLETE
+   - **Status:** Implemented in `ghostman/src/presentation/widgets/repl_widget.py`
+   - **Shortcuts Added:**
+     - `Ctrl+K` - Open conversation browser (search conversations)
+     - `Ctrl+N` - Create new tab
+     - `Ctrl+W` - Close current tab
+     - `Ctrl+Tab` - Switch to next tab
+     - `Ctrl+Shift+Tab` - Switch to previous tab
+     - `Ctrl+F` - Search within conversation (existing)
+     - `Ctrl+U` - Toggle file browser (existing)
+     - `Ctrl+Enter` - Send message
+     - `Escape` - Cancel streaming response / close search / close file browser
+   - **Tooltips Updated:** All buttons now show keyboard shortcuts in tooltips
 
 ---
 
 ## Implementation Notes
 
-- Start with Priority 1 to finish existing work
-- Move to Priority 2-3 for biggest user experience wins
-- Balance quick wins with long-term architectural improvements
-- Gather user feedback after each priority level completion
-- Maintain backward compatibility with existing configurations
+- Focus on Priority 1 features first - these are the core UX improvements users need most
+- Each feature should include comprehensive error handling and user feedback
+- Add tooltips and help text for all new UI elements
+- Include keyboard shortcuts wherever applicable
+- Test with large datasets (100+ conversations, 1000+ messages)
+- Maintain backward compatibility with existing conversations database
+- Add migration logic if database schema changes are needed
+- Document all new features in user-facing help/tooltips
