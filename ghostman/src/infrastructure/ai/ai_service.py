@@ -172,22 +172,30 @@ class AIService:
     def _validate_config(self) -> bool:
         """Validate the AI configuration."""
         required_fields = ['model_name', 'base_url']
-        
+
+        # Check if configuration is empty (not yet configured)
+        is_empty = all(not self._config.get(field) for field in required_fields)
+
+        if is_empty:
+            logger.info("AI service not yet configured (no model_name or base_url set)")
+            return False  # Not an error, just not configured yet
+
+        # If partially configured, validate what's there
         for field in required_fields:
             if not self._config.get(field):
-                logger.error(f"Missing required configuration field: {field}")
+                logger.warning(f"AI configuration incomplete: missing {field}")
                 return False
-        
+
         # Warn about missing API key (some local services don't need it)
         if not self._config.get('api_key'):
             logger.warning("No API key configured - this may be required for some services")
-        
-        # Validate URL format
+
+        # Validate URL format if base_url is set
         base_url = self._config['base_url']
-        if not base_url.startswith(('http://', 'https://')):
+        if base_url and not base_url.startswith(('http://', 'https://')):
             logger.error(f"Invalid base URL format: {base_url}")
             return False
-        
+
         logger.debug("Configuration validation passed")
         return True
     
