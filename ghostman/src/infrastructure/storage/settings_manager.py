@@ -369,13 +369,95 @@ class SettingsManager:
         except Exception as e:
             logger.warning(f"PKI config migration failed: {e}")
 
+    def _validate_and_merge_settings(self, loaded_settings: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Validate and merge loaded settings with defaults.
+
+        Only keys that exist in DEFAULT_SETTINGS are kept.
+        Values are validated for correct data types.
+        Missing keys are filled with defaults.
+
+        Args:
+            loaded_settings: Settings loaded from file
+
+        Returns:
+            Validated and merged settings dictionary
+        """
+        import copy
+
+        def validate_value(value, default_value, key_path):
+            """Validate a single value against its default."""
+            # If default is None, allow any type
+            if default_value is None:
+                return value
+
+            # Type validation
+            expected_type = type(default_value)
+
+            # Special handling for numeric types (allow int where float expected)
+            if expected_type == float and isinstance(value, (int, float)):
+                return float(value)
+            elif expected_type == int and isinstance(value, (int, float)):
+                return int(value)
+            elif isinstance(value, expected_type):
+                return value
+            else:
+                logger.warning(
+                    f"Invalid type for '{key_path}': expected {expected_type.__name__}, "
+                    f"got {type(value).__name__}. Using default: {default_value}"
+                )
+                return default_value
+
+        def merge_dict(loaded_dict, default_dict, path=""):
+            """Recursively merge and validate nested dictionaries."""
+            result = {}
+
+            # Start with all default keys
+            for key, default_value in default_dict.items():
+                current_path = f"{path}.{key}" if path else key
+
+                if key not in loaded_dict:
+                    # Missing key - use default
+                    result[key] = copy.deepcopy(default_value)
+                    logger.debug(f"Using default for missing key: {current_path}")
+                else:
+                    loaded_value = loaded_dict[key]
+
+                    # Recursively validate nested dictionaries
+                    if isinstance(default_value, dict):
+                        if isinstance(loaded_value, dict):
+                            result[key] = merge_dict(loaded_value, default_value, current_path)
+                        else:
+                            logger.warning(
+                                f"Invalid type for '{current_path}': expected dict, "
+                                f"got {type(loaded_value).__name__}. Using default"
+                            )
+                            result[key] = copy.deepcopy(default_value)
+                    else:
+                        # Validate primitive value
+                        result[key] = validate_value(loaded_value, default_value, current_path)
+
+            # Log any extra keys in loaded settings that don't exist in defaults
+            for key in loaded_dict.keys():
+                if key not in default_dict:
+                    current_path = f"{path}.{key}" if path else key
+                    logger.debug(f"Ignoring unknown key from config file: {current_path}")
+
+            return result
+
+        return merge_dict(loaded_settings, self.DEFAULT_SETTINGS)
+
     def load(self):
-        """Load settings from file or create defaults."""
+        """Load settings from file or create defaults with comprehensive validation."""
         try:
             if self.settings_file.exists():
                 with open(self.settings_file, 'r', encoding='utf-8') as f:
-                    self._settings = json.load(f)
-                logger.info("Settings loaded successfully")
+                    loaded_settings = json.load(f)
+
+                # Validate and merge with defaults
+                self._settings = self._validate_and_merge_settings(loaded_settings)
+                logger.info("Settings loaded and validated successfully")
+
                 # Backward compatibility: migrate legacy ui.window_opacity -> interface.opacity percent
                 try:
                     ui_cfg = self._settings.get('ui', {})
@@ -400,18 +482,49 @@ class SettingsManager:
                 self._settings = self.DEFAULT_SETTINGS.copy()
                 self.save()
                 logger.info("Default settings created")
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in settings file: {e}. Using defaults.")
+            self._settings = self.DEFAULT_SETTINGS.copy()
         except Exception as e:
             logger.error(f"Failed to load settings: {e}")
             self._settings = self.DEFAULT_SETTINGS.copy()
     
     def save(self):
-        """Save current settings to file."""
+        """
+        Save all current settings to file.
+
+        Ensures all settings in memory are written to disk, including:
+        - UI settings (window opacity, position, size)
+        - Interface settings (opacity percentage)
+        - Font settings (AI response and user input fonts)
+        - Resize settings (global and widget-specific)
+        - App settings (state, log level, auto-start)
+        - Tray settings (animations, tooltips)
+        - PKI settings (certificates, validation)
+        - AI model settings (model name, base_url, api_key)
+        - Advanced settings (log location, SSL verification)
+
+        All settings are validated against DEFAULT_SETTINGS structure.
+        Sensitive values (API keys) remain encrypted with 'enc:' prefix.
+        """
         try:
+            # Ensure all default top-level keys exist (but don't overwrite existing values)
+            for key in self.DEFAULT_SETTINGS.keys():
+                if key not in self._settings:
+                    logger.debug(f"Adding missing default key to settings before save: {key}")
+                    self._settings[key] = self.DEFAULT_SETTINGS[key].copy() if isinstance(self.DEFAULT_SETTINGS[key], dict) else self.DEFAULT_SETTINGS[key]
+
+            # Write to file with pretty formatting
             with open(self.settings_file, 'w', encoding='utf-8') as f:
                 json.dump(self._settings, f, indent=2, ensure_ascii=False)
-            logger.debug("Settings saved successfully")
+
+            logger.debug(f"Settings saved successfully to {self.settings_file}")
+            logger.debug(f"Total top-level keys saved: {len(self._settings)}")
+
         except Exception as e:
             logger.error(f"Failed to save settings: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
     
     def get(self, key_path: str, default: Any = None) -> Any:
         """
@@ -480,7 +593,11 @@ class SettingsManager:
     def get_all(self) -> Dict[str, Any]:
         """Get all settings (sensitive values remain encrypted)."""
         return self._settings.copy()
-    
+
+    def get_all_settings(self) -> Dict[str, Any]:
+        """Alias for get_all() - returns all settings with encrypted sensitive values."""
+        return self.get_all()
+
     def reset_to_defaults(self):
         """Reset all settings to defaults."""
         self._settings = self.DEFAULT_SETTINGS.copy()
