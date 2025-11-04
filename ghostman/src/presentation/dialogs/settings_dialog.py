@@ -212,7 +212,7 @@ class SettingsDialog(QDialog):
         params_layout.addRow("", temp_description)
         
         self.max_tokens_spin = QSpinBox()
-        self.max_tokens_spin.setRange(1, 200000)  # Support up to 200k tokens for newer models
+        self.max_tokens_spin.setRange(1, 2147483647)  # Max int32 value - no artificial limit
         self.max_tokens_spin.setValue(2000)
         self.max_tokens_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         
