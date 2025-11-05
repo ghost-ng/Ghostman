@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (
 from ...application.services.collection_service import CollectionService
 from ...domain.models.collection import FileCollection, FileCollectionItem
 from ...infrastructure.conversation_management.repositories.database import DatabaseManager
-from ...ui.themes.improved_preset_themes import get_theme_by_name, ColorSystem
+from ...ui.themes.improved_preset_themes import get_improved_preset_themes, ColorSystem
 
 logger = logging.getLogger("ghostman.presentation.collections_manager")
 
@@ -312,9 +312,18 @@ class CollectionsManagerDialog(QDialog):
 
     def _apply_theme(self):
         """Apply the current theme to the dialog."""
-        theme = get_theme_by_name(self.theme_name)
-        if theme:
-            self.colors = theme.colors
+        themes = get_improved_preset_themes()
+        # Try to find matching theme (case-insensitive, handle both old and new names)
+        theme_key = self.theme_name.lower().replace(" ", "_")
+        if theme_key in themes:
+            self.colors = themes[theme_key]
+        elif f"improved_{theme_key}" in themes:
+            self.colors = themes[f"improved_{theme_key}"]
+        else:
+            # Default to professional_dark if theme not found
+            self.colors = themes.get("professional_dark", list(themes.values())[0])
+
+        if self.colors:
 
             # Apply background color
             self.setStyleSheet(f"""
