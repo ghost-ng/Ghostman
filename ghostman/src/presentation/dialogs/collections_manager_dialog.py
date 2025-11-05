@@ -383,7 +383,7 @@ class CollectionsManagerDialog(QDialog):
                     color: {self.colors.text_primary};
                 }}
                 QGroupBox {{
-                    border: 1px solid {self.colors.border};
+                    border: 1px solid {self.colors.border_primary};
                     border-radius: 4px;
                     margin-top: 10px;
                     padding-top: 10px;
@@ -398,14 +398,14 @@ class CollectionsManagerDialog(QDialog):
                 QLineEdit, QTextEdit, QSpinBox, QComboBox {{
                     background-color: {self.colors.background_secondary};
                     color: {self.colors.text_primary};
-                    border: 1px solid {self.colors.border};
+                    border: 1px solid {self.colors.border_primary};
                     border-radius: 3px;
                     padding: 5px;
                 }}
                 QListWidget {{
                     background-color: {self.colors.background_secondary};
                     color: {self.colors.text_primary};
-                    border: 1px solid {self.colors.border};
+                    border: 1px solid {self.colors.border_primary};
                     border-radius: 3px;
                 }}
                 QPushButton {{
