@@ -205,14 +205,19 @@ Based on immediate impact and user value:
    - **Shortcuts Added:**
      - `Ctrl+K` - Open conversation browser (search conversations)
      - `Ctrl+N` - Create new tab
-     - `Ctrl+W` - Close current tab
+     - `Ctrl+X` - Close current tab
      - `Ctrl+Tab` - Switch to next tab
      - `Ctrl+Shift+Tab` - Switch to previous tab
-     - `Ctrl+F` - Search within conversation (existing)
-     - `Ctrl+U` - Toggle file browser (existing)
+     - `Ctrl+T` - Toggle always on top
+     - `Ctrl+S` - Save/export conversation
+     - `Ctrl+M` - Minimize to tray
+     - `Ctrl+,` - Open settings
+     - `Ctrl+F` - Search within conversation
+     - `Ctrl+U` - Toggle file browser
      - `Ctrl+Enter` - Send message
      - `Escape` - Cancel streaming response / close search / close file browser
    - **Tooltips Updated:** All buttons now show keyboard shortcuts in tooltips
+   - **Help Documentation:** Complete keyboard shortcuts section added to help HTML
 
 ---
 

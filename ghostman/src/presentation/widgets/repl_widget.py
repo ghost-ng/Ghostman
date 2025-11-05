@@ -7452,8 +7452,8 @@ class REPLWidget(QWidget):
             self._create_new_tab()
             return
 
-        # Ctrl+W to close current tab
-        elif event.key() == Qt.Key.Key_W and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+        # Ctrl+X to close current tab
+        elif event.key() == Qt.Key.Key_X and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
             self._close_current_tab()
             return
 
@@ -7463,9 +7463,28 @@ class REPLWidget(QWidget):
             return
 
         # Ctrl+Shift+Tab to switch to previous tab
-        elif (event.key() == Qt.Key.Key_Tab and
-              event.modifiers() == (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)):
+        elif event.key() == Qt.Key.Key_Backtab and event.modifiers() == (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier):
             self._switch_to_previous_tab()
+            return
+
+        # Ctrl+T to toggle always on top
+        elif event.key() == Qt.Key.Key_T and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            self._toggle_always_on_top()
+            return
+
+        # Ctrl+S to save/export conversation
+        elif event.key() == Qt.Key.Key_S and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            self._save_conversation()
+            return
+
+        # Ctrl+M to minimize to tray
+        elif event.key() == Qt.Key.Key_M and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            self._minimize_to_tray()
+            return
+
+        # Ctrl+Comma to open settings
+        elif event.key() == Qt.Key.Key_Comma and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            self._open_settings()
             return
 
         # Ctrl+U to toggle file browser
@@ -11312,6 +11331,50 @@ def test_theme():
         if hasattr(self, '_stop_streaming'):
             self._stop_streaming()
             logger.info("Streaming cancelled via Escape key")
+
+    def _toggle_always_on_top(self):
+        """Toggle always on top setting."""
+        try:
+            from ...infrastructure.storage.settings_manager import settings
+            current = settings.get('interface.always_on_top', True)
+            new_value = not current
+            settings.set('interface.always_on_top', new_value)
+
+            # Emit signal to update window flags
+            self.pin_toggled.emit(new_value)
+            logger.info(f"Always on top toggled via Ctrl+T: {new_value}")
+        except Exception as e:
+            logger.error(f"Failed to toggle always on top: {e}")
+
+    def _save_conversation(self):
+        """Save/export current conversation."""
+        try:
+            # Trigger the save button click
+            if hasattr(self, 'save_btn'):
+                self.save_btn.click()
+                logger.info("Save conversation triggered via Ctrl+S")
+            else:
+                logger.warning("Save button not available")
+        except Exception as e:
+            logger.error(f"Failed to save conversation: {e}")
+
+    def _minimize_to_tray(self):
+        """Minimize window to system tray."""
+        try:
+            # Emit signal to minimize to tray
+            self.minimize_requested.emit()
+            logger.info("Minimize to tray triggered via Ctrl+M")
+        except Exception as e:
+            logger.error(f"Failed to minimize to tray: {e}")
+
+    def _open_settings(self):
+        """Open settings dialog."""
+        try:
+            # Emit signal to open settings
+            self.settings_requested.emit()
+            logger.info("Settings dialog triggered via Ctrl+,")
+        except Exception as e:
+            logger.error(f"Failed to open settings: {e}")
 
     # --- Tab Event Handlers ---
     
