@@ -70,6 +70,7 @@ class ConversationModel(Base):
     conversation_tags = relationship("ConversationTagModel", back_populates="conversation", cascade="all, delete-orphan")
     fts_entries = relationship("MessageFTSModel", back_populates="conversation", cascade="all, delete-orphan")
     conversation_files = relationship("ConversationFileModel", back_populates="conversation", cascade="all, delete-orphan")
+    conversation_collections = relationship("ConversationCollectionModel", back_populates="conversation", cascade="all, delete-orphan")
     
     # Constraints
     __table_args__ = (
@@ -440,8 +441,180 @@ class ConversationFileModel(Base):
 
 class SchemaVersionModel(Base):
     """SQLAlchemy model for schema version tracking."""
-    
+
     __tablename__ = 'schema_version'
-    
+
     version = Column(Integer, primary_key=True)
     applied_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class CollectionModel(Base):
+    """SQLAlchemy model for file collections table."""
+
+    __tablename__ = 'collections'
+
+    id = Column(String(36), primary_key=True)
+    name = Column(String(500), nullable=False, index=True)
+    description = Column(Text, default='')
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, index=True)
+    chunk_size = Column(Integer, default=1000)
+    chunk_overlap = Column(Integer, default=200)
+    is_template = Column(Boolean, default=False, index=True)
+    max_size_mb = Column(Integer, default=500)
+
+    # Relationships
+    files = relationship("CollectionFileModel", back_populates="collection", cascade="all, delete-orphan", lazy="select")
+    tags = relationship("CollectionTagModel", back_populates="collection", cascade="all, delete-orphan", lazy="select")
+    conversations = relationship("ConversationCollectionModel", back_populates="collection", cascade="all, delete-orphan", lazy="select")
+
+    # Constraints
+    __table_args__ = (
+        Index('idx_collections_name', 'name'),
+        Index('idx_collections_template', 'is_template'),
+        Index('idx_collections_updated', 'updated_at'),
+    )
+
+    @validates('name')
+    def validate_name(self, key, value):
+        """Validate and sanitize collection name."""
+        if not value or not value.strip():
+            raise ValueError("Collection name cannot be empty")
+        return sanitize_text(value)[:500]
+
+    @validates('description')
+    def validate_description(self, key, value):
+        """Validate and sanitize description."""
+        if value:
+            return sanitize_text(value)
+        return value
+
+    def to_domain_model(self):
+        """Convert to domain model."""
+        from ....domain.models.collection import FileCollection, FileCollectionItem
+
+        # Convert files to domain objects
+        file_items = [file.to_domain_model() for file in self.files]
+
+        # Convert tags to list of strings
+        tag_list = [tag.tag for tag in self.tags]
+
+        return FileCollection(
+            id=self.id,
+            name=self.name,
+            description=self.description or '',
+            files=file_items,
+            created_at=self.created_at,
+            updated_at=self.updated_at,
+            tags=tag_list,
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap,
+            is_template=self.is_template,
+            max_size_mb=self.max_size_mb
+        )
+
+
+class CollectionFileModel(Base):
+    """SQLAlchemy model for collection files table."""
+
+    __tablename__ = 'collection_files'
+
+    id = Column(String(36), primary_key=True)
+    collection_id = Column(String(36), ForeignKey('collections.id', ondelete='CASCADE'), nullable=False, index=True)
+    file_path = Column(String(1000), nullable=False)
+    file_name = Column(String(500), nullable=False)
+    file_size = Column(Integer, nullable=False, default=0)
+    file_type = Column(String(100), nullable=False)
+    added_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    checksum = Column(String(64), nullable=False, index=True)  # SHA256 hash
+
+    # Relationships
+    collection = relationship("CollectionModel", back_populates="files")
+
+    # Constraints
+    __table_args__ = (
+        Index('idx_collection_files_collection', 'collection_id'),
+        Index('idx_collection_files_checksum', 'checksum'),
+        Index('idx_collection_files_added', 'added_at'),
+    )
+
+    @validates('file_path')
+    def validate_file_path(self, key, value):
+        """Validate and sanitize file path."""
+        if not value or not value.strip():
+            raise ValueError("File path cannot be empty")
+        return sanitize_text(value)[:1000]
+
+    @validates('file_name')
+    def validate_file_name(self, key, value):
+        """Validate and sanitize file name."""
+        if not value or not value.strip():
+            raise ValueError("File name cannot be empty")
+        return sanitize_text(value)[:500]
+
+    @validates('checksum')
+    def validate_checksum(self, key, value):
+        """Validate checksum format."""
+        if not value or len(value) != 64:
+            raise ValueError("Checksum must be a 64-character SHA256 hash")
+        return value.lower()
+
+    def to_domain_model(self):
+        """Convert to domain model."""
+        from ....domain.models.collection import FileCollectionItem
+
+        return FileCollectionItem(
+            id=self.id,
+            file_path=self.file_path,
+            file_name=self.file_name,
+            file_size=self.file_size,
+            file_type=self.file_type,
+            added_at=self.added_at,
+            checksum=self.checksum
+        )
+
+
+class CollectionTagModel(Base):
+    """SQLAlchemy model for collection tags table."""
+
+    __tablename__ = 'collection_tags'
+
+    collection_id = Column(String(36), ForeignKey('collections.id', ondelete='CASCADE'), primary_key=True)
+    tag = Column(String(100), primary_key=True)
+
+    # Relationships
+    collection = relationship("CollectionModel", back_populates="tags")
+
+    # Constraints
+    __table_args__ = (
+        Index('idx_collection_tags_collection', 'collection_id'),
+        Index('idx_collection_tags_tag', 'tag'),
+    )
+
+    @validates('tag')
+    def validate_tag(self, key, value):
+        """Validate and sanitize tag."""
+        if not value or not value.strip():
+            raise ValueError("Tag cannot be empty")
+        return sanitize_text(value)[:100].lower()
+
+
+class ConversationCollectionModel(Base):
+    """SQLAlchemy model for conversation-collection association table."""
+
+    __tablename__ = 'conversation_collections'
+
+    conversation_id = Column(String(36), ForeignKey('conversations.id', ondelete='CASCADE'), primary_key=True)
+    collection_id = Column(String(36), ForeignKey('collections.id', ondelete='CASCADE'), primary_key=True)
+    attached_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+    # Relationships
+    conversation = relationship("ConversationModel")
+    collection = relationship("CollectionModel", back_populates="conversations")
+
+    # Constraints
+    __table_args__ = (
+        Index('idx_conversation_collections_conversation', 'conversation_id'),
+        Index('idx_conversation_collections_collection', 'collection_id'),
+        Index('idx_conversation_collections_attached', 'attached_at'),
+    )
