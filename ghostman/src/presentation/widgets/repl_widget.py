@@ -7920,6 +7920,89 @@ class REPLWidget(QWidget):
         except Exception as e:
             logger.error(f"✗ Error updating collection widget: {e}")
 
+    def _auto_attach_collections(self, collection_names: List[str]):
+        """
+        Auto-attach collections mentioned in user message.
+
+        Args:
+            collection_names: List of collection names to attach
+        """
+        if not self.current_conversation:
+            logger.warning("⚠ Cannot attach collections - no active conversation")
+            return
+
+        try:
+            from ...application.services.collection_service import CollectionService
+
+            # Get conversation manager's database
+            db_manager = self.conversation_manager.db_manager if self.conversation_manager else None
+            service = CollectionService(db_manager)
+
+            attached_names = []
+            not_found = []
+
+            for collection_name in collection_names:
+                try:
+                    # Get collection by name
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    collection = loop.run_until_complete(
+                        service.get_collection_by_name(collection_name)
+                    )
+
+                    if collection:
+                        # Attach to conversation
+                        success = loop.run_until_complete(
+                            service.attach_collection_to_conversation(
+                                self.current_conversation.id,
+                                collection.id
+                            )
+                        )
+                        loop.close()
+
+                        if success:
+                            attached_names.append(collection_name)
+                            logger.info(f"✓ Auto-attached collection: {collection_name}")
+                        else:
+                            logger.warning(f"⚠ Collection already attached: {collection_name}")
+                            attached_names.append(collection_name)  # Count as success
+                    else:
+                        not_found.append(collection_name)
+                        logger.warning(f"⚠ Collection not found: {collection_name}")
+
+                except Exception as e:
+                    logger.error(f"✗ Error attaching collection '{collection_name}': {e}")
+                    not_found.append(collection_name)
+
+            # Show user feedback
+            if attached_names or not_found:
+                feedback_parts = []
+
+                if attached_names:
+                    feedback_parts.append(
+                        f"✓ Attached collection(s): {', '.join(attached_names)}"
+                    )
+
+                if not_found:
+                    feedback_parts.append(
+                        f"⚠ Not found: {', '.join(not_found)}"
+                    )
+
+                feedback = "\n".join(feedback_parts)
+                self.append_output(f"📚 {feedback}", "info")
+                self.append_output("", "normal")  # Add spacing
+
+            # Refresh collection widget to show updated attachments
+            self._on_collections_changed()
+
+        except Exception as e:
+            logger.error(f"✗ Error in auto-attach collections: {e}")
+            self.append_output(
+                f"⚠ Error attaching collections: {e}",
+                "warning"
+            )
+
     @pyqtSlot(str)
     def _on_idle_detected(self, conversation_id: str):
         """Handle idle detection for background summarization."""
@@ -8093,28 +8176,54 @@ class REPLWidget(QWidget):
     def _on_command_entered(self):
         """Handle command entry."""
         command = self.command_input.toPlainText().strip()
-        
+
         if not command:
             return
-        
+
+        # Parse collection mentions (@collection:name syntax)
+        original_command = command
+        try:
+            from ...application.services.collection_mention_parser import CollectionMentionParser
+
+            if CollectionMentionParser.has_mentions(command):
+                collection_names, cleaned_command = CollectionMentionParser.parse_mentions(command)
+
+                # Auto-attach mentioned collections
+                if collection_names and self.current_conversation:
+                    self._auto_attach_collections(collection_names)
+
+                # Use cleaned command (with mentions removed)
+                command = cleaned_command
+
+                logger.info(
+                    f"📚 Processed {len(collection_names)} collection mention(s): "
+                    f"{', '.join(collection_names)}"
+                )
+        except Exception as e:
+            logger.error(f"✗ Error parsing collection mentions: {e}")
+            # Continue with original command if parsing fails
+            command = original_command
+
         # Add to history
         if not self.command_history or command != self.command_history[-1]:
             self.command_history.append(command)
-        
+
         # Reset history navigation
         self.history_index = -1
         self.current_input = ""
-                
+
         # Display command in output with better separation
-        self.append_output(f"👤 **You:**\n{command}", "input")
+        # Show original command with mentions for context
+        display_command = original_command if original_command != command else command
+        self.append_output(f"👤 **You:**\n{display_command}", "input")
         self.append_output("", "normal")  # Add spacing
-        
+
         # Clear input
         self.command_input.clear()
-        
-        # Process command
+
+        # Process command (with cleaned version if mentions were found)
         self._process_command(command)
-        
+
         # Emit signal for external processing
         self.command_entered.emit(command)
     
