@@ -32,6 +32,7 @@ from PyQt6.QtWidgets import (
 # Import our custom mixed content display
 from .mixed_content_display import MixedContentDisplay
 from .collection_attach_widget import CollectionAttachWidget
+from ..dialogs.collections_manager_dialog import CollectionsManagerDialog
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread, QObject, QSize, pyqtSlot, QPropertyAnimation, QEasingCurve, QUrl, QPoint
 import weakref
 from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QTextCharFormat, QColor, QPalette, QIcon, QAction, QTextOption, QFontMetrics
