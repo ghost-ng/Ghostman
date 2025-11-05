@@ -73,6 +73,7 @@ class CollectionsManagerDialog(QDialog):
         self._init_ui()
         self._apply_theme()
         self._load_collections()
+        self._load_all_tags()
 
         logger.info("✓ Collections Manager Dialog initialized")
 
@@ -84,19 +85,23 @@ class CollectionsManagerDialog(QDialog):
         top_bar = self._create_top_bar()
         layout.addLayout(top_bar)
 
-        # Main content area (split view)
+        # Main content area (3-column split view)
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
         # Left panel: Collections list
         left_panel = self._create_collections_panel()
         splitter.addWidget(left_panel)
 
-        # Right panel: Collection details and files
-        right_panel = self._create_details_panel()
+        # Middle panel: Collection details and files
+        middle_panel = self._create_details_panel()
+        splitter.addWidget(middle_panel)
+
+        # Right panel: Tags browser
+        right_panel = self._create_tags_panel()
         splitter.addWidget(right_panel)
 
-        # Set initial splitter sizes (30% left, 70% right)
-        splitter.setSizes([300, 700])
+        # Set initial splitter sizes (25% left, 50% middle, 25% right)
+        splitter.setSizes([250, 500, 250])
 
         layout.addWidget(splitter)
 
@@ -298,6 +303,52 @@ class CollectionsManagerDialog(QDialog):
 
         return panel
 
+    def _create_tags_panel(self) -> QWidget:
+        """Create the right panel with clickable tags browser."""
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+
+        # Header
+        header_layout = QHBoxLayout()
+        header_label = QLabel("Available Tags")
+        header_label.setStyleSheet("font-weight: bold; font-size: 12pt;")
+        header_layout.addWidget(header_label)
+        header_layout.addStretch()
+        layout.addLayout(header_layout)
+
+        # Instructions
+        instructions = QLabel("Click a tag to attach all collections with that tag to the current conversation")
+        instructions.setWordWrap(True)
+        instructions.setStyleSheet("font-size: 9pt; font-style: italic;")
+        layout.addWidget(instructions)
+
+        # Tags list (clickable items)
+        self.tags_list = QListWidget()
+        self.tags_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        self.tags_list.itemClicked.connect(self._on_tag_clicked)
+        layout.addWidget(self.tags_list)
+
+        # Statistics label
+        self.tags_stats_label = QLabel("0 tags available")
+        self.tags_stats_label.setStyleSheet("font-size: 9pt; font-style: italic;")
+        layout.addWidget(self.tags_stats_label)
+
+        # Action buttons
+        tag_buttons = QHBoxLayout()
+
+        self.attach_by_tag_btn = QPushButton("Attach Selected Tag")
+        self.attach_by_tag_btn.setEnabled(False)
+        self.attach_by_tag_btn.clicked.connect(self._on_attach_by_tag)
+
+        self.refresh_tags_btn = QPushButton("Refresh")
+        self.refresh_tags_btn.clicked.connect(self._load_all_tags)
+
+        tag_buttons.addWidget(self.attach_by_tag_btn)
+        tag_buttons.addWidget(self.refresh_tags_btn)
+        layout.addLayout(tag_buttons)
+
+        return panel
+
     def _create_bottom_buttons(self) -> QHBoxLayout:
         """Create bottom dialog buttons."""
         layout = QHBoxLayout()
@@ -453,6 +504,120 @@ class CollectionsManagerDialog(QDialog):
             index = self.tag_filter.findData(current_tag)
             if index >= 0:
                 self.tag_filter.setCurrentIndex(index)
+
+    def _load_all_tags(self):
+        """Load all tags from all collections into the tags panel."""
+        try:
+            # Get all collections
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            collections = loop.run_until_complete(
+                self.service.list_collections(include_templates=True)
+            )
+            loop.close()
+
+            # Collect all tags with their collection counts
+            tag_counts = {}
+            for collection in collections:
+                for tag in collection.tags:
+                    if tag not in tag_counts:
+                        tag_counts[tag] = []
+                    tag_counts[tag].append(collection.name)
+
+            # Update tags list
+            self.tags_list.clear()
+            for tag in sorted(tag_counts.keys()):
+                count = len(tag_counts[tag])
+                item = QListWidgetItem(f"{tag} ({count} collection{'s' if count != 1 else ''})")
+                item.setData(Qt.ItemDataRole.UserRole, tag)  # Store tag name
+                item.setData(Qt.ItemDataRole.UserRole + 1, tag_counts[tag])  # Store collection names
+                item.setToolTip(f"Collections: {', '.join(tag_counts[tag])}")
+                self.tags_list.addItem(item)
+
+            # Update statistics
+            self.tags_stats_label.setText(
+                f"{len(tag_counts)} tag{'s' if len(tag_counts) != 1 else ''} available"
+            )
+
+            logger.info(f"✓ Loaded {len(tag_counts)} tags")
+
+        except Exception as e:
+            logger.error(f"✗ Error loading tags: {e}")
+
+    def _on_tag_clicked(self, item: QListWidgetItem):
+        """Handle tag item click - enable attach button."""
+        self.attach_by_tag_btn.setEnabled(True)
+
+    def _on_attach_by_tag(self):
+        """Attach all collections with the selected tag to the current conversation."""
+        selected_item = self.tags_list.currentItem()
+        if not selected_item:
+            return
+
+        tag = selected_item.data(Qt.ItemDataRole.UserRole)
+        collection_names = selected_item.data(Qt.ItemDataRole.UserRole + 1)
+
+        try:
+            # Get current conversation ID from parent
+            conversation_id = self._get_current_conversation_id()
+            if not conversation_id:
+                QMessageBox.warning(
+                    self,
+                    "No Conversation",
+                    "Please select a conversation first before attaching collections."
+                )
+                return
+
+            # Get all collections with this tag
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            all_collections = loop.run_until_complete(
+                self.service.list_collections(include_templates=False, tags=[tag])
+            )
+            loop.close()
+
+            # Attach each collection
+            attached_count = 0
+            for collection in all_collections:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                success = loop.run_until_complete(
+                    self.service.attach_collection_to_conversation(
+                        conversation_id,
+                        collection.id
+                    )
+                )
+                loop.close()
+
+                if success:
+                    attached_count += 1
+
+            QMessageBox.information(
+                self,
+                "Collections Attached",
+                f"Attached {attached_count} collection(s) with tag '{tag}' to the current conversation.\n\n"
+                f"Collections: {', '.join(collection_names)}"
+            )
+
+            logger.info(f"✓ Attached {attached_count} collections by tag: {tag}")
+
+        except Exception as e:
+            logger.error(f"✗ Error attaching collections by tag: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to attach collections:\n{e}")
+
+    def _get_current_conversation_id(self) -> Optional[str]:
+        """Get the current conversation ID from the parent REPL widget."""
+        try:
+            # Try to get from parent window
+            parent = self.parent()
+            while parent:
+                if hasattr(parent, 'current_conversation') and parent.current_conversation:
+                    return parent.current_conversation.id
+                parent = parent.parent()
+            return None
+        except Exception as e:
+            logger.error(f"✗ Error getting conversation ID: {e}")
+            return None
 
     # ========================================
     # Event Handlers - Collections
