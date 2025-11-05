@@ -7479,7 +7479,7 @@ class REPLWidget(QWidget):
             return
 
         # Escape to cancel streaming response
-        elif event.key() == Qt.Key.Key_Escape and self._streaming:
+        elif event.key() == Qt.Key.Key_Escape and hasattr(self, '_stop_streaming'):
             self._cancel_stream()
             return
 

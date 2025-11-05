@@ -417,11 +417,6 @@ class AvatarWidget(SimpleAvatarArrowMixin, AvatarResizableMixin, QWidget):
         help_action.triggered.connect(self._on_help_clicked)
         context_menu.addAction(help_action)
 
-        # Hotkeys action
-        hotkeys_action = QAction(self._get_theme_icon("help-docs"), "Keyboard Shortcuts", self)
-        hotkeys_action.triggered.connect(self._on_hotkeys_clicked)
-        context_menu.addAction(hotkeys_action)
-
         context_menu.addSeparator()
         
         # Add actions
@@ -507,23 +502,6 @@ class AvatarWidget(SimpleAvatarArrowMixin, AvatarResizableMixin, QWidget):
             logger.info(f"📖 Opened help documentation: {help_url}")
         except Exception as e:
             logger.error(f"Failed to open help documentation: {e}")
-
-    def _on_hotkeys_clicked(self):
-        """Handle hotkeys menu item clicked."""
-        import os
-        import webbrowser
-        try:
-            logger.info("⌨️ Keyboard shortcuts menu item clicked by user")
-            # Get the help file path with hotkeys anchor
-            current_dir = os.path.dirname(__file__)
-            # Go up from widgets to presentation, then to src, then stay in ghostman, then to assets
-            ghostman_src_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
-            help_file = os.path.join(ghostman_src_root, 'assets', 'help', 'index.html')
-            help_url = f'file:///{help_file.replace(os.sep, "/")}#hotkeys'
-            webbrowser.open(help_url)
-            logger.info(f"⌨️ Opened keyboard shortcuts documentation: {help_url}")
-        except Exception as e:
-            logger.error(f"Failed to open keyboard shortcuts documentation: {e}")
 
     def _on_quit_clicked(self):
         """Handle quit menu item clicked."""
