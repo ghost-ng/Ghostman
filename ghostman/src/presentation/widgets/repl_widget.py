@@ -2809,18 +2809,19 @@ class REPLWidget(QWidget):
         self.attach_btn.clicked.connect(self._on_attach_toggle_clicked)
         title_layout.addWidget(self.attach_btn)
         
-        # Upload/File context button (now toggles file browser bar)
+        # Upload/File context button (now shows menu with File Context and Collections options)
         self.upload_btn = QToolButton()
-        self.upload_btn.setToolTip("Toggle file browser (Ctrl+U)\nClick 'Upload Files' button inside to add files")
-        
+        self.upload_btn.setToolTip("File Context & Collections")
+        self.upload_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+
         # SET ICON DIRECTLY HERE - NO SEPARATE METHOD CALL
         try:
             icon_variant = self._get_icon_variant()
             filebar_icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", 
+                os.path.dirname(__file__), "..", "..", "..",
                 "assets", "icons", f"upload_{icon_variant}.png"
             )
-            
+
             if os.path.exists(filebar_icon_path):
                 filebar_icon = QIcon(filebar_icon_path)
                 if not filebar_icon.isNull():
@@ -2835,8 +2836,29 @@ class REPLWidget(QWidget):
         except Exception as e:
             logger.error(f"Failed to set filebar icon: {e}")
             self.upload_btn.setText("📁")
-        
-        self.upload_btn.clicked.connect(self._toggle_file_browser)
+
+        # Create menu for file context options
+        upload_menu = QMenu(self.upload_btn)
+
+        # File Context option (toggle file browser bar)
+        file_context_action = QAction("File Context", self.upload_btn)
+        file_context_action.setToolTip("Toggle file browser bar (Ctrl+U)")
+        file_context_action.triggered.connect(self._toggle_file_browser)
+        upload_menu.addAction(file_context_action)
+
+        # Collections Manager option
+        collections_action = QAction("Collections Manager", self.upload_btn)
+        collections_action.setToolTip("Manage file collections")
+        collections_action.triggered.connect(self._open_collections_manager)
+        upload_menu.addAction(collections_action)
+
+        # Set menu on button
+        self.upload_btn.setMenu(upload_menu)
+        self.upload_menu = upload_menu  # Store reference
+
+        # Apply menu styling
+        self._style_menu(upload_menu)
+
         # Apply uniform styling first
         self._style_title_button(self.upload_btn)
         # Style: theme-aware styling
@@ -10095,7 +10117,56 @@ def test_theme():
     def _on_settings_clicked(self):
         """Handle settings button click - open settings dialog."""
         self.settings_requested.emit()
-    
+
+    def _open_collections_manager(self):
+        """Open the Collections Manager dialog."""
+        try:
+            logger.info("📚 Opening Collections Manager")
+
+            # Get database manager
+            db_manager = self.conversation_manager.db_manager if self.conversation_manager else None
+
+            # Get current theme name
+            theme_name = "professional_dark"  # Default
+            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+                theme_name = getattr(self.theme_manager.current_theme, 'name', 'professional_dark')
+
+            # Create and show dialog
+            dialog = CollectionsManagerDialog(
+                parent=self,
+                db_manager=db_manager,
+                theme_name=theme_name
+            )
+
+            # Connect signals to refresh collection widget when collections change
+            dialog.collection_created.connect(lambda c: self._on_collection_manager_changed())
+            dialog.collection_updated.connect(lambda c: self._on_collection_manager_changed())
+            dialog.collection_deleted.connect(lambda c: self._on_collection_manager_changed())
+
+            # Show dialog
+            dialog.exec()
+
+            logger.info("✓ Collections Manager closed")
+
+        except Exception as e:
+            logger.error(f"✗ Error opening Collections Manager: {e}")
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to open Collections Manager:\n{e}"
+            )
+
+    def _on_collection_manager_changed(self):
+        """Handle when collections are created/updated/deleted in the manager."""
+        try:
+            # Refresh the collection attach widget to show updated list
+            if hasattr(self, 'collection_attach_widget'):
+                self.collection_attach_widget.refresh()
+                logger.info("✓ Refreshed collection attach widget")
+        except Exception as e:
+            logger.error(f"✗ Error refreshing after collection change: {e}")
+
     def _on_chat_clicked(self):
         """Handle chat button click - browse conversations."""
         self.browse_requested.emit()
