@@ -31,6 +31,7 @@ from PyQt6.QtWidgets import (
 
 # Import our custom mixed content display
 from .mixed_content_display import MixedContentDisplay
+from .collection_attach_widget import CollectionAttachWidget
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread, QObject, QSize, pyqtSlot, QPropertyAnimation, QEasingCurve, QUrl, QPoint
 import weakref
 from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QTextCharFormat, QColor, QPalette, QIcon, QAction, QTextOption, QFontMetrics
@@ -1901,7 +1902,11 @@ class REPLWidget(QWidget):
             # Update main input field styling
             if hasattr(self, 'command_input'):
                 self._style_command_input()
-            
+
+            # Update collection attach widget if it exists
+            if hasattr(self, 'collection_attach_widget'):
+                self.collection_attach_widget.set_colors(colors)
+
             # Update all QToolButton widgets with new theme
             self._update_all_tool_buttons()
             
@@ -5625,7 +5630,18 @@ class REPLWidget(QWidget):
         self.settings_btn.clicked.connect(self.settings_requested.emit)
         self._style_tool_button(self.settings_btn)
         toolbar_layout.addWidget(self.settings_btn)
-        
+
+        # Collections attach widget
+        db_manager = self.conversation_manager.db_manager if self.conversation_manager else None
+        colors = self.theme_manager.current_theme if (self.theme_manager and THEME_SYSTEM_AVAILABLE) else None
+        self.collection_attach_widget = CollectionAttachWidget(
+            parent=self,
+            db_manager=db_manager,
+            colors=colors
+        )
+        self.collection_attach_widget.collections_changed.connect(self._on_collections_changed)
+        toolbar_layout.addWidget(self.collection_attach_widget)
+
         toolbar_layout.addStretch()
         
         # Background summarization progress
@@ -7704,13 +7720,16 @@ class REPLWidget(QWidget):
         
         # Reset idle detector for new conversation
         self.idle_detector.reset_activity(conversation.id)
-        
+
         # Sync tab title with conversation
         self._sync_tab_with_conversation()
-        
+
+        # Update collection attach widget for new conversation
+        self._update_collection_widget_for_conversation()
+
         # Emit signal for external components
         self.conversation_changed.emit(conversation.id)
-        
+
         logger.info(f"✓ Switched to conversation: {conversation.title}")
     
     def _create_new_conversation(self):
@@ -7822,10 +7841,63 @@ class REPLWidget(QWidget):
         if not self.current_conversation:
             self.append_output("⚠ No conversation selected for export", "warning")
             return
-        
+
         logger.info(f"📤 Export requested for conversation: {self.current_conversation.id}")
         self.export_requested.emit(self.current_conversation.id)
-    
+
+    def _on_collections_changed(self):
+        """Handle when collections are attached or detached from the current conversation."""
+        if not self.current_conversation:
+            return
+
+        try:
+            # Get updated list of attached collections
+            if hasattr(self, 'collection_attach_widget'):
+                collections = self.collection_attach_widget.get_attached_collections()
+
+                # Update file browser bar to show collection badges
+                if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                    # Trigger file browser refresh to show collection files
+                    self._update_file_browser_with_collections(collections)
+
+                # Log the change
+                logger.info(
+                    f"✓ Collections updated for conversation {self.current_conversation.id[:8]}... "
+                    f"({len(collections)} attached)"
+                )
+        except Exception as e:
+            logger.error(f"✗ Error handling collections change: {e}")
+
+    def _update_file_browser_with_collections(self, collections):
+        """
+        Update file browser bar to show files from attached collections.
+
+        Args:
+            collections: List of FileCollection objects
+        """
+        # This will be implemented in Phase 5 when integrating with file browser
+        # For now, just log the collection files
+        try:
+            total_files = sum(c.file_count for c in collections)
+            if total_files > 0:
+                logger.info(
+                    f"📚 {len(collections)} collection(s) with {total_files} file(s) attached"
+                )
+        except Exception as e:
+            logger.error(f"✗ Error updating file browser with collections: {e}")
+
+    def _update_collection_widget_for_conversation(self):
+        """Update collection attach widget when conversation changes."""
+        if not hasattr(self, 'collection_attach_widget'):
+            return
+
+        try:
+            conversation_id = self.current_conversation.id if self.current_conversation else None
+            self.collection_attach_widget.set_conversation(conversation_id)
+            logger.debug(f"✓ Updated collection widget for conversation: {conversation_id}")
+        except Exception as e:
+            logger.error(f"✗ Error updating collection widget: {e}")
+
     @pyqtSlot(str)
     def _on_idle_detected(self, conversation_id: str):
         """Handle idle detection for background summarization."""
