@@ -19,8 +19,8 @@ from PyQt6.QtWidgets import (
 
 from ...application.services.collection_service import CollectionService
 from ...domain.models.collection import FileCollection
-from ...infrastructure.conversation_management.database_manager import DatabaseManager
-from ..ui.themes.improved_preset_themes import ColorSystem
+from ...infrastructure.conversation_management.repositories.database import DatabaseManager
+from ...ui.themes.improved_preset_themes import ColorSystem
 
 logger = logging.getLogger("ghostman.presentation.collection_attach")
 

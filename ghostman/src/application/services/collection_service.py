@@ -18,7 +18,7 @@ from uuid import uuid4
 from ...domain.models.collection import FileCollection, FileCollectionItem
 from ...infrastructure.conversation_management.repositories.collection_repository import CollectionRepository
 from ...infrastructure.storage.collection_storage import CollectionStorageService
-from ...infrastructure.conversation_management.database_manager import DatabaseManager
+from ...infrastructure.conversation_management.repositories.database import DatabaseManager
 
 logger = logging.getLogger("ghostman.application.collection_service")
 
