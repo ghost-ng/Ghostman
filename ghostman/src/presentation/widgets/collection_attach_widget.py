@@ -104,7 +104,7 @@ class CollectionAttachWidget(QWidget):
                 background-color: {self.colors.primary_hover};
             }}
             QToolButton:pressed {{
-                background-color: {self.colors.primary_active};
+                background-color: {self.colors.interactive_active};
             }}
             QToolButton::menu-indicator {{
                 image: none;  /* Hide default arrow */
@@ -116,7 +116,7 @@ class CollectionAttachWidget(QWidget):
             QMenu {{
                 background-color: {self.colors.background_secondary};
                 color: {self.colors.text_primary};
-                border: 1px solid {self.colors.border};
+                border: 1px solid {self.colors.border_primary};
                 border-radius: 4px;
                 padding: 4px;
             }}
@@ -330,7 +330,7 @@ class CollectionAttachWidget(QWidget):
                         background-color: {self.colors.primary_hover};
                     }}
                     QPushButton:pressed {{
-                        background-color: {self.colors.primary_active};
+                        background-color: {self.colors.interactive_active};
                     }}
                 """
                 create_btn.setStyleSheet(button_style)

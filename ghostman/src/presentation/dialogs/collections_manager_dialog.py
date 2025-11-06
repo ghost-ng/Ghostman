@@ -420,11 +420,11 @@ class CollectionsManagerDialog(QDialog):
                     background-color: {self.colors.primary_hover};
                 }}
                 QPushButton:pressed {{
-                    background-color: {self.colors.primary_active};
+                    background-color: {self.colors.interactive_active};
                 }}
                 QPushButton:disabled {{
                     background-color: {self.colors.background_tertiary};
-                    color: {self.colors.text_secondary};
+                    color: {self.colors.text_disabled};
                 }}
             """)
 
