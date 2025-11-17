@@ -70,7 +70,8 @@ class ConversationModel(Base):
     conversation_tags = relationship("ConversationTagModel", back_populates="conversation", cascade="all, delete-orphan")
     fts_entries = relationship("MessageFTSModel", back_populates="conversation", cascade="all, delete-orphan")
     conversation_files = relationship("ConversationFileModel", back_populates="conversation", cascade="all, delete-orphan")
-    conversation_collections = relationship("ConversationCollectionModel", back_populates="conversation", cascade="all, delete-orphan")
+    # DISABLED to prevent circular recursion through collections
+    # conversation_collections = relationship("ConversationCollectionModel", back_populates="conversation", cascade="all, delete-orphan")
     
     # Constraints
     __table_args__ = (
@@ -388,6 +389,7 @@ class ConversationFileModel(Base):
     chunk_count = Column(Integer, default=0)  # Number of chunks created in RAG
     is_enabled = Column(Boolean, default=True, index=True)  # Whether file is enabled for context
     metadata_json = Column(Text, default='{}')
+    collection_tag = Column(String(100), nullable=True, index=True)  # Tag for grouping files into collections
     
     # Relationships
     conversation = relationship("ConversationModel", back_populates="conversation_files")
@@ -398,7 +400,8 @@ class ConversationFileModel(Base):
         Index('idx_conversation_files_conv_status', 'conversation_id', 'processing_status'),
         Index('idx_conversation_files_conv_enabled', 'conversation_id', 'is_enabled'),
         Index('idx_conversation_files_file_id', 'file_id'),  # For efficient file lookups
-        Index('idx_conversation_files_batch_count', 'conversation_id', 'is_enabled', sqlite_where=text("is_enabled = 1"))  # Optimized for batch file counts
+        Index('idx_conversation_files_batch_count', 'conversation_id', 'is_enabled', sqlite_where=text("is_enabled = 1")),  # Optimized for batch file counts
+        Index('idx_conversation_files_collection_tag', 'collection_tag')  # For efficient collection tag lookups
     )
     
     @validates('filename')
@@ -463,10 +466,8 @@ class CollectionModel(Base):
     is_template = Column(Boolean, default=False, index=True)
     max_size_mb = Column(Integer, default=500)
 
-    # Relationships
-    files = relationship("CollectionFileModel", back_populates="collection", cascade="all, delete-orphan", lazy="select")
-    tags = relationship("CollectionTagModel", back_populates="collection", cascade="all, delete-orphan", lazy="select")
-    conversations = relationship("ConversationCollectionModel", back_populates="collection", cascade="all, delete-orphan", lazy="select")
+    # NO RELATIONSHIPS - completely removed to prevent recursion
+    # Files and tags must be loaded via explicit queries in repository
 
     # Constraints
     __table_args__ = (
@@ -490,14 +491,23 @@ class CollectionModel(Base):
         return value
 
     def to_domain_model(self):
-        """Convert to domain model."""
-        from ....domain.models.collection import FileCollection, FileCollectionItem
+        """
+        Convert to domain model.
 
-        # Convert files to domain objects
-        file_items = [file.to_domain_model() for file in self.files]
+        Returns:
+            FileCollection domain model
 
-        # Convert tags to list of strings
-        tag_list = [tag.tag for tag in self.tags]
+        Note:
+            Relationships use lazy='noload' and viewonly=True to prevent recursion.
+            Files and tags will be empty lists since they're not automatically loaded.
+            Use explicit queries in the repository if you need to load them.
+        """
+        from ....domain.models.collection import FileCollection
+
+        # Files and tags are viewonly with noload - they won't be populated
+        # Repository must load them explicitly if needed
+        file_items = []
+        tag_list = []
 
         return FileCollection(
             id=self.id,
@@ -528,8 +538,8 @@ class CollectionFileModel(Base):
     added_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
     checksum = Column(String(64), nullable=False, index=True)  # SHA256 hash
 
-    # Relationships
-    collection = relationship("CollectionModel", back_populates="files")
+    # Relationships - removed entirely to prevent recursion
+    # collection = relationship("CollectionModel")
 
     # Constraints
     __table_args__ = (
@@ -582,8 +592,8 @@ class CollectionTagModel(Base):
     collection_id = Column(String(36), ForeignKey('collections.id', ondelete='CASCADE'), primary_key=True)
     tag = Column(String(100), primary_key=True)
 
-    # Relationships
-    collection = relationship("CollectionModel", back_populates="tags")
+    # Relationships - removed entirely to prevent recursion
+    # collection = relationship("CollectionModel")
 
     # Constraints
     __table_args__ = (
@@ -605,12 +615,12 @@ class ConversationCollectionModel(Base):
     __tablename__ = 'conversation_collections'
 
     conversation_id = Column(String(36), ForeignKey('conversations.id', ondelete='CASCADE'), primary_key=True)
-    collection_id = Column(String(36), ForeignKey('collections.id', ondelete='CASCADE'), primary_key=True)
+    collection_id = Column(String(36), primary_key=True)  # FK removed - collections in separate Base
     attached_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
 
-    # Relationships
-    conversation = relationship("ConversationModel")
-    collection = relationship("CollectionModel", back_populates="conversations")
+    # Relationships - ALL REMOVED to completely break circular reference chain
+    # conversation = relationship("ConversationModel", back_populates="conversation_collections")
+    # collection = relationship("CollectionModel")
 
     # Constraints
     __table_args__ = (

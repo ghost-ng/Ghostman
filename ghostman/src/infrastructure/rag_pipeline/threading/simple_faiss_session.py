@@ -262,6 +262,14 @@ class SimpleFAISSSession:
                             self.logger.info(f"🎯 Looking ONLY for conversation {conversation_id[:8]}... files")
                         else:
                             self.logger.warning(f"⚠️ No conversation ID - no files will be found")
+
+                        # CRITICAL DEBUG: Log additional_filters before passing
+                        self.logger.warning(f"🔍 CRITICAL DEBUG: additional_filters = {filters}")
+                        self.logger.warning(f"🔍 CRITICAL DEBUG: filters type = {type(filters)}")
+                        self.logger.warning(f"🔍 CRITICAL DEBUG: filters is None? {filters is None}")
+                        if filters:
+                            self.logger.warning(f"🔍 CRITICAL DEBUG: 'collection_tag' in filters? {'collection_tag' in filters}")
+
                         context_results, selection_info = new_loop.run_until_complete(
                             self.context_selector.select_context(
                                 faiss_client=self.faiss_client,
@@ -270,7 +278,8 @@ class SimpleFAISSSession:
                                 top_k=top_k,
                                 conversation_id=conversation_id,
                                 max_tokens=4000,
-                                strict_conversation_isolation=strict_isolation
+                                strict_conversation_isolation=strict_isolation,
+                                additional_filters=filters  # Pass collection_tag and other custom filters
                             )
                         )
                         result_queue.put((context_results, selection_info))

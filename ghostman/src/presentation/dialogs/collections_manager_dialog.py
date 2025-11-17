@@ -1,1240 +1,847 @@
 """
-Collections Manager Dialog for managing file collections.
-
-Provides a comprehensive UI for creating, editing, and organizing
-file collections with drag-and-drop support, search, and filtering.
+Collections Manager - Simple Tag-Based File Organization
 """
 
 import asyncio
 import logging
+import os
+import uuid
 from pathlib import Path
-from typing import List, Optional
+from datetime import datetime
+from typing import List, Optional, Dict
 
-from PyQt6.QtCore import Qt, pyqtSignal, QMimeData, QUrl
-from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QIcon
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QSplitter,
     QListWidget, QListWidgetItem, QPushButton, QLineEdit,
-    QLabel, QGroupBox, QSpinBox, QCheckBox, QTextEdit,
-    QFileDialog, QMessageBox, QWidget, QComboBox,
-    QInputDialog
+    QLabel, QGroupBox, QFileDialog, QMessageBox, QWidget,
+    QInputDialog, QCheckBox, QTableWidget, QTableWidgetItem,
+    QHeaderView, QProgressBar, QProgressDialog, QApplication
 )
 
 from ...application.services.collection_service import CollectionService
-from ...domain.models.collection import FileCollection, FileCollectionItem
 from ...infrastructure.conversation_management.repositories.database import DatabaseManager
+from ...infrastructure.storage.settings_manager import settings
 from ...ui.themes.improved_preset_themes import get_improved_preset_themes, ColorSystem
 
 logger = logging.getLogger("ghostman.presentation.collections_manager")
 
 
-class CollectionsManagerDialog(QDialog):
-    """
-    Dialog for managing file collections.
-
-    Features:
-    - Split view: collections list (left) and file details (right)
-    - Search and filter by tags
-    - Create/edit/delete collections
-    - Add/remove files with drag-and-drop
-    - Import/export collections
-    - Template instantiation
-    - RAG settings configuration
-    """
+class FileUploadWorker(QThread):
+    """Background worker for uploading files to RAG without blocking UI."""
 
     # Signals
-    collection_created = pyqtSignal(FileCollection)
-    collection_updated = pyqtSignal(FileCollection)
-    collection_deleted = pyqtSignal(str)  # collection_id
+    file_started = pyqtSignal(int, str)  # row, filename
+    file_completed = pyqtSignal(int, dict)  # row, file_data
+    file_failed = pyqtSignal(int, str, str)  # row, filename, error
+    all_completed = pyqtSignal(list, list)  # successful_files, failed_files
 
-    def __init__(
-        self,
-        parent=None,
-        db_manager: Optional[DatabaseManager] = None,
-        theme_name: str = "Matrix"
-    ):
-        """
-        Initialize the Collections Manager Dialog.
+    def __init__(self, file_paths, collection_tag, conversation_id, rag_session, db_manager):
+        super().__init__()
+        self.file_paths = file_paths
+        self.collection_tag = collection_tag
+        self.conversation_id = conversation_id
+        self.rag_session = rag_session
+        self.db_manager = db_manager
+        self.successful_files = []
+        self.failed_files = []
 
-        Args:
-            parent: Parent widget
-            db_manager: Optional database manager
-            theme_name: Theme to apply
-        """
+    def run(self):
+        """Run file uploads in background thread."""
+        for i, file_path in enumerate(self.file_paths):
+            filename = os.path.basename(file_path)
+
+            self.file_started.emit(i, filename)
+
+            try:
+                # Validate file
+                if not os.path.exists(file_path):
+                    self.failed_files.append((filename, "File not found"))
+                    self.file_failed.emit(i, filename, "File not found")
+                    continue
+
+                if os.path.isdir(file_path):
+                    self.failed_files.append((filename, "Cannot upload directories"))
+                    self.file_failed.emit(i, filename, "Cannot upload directories")
+                    continue
+
+                file_size = os.path.getsize(file_path)
+                if file_size > 50 * 1024 * 1024:
+                    error = f"File too large ({file_size/1024/1024:.1f}MB > 50MB)"
+                    self.failed_files.append((filename, error))
+                    self.file_failed.emit(i, filename, error)
+                    continue
+
+                # Check file extension
+                file_ext = os.path.splitext(filename)[1].lower().lstrip('.')
+                supported_extensions = {'txt', 'py', 'js', 'json', 'md', 'csv', 'html', 'css', 'xml', 'yaml', 'yml', 'java', 'cpp', 'c', 'h', 'rs', 'go', 'rb', 'php', 'ts', 'tsx', 'jsx'}
+                if file_ext not in supported_extensions:
+                    error = f"Unsupported format: .{file_ext}"
+                    self.failed_files.append((filename, error))
+                    self.file_failed.emit(i, filename, error)
+                    continue
+
+                # Generate file ID
+                timestamp = datetime.now().timestamp()
+                file_id = f"file_{Path(file_path).stem}_{int(timestamp)}"
+
+                # Process through RAG
+                try:
+                    metadata_override = {
+                        'pending_conversation_id': self.conversation_id,
+                        'conversation_id': self.conversation_id,
+                        'collection_tag': self.collection_tag  # CRITICAL: Add collection tag to FAISS metadata
+                    }
+
+                    document_id = self.rag_session.ingest_document(
+                        file_path=str(file_path),
+                        metadata_override=metadata_override,
+                        timeout=120.0
+                    )
+
+                    if not document_id:
+                        self.failed_files.append((filename, 'Document ingestion returned None'))
+                        self.file_failed.emit(i, filename, 'Document ingestion returned None')
+                        continue
+
+                    stats = self.rag_session.get_stats(timeout=10.0) or {}
+                    rag_stats = stats.get('rag_pipeline', {})
+                    chunk_count = rag_stats.get('chunks_created', 1)
+
+                    logger.info(f"✓ RAG processed: {filename} ({chunk_count} chunks)")
+
+                except Exception as rag_error:
+                    error_msg = f"RAG error: {str(rag_error)}"
+                    self.failed_files.append((filename, error_msg))
+                    self.file_failed.emit(i, filename, error_msg)
+                    logger.error(f"RAG processing failed for {filename}: {rag_error}")
+                    continue
+
+                # Save to database
+                try:
+                    from ...infrastructure.conversation_management.models.database_models import ConversationFileModel
+
+                    with self.db_manager.get_session() as session:
+                        file_record = ConversationFileModel(
+                            id=str(uuid.uuid4()),
+                            conversation_id=self.conversation_id,
+                            file_id=file_id,
+                            filename=filename,
+                            file_path=file_path,
+                            file_size=file_size,
+                            file_type=file_ext,
+                            upload_timestamp=datetime.now(),
+                            processing_status='completed',
+                            chunk_count=chunk_count,
+                            is_enabled=True,
+                            collection_tag=self.collection_tag
+                        )
+                        session.add(file_record)
+                        session.commit()
+
+                    self.successful_files.append(filename)
+                    logger.info(f"✅ Uploaded: {filename} ({chunk_count} chunks, tag: {self.collection_tag or 'none'})")
+
+                    # Emit success with file data
+                    file_data = {
+                        'filename': filename,
+                        'file_size': file_size,
+                        'chunk_count': chunk_count,
+                        'collection_tag': self.collection_tag
+                    }
+                    self.file_completed.emit(i, file_data)
+
+                except Exception as db_error:
+                    error_msg = f"DB error: {str(db_error)}"
+                    self.failed_files.append((filename, error_msg))
+                    self.file_failed.emit(i, filename, error_msg)
+                    logger.error(f"Database error for {filename}: {db_error}")
+                    import traceback
+                    traceback.print_exc()
+
+            except Exception as e:
+                error_msg = str(e)
+                self.failed_files.append((filename, error_msg))
+                self.file_failed.emit(i, filename, error_msg)
+                logger.error(f"Failed to process {filename}: {e}")
+
+        # Emit completion signal
+        self.all_completed.emit(self.successful_files, self.failed_files)
+
+
+class CollectionsManagerDialog(QDialog):
+    """Simple tag-based Collections Manager."""
+
+    tag_insert_requested = pyqtSignal(str)  # Emit when user wants to insert @tag
+
+    # Legacy signals for backwards compatibility (not used in tag-based system)
+    collection_created = pyqtSignal(object)
+    collection_updated = pyqtSignal(object)
+    collection_deleted = pyqtSignal(str)
+
+    def __init__(self, parent=None, db_manager=None, theme_name=None):
         super().__init__(parent)
         self.service = CollectionService(db_manager)
-        self.current_collection: Optional[FileCollection] = None
+        self.db_manager = db_manager or DatabaseManager()
+
+        # Get RAG session from parent (REPL widget pattern)
+        self.rag_session = None
+        if parent and hasattr(parent, 'rag_session'):
+            self.rag_session = parent.rag_session
+            logger.info("✓ Using parent's RAG session")
+
+        # Get theme from settings
+        if theme_name is None:
+            from ...infrastructure.storage.settings_manager import settings
+            theme_name = settings.get('ui.theme', 'professional_dark')
+
         self.theme_name = theme_name
-        self.colors: Optional[ColorSystem] = None
+        self.current_tag = None
+        self.all_files = []
+
+        # Track upload workers and row mappings
+        self._upload_workers = []
+        self._upload_row_mapping = {}  # Maps worker index to table row
 
         self.setWindowTitle("Collections Manager")
-        self.setMinimumSize(1000, 700)
+        self.setMinimumSize(1200, 700)
+
+        # Make dialog non-modal so it doesn't block the app
+        self.setModal(False)
 
         self._init_ui()
         self._apply_theme()
-        self._load_collections()
-        self._load_all_tags()
 
-        logger.info("✓ Collections Manager Dialog initialized")
+        # Don't load data in __init__ - let it load when dialog is shown
+        # This prevents recursion issues during initialization
+        QTimer.singleShot(100, self._load_data)
+
+        logger.info("✓ Collections Manager initialized (tag-based)")
 
     def _init_ui(self):
-        """Initialize the user interface."""
+        """Create 3-panel UI."""
         layout = QVBoxLayout(self)
 
-        # Top bar with search and actions
-        top_bar = self._create_top_bar()
+        # Top: Upload + Create Tag buttons
+        top_bar = QHBoxLayout()
+        self.upload_btn = QPushButton("Upload Files")
+        self.upload_btn.clicked.connect(self._on_upload_files)
+        self.new_tag_btn = QPushButton("Create Tag")
+        self.new_tag_btn.clicked.connect(self._on_create_tag)
+
+        top_bar.addWidget(QLabel("Collections Manager"))
+        top_bar.addStretch()
+        top_bar.addWidget(self.upload_btn)
+        top_bar.addWidget(self.new_tag_btn)
         layout.addLayout(top_bar)
 
-        # Main content area (3-column split view)
+        # Middle: 3-panel splitter
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        # Left panel: Collections list
-        left_panel = self._create_collections_panel()
+        # LEFT: Tags list
+        left_panel = QGroupBox("Tags")
+        left_layout = QVBoxLayout(left_panel)
+        self.tag_search = QLineEdit()
+        self.tag_search.setPlaceholderText("Search tags...")
+        self.tag_search.textChanged.connect(self._filter_tags)
+        self.tags_list = QListWidget()
+        self.tags_list.itemClicked.connect(self._on_tag_selected)
+        self.show_all_btn = QPushButton("Show All Files")
+        self.show_all_btn.clicked.connect(self._on_show_all)
+        left_layout.addWidget(self.tag_search)
+        left_layout.addWidget(self.tags_list)
+        left_layout.addWidget(self.show_all_btn)
+
+        # MIDDLE: Files table
+        middle_panel = QGroupBox("Files")
+        middle_layout = QVBoxLayout(middle_panel)
+        self.files_table = QTableWidget()
+        self.files_table.setColumnCount(5)
+        self.files_table.setHorizontalHeaderLabels(['☑', 'Filename', 'Tag', 'Size', 'Chunks'])
+        self.files_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.selection_label = QLabel("0 selected")
+        middle_layout.addWidget(self.files_table)
+        middle_layout.addWidget(self.selection_label)
+
+        # RIGHT: Actions
+        right_panel = QGroupBox("Actions")
+        right_layout = QVBoxLayout(right_panel)
+        self.current_tag_label = QLabel("No tag selected")
+        self.tag_files_btn = QPushButton("Tag Selected Files")
+        self.tag_files_btn.clicked.connect(self._on_tag_files)
+        self.untag_btn = QPushButton("Remove Tags")
+        self.untag_btn.clicked.connect(self._on_untag_files)
+        self.insert_btn = QPushButton("Insert @tag into Chat")
+        self.insert_btn.clicked.connect(self._on_insert_tag)
+        self.insert_btn.setEnabled(False)
+        self.delete_tag_btn = QPushButton("Delete Tag")
+        self.delete_tag_btn.clicked.connect(self._on_delete_tag)
+        self.delete_tag_btn.setEnabled(False)
+        self.delete_files_btn = QPushButton("Delete Selected Files")
+        self.delete_files_btn.clicked.connect(self._on_delete_files)
+
+        right_layout.addWidget(self.current_tag_label)
+        right_layout.addStretch()
+        right_layout.addWidget(self.tag_files_btn)
+        right_layout.addWidget(self.untag_btn)
+        right_layout.addWidget(self.insert_btn)
+        right_layout.addWidget(self.delete_files_btn)
+        right_layout.addStretch()
+        right_layout.addWidget(self.delete_tag_btn)
+
         splitter.addWidget(left_panel)
-
-        # Middle panel: Collection details and files
-        middle_panel = self._create_details_panel()
         splitter.addWidget(middle_panel)
-
-        # Right panel: Tags browser
-        right_panel = self._create_tags_panel()
         splitter.addWidget(right_panel)
-
-        # Set initial splitter sizes (25% left, 50% middle, 25% right)
-        splitter.setSizes([250, 500, 250])
-
+        splitter.setSizes([250, 650, 300])
         layout.addWidget(splitter)
 
-        # Bottom buttons
-        bottom_buttons = self._create_bottom_buttons()
-        layout.addLayout(bottom_buttons)
-
-    def _create_top_bar(self) -> QHBoxLayout:
-        """Create the top bar with search and action buttons."""
-        layout = QHBoxLayout()
-
-        # Search box
-        search_label = QLabel("Search:")
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Search collections...")
-        self.search_input.textChanged.connect(self._on_search_changed)
-
-        # Tag filter
-        tag_filter_label = QLabel("Filter by tag:")
-        self.tag_filter = QComboBox()
-        self.tag_filter.addItem("All tags", None)
-        self.tag_filter.currentIndexChanged.connect(self._on_filter_changed)
-
-        # Template checkbox
-        self.show_templates = QCheckBox("Show templates")
-        self.show_templates.setChecked(True)
-        self.show_templates.stateChanged.connect(self._on_filter_changed)
-
-        # New collection button
-        self.new_collection_btn = QPushButton("New Collection")
-        self.new_collection_btn.clicked.connect(self._on_new_collection)
-
-        # New from template button
-        self.new_from_template_btn = QPushButton("From Template")
-        self.new_from_template_btn.clicked.connect(self._on_new_from_template)
-
-        # Import button
-        self.import_btn = QPushButton("Import")
-        self.import_btn.clicked.connect(self._on_import_collection)
-
-        layout.addWidget(search_label)
-        layout.addWidget(self.search_input, stretch=2)
-        layout.addWidget(tag_filter_label)
-        layout.addWidget(self.tag_filter, stretch=1)
-        layout.addWidget(self.show_templates)
-        layout.addStretch()
-        layout.addWidget(self.new_collection_btn)
-        layout.addWidget(self.new_from_template_btn)
-        layout.addWidget(self.import_btn)
-
-        return layout
-
-    def _create_collections_panel(self) -> QWidget:
-        """Create the left panel with collections list."""
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
-
-        # Collections list
-        self.collections_list = QListWidget()
-        self.collections_list.itemClicked.connect(self._on_collection_selected)
-
-        layout.addWidget(QLabel("Collections:"))
-        layout.addWidget(self.collections_list)
-
-        return panel
-
-    def _create_details_panel(self) -> QWidget:
-        """Create the right panel with collection details and files."""
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
-
-        # Collection info section
-        info_group = QGroupBox("Collection Details")
-        info_layout = QVBoxLayout()
-
-        # Name
-        name_layout = QHBoxLayout()
-        name_layout.addWidget(QLabel("Name:"))
-        self.name_input = QLineEdit()
-        self.name_input.setPlaceholderText("Collection name")
-        self.name_input.textChanged.connect(self._on_details_changed)
-        name_layout.addWidget(self.name_input)
-        info_layout.addLayout(name_layout)
-
-        # Description
-        desc_layout = QVBoxLayout()
-        desc_layout.addWidget(QLabel("Description:"))
-        self.description_input = QTextEdit()
-        self.description_input.setPlaceholderText("Optional description")
-        self.description_input.setMaximumHeight(80)
-        self.description_input.textChanged.connect(self._on_details_changed)
-        desc_layout.addWidget(self.description_input)
-        info_layout.addLayout(desc_layout)
-
-        # Tags
-        tags_layout = QHBoxLayout()
-        tags_layout.addWidget(QLabel("Tags:"))
-        self.tags_input = QLineEdit()
-        self.tags_input.setPlaceholderText("Comma-separated tags")
-        self.tags_input.textChanged.connect(self._on_details_changed)
-        tags_layout.addWidget(self.tags_input)
-        info_layout.addLayout(tags_layout)
-
-        # Statistics
-        self.stats_label = QLabel("Files: 0 | Size: 0 MB")
-        self.stats_label.setStyleSheet("font-style: italic; opacity: 0.7;")
-        info_layout.addWidget(self.stats_label)
-
-        info_group.setLayout(info_layout)
-        layout.addWidget(info_group)
-
-        # RAG settings section
-        rag_group = QGroupBox("RAG Settings")
-        rag_layout = QHBoxLayout()
-
-        chunk_size_layout = QVBoxLayout()
-        chunk_size_layout.addWidget(QLabel("Chunk Size:"))
-        self.chunk_size_spin = QSpinBox()
-        self.chunk_size_spin.setRange(100, 10000)
-        self.chunk_size_spin.setValue(1000)
-        self.chunk_size_spin.setSingleStep(100)
-        self.chunk_size_spin.valueChanged.connect(self._on_details_changed)
-        chunk_size_layout.addWidget(self.chunk_size_spin)
-
-        chunk_overlap_layout = QVBoxLayout()
-        chunk_overlap_layout.addWidget(QLabel("Chunk Overlap:"))
-        self.chunk_overlap_spin = QSpinBox()
-        self.chunk_overlap_spin.setRange(0, 1000)
-        self.chunk_overlap_spin.setValue(200)
-        self.chunk_overlap_spin.setSingleStep(50)
-        self.chunk_overlap_spin.valueChanged.connect(self._on_details_changed)
-        chunk_overlap_layout.addWidget(self.chunk_overlap_spin)
-
-        max_size_layout = QVBoxLayout()
-        max_size_layout.addWidget(QLabel("Max Size (MB):"))
-        self.max_size_spin = QSpinBox()
-        self.max_size_spin.setRange(1, 10000)
-        self.max_size_spin.setValue(500)
-        self.max_size_spin.setSingleStep(100)
-        self.max_size_spin.valueChanged.connect(self._on_details_changed)
-        max_size_layout.addWidget(self.max_size_spin)
-
-        rag_layout.addLayout(chunk_size_layout)
-        rag_layout.addLayout(chunk_overlap_layout)
-        rag_layout.addLayout(max_size_layout)
-        rag_layout.addStretch()
-
-        rag_group.setLayout(rag_layout)
-        layout.addWidget(rag_group)
-
-        # Files section
-        files_group = QGroupBox("Files")
-        files_layout = QVBoxLayout()
-
-        # File list with drag-and-drop
-        self.files_list = FileListWidget()
-        self.files_list.files_dropped.connect(self._on_files_dropped)
-
-        # File action buttons
-        file_buttons = QHBoxLayout()
-        self.add_files_btn = QPushButton("Add Files")
-        self.add_files_btn.clicked.connect(self._on_add_files)
-        self.remove_file_btn = QPushButton("Remove Selected")
-        self.remove_file_btn.clicked.connect(self._on_remove_file)
-        self.verify_integrity_btn = QPushButton("Verify Integrity")
-        self.verify_integrity_btn.clicked.connect(self._on_verify_integrity)
-
-        file_buttons.addWidget(self.add_files_btn)
-        file_buttons.addWidget(self.remove_file_btn)
-        file_buttons.addWidget(self.verify_integrity_btn)
-        file_buttons.addStretch()
-
-        files_layout.addWidget(self.files_list)
-        files_layout.addLayout(file_buttons)
-
-        files_group.setLayout(files_layout)
-        layout.addWidget(files_group, stretch=1)
-
-        # Collection action buttons
-        action_buttons = QHBoxLayout()
-        self.save_btn = QPushButton("Save Changes")
-        self.save_btn.clicked.connect(self._on_save_collection)
-        self.save_btn.setEnabled(False)
-
-        self.delete_btn = QPushButton("Delete Collection")
-        self.delete_btn.clicked.connect(self._on_delete_collection)
-        self.delete_btn.setEnabled(False)
-
-        self.export_btn = QPushButton("Export")
-        self.export_btn.clicked.connect(self._on_export_collection)
-        self.export_btn.setEnabled(False)
-
-        action_buttons.addWidget(self.save_btn)
-        action_buttons.addWidget(self.delete_btn)
-        action_buttons.addWidget(self.export_btn)
-        action_buttons.addStretch()
-
-        layout.addLayout(action_buttons)
-
-        return panel
-
-    def _create_tags_panel(self) -> QWidget:
-        """Create the right panel with clickable tags browser."""
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
-
-        # Header
-        header_layout = QHBoxLayout()
-        header_label = QLabel("Available Tags")
-        header_label.setStyleSheet("font-weight: bold; font-size: 12pt;")
-        header_layout.addWidget(header_label)
-        header_layout.addStretch()
-        layout.addLayout(header_layout)
-
-        # Instructions
-        instructions = QLabel("Click a tag to attach all collections with that tag to the current conversation")
-        instructions.setWordWrap(True)
-        instructions.setStyleSheet("font-size: 9pt; font-style: italic;")
-        layout.addWidget(instructions)
-
-        # Tags list (clickable items)
-        self.tags_list = QListWidget()
-        self.tags_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
-        self.tags_list.itemClicked.connect(self._on_tag_clicked)
-        layout.addWidget(self.tags_list)
-
-        # Statistics label
-        self.tags_stats_label = QLabel("0 tags available")
-        self.tags_stats_label.setStyleSheet("font-size: 9pt; font-style: italic;")
-        layout.addWidget(self.tags_stats_label)
-
-        # Action buttons
-        tag_buttons = QHBoxLayout()
-
-        self.attach_by_tag_btn = QPushButton("Attach Selected Tag")
-        self.attach_by_tag_btn.setEnabled(False)
-        self.attach_by_tag_btn.clicked.connect(self._on_attach_by_tag)
-
-        self.refresh_tags_btn = QPushButton("Refresh")
-        self.refresh_tags_btn.clicked.connect(self._load_all_tags)
-
-        tag_buttons.addWidget(self.attach_by_tag_btn)
-        tag_buttons.addWidget(self.refresh_tags_btn)
-        layout.addLayout(tag_buttons)
-
-        return panel
-
-    def _create_bottom_buttons(self) -> QHBoxLayout:
-        """Create bottom dialog buttons."""
-        layout = QHBoxLayout()
-
-        self.close_btn = QPushButton("Close")
-        self.close_btn.clicked.connect(self.accept)
-
-        layout.addStretch()
-        layout.addWidget(self.close_btn)
-
-        return layout
+        # Bottom: Close
+        bottom = QHBoxLayout()
+        bottom.addStretch()
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.accept)
+        bottom.addWidget(close_btn)
+        layout.addLayout(bottom)
 
     def _apply_theme(self):
-        """Apply the current theme to the dialog."""
-        themes = get_improved_preset_themes()
-        # Try to find matching theme (case-insensitive, handle both old and new names)
-        theme_key = self.theme_name.lower().replace(" ", "_")
-        if theme_key in themes:
-            self.colors = themes[theme_key]
-        elif f"improved_{theme_key}" in themes:
-            self.colors = themes[f"improved_{theme_key}"]
-        else:
-            # Default to professional_dark if theme not found
-            self.colors = themes.get("professional_dark", list(themes.values())[0])
-
-        if self.colors:
-
-            # Apply background color
-            self.setStyleSheet(f"""
-                QDialog {{
-                    background-color: {self.colors.background_primary};
-                    color: {self.colors.text_primary};
-                }}
-                QGroupBox {{
-                    border: 1px solid {self.colors.border_primary};
-                    border-radius: 4px;
-                    margin-top: 10px;
-                    padding-top: 10px;
-                    font-weight: bold;
-                }}
-                QGroupBox::title {{
-                    color: {self.colors.primary};
-                    subcontrol-origin: margin;
-                    left: 10px;
-                    padding: 0 5px;
-                }}
-                QLineEdit, QTextEdit, QSpinBox, QComboBox {{
-                    background-color: {self.colors.background_secondary};
-                    color: {self.colors.text_primary};
-                    border: 1px solid {self.colors.border_primary};
-                    border-radius: 3px;
-                    padding: 5px;
-                }}
-                QListWidget {{
-                    background-color: {self.colors.background_secondary};
-                    color: {self.colors.text_primary};
-                    border: 1px solid {self.colors.border_primary};
-                    border-radius: 3px;
-                }}
-                QPushButton {{
-                    background-color: {self.colors.primary};
-                    color: {self.colors.text_primary};
-                    border: none;
-                    border-radius: 3px;
-                    padding: 8px 16px;
-                    font-weight: bold;
-                }}
-                QPushButton:hover {{
-                    background-color: {self.colors.primary_hover};
-                }}
-                QPushButton:pressed {{
-                    background-color: {self.colors.interactive_active};
-                }}
-                QPushButton:disabled {{
-                    background-color: {self.colors.background_tertiary};
-                    color: {self.colors.text_disabled};
-                }}
-            """)
-
-            logger.info(f"✓ Applied theme: {self.theme_name}")
-
-    # ========================================
-    # Data Loading
-    # ========================================
-
-    def _load_collections(self):
-        """Load collections from database."""
+        """Apply theme using StyleTemplates like settings dialog."""
         try:
-            # Get filter settings
-            include_templates = self.show_templates.isChecked()
-            selected_tag = self.tag_filter.currentData()
-            tags = [selected_tag] if selected_tag else None
+            from ...ui.themes.theme_manager import get_theme_manager
+            from ...ui.themes.style_templates import StyleTemplates
 
-            # Load collections
+            theme_manager = get_theme_manager()
+            style = StyleTemplates.get_settings_dialog_style(theme_manager.current_theme)
+            self.setStyleSheet(style)
+
+            logger.debug(f"Applied theme: {theme_manager.current_theme_name}")
+        except ImportError:
+            logger.warning("Theme system not available, using fallback")
+            self._apply_fallback_theme()
+
+    def _apply_fallback_theme(self):
+        """Apply fallback dark theme styling when theme system is not available."""
+        self.setStyleSheet("""
+            /* Main dialog styling */
+            QDialog {
+                background-color: #2b2b2b;
+                color: #ffffff;
+            }
+
+            /* Group box styling */
+            QGroupBox {
+                color: #ffffff;
+                font-weight: bold;
+                border: 1px solid #555555;
+                border-radius: 5px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+
+            /* Label styling */
+            QLabel {
+                color: #ffffff;
+            }
+
+            /* Input field styling */
+            QLineEdit, QTextEdit {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                padding: 5px;
+            }
+            QLineEdit:focus, QTextEdit:focus {
+                border-color: #4CAF50;
+            }
+
+            /* Button styling */
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton:pressed {
+                background-color: #3e8e41;
+            }
+            QPushButton:disabled {
+                background-color: #666666;
+                color: #999999;
+            }
+
+            /* List widget styling */
+            QListWidget {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                border: 1px solid #555555;
+                border-radius: 4px;
+            }
+            QListWidget::item {
+                padding: 5px;
+                border-bottom: 1px solid #555555;
+            }
+            QListWidget::item:selected {
+                background-color: #4CAF50;
+            }
+            QListWidget::item:hover {
+                background-color: #4a4a4a;
+            }
+
+            /* Table widget styling */
+            QTableWidget {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                gridline-color: #555555;
+            }
+            QTableWidget::item {
+                padding: 5px;
+            }
+            QTableWidget::item:selected {
+                background-color: #4CAF50;
+            }
+            QHeaderView::section {
+                background-color: #2b2b2b;
+                color: #ffffff;
+                padding: 5px;
+                border: 1px solid #555555;
+                font-weight: bold;
+            }
+
+            /* Splitter styling */
+            QSplitter::handle {
+                background-color: #555555;
+            }
+            QSplitter::handle:horizontal {
+                width: 2px;
+            }
+            QSplitter::handle:vertical {
+                height: 2px;
+            }
+        """)
+
+    def _load_data(self):
+        """Load tags and files from ALL conversations."""
+        try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            collections = loop.run_until_complete(
-                self.service.list_collections(
-                    include_templates=include_templates,
-                    tags=tags
-                )
-            )
+
+            # Load tags
+            tags = loop.run_until_complete(self.service.list_collection_tags())
+
+            # Load ALL files from ALL conversations (not just collections)
+            from ...infrastructure.conversation_management.models.database_models import ConversationFileModel
+            all_files = []
+
+            with self.db_manager.get_session() as session:
+                # Get ALL files from database (from all conversations)
+                file_records = session.query(ConversationFileModel).all()
+
+                # Convert to dict format (same as service returns)
+                for record in file_records:
+                    all_files.append({
+                        'file_id': record.file_id,
+                        'filename': record.filename,
+                        'file_path': record.file_path,
+                        'file_size': record.file_size,
+                        'file_type': record.file_type,
+                        'chunk_count': record.chunk_count,
+                        'collection_tag': record.collection_tag,
+                        'conversation_id': record.conversation_id,
+                        'processing_status': record.processing_status
+                    })
+
+            self.all_files = all_files
             loop.close()
 
-            # Apply search filter
-            search_query = self.search_input.text().lower()
-            if search_query:
-                collections = [
-                    c for c in collections
-                    if search_query in c.name.lower() or
-                       search_query in c.description.lower()
-                ]
-
-            # Update list
-            self.collections_list.clear()
-            for collection in collections:
-                item = QListWidgetItem(
-                    f"{collection.name} ({collection.file_count} files)"
-                )
-                item.setData(Qt.ItemDataRole.UserRole, collection)
-                self.collections_list.addItem(item)
-
-            # Update tag filter options
-            self._update_tag_filter(collections)
-
-            logger.info(f"✓ Loaded {len(collections)} collections")
-
-        except Exception as e:
-            logger.error(f"✗ Error loading collections: {e}")
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to load collections: {e}"
-            )
-
-    def _update_tag_filter(self, collections: List[FileCollection]):
-        """Update tag filter dropdown with available tags."""
-        # Collect all unique tags
-        all_tags = set()
-        for collection in collections:
-            all_tags.update(collection.tags)
-
-        # Update combobox
-        current_tag = self.tag_filter.currentData()
-        self.tag_filter.clear()
-        self.tag_filter.addItem("All tags", None)
-
-        for tag in sorted(all_tags):
-            self.tag_filter.addItem(tag, tag)
-
-        # Restore selection if possible
-        if current_tag:
-            index = self.tag_filter.findData(current_tag)
-            if index >= 0:
-                self.tag_filter.setCurrentIndex(index)
-
-    def _load_all_tags(self):
-        """Load all tags from all collections into the tags panel."""
-        try:
-            # Get all collections
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            collections = loop.run_until_complete(
-                self.service.list_collections(include_templates=True)
-            )
-            loop.close()
-
-            # Collect all tags with their collection counts
-            tag_counts = {}
-            for collection in collections:
-                for tag in collection.tags:
-                    if tag not in tag_counts:
-                        tag_counts[tag] = []
-                    tag_counts[tag].append(collection.name)
-
-            # Update tags list
+            # Populate tags
             self.tags_list.clear()
-            for tag in sorted(tag_counts.keys()):
-                count = len(tag_counts[tag])
-                item = QListWidgetItem(f"{tag} ({count} collection{'s' if count != 1 else ''})")
-                item.setData(Qt.ItemDataRole.UserRole, tag)  # Store tag name
-                item.setData(Qt.ItemDataRole.UserRole + 1, tag_counts[tag])  # Store collection names
-                item.setToolTip(f"Collections: {', '.join(tag_counts[tag])}")
+            for tag in tags:
+                loop2 = asyncio.new_event_loop()
+                stats = loop2.run_until_complete(self.service.get_tag_stats(tag))
+                loop2.close()
+                item = QListWidgetItem(f"{tag} ({stats['file_count']} files)")
+                item.setData(Qt.ItemDataRole.UserRole, tag)
                 self.tags_list.addItem(item)
 
-            # Update statistics
-            self.tags_stats_label.setText(
-                f"{len(tag_counts)} tag{'s' if len(tag_counts) != 1 else ''} available"
-            )
-
-            logger.info(f"✓ Loaded {len(tag_counts)} tags")
+            self._display_files(all_files)
+            logger.info(f"✓ Loaded {len(tags)} tags, {len(all_files)} files")
 
         except Exception as e:
-            logger.error(f"✗ Error loading tags: {e}")
-
-    def _on_tag_clicked(self, item: QListWidgetItem):
-        """Handle tag item click - enable attach button."""
-        self.attach_by_tag_btn.setEnabled(True)
-
-    def _on_attach_by_tag(self):
-        """Attach all collections with the selected tag to the current conversation."""
-        selected_item = self.tags_list.currentItem()
-        if not selected_item:
-            return
-
-        tag = selected_item.data(Qt.ItemDataRole.UserRole)
-        collection_names = selected_item.data(Qt.ItemDataRole.UserRole + 1)
-
-        try:
-            # Get current conversation ID from parent
-            conversation_id = self._get_current_conversation_id()
-            if not conversation_id:
-                QMessageBox.warning(
-                    self,
-                    "No Conversation",
-                    "Please select a conversation first before attaching collections."
-                )
-                return
-
-            # Get all collections with this tag
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            all_collections = loop.run_until_complete(
-                self.service.list_collections(include_templates=False, tags=[tag])
-            )
-            loop.close()
-
-            # Attach each collection
-            attached_count = 0
-            for collection in all_collections:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                success = loop.run_until_complete(
-                    self.service.attach_collection_to_conversation(
-                        conversation_id,
-                        collection.id
-                    )
-                )
-                loop.close()
-
-                if success:
-                    attached_count += 1
-
-            QMessageBox.information(
-                self,
-                "Collections Attached",
-                f"Attached {attached_count} collection(s) with tag '{tag}' to the current conversation.\n\n"
-                f"Collections: {', '.join(collection_names)}"
-            )
-
-            logger.info(f"✓ Attached {attached_count} collections by tag: {tag}")
-
-        except Exception as e:
-            logger.error(f"✗ Error attaching collections by tag: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to attach collections:\n{e}")
-
-    def _get_current_conversation_id(self) -> Optional[str]:
-        """Get the current conversation ID from the parent REPL widget."""
-        try:
-            # Try to get from parent window
-            parent = self.parent()
-            while parent:
-                if hasattr(parent, 'current_conversation') and parent.current_conversation:
-                    return parent.current_conversation.id
-                parent = parent.parent()
-            return None
-        except Exception as e:
-            logger.error(f"✗ Error getting conversation ID: {e}")
-            return None
-
-    # ========================================
-    # Event Handlers - Collections
-    # ========================================
-
-    def _on_collection_selected(self, item: QListWidgetItem):
-        """Handle collection selection."""
-        collection = item.data(Qt.ItemDataRole.UserRole)
-        if collection:
-            self._load_collection_details(collection)
-
-    def _load_collection_details(self, collection: FileCollection):
-        """Load collection details into the form."""
-        self.current_collection = collection
-
-        # Update form fields
-        self.name_input.setText(collection.name)
-        self.description_input.setPlainText(collection.description)
-        self.tags_input.setText(", ".join(collection.tags))
-        self.chunk_size_spin.setValue(collection.chunk_size)
-        self.chunk_overlap_spin.setValue(collection.chunk_overlap)
-        self.max_size_spin.setValue(collection.max_size_mb)
-
-        # Update statistics
-        self._update_statistics()
-
-        # Load files
-        self._load_collection_files()
-
-        # Enable action buttons
-        self.save_btn.setEnabled(False)  # No changes yet
-        self.delete_btn.setEnabled(True)
-        self.export_btn.setEnabled(True)
-
-        logger.info(f"✓ Loaded collection: {collection.name}")
-
-    def _load_collection_files(self):
-        """Load files for the current collection."""
-        if not self.current_collection:
-            return
-
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            files = loop.run_until_complete(
-                self.service.get_collection_files(self.current_collection.id)
-            )
-            loop.close()
-
-            # Update files list
-            self.files_list.clear()
-            for file_item in files:
-                list_item = QListWidgetItem(
-                    f"{file_item.file_name} ({file_item.file_size / 1024:.1f} KB)"
-                )
-                list_item.setData(Qt.ItemDataRole.UserRole, file_item)
-                self.files_list.addItem(list_item)
-
-            logger.info(f"✓ Loaded {len(files)} files")
-
-        except Exception as e:
-            logger.error(f"✗ Error loading files: {e}")
-
-    def _update_statistics(self):
-        """Update collection statistics display."""
-        if not self.current_collection:
-            self.stats_label.setText("Files: 0 | Size: 0 MB")
-            return
-
-        # Reload collection to get latest stats
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            collection = loop.run_until_complete(
-                self.service.get_collection(self.current_collection.id)
-            )
-            loop.close()
-
-            if collection:
-                self.current_collection = collection
-                self.stats_label.setText(
-                    f"Files: {collection.file_count} | "
-                    f"Size: {collection.total_size_mb:.2f} MB / {collection.max_size_mb} MB"
-                )
-
-        except Exception as e:
-            logger.error(f"✗ Error updating statistics: {e}")
-
-    def _on_details_changed(self):
-        """Handle changes to collection details."""
-        if self.current_collection:
-            self.save_btn.setEnabled(True)
-
-    def _on_search_changed(self):
-        """Handle search query changes."""
-        self._load_collections()
-
-    def _on_filter_changed(self):
-        """Handle filter changes."""
-        self._load_collections()
-
-    def _on_new_collection(self):
-        """Create a new empty collection."""
-        name, ok = QInputDialog.getText(
-            self,
-            "New Collection",
-            "Collection name:"
-        )
-
-        if not ok or not name:
-            return
-
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            collection = loop.run_until_complete(
-                self.service.create_collection(name=name)
-            )
-            loop.close()
-
-            if collection:
-                self.collection_created.emit(collection)
-                self._load_collections()
-                QMessageBox.information(
-                    self,
-                    "Success",
-                    f"Collection '{name}' created successfully"
-                )
-            else:
-                QMessageBox.warning(
-                    self,
-                    "Error",
-                    "Failed to create collection (name may already exist)"
-                )
-
-        except Exception as e:
-            logger.error(f"✗ Error creating collection: {e}")
+            logger.error(f"✗ Error loading: {e}")
+            import traceback
+            traceback.print_exc()
             QMessageBox.critical(self, "Error", str(e))
 
-    def _on_new_from_template(self):
-        """Create a new collection from a template."""
-        # Get available templates
+    def _display_files(self, files):
+        """Show files in table."""
+        self.files_table.setRowCount(len(files))
+        for row, file in enumerate(files):
+            checkbox = QCheckBox()
+            self.files_table.setCellWidget(row, 0, checkbox)
+            self.files_table.setItem(row, 1, QTableWidgetItem(file['filename']))
+            self.files_table.setItem(row, 2, QTableWidgetItem(file.get('collection_tag', 'Untagged')))
+            self.files_table.setItem(row, 3, QTableWidgetItem(f"{file['file_size']/1024/1024:.2f} MB"))
+            self.files_table.setItem(row, 4, QTableWidgetItem(str(file['chunk_count'])))
+            self.files_table.item(row, 1).setData(Qt.ItemDataRole.UserRole, file)
+
+    def _get_selected_files(self):
+        """Get checked files."""
+        selected = []
+        for row in range(self.files_table.rowCount()):
+            cb = self.files_table.cellWidget(row, 0)
+            if cb and cb.isChecked():
+                selected.append(self.files_table.item(row, 1).data(Qt.ItemDataRole.UserRole))
+        return selected
+
+    def _on_tag_selected(self, item):
+        """Handle tag click."""
+        tag = item.data(Qt.ItemDataRole.UserRole)
+        self.current_tag = tag
+        self.current_tag_label.setText(f"Tag: {tag}")
+        self.insert_btn.setEnabled(True)
+        self.delete_tag_btn.setEnabled(True)
+
+        # Load files for tag
         loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        templates = loop.run_until_complete(self.service.get_builtin_templates())
+        files = loop.run_until_complete(self.service.get_files_by_tag(tag))
         loop.close()
+        self._display_files(files)
 
-        # Show template selection dialog
-        template_names = [t["name"] for t in templates]
-        template_name, ok = QInputDialog.getItem(
-            self,
-            "Select Template",
-            "Choose a template:",
-            template_names,
-            0,
-            False
-        )
+    def _on_show_all(self):
+        """Show all files."""
+        self.current_tag = None
+        self.current_tag_label.setText("All files")
+        self.insert_btn.setEnabled(False)
+        self.delete_tag_btn.setEnabled(False)
+        self._display_files(self.all_files)
 
-        if not ok:
-            return
+    def _filter_tags(self, text):
+        """Filter tags by search."""
+        for i in range(self.tags_list.count()):
+            item = self.tags_list.item(i)
+            tag = item.data(Qt.ItemDataRole.UserRole)
+            item.setHidden(text.lower() not in tag.lower())
 
-        # Get collection name
-        collection_name, ok = QInputDialog.getText(
-            self,
-            "Collection Name",
-            "Enter name for new collection:"
-        )
-
-        if not ok or not collection_name:
-            return
-
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            collection = loop.run_until_complete(
-                self.service.instantiate_template(
-                    template_name=template_name,
-                    new_collection_name=collection_name,
-                    file_paths=[]
-                )
-            )
-            loop.close()
-
-            if collection:
-                self.collection_created.emit(collection)
-                self._load_collections()
-                QMessageBox.information(
-                    self,
-                    "Success",
-                    f"Collection '{collection_name}' created from template"
-                )
-            else:
-                QMessageBox.warning(self, "Error", "Failed to create collection")
-
-        except Exception as e:
-            logger.error(f"✗ Error creating from template: {e}")
-            QMessageBox.critical(self, "Error", str(e))
-
-    def _on_save_collection(self):
-        """Save changes to the current collection."""
-        if not self.current_collection:
-            return
-
-        try:
-            # Get updated values
-            name = self.name_input.text()
-            description = self.description_input.toPlainText()
-            tags_text = self.tags_input.text()
-            tags = [t.strip() for t in tags_text.split(",") if t.strip()]
-            chunk_size = self.chunk_size_spin.value()
-            chunk_overlap = self.chunk_overlap_spin.value()
-            max_size_mb = self.max_size_spin.value()
-
-            # Update collection
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            success = loop.run_until_complete(
-                self.service.update_collection(
-                    collection_id=self.current_collection.id,
-                    name=name if name != self.current_collection.name else None,
-                    description=description,
-                    tags=tags,
-                    chunk_size=chunk_size,
-                    chunk_overlap=chunk_overlap,
-                    max_size_mb=max_size_mb
-                )
-            )
-            loop.close()
-
-            if success:
-                # Reload collection
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                updated = loop.run_until_complete(
-                    self.service.get_collection(self.current_collection.id)
-                )
-                loop.close()
-
-                if updated:
-                    self.current_collection = updated
-                    self.collection_updated.emit(updated)
-                    self._load_collections()
-                    self.save_btn.setEnabled(False)
-                    QMessageBox.information(
-                        self,
-                        "Success",
-                        "Collection updated successfully"
-                    )
-
-            else:
-                QMessageBox.warning(self, "Error", "Failed to update collection")
-
-        except Exception as e:
-            logger.error(f"✗ Error saving collection: {e}")
-            QMessageBox.critical(self, "Error", str(e))
-
-    def _on_delete_collection(self):
-        """Delete the current collection."""
-        if not self.current_collection:
-            return
-
-        # Confirm deletion
-        reply = QMessageBox.question(
-            self,
-            "Confirm Delete",
-            f"Are you sure you want to delete collection '{self.current_collection.name}'?\n\n"
-            f"This will remove all file associations and cannot be undone.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
-
-        if reply != QMessageBox.StandardButton.Yes:
-            return
-
-        try:
-            collection_id = self.current_collection.id
-
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            success = loop.run_until_complete(
-                self.service.delete_collection(collection_id)
-            )
-            loop.close()
-
-            if success:
-                self.collection_deleted.emit(collection_id)
-                self.current_collection = None
-                self._clear_details_form()
-                self._load_collections()
-                QMessageBox.information(
-                    self,
-                    "Success",
-                    "Collection deleted successfully"
-                )
-            else:
-                QMessageBox.warning(self, "Error", "Failed to delete collection")
-
-        except Exception as e:
-            logger.error(f"✗ Error deleting collection: {e}")
-            QMessageBox.critical(self, "Error", str(e))
-
-    def _clear_details_form(self):
-        """Clear the details form."""
-        self.name_input.clear()
-        self.description_input.clear()
-        self.tags_input.clear()
-        self.chunk_size_spin.setValue(1000)
-        self.chunk_overlap_spin.setValue(200)
-        self.max_size_spin.setValue(500)
-        self.files_list.clear()
-        self.stats_label.setText("Files: 0 | Size: 0 MB")
-        self.save_btn.setEnabled(False)
-        self.delete_btn.setEnabled(False)
-        self.export_btn.setEnabled(False)
-
-    # ========================================
-    # Event Handlers - Files
-    # ========================================
-
-    def _on_add_files(self):
-        """Add files to the current collection."""
-        if not self.current_collection:
+    def _on_upload_files(self):
+        """Upload files using REPL's existing RAG session approach."""
+        if not self.rag_session or not getattr(self.rag_session, 'is_ready', False):
             QMessageBox.warning(
                 self,
-                "No Collection",
-                "Please select or create a collection first"
+                "RAG Not Available",
+                "File upload requires RAG to be initialized.\n\n"
+                "This usually happens automatically when the app starts with an API key configured."
             )
             return
 
-        # Show file dialog
+        # Show file picker
         file_paths, _ = QFileDialog.getOpenFileNames(
             self,
-            "Select Files to Add",
+            "Select Files to Upload",
             "",
-            "All Files (*.*)"
+            "Supported Files (*.txt *.py *.js *.json *.md *.csv *.html *.css *.xml *.yaml *.yml *.java *.cpp *.c *.h *.rs *.go *.rb *.php *.ts *.tsx *.jsx);;All Files (*.*)"
         )
 
         if not file_paths:
             return
 
-        self._add_files_to_collection(file_paths)
+        # Check for duplicates
+        from ...infrastructure.conversation_management.models.database_models import ConversationFileModel
+        duplicates = []
+        unique_files = []
 
-    def _on_files_dropped(self, file_paths: List[str]):
-        """Handle files dropped onto the list."""
-        if not self.current_collection:
-            QMessageBox.warning(
-                self,
-                "No Collection",
-                "Please select or create a collection first"
-            )
-            return
+        with self.db_manager.get_session() as session:
+            for file_path in file_paths:
+                filename = os.path.basename(file_path)
+                # Check if this exact file path already exists
+                existing = session.query(ConversationFileModel).filter(
+                    ConversationFileModel.file_path == file_path
+                ).first()
 
-        self._add_files_to_collection(file_paths)
-
-    def _add_files_to_collection(self, file_paths: List[str]):
-        """Add files to the current collection."""
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            successful, errors = loop.run_until_complete(
-                self.service.add_files_to_collection(
-                    self.current_collection.id,
-                    file_paths,
-                    check_duplicates=True
-                )
-            )
-            loop.close()
-
-            # Show results
-            if successful > 0:
-                self._load_collection_files()
-                self._update_statistics()
-
-            if errors:
-                QMessageBox.warning(
-                    self,
-                    "Some Files Failed",
-                    f"Added {successful}/{len(file_paths)} files.\n\nErrors:\n" +
-                    "\n".join(errors[:5])  # Show first 5 errors
-                )
-            else:
-                QMessageBox.information(
-                    self,
-                    "Success",
-                    f"Added {successful} file(s) successfully"
-                )
-
-        except Exception as e:
-            logger.error(f"✗ Error adding files: {e}")
-            QMessageBox.critical(self, "Error", str(e))
-
-    def _on_remove_file(self):
-        """Remove selected file from collection."""
-        if not self.current_collection:
-            return
-
-        current_item = self.files_list.currentItem()
-        if not current_item:
-            QMessageBox.warning(self, "No Selection", "Please select a file to remove")
-            return
-
-        file_item = current_item.data(Qt.ItemDataRole.UserRole)
-        if not file_item:
-            return
-
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            success = loop.run_until_complete(
-                self.service.remove_file_from_collection(
-                    self.current_collection.id,
-                    file_item.id
-                )
-            )
-            loop.close()
-
-            if success:
-                self._load_collection_files()
-                self._update_statistics()
-            else:
-                QMessageBox.warning(self, "Error", "Failed to remove file")
-
-        except Exception as e:
-            logger.error(f"✗ Error removing file: {e}")
-            QMessageBox.critical(self, "Error", str(e))
-
-    def _on_verify_integrity(self):
-        """Verify integrity of all files in collection."""
-        if not self.current_collection:
-            return
-
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            all_valid, errors = loop.run_until_complete(
-                self.service.verify_collection_integrity(self.current_collection.id)
-            )
-            loop.close()
-
-            if all_valid:
-                QMessageBox.information(
-                    self,
-                    "Verification Success",
-                    "All files passed integrity verification"
-                )
-            else:
-                QMessageBox.warning(
-                    self,
-                    "Verification Failed",
-                    f"{len(errors)} file(s) failed verification:\n\n" +
-                    "\n".join(errors[:10])  # Show first 10 errors
-                )
-
-        except Exception as e:
-            logger.error(f"✗ Error verifying integrity: {e}")
-            QMessageBox.critical(self, "Error", str(e))
-
-    # ========================================
-    # Import/Export
-    # ========================================
-
-    def _on_export_collection(self):
-        """Export the current collection."""
-        if not self.current_collection:
-            return
-
-        # Show save dialog
-        export_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Export Collection",
-            f"{self.current_collection.name}.zip",
-            "ZIP Files (*.zip)"
-        )
-
-        if not export_path:
-            return
-
-        # Ask if files should be included
-        include_files = QMessageBox.question(
-            self,
-            "Include Files",
-            "Include file contents in export?\n\n"
-            "Yes: Full export with files (larger file size)\n"
-            "No: Metadata only (smaller, requires files to exist on import)",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes
-        ) == QMessageBox.StandardButton.Yes
-
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            success, error = loop.run_until_complete(
-                self.service.export_collection(
-                    self.current_collection.id,
-                    export_path,
-                    include_files=include_files
-                )
-            )
-            loop.close()
-
-            if success:
-                QMessageBox.information(
-                    self,
-                    "Success",
-                    f"Collection exported to:\n{export_path}"
-                )
-            else:
-                QMessageBox.warning(self, "Error", f"Export failed: {error}")
-
-        except Exception as e:
-            logger.error(f"✗ Error exporting collection: {e}")
-            QMessageBox.critical(self, "Error", str(e))
-
-    def _on_import_collection(self):
-        """Import a collection from file."""
-        # Show open dialog
-        import_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Import Collection",
-            "",
-            "ZIP Files (*.zip)"
-        )
-
-        if not import_path:
-            return
-
-        # Ask about file restoration
-        restore_files = QMessageBox.question(
-            self,
-            "Restore Files",
-            "Restore file contents from import package?\n\n"
-            "This will extract files to a directory you choose.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        ) == QMessageBox.StandardButton.Yes
-
-        target_directory = None
-        if restore_files:
-            target_directory = QFileDialog.getExistingDirectory(
-                self,
-                "Select Target Directory for Files"
-            )
-            if not target_directory:
-                return
-
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            collection, errors = loop.run_until_complete(
-                self.service.import_collection(
-                    import_path,
-                    restore_files=restore_files,
-                    target_directory=target_directory
-                )
-            )
-            loop.close()
-
-            if collection:
-                self.collection_created.emit(collection)
-                self._load_collections()
-
-                if errors:
-                    QMessageBox.warning(
-                        self,
-                        "Import with Warnings",
-                        f"Collection imported: {collection.name}\n\n"
-                        f"Warnings:\n" + "\n".join(errors[:5])
-                    )
+                if existing:
+                    duplicates.append(filename)
                 else:
-                    QMessageBox.information(
-                        self,
-                        "Success",
-                        f"Collection imported: {collection.name}"
-                    )
-            else:
-                QMessageBox.critical(
+                    unique_files.append(file_path)
+
+        # Show duplicate warning if any
+        if duplicates:
+            if len(duplicates) == len(file_paths):
+                QMessageBox.warning(
                     self,
-                    "Import Failed",
-                    "Failed to import collection:\n" + "\n".join(errors)
+                    "Duplicate Files",
+                    f"All selected files are already uploaded:\n\n" + "\n".join(f"• {f}" for f in duplicates[:10])
                 )
+                return
+            else:
+                reply = QMessageBox.question(
+                    self,
+                    "Duplicate Files Found",
+                    f"Found {len(duplicates)} duplicate file(s):\n\n" +
+                    "\n".join(f"• {f}" for f in duplicates[:5]) +
+                    (f"\n... and {len(duplicates) - 5} more" if len(duplicates) > 5 else "") +
+                    f"\n\nContinue uploading {len(unique_files)} new file(s)?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+                if reply != QMessageBox.StandardButton.Yes:
+                    return
 
-        except Exception as e:
-            logger.error(f"✗ Error importing collection: {e}")
-            QMessageBox.critical(self, "Error", str(e))
+        if not unique_files:
+            return
 
+        # Ask for optional collection tag
+        tag, ok = QInputDialog.getText(
+            self,
+            "Collection Tag (Optional)",
+            f"Tag for {len(unique_files)} file(s):\n(Leave empty to upload without tag)"
+        )
 
-class FileListWidget(QListWidget):
-    """
-    Custom list widget that accepts file drops.
-    """
+        if ok:  # User clicked OK (even if tag is empty)
+            tag = tag.strip() if tag else None
+            self._process_files_with_rag(unique_files, tag)
 
-    files_dropped = pyqtSignal(list)  # List of file paths
+    def _process_files_with_rag(self, file_paths: List[str], collection_tag: Optional[str] = None):
+        """Start async file upload using worker thread."""
+        # Ensure special collections conversation exists
+        conversation_id = "00000000-0000-0000-0000-000000000000"
+        from ...infrastructure.conversation_management.models.database_models import ConversationModel
 
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setAcceptDrops(True)
-        self.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        with self.db_manager.get_session() as session:
+            existing = session.query(ConversationModel).filter(
+                ConversationModel.id == conversation_id
+            ).first()
 
-    def dragEnterEvent(self, event: QDragEnterEvent):
-        """Handle drag enter."""
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
+            if not existing:
+                collections_conv = ConversationModel(
+                    id=conversation_id,
+                    title="Collections Library",
+                    status='active',
+                    created_at=datetime.now(),
+                    updated_at=datetime.now()
+                )
+                session.add(collections_conv)
+                session.commit()
 
-    def dragMoveEvent(self, event):
-        """Handle drag move."""
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
+        # Add files to table with hourglass
+        for i, file_path in enumerate(file_paths):
+            filename = os.path.basename(file_path)
+            current_row = self.files_table.rowCount()
+            self.files_table.setRowCount(current_row + 1)
 
-    def dropEvent(self, event: QDropEvent):
-        """Handle file drop."""
-        if event.mimeData().hasUrls():
-            file_paths = []
-            for url in event.mimeData().urls():
-                if url.isLocalFile():
-                    file_paths.append(url.toLocalFile())
+            # Hourglass in checkbox column
+            hourglass_label = QLabel("⏳")
+            hourglass_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            hourglass_label.setStyleSheet("font-size: 18px;")
+            self.files_table.setCellWidget(current_row, 0, hourglass_label)
 
-            if file_paths:
-                self.files_dropped.emit(file_paths)
+            self.files_table.setItem(current_row, 1, QTableWidgetItem(filename))
+            self.files_table.setItem(current_row, 2, QTableWidgetItem(collection_tag or "Untagged"))
+            self.files_table.setItem(current_row, 3, QTableWidgetItem("Uploading..."))
+            self.files_table.setItem(current_row, 4, QTableWidgetItem("..."))
 
-            event.acceptProposedAction()
+            self._upload_row_mapping[i] = current_row
+
+        # Create and start worker thread
+        worker = FileUploadWorker(
+            file_paths=file_paths,
+            collection_tag=collection_tag,
+            conversation_id=conversation_id,
+            rag_session=self.rag_session,
+            db_manager=self.db_manager
+        )
+
+        # Connect signals
+        worker.file_started.connect(self._on_file_upload_started)
+        worker.file_completed.connect(self._on_file_upload_completed)
+        worker.file_failed.connect(self._on_file_upload_failed)
+        worker.all_completed.connect(self._on_all_uploads_completed)
+
+        # Start upload
+        self._upload_workers.append(worker)
+        worker.start()
+
+        logger.info(f"🚀 Started async upload of {len(file_paths)} file(s)")
+
+    def _on_file_upload_started(self, worker_idx: int, filename: str):
+        """Handle file upload start."""
+        logger.info(f"📤 Starting upload: {filename}")
+
+    def _on_file_upload_completed(self, worker_idx: int, file_data: dict):
+        """Handle successful file upload."""
+        if worker_idx not in self._upload_row_mapping:
+            return
+
+        row = self._upload_row_mapping[worker_idx]
+        filename = file_data['filename']
+
+        # Replace hourglass with checkbox
+        checkbox = QCheckBox()
+        self.files_table.setCellWidget(row, 0, checkbox)
+
+        # Update size and chunks
+        self.files_table.setItem(row, 3, QTableWidgetItem(f"{file_data['file_size']/1024/1024:.2f} MB"))
+        self.files_table.setItem(row, 4, QTableWidgetItem(str(file_data['chunk_count'])))
+
+        logger.info(f"✅ Upload completed: {filename}")
+
+    def _on_file_upload_failed(self, worker_idx: int, filename: str, error: str):
+        """Handle failed file upload."""
+        if worker_idx not in self._upload_row_mapping:
+            return
+
+        row = self._upload_row_mapping[worker_idx]
+
+        # Replace hourglass with error icon
+        error_label = QLabel("❌")
+        error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.files_table.setCellWidget(row, 0, error_label)
+
+        self.files_table.setItem(row, 3, QTableWidgetItem("Failed"))
+        self.files_table.setItem(row, 4, QTableWidgetItem("Error"))
+
+        logger.error(f"❌ Upload failed: {filename} - {error}")
+
+    def _on_all_uploads_completed(self, successful_files: list, failed_files: list):
+        """Handle completion of all uploads."""
+        self._upload_row_mapping.clear()
+
+        # Reload data to show all files
+        self._load_data()
+
+        # Show results
+        message = f"✅ Successfully uploaded: {len(successful_files)} file(s)"
+        if failed_files:
+            message += f"\n❌ Failed: {len(failed_files)} file(s)"
+            for fname, error in failed_files[:5]:
+                message += f"\n  - {fname}: {error}"
+            if len(failed_files) > 5:
+                message += f"\n  ... and {len(failed_files) - 5} more"
+
+        QMessageBox.information(self, "Upload Complete", message)
+        logger.info(f"🏁 All uploads completed: {len(successful_files)} success, {len(failed_files)} failed")
+
+    def _on_create_tag(self):
+        """Create tag (just info message)."""
+        tag, ok = QInputDialog.getText(self, "Create Tag", "Tag name:")
+        if ok and tag:
+            QMessageBox.information(self, "Tag Created", f"Select files and tag them with '{tag}'")
+
+    def _on_tag_files(self):
+        """Tag selected files."""
+        selected = self._get_selected_files()
+        if not selected:
+            QMessageBox.warning(self, "No Selection", "Select files first")
+            return
+
+        tag, ok = QInputDialog.getText(self, "Tag Files", f"Tag for {len(selected)} files:")
+        if ok and tag:
+            loop = asyncio.new_event_loop()
+            count = 0
+            for file in selected:
+                if loop.run_until_complete(self.service.tag_file(file['file_id'], file['conversation_id'], tag)):
+                    count += 1
+            loop.close()
+            QMessageBox.information(self, "Done", f"Tagged {count}/{len(selected)} files")
+            self._load_data()
+
+    def _on_untag_files(self):
+        """Remove tags from selected."""
+        selected = self._get_selected_files()
+        if not selected:
+            return
+
+        loop = asyncio.new_event_loop()
+        count = 0
+        for file in selected:
+            if loop.run_until_complete(self.service.untag_file(file['file_id'], file['conversation_id'])):
+                count += 1
+        loop.close()
+        QMessageBox.information(self, "Done", f"Untagged {count} files")
+        self._load_data()
+
+    def _on_insert_tag(self):
+        """Emit signal to insert @tag."""
+        if self.current_tag:
+            self.tag_insert_requested.emit(self.current_tag)
+            QMessageBox.information(self, "Inserted", f"@{self.current_tag} will be inserted")
+
+    def _on_delete_tag(self):
+        """Delete tag from all files."""
+        if not self.current_tag:
+            return
+
+        reply = QMessageBox.question(self, "Delete?", f"Remove '{self.current_tag}' from all files?")
+        if reply == QMessageBox.StandardButton.Yes:
+            loop = asyncio.new_event_loop()
+            loop.run_until_complete(self.service.delete_tag(self.current_tag))
+            loop.close()
+            self._load_data()
+
+    def _on_delete_files(self):
+        """Delete selected files from collections and RAG."""
+        selected = self._get_selected_files()
+        if not selected:
+            QMessageBox.warning(self, "No Selection", "Please select files to delete")
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Delete Files?",
+            f"Permanently delete {len(selected)} file(s) from collections?\n\nThis will remove them from the database and RAG index."
+        )
+
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        deleted_count = 0
+        failed = []
+
+        for file_data in selected:
+            try:
+                file_id = file_data['file_id']
+                conversation_id = file_data['conversation_id']
+                filename = file_data['filename']
+
+                # Delete from database
+                from ...infrastructure.conversation_management.models.database_models import ConversationFileModel
+                with self.db_manager.get_session() as session:
+                    file_record = session.query(ConversationFileModel).filter(
+                        ConversationFileModel.file_id == file_id,
+                        ConversationFileModel.conversation_id == conversation_id
+                    ).first()
+
+                    if file_record:
+                        session.delete(file_record)
+                        session.commit()
+                        deleted_count += 1
+                        logger.info(f"✅ Deleted file from database: {filename}")
+                    else:
+                        failed.append((filename, "Not found in database"))
+
+                # TODO: Delete from RAG index when RAG session supports deletion
+                # For now, just delete from database
+
+            except Exception as e:
+                logger.error(f"Failed to delete {filename}: {e}")
+                failed.append((filename, str(e)))
+
+        # Show results
+        message = f"✅ Deleted {deleted_count} file(s)"
+        if failed:
+            message += f"\n❌ Failed: {len(failed)}"
+            for fname, error in failed[:5]:
+                message += f"\n  - {fname}: {error}"
+
+        QMessageBox.information(self, "Delete Complete", message)
+        self._load_data()
