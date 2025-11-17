@@ -21,12 +21,36 @@ logger = logging.getLogger("ghostman.conversation_db")
 
 
 class DatabaseManager:
-    """Manages SQLAlchemy database for conversation storage."""
-    
+    """
+    Manages SQLAlchemy database for conversation storage.
+
+    Singleton pattern ensures only one instance exists to prevent
+    multiple mapper configurations that can cause recursion issues.
+    """
+
+    _instance: Optional['DatabaseManager'] = None
+    _lock = None  # Will be initialized to threading.Lock() on first use
+
+    def __new__(cls, db_path: Optional[Path] = None):
+        """Singleton pattern - returns same instance for all calls."""
+        if cls._lock is None:
+            import threading
+            cls._lock = threading.Lock()
+
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super().__new__(cls)
+                cls._instance._singleton_initialized = False
+            return cls._instance
+
     def __init__(self, db_path: Optional[Path] = None):
         """Initialize SQLAlchemy database manager."""
+        # Skip re-initialization for singleton
+        if self._singleton_initialized:
+            return
+
         from ...storage.settings_manager import settings
-        
+
         if db_path is None:
             # Store in db subdirectory of Ghostman data directory
             settings_paths = settings.get_paths()
@@ -35,15 +59,16 @@ class DatabaseManager:
             ghostman_root = settings_dir.parent
             db_dir = ghostman_root / "db"
             db_path = db_dir / "conversations.db"
-        
+
         self.db_path = db_path
         self._engine: Optional[Engine] = None
         self._session_factory: Optional[sessionmaker] = None
         self._initialized = False
-        
+
         # Ensure database directory exists
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
+        self._singleton_initialized = True
         logger.info(f"Database path: {self.db_path}")
     
     def _create_engine(self) -> Engine:
@@ -116,7 +141,7 @@ class DatabaseManager:
                             Base.metadata.create_all(self._engine)
                     else:
                         logger.info("Database is up to date")
-                        
+
                 except ImportError:
                     logger.warning("Alembic not available, creating tables directly")
                     Base.metadata.create_all(self._engine)

@@ -674,12 +674,35 @@ class FaissClient:
                                         if filter_key.startswith('_or_'):
                                             # Skip special OR keys when not used with conversation_id
                                             continue
-                                            
+
+                                        # Special handling for collection_tag filter (supports list of tags)
+                                        if filter_key == 'collection_tag' and isinstance(filter_value, list):
+                                            # Check if document's collection_tag is IN the list
+                                            if 'collection_tag' not in metadata:
+                                                self.logger.debug(f"Document has no collection_tag, skipping")
+                                                skip = True
+                                                break
+
+                                            doc_tag = metadata['collection_tag']
+                                            # Handle numpy types
+                                            if hasattr(doc_tag, 'item'):
+                                                doc_tag = doc_tag.item()
+                                            doc_tag = str(doc_tag) if doc_tag is not None else None
+
+                                            # Check if document tag is in the filter list
+                                            if doc_tag not in filter_value:
+                                                self.logger.debug(f"Document collection_tag '{doc_tag}' not in {filter_value}, skipping")
+                                                skip = True
+                                                break
+                                            else:
+                                                self.logger.info(f"✅ Document collection_tag '{doc_tag}' matches filter {filter_value}")
+                                            continue  # Skip to next filter
+
                                         if filter_key not in metadata:
                                             self.logger.debug(f"Filter key '{filter_key}' not found in metadata, skipping document")
                                             skip = True
                                             break
-                                        
+
                                         metadata_value = metadata[filter_key]
                                         if not safe_array_comparison(metadata_value, filter_value, filter_key):
                                             self.logger.debug(f"Filter mismatch: '{filter_key}' value '{metadata_value}' != '{filter_value}', skipping document")

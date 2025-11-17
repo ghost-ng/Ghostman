@@ -916,6 +916,15 @@ class AppCoordinator(QObject):
         except Exception as e:
             logger.error(f"✗ Error reinitializing SSL/PKI services: {e}")
 
+        # CRITICAL: Reinitialize RAG pipeline with new AI settings
+        logger.info("🔄 Reinitializing RAG pipeline with new AI settings...")
+        try:
+            self._reinitialize_rag_pipeline()
+        except Exception as e:
+            logger.error(f"✗ Error reinitializing RAG pipeline: {e}")
+            import traceback
+            logger.error(f"📝 Stack trace: {traceback.format_exc()}")
+
         logger.info(f"🤖 AI model settings processing complete: {settings_processed} items logged")
     
     def _apply_advanced_settings(self, advanced_config: dict):
@@ -1036,6 +1045,62 @@ class AppCoordinator(QObject):
                 logger.warning("⚠ No REPL widget available for AI service reinitialization")
         except Exception as ai_e:
             logger.error(f"Failed to reinitialize AI service: {ai_e}")
+
+    def _reinitialize_rag_pipeline(self):
+        """
+        Reinitialize RAG pipeline to apply new AI settings.
+
+        This creates a new SimpleFAISSSession with fresh configuration
+        that reads from the updated settings.
+        """
+        logger.info("🔄 Reinitializing RAG pipeline...")
+
+        try:
+            # Access REPL widget
+            if not self._main_window or not hasattr(self._main_window, 'repl_widget'):
+                logger.warning("⚠ No REPL widget available for RAG reinitialization")
+                return
+
+            repl_widget = self._main_window.repl_widget
+
+            # Close existing RAG session if present
+            if hasattr(repl_widget, 'rag_session') and repl_widget.rag_session:
+                try:
+                    logger.info("🔄 Closing existing RAG session...")
+                    if hasattr(repl_widget.rag_session, 'close'):
+                        repl_widget.rag_session.close()
+                    logger.info("✓ Existing RAG session closed")
+                except Exception as e:
+                    logger.warning(f"⚠ Error closing existing RAG session: {e}")
+
+            # Create new RAG session with fresh configuration
+            # The SimpleFAISSSession will read settings via RAGPipelineConfig.__post_init__
+            logger.info("🔄 Creating new RAG session with updated settings...")
+            from ..infrastructure.rag_pipeline.threading.simple_faiss_session import create_simple_faiss_session
+
+            new_rag_session = create_simple_faiss_session()
+
+            if new_rag_session and new_rag_session.validate(timeout=10.0):
+                # Replace the RAG session in REPL widget
+                repl_widget.rag_session = new_rag_session
+                logger.info("✅ RAG pipeline reinitialized successfully with new settings")
+
+                # Also update in Collections Manager if it's open
+                try:
+                    if hasattr(repl_widget, '_collections_dialog') and repl_widget._collections_dialog:
+                        repl_widget._collections_dialog.rag_session = new_rag_session
+                        logger.info("✓ Collections Manager RAG session updated")
+                except Exception as e:
+                    logger.debug(f"Collections Manager not available: {e}")
+
+            else:
+                logger.error("✗ RAG pipeline reinitialization failed - session validation failed")
+                logger.warning("⚠ Keeping old RAG session")
+
+        except Exception as e:
+            logger.error(f"Failed to reinitialize RAG pipeline: {e}")
+            import traceback
+            logger.error(f"📝 Stack trace: {traceback.format_exc()}")
 
     def _apply_font_settings(self, fonts_config: dict):
         """Apply font settings to the UI."""

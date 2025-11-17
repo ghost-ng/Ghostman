@@ -31,6 +31,8 @@ from PyQt6.QtWidgets import (
 
 # Import our custom mixed content display
 from .mixed_content_display import MixedContentDisplay
+from .collection_attach_widget import CollectionAttachWidget
+from ..dialogs.collections_manager_dialog import CollectionsManagerDialog
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread, QObject, QSize, pyqtSlot, QPropertyAnimation, QEasingCurve, QUrl, QPoint
 import weakref
 from PyQt6.QtGui import QKeyEvent, QFont, QTextCursor, QTextCharFormat, QColor, QPalette, QIcon, QAction, QTextOption, QFontMetrics
@@ -1442,11 +1444,14 @@ class REPLWidget(QWidget):
         """Handle input text changes to update height dynamically."""
         if not hasattr(self, 'command_input') or not self.command_input:
             return
-        
+
+        # Check for @ tag autocomplete
+        self._check_tag_autocomplete()
+
         # Always update height when text changes (handles both wrapping and manual breaks)
         # Use a short delay to let Qt finish updating the document layout
         QTimer.singleShot(10, self._check_visual_lines_change)
-        
+
         # Also update block count for other purposes
         document = self.command_input.document()
         self.current_line_count = document.blockCount()
@@ -1901,7 +1906,11 @@ class REPLWidget(QWidget):
             # Update main input field styling
             if hasattr(self, 'command_input'):
                 self._style_command_input()
-            
+
+            # Update collection attach widget if it exists
+            if hasattr(self, 'collection_attach_widget'):
+                self.collection_attach_widget.set_colors(colors)
+
             # Update all QToolButton widgets with new theme
             self._update_all_tool_buttons()
             
@@ -2804,18 +2813,19 @@ class REPLWidget(QWidget):
         self.attach_btn.clicked.connect(self._on_attach_toggle_clicked)
         title_layout.addWidget(self.attach_btn)
         
-        # Upload/File context button (now toggles file browser bar)
+        # Upload/File context button (now shows menu with File Context and Collections options)
         self.upload_btn = QToolButton()
-        self.upload_btn.setToolTip("Toggle file browser (Ctrl+U)\nClick 'Upload Files' button inside to add files")
-        
+        self.upload_btn.setToolTip("File Context & Collections")
+        self.upload_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+
         # SET ICON DIRECTLY HERE - NO SEPARATE METHOD CALL
         try:
             icon_variant = self._get_icon_variant()
             filebar_icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", 
+                os.path.dirname(__file__), "..", "..", "..",
                 "assets", "icons", f"upload_{icon_variant}.png"
             )
-            
+
             if os.path.exists(filebar_icon_path):
                 filebar_icon = QIcon(filebar_icon_path)
                 if not filebar_icon.isNull():
@@ -2830,8 +2840,29 @@ class REPLWidget(QWidget):
         except Exception as e:
             logger.error(f"Failed to set filebar icon: {e}")
             self.upload_btn.setText("📁")
-        
-        self.upload_btn.clicked.connect(self._toggle_file_browser)
+
+        # Create menu for file context options
+        upload_menu = QMenu(self.upload_btn)
+
+        # File Context option (toggle file browser bar)
+        file_context_action = QAction("File Context", self.upload_btn)
+        file_context_action.setToolTip("Toggle file browser bar (Ctrl+U)")
+        file_context_action.triggered.connect(self._toggle_file_browser)
+        upload_menu.addAction(file_context_action)
+
+        # Collections Manager option
+        collections_action = QAction("Collections Manager", self.upload_btn)
+        collections_action.setToolTip("Manage file collections")
+        collections_action.triggered.connect(self._open_collections_manager)
+        upload_menu.addAction(collections_action)
+
+        # Set menu on button
+        self.upload_btn.setMenu(upload_menu)
+        self.upload_menu = upload_menu  # Store reference
+
+        # Apply menu styling
+        self._style_menu(upload_menu)
+
         # Apply uniform styling first
         self._style_title_button(self.upload_btn)
         # Style: theme-aware styling
@@ -3207,8 +3238,9 @@ class REPLWidget(QWidget):
             parent_layout.addWidget(self.file_browser_bar)
             logger.info("✅ File browser bar enabled with segfault prevention")
 
-            # NOTE: File browser reference will be set in AI service after conversation_manager initializes
-            # See _initialize_conversation_manager() which calls _set_file_browser_reference_in_ai_service()
+            # CRITICAL: Set file browser reference in AI service for RAG optimization
+            # This must happen AFTER file browser is created
+            self._set_file_browser_reference_in_ai_service()
 
         except Exception as e:
             logger.error(f"❌ Failed to initialize file browser bar: {e}")
@@ -5625,7 +5657,18 @@ class REPLWidget(QWidget):
         self.settings_btn.clicked.connect(self.settings_requested.emit)
         self._style_tool_button(self.settings_btn)
         toolbar_layout.addWidget(self.settings_btn)
-        
+
+        # Collections attach widget
+        db_manager = self.conversation_manager.db_manager if self.conversation_manager else None
+        colors = self.theme_manager.current_theme if (self.theme_manager and THEME_SYSTEM_AVAILABLE) else None
+        self.collection_attach_widget = CollectionAttachWidget(
+            parent=self,
+            db_manager=db_manager,
+            colors=colors
+        )
+        self.collection_attach_widget.collections_changed.connect(self._on_collections_changed)
+        toolbar_layout.addWidget(self.collection_attach_widget)
+
         toolbar_layout.addStretch()
         
         # Background summarization progress
@@ -7704,13 +7747,16 @@ class REPLWidget(QWidget):
         
         # Reset idle detector for new conversation
         self.idle_detector.reset_activity(conversation.id)
-        
+
         # Sync tab title with conversation
         self._sync_tab_with_conversation()
-        
+
+        # Update collection attach widget for new conversation
+        self._update_collection_widget_for_conversation()
+
         # Emit signal for external components
         self.conversation_changed.emit(conversation.id)
-        
+
         logger.info(f"✓ Switched to conversation: {conversation.title}")
     
     def _create_new_conversation(self):
@@ -7822,10 +7868,146 @@ class REPLWidget(QWidget):
         if not self.current_conversation:
             self.append_output("⚠ No conversation selected for export", "warning")
             return
-        
+
         logger.info(f"📤 Export requested for conversation: {self.current_conversation.id}")
         self.export_requested.emit(self.current_conversation.id)
-    
+
+    def _on_collections_changed(self):
+        """Handle when collections are attached or detached from the current conversation."""
+        if not self.current_conversation:
+            return
+
+        try:
+            # Get updated list of attached collections
+            if hasattr(self, 'collection_attach_widget'):
+                collections = self.collection_attach_widget.get_attached_collections()
+
+                # Update file browser bar to show collection badges
+                if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                    # Trigger file browser refresh to show collection files
+                    self._update_file_browser_with_collections(collections)
+
+                # Log the change
+                logger.info(
+                    f"✓ Collections updated for conversation {self.current_conversation.id[:8]}... "
+                    f"({len(collections)} attached)"
+                )
+        except Exception as e:
+            logger.error(f"✗ Error handling collections change: {e}")
+
+    def _update_file_browser_with_collections(self, collections):
+        """
+        Update file browser bar to show files from attached collections.
+
+        Args:
+            collections: List of FileCollection objects
+        """
+        # This will be implemented in Phase 5 when integrating with file browser
+        # For now, just log the collection files
+        try:
+            total_files = sum(c.file_count for c in collections)
+            if total_files > 0:
+                logger.info(
+                    f"📚 {len(collections)} collection(s) with {total_files} file(s) attached"
+                )
+        except Exception as e:
+            logger.error(f"✗ Error updating file browser with collections: {e}")
+
+    def _update_collection_widget_for_conversation(self):
+        """Update collection attach widget when conversation changes."""
+        if not hasattr(self, 'collection_attach_widget'):
+            return
+
+        try:
+            conversation_id = self.current_conversation.id if self.current_conversation else None
+            self.collection_attach_widget.set_conversation(conversation_id)
+            logger.debug(f"✓ Updated collection widget for conversation: {conversation_id}")
+        except Exception as e:
+            logger.error(f"✗ Error updating collection widget: {e}")
+
+    def _auto_attach_collections(self, collection_names: List[str]):
+        """
+        Auto-attach collections mentioned in user message.
+
+        Args:
+            collection_names: List of collection names to attach
+        """
+        if not self.current_conversation:
+            logger.warning("⚠ Cannot attach collections - no active conversation")
+            return
+
+        try:
+            from ...application.services.collection_service import CollectionService
+
+            # Get conversation manager's database
+            db_manager = self.conversation_manager.db_manager if self.conversation_manager else None
+            service = CollectionService(db_manager)
+
+            attached_names = []
+            not_found = []
+
+            for collection_name in collection_names:
+                try:
+                    # Get collection by name
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    collection = loop.run_until_complete(
+                        service.get_collection_by_name(collection_name)
+                    )
+
+                    if collection:
+                        # Attach to conversation
+                        success = loop.run_until_complete(
+                            service.attach_collection_to_conversation(
+                                self.current_conversation.id,
+                                collection.id
+                            )
+                        )
+                        loop.close()
+
+                        if success:
+                            attached_names.append(collection_name)
+                            logger.info(f"✓ Auto-attached collection: {collection_name}")
+                        else:
+                            logger.warning(f"⚠ Collection already attached: {collection_name}")
+                            attached_names.append(collection_name)  # Count as success
+                    else:
+                        not_found.append(collection_name)
+                        logger.warning(f"⚠ Collection not found: {collection_name}")
+
+                except Exception as e:
+                    logger.error(f"✗ Error attaching collection '{collection_name}': {e}")
+                    not_found.append(collection_name)
+
+            # Show user feedback
+            if attached_names or not_found:
+                feedback_parts = []
+
+                if attached_names:
+                    feedback_parts.append(
+                        f"✓ Attached collection(s): {', '.join(attached_names)}"
+                    )
+
+                if not_found:
+                    feedback_parts.append(
+                        f"⚠ Not found: {', '.join(not_found)}"
+                    )
+
+                feedback = "\n".join(feedback_parts)
+                self.append_output(f"📚 {feedback}", "info")
+                self.append_output("", "normal")  # Add spacing
+
+            # Refresh collection widget to show updated attachments
+            self._on_collections_changed()
+
+        except Exception as e:
+            logger.error(f"✗ Error in auto-attach collections: {e}")
+            self.append_output(
+                f"⚠ Error attaching collections: {e}",
+                "warning"
+            )
+
     @pyqtSlot(str)
     def _on_idle_detected(self, conversation_id: str):
         """Handle idle detection for background summarization."""
@@ -7999,28 +8181,35 @@ class REPLWidget(QWidget):
     def _on_command_entered(self):
         """Handle command entry."""
         command = self.command_input.toPlainText().strip()
-        
+
         if not command:
             return
-        
+
+        # NOTE: Collection mentions (@collection:name) are now processed in _send_to_ai()
+        # via _process_mentions_in_message() for unified mention handling
+        # This ensures collection tags are passed to the RAG worker correctly
+        original_command = command
+
         # Add to history
         if not self.command_history or command != self.command_history[-1]:
             self.command_history.append(command)
-        
+
         # Reset history navigation
         self.history_index = -1
         self.current_input = ""
-                
+
         # Display command in output with better separation
-        self.append_output(f"👤 **You:**\n{command}", "input")
+        # Show original command with mentions for context
+        display_command = original_command if original_command != command else command
+        self.append_output(f"👤 **You:**\n{display_command}", "input")
         self.append_output("", "normal")  # Add spacing
-        
+
         # Clear input
         self.command_input.clear()
-        
-        # Process command
+
+        # Process command (with cleaned version if mentions were found)
         self._process_command(command)
-        
+
         # Emit signal for external processing
         self.command_entered.emit(command)
     
@@ -8530,9 +8719,12 @@ def test_theme():
     
     def _send_to_ai(self, message: str):
         """Send message to AI service with conversation management."""
+        # Process @tags in message - extract tags and load associated files
+        message, tags_found = self._process_tags_in_message(message)
+
         # Store message for potential resend
         self.last_failed_message = message
-        
+
         # EDGE CASE FIX: Check if user deleted all conversations and needs a new one
         if self.conversation_manager:
             self._ensure_conversation_exists_for_message(message)
@@ -8581,8 +8773,8 @@ def test_theme():
         # Create enhanced AI worker thread
         class EnhancedAIWorker(QObject):
             response_received = pyqtSignal(str, bool)  # response, success
-            
-            def __init__(self, message, conversation_manager, current_conversation, rag_session=None, conversation_id=None, file_browser_bar=None):
+
+            def __init__(self, message, conversation_manager, current_conversation, rag_session=None, conversation_id=None, file_browser_bar=None, collection_tags=None, url_mentions=None):
                 super().__init__()
                 self.message = message
                 self.conversation_manager = conversation_manager
@@ -8590,11 +8782,23 @@ def test_theme():
                 self.rag_session = rag_session
                 self.conversation_id = conversation_id
                 self.file_browser_bar = file_browser_bar  # For RAG optimization
+                self.collection_tags = collection_tags or []  # Tags from @mentions
+                self.url_mentions = url_mentions or []  # URLs from @url mentions
+                self.parent_widget = None  # Will be set to access append_output
             
             def run(self):
                 try:
+                    # Load URL content if @url mentions present
+                    url_context = ""
+                    if self.url_mentions:
+                        url_context = self._load_url_content()
+
                     # Enhance message with file context if available
                     enhanced_message = self._enhance_message_with_file_context(self.message)
+
+                    # Add URL context if present
+                    if url_context:
+                        enhanced_message = f"{url_context}\n\n{enhanced_message}"
                     
                     # ALWAYS prefer conversation-aware AI service for context persistence
                     ai_service = None
@@ -8729,11 +8933,14 @@ def test_theme():
                             safe_rag.close()
                         return message
                     
-                    # CRITICAL OPTIMIZATION: Skip RAG query if this conversation has no files
+                    # CRITICAL OPTIMIZATION: Skip RAG query if this conversation has no files AND no collection tags
                     # This prevents expensive FAISS searches when result is guaranteed to be empty
                     current_conversation_id = self.conversation_id
+                    has_collection_tags = self.collection_tags and len(self.collection_tags) > 0
+
                     logger.info(f"🔍 RAG OPTIMIZATION CHECK:")
                     logger.info(f"  - conversation_id: {current_conversation_id[:8] if current_conversation_id else 'NONE'}")
+                    logger.info(f"  - collection_tags: {self.collection_tags if has_collection_tags else 'NONE'}")
 
                     if current_conversation_id and hasattr(self, 'file_browser_bar') and self.file_browser_bar:
                         try:
@@ -8743,13 +8950,16 @@ def test_theme():
                             file_count = len(files) if files else 0
                             logger.info(f"  - File count result: {file_count}")
 
-                            if file_count == 0:
-                                logger.info(f"⏭️⏭️⏭️ SKIPPING RAG: Conversation {current_conversation_id[:8]} has no files uploaded ⏭️⏭️⏭️")
+                            # Skip RAG only if BOTH no files AND no collection tags
+                            if file_count == 0 and not has_collection_tags:
+                                logger.info(f"⏭️⏭️⏭️ SKIPPING RAG: Conversation {current_conversation_id[:8]} has no files and no collection tags ⏭️⏭️⏭️")
                                 if is_new_session:
                                     safe_rag.close()
                                 return message
-                            else:
-                                logger.info(f"✅ Conversation {current_conversation_id[:8]} has {file_count} files - proceeding with RAG query")
+                            elif file_count > 0:
+                                logger.info(f"✅ Conversation {current_conversation_id[:8]} has {file_count} file(s) - proceeding with RAG query")
+                            if has_collection_tags:
+                                logger.info(f"✅ Using {len(self.collection_tags)} collection tag(s): {self.collection_tags} - proceeding with RAG query")
                         except Exception as e:
                             logger.warning(f"❌ File browser check failed: {e} - proceeding with query to be safe")
                             import traceback
@@ -8770,11 +8980,18 @@ def test_theme():
                         # Query using SafeRAGSession with SmartContextSelector progressive fallback
                         # NEW: Smart context selection eliminates "all or nothing" problem
                         logger.info(f"🧠 Using SmartContextSelector for conversation: {current_conversation_id or 'None'}")
-                        
+
+                        # Build filters to include collection tags if present
+                        query_filters = None
+                        if has_collection_tags:
+                            # Add collection_tag filter to also search files with these tags
+                            query_filters = {'collection_tag': self.collection_tags}
+                            logger.info(f"🏷️  Including collection tag filter: {query_filters}")
+
                         response = safe_rag.query(
                             query_text=message,
                             top_k=3,
-                            filters=None,  # Filters now handled by SmartContextSelector
+                            filters=query_filters,  # Pass collection tags as filters
                             timeout=10.0,
                             conversation_id=current_conversation_id  # Pass conversation_id for smart selection
                         )
@@ -8901,6 +9118,64 @@ def test_theme():
                     logger.error(f"Failed to get relevant file contexts: {e}")
                     return []
             
+            def _load_url_content(self) -> str:
+                """
+                Load content from @url mentions.
+
+                Returns:
+                    Formatted string with URL content for AI context
+                """
+                if not self.url_mentions:
+                    return ""
+
+                url_context_parts = []
+
+                for url_mention in self.url_mentions:
+                    url = url_mention['url']
+
+                    try:
+                        logger.info(f"📥 Loading URL for context: {url}")
+
+                        # Import WebLoader (absolute import for thread context)
+                        from ghostman.src.infrastructure.rag_pipeline.document_loaders.web_loader import WebLoader
+                        import asyncio
+
+                        # Create WebLoader instance
+                        loader = WebLoader()
+
+                        # Load document (run async in new event loop)
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            document = loop.run_until_complete(loader.load(url))
+                        finally:
+                            loop.close()
+
+                        # Format context
+                        title = document.metadata.title or url
+                        content = document.content[:10000]  # Limit to 10K chars
+
+                        url_context_parts.append(
+                            f"[Content from URL: {title}]\n"
+                            f"Source: {url}\n\n"
+                            f"{content}\n"
+                            f"[End of URL content]\n"
+                        )
+
+                        logger.info(f"✅ Loaded URL content: {title} ({len(document.content)} chars)")
+
+                    except Exception as e:
+                        logger.error(f"❌ Failed to load URL {url}: {e}")
+                        url_context_parts.append(
+                            f"[Failed to load URL: {url}]\n"
+                            f"Error: {str(e)}\n"
+                        )
+
+                if url_context_parts:
+                    return "\n".join(url_context_parts)
+
+                return ""
+
             def _get_user_friendly_error(self, error_message: str) -> str:
                 """Convert technical error messages to user-friendly ones."""
                 try:
@@ -8929,16 +9204,24 @@ def test_theme():
                     logger.error(f"Failed to get AI service: {e}")
                     return None
         
+        # Get URL mentions from instance variable if present
+        url_mentions = getattr(self, '_pending_url_mentions', [])
+
         # Create and start worker thread
         self.ai_thread = QThread()
         self.ai_worker = EnhancedAIWorker(
-            message, 
-            self.conversation_manager, 
-            self.current_conversation, 
+            message,
+            self.conversation_manager,
+            self.current_conversation,
             self.rag_session,
             conversation_id=self._get_safe_conversation_id(),
-            file_browser_bar=self.file_browser_bar  # Pass file browser for RAG optimization
+            file_browser_bar=self.file_browser_bar,  # Pass file browser for RAG optimization
+            collection_tags=tags_found,  # Pass collection tags from @mentions
+            url_mentions=url_mentions  # Pass URL mentions from @url
         )
+
+        # Clear pending URL mentions
+        self._pending_url_mentions = []
         self.ai_worker.moveToThread(self.ai_thread)
         
         # Store references for cancellation
@@ -10023,7 +10306,379 @@ def test_theme():
     def _on_settings_clicked(self):
         """Handle settings button click - open settings dialog."""
         self.settings_requested.emit()
-    
+
+    def _open_collections_manager(self):
+        """Open the Collections Manager dialog."""
+        try:
+            logger.info("📚 Opening Collections Manager")
+
+            # Get database manager
+            db_manager = self.conversation_manager.db_manager if self.conversation_manager else None
+
+            # Get current theme name
+            theme_name = "professional_dark"  # Default
+            if self.theme_manager and THEME_SYSTEM_AVAILABLE:
+                theme_name = getattr(self.theme_manager.current_theme, 'name', 'professional_dark')
+
+            # Create and show dialog
+            dialog = CollectionsManagerDialog(
+                parent=self,
+                db_manager=db_manager,
+                theme_name=theme_name
+            )
+
+            # Connect signals to refresh collection widget when collections change
+            dialog.collection_created.connect(lambda c: self._on_collection_manager_changed())
+            dialog.collection_updated.connect(lambda c: self._on_collection_manager_changed())
+            dialog.collection_deleted.connect(lambda c: self._on_collection_manager_changed())
+
+            # Connect tag insert signal to insert @tag into chat
+            dialog.tag_insert_requested.connect(self._insert_tag_into_chat)
+
+            # Show dialog non-modally so it doesn't block the app
+            dialog.show()
+
+            logger.info("✓ Collections Manager opened (non-modal)")
+
+        except Exception as e:
+            logger.error(f"✗ Error opening Collections Manager: {e}")
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to open Collections Manager:\n{e}"
+            )
+
+    def _on_collection_manager_changed(self):
+        """Handle when collections are created/updated/deleted in the manager."""
+        try:
+            # Refresh the collection attach widget to show updated list
+            if hasattr(self, 'collection_attach_widget'):
+                self.collection_attach_widget.refresh()
+                logger.info("✓ Refreshed collection attach widget")
+        except Exception as e:
+            logger.error(f"✗ Error refreshing after collection change: {e}")
+
+    def _insert_tag_into_chat(self, tag: str):
+        """Insert @collection:tag into the chat input field at cursor position."""
+        try:
+            # Get current cursor position in the command input field
+            cursor = self.command_input.textCursor()
+
+            # Insert @collection:tag at cursor position
+            tag_text = f"@collection:{tag} "
+            cursor.insertText(tag_text)
+
+            # Set focus back to input field
+            self.command_input.setFocus()
+
+            logger.info(f"✓ Inserted collection '@collection:{tag}' into chat input")
+        except Exception as e:
+            logger.error(f"✗ Error inserting collection into chat: {e}")
+
+    def _check_mention_autocomplete(self):
+        """Check if user typed @ and show mention autocomplete menu."""
+        try:
+            cursor = self.command_input.textCursor()
+            text = self.command_input.toPlainText()
+            cursor_pos = cursor.position()
+
+            # Check if user just typed @
+            if cursor_pos > 0 and text[cursor_pos - 1] == '@':
+                # Show mention types autocomplete (collection:, url:)
+                self._show_mention_types_autocomplete()
+            else:
+                # Check if we're currently typing a mention
+                text_before_cursor = text[:cursor_pos]
+                last_at = text_before_cursor.rfind('@')
+
+                if last_at != -1:
+                    text_after_at = text_before_cursor[last_at + 1:]
+
+                    # Check if user typed "@collection:" (manually or via autocomplete)
+                    if text_after_at == 'collection:' or text_after_at.startswith('collection:'):
+                        # Extract the collection name prefix after the colon
+                        if text_after_at.startswith('collection:'):
+                            collection_prefix = text_after_at[len('collection:'):]
+
+                            # Only show if no space in the prefix (still typing collection name)
+                            if not ' ' in collection_prefix:
+                                # Show collection names autocomplete
+                                self._show_collection_names_autocomplete(collection_prefix)
+                        else:
+                            # Just typed "@collection:" - show all collections
+                            self._show_collection_names_autocomplete('')
+
+                    # Check if typing "@url:" (user will type URL manually after colon)
+                    elif text_after_at == 'url:' or text_after_at.startswith('url:'):
+                        # User is typing URL manually after colon, no autocomplete needed
+                        pass
+
+                    # Still typing mention type (before ":" or space)
+                    elif text_after_at and not ' ' in text_after_at and ':' not in text_after_at:
+                        # Update mention type completer prefix if visible
+                        if hasattr(self, '_mention_completer') and self._mention_completer.popup().isVisible():
+                            self._mention_completer.setCompletionPrefix(text_after_at)
+                        else:
+                            # Show mention types autocomplete with prefix
+                            self._show_mention_types_autocomplete()
+
+        except Exception as e:
+            logger.error(f"Error in mention autocomplete check: {e}")
+
+    def _check_tag_autocomplete(self):
+        """DEPRECATED: Use _check_mention_autocomplete instead."""
+        self._check_mention_autocomplete()
+
+    def _show_mention_types_autocomplete(self):
+        """Show autocomplete menu with mention types (collection:, url:)."""
+        try:
+            from PyQt6.QtWidgets import QCompleter
+            from PyQt6.QtCore import QStringListModel, Qt as QtCore
+
+            mention_types = ['collection:', 'url:']
+
+            # Create completer if it doesn't exist
+            if not hasattr(self, '_mention_completer'):
+                self._mention_completer = QCompleter()
+                self._mention_completer.setCaseSensitivity(QtCore.CaseSensitivity.CaseInsensitive)
+                self._mention_completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+
+                # Connect both activated (mouse/enter) and highlighted (arrow keys)
+                self._mention_completer.activated.connect(self._on_mention_type_completed)
+                # For keyboard navigation - update as user arrows through options
+                self._mention_completer.highlighted.connect(lambda text: None)  # Just for navigation visual
+
+            # Update completer with mention types
+            model = QStringListModel(mention_types)
+            self._mention_completer.setModel(model)
+            self._mention_completer.setWidget(self.command_input)
+
+            # Show completer
+            self._mention_completer.complete()
+
+            logger.info(f"Showing mention type autocomplete")
+
+        except Exception as e:
+            logger.error(f"Error showing mention type autocomplete: {e}")
+
+    def _show_collection_names_autocomplete(self, prefix: str = ''):
+        """Show autocomplete menu with available collection names."""
+        try:
+            from PyQt6.QtWidgets import QCompleter
+            from PyQt6.QtCore import QStringListModel, Qt as QtCore
+            from ...infrastructure.conversation_management.repositories.database import DatabaseManager
+            from ...application.services.collection_service import CollectionService
+
+            db_manager = DatabaseManager()
+            service = CollectionService(db_manager)
+
+            # Get tags asynchronously
+            import asyncio
+            loop = asyncio.new_event_loop()
+            tags = loop.run_until_complete(service.list_collection_tags())
+            loop.close()
+
+            if not tags:
+                logger.info("No collection tags available for autocomplete")
+                return
+
+            # Create completer if it doesn't exist
+            if not hasattr(self, '_collection_completer'):
+                self._collection_completer = QCompleter()
+                self._collection_completer.setCaseSensitivity(QtCore.CaseSensitivity.CaseInsensitive)
+                self._collection_completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+
+                # Connect both activated (mouse/enter) and highlighted (arrow keys)
+                self._collection_completer.activated.connect(self._on_collection_name_completed)
+                # For keyboard navigation
+                self._collection_completer.highlighted.connect(lambda text: None)
+
+            # Update completer with collection names
+            model = QStringListModel(tags)
+            self._collection_completer.setModel(model)
+            self._collection_completer.setWidget(self.command_input)
+            self._collection_completer.setCompletionPrefix(prefix)
+
+            # Show completer
+            self._collection_completer.complete()
+
+            logger.info(f"Showing collection names autocomplete with {len(tags)} collections")
+
+        except Exception as e:
+            logger.error(f"Error showing collection names autocomplete: {e}")
+
+    def _show_tag_autocomplete_menu(self):
+        """DEPRECATED: Show autocomplete menu with available tags."""
+        # For backwards compatibility, show mention types
+        self._show_mention_types_autocomplete()
+
+    def _on_mention_type_completed(self, completion: str):
+        """Handle mention type completion (@collection: or @url)."""
+        try:
+            cursor = self.command_input.textCursor()
+            text = self.command_input.toPlainText()
+            cursor_pos = cursor.position()
+
+            # Find the @ before cursor
+            text_before_cursor = text[:cursor_pos]
+            last_at = text_before_cursor.rfind('@')
+
+            if last_at == -1:
+                logger.error("Could not find @ symbol for mention completion")
+                return
+
+            # Select from @ to cursor position
+            cursor.setPosition(last_at)
+            cursor.setPosition(cursor_pos, cursor.MoveMode.KeepAnchor)
+
+            # Replace with completed mention type
+            cursor.removeSelectedText()
+            cursor.insertText(f"@{completion}")
+
+            # Update cursor position
+            self.command_input.setTextCursor(cursor)
+
+            # If @collection: was completed, show collection names
+            if completion == 'collection:':
+                self._show_collection_names_autocomplete()
+
+            logger.info(f"✓ Auto-completed mention type: @{completion}")
+
+        except Exception as e:
+            logger.error(f"Error completing mention type: {e}")
+
+    def _on_collection_name_completed(self, completion: str):
+        """Handle collection name completion for @collection:name."""
+        try:
+            cursor = self.command_input.textCursor()
+            text = self.command_input.toPlainText()
+            cursor_pos = cursor.position()
+
+            # Find the @collection: before cursor
+            text_before_cursor = text[:cursor_pos]
+            collection_start = text_before_cursor.rfind('@collection:')
+
+            if collection_start == -1:
+                logger.error("Could not find @collection: for name completion")
+                return
+
+            # Select from after @collection: to cursor position
+            cursor.setPosition(collection_start + len('@collection:'))
+            cursor.setPosition(cursor_pos, cursor.MoveMode.KeepAnchor)
+
+            # Replace with completed collection name
+            cursor.removeSelectedText()
+            cursor.insertText(f"{completion} ")
+
+            # Update cursor position
+            self.command_input.setTextCursor(cursor)
+
+            logger.info(f"✓ Auto-completed collection: @collection:{completion}")
+
+        except Exception as e:
+            logger.error(f"Error completing collection name: {e}")
+
+    def _on_tag_completed(self, completion: str):
+        """DEPRECATED: Handle tag completion - now redirects to mention type completion."""
+        self._on_mention_type_completed(completion)
+
+    def _process_mentions_in_message(self, message: str):
+        """
+        Process all @mentions in message - extract collections and URLs.
+
+        Supported mentions:
+        - @collection:name - Load files from collection 'name'
+        - @url:URL - Load webpage from URL temporarily
+
+        Returns:
+            Tuple of (cleaned_message, collection_tags, url_mentions)
+        """
+        import re
+
+        cleaned_message = message
+        collection_tags = []
+        url_mentions = []
+
+        # Pattern 1: @collection:tagname
+        collection_pattern = r'@collection:(\w+)'
+        collections = re.findall(collection_pattern, message)
+
+        if collections:
+            logger.info(f"Found {len(collections)} @collection mention(s): {collections}")
+
+            # Verify collections exist
+            validated_tags = []
+            total_files = 0
+
+            for tag in collections:
+                try:
+                    from ...infrastructure.conversation_management.repositories.database import DatabaseManager
+                    from ...infrastructure.conversation_management.models.database_models import ConversationFileModel
+
+                    db_manager = DatabaseManager()
+                    with db_manager.get_session() as session:
+                        file_count = session.query(ConversationFileModel).filter(
+                            ConversationFileModel.collection_tag == tag
+                        ).count()
+
+                        if file_count > 0:
+                            validated_tags.append(tag)
+                            total_files += file_count
+                            logger.info(f"✓ Collection '@collection:{tag}' has {file_count} file(s)")
+                        else:
+                            logger.warning(f"⚠️ Collection '@collection:{tag}' has no files")
+
+                except Exception as e:
+                    logger.error(f"Error checking collection '@collection:{tag}': {e}")
+
+            collection_tags = validated_tags
+
+            if validated_tags:
+                logger.info(f"✅ Will query {total_files} file(s) from {len(validated_tags)} collection(s)")
+
+            # Strip @collection:tag from message
+            cleaned_message = re.sub(collection_pattern, '', cleaned_message)
+
+        # Pattern 2: @url:URL
+        url_pattern = r'@url:(https?://[^\s]+)'
+        urls = re.findall(url_pattern, message)
+
+        if urls:
+            logger.info(f"Found {len(urls)} @url mention(s): {urls}")
+
+            for url in urls:
+                url_mentions.append({
+                    'type': 'url',
+                    'url': url
+                })
+
+            # Strip @url <url> from message
+            cleaned_message = re.sub(url_pattern, '', cleaned_message)
+
+        # Clean up extra whitespace
+        cleaned_message = re.sub(r'\s+', ' ', cleaned_message).strip()
+
+        if collection_tags or url_mentions:
+            logger.info(f"📝 Cleaned message: '{cleaned_message}'")
+
+        return cleaned_message, collection_tags, url_mentions
+
+    def _process_tags_in_message(self, message: str):
+        """
+        DEPRECATED: Use _process_mentions_in_message instead.
+
+        This method is kept for backwards compatibility but now calls
+        the new unified mention processor.
+        """
+        cleaned_message, collection_tags, url_mentions = self._process_mentions_in_message(message)
+
+        # For backwards compatibility, store url_mentions as instance variable
+        # so AI worker can access them
+        self._pending_url_mentions = url_mentions
+
+        return cleaned_message, collection_tags
+
     def _on_chat_clicked(self):
         """Handle chat button click - browse conversations."""
         self.browse_requested.emit()

@@ -16,7 +16,8 @@ from enum import Enum
 class ContextSource(Enum):
     """Source type for context results."""
     CONVERSATION = "conversation"        # Files from current conversation
-    PENDING = "pending"                 # Files uploaded but not saved  
+    PENDING = "pending"                 # Files uploaded but not saved
+    COLLECTION = "collection"           # Files from collection tags (global knowledge bases)
     RECENT = "recent"                   # Recent files with semantic similarity
     GLOBAL = "global"                   # Global relevant files (higher threshold)
 
@@ -50,7 +51,8 @@ class SmartContextSelector:
         # Similarity thresholds for each tier (FIXED: Lowered thresholds for conversation isolation)
         self.thresholds = {
             ContextSource.CONVERSATION: 0.1,   # Very permissive for conversation files
-            ContextSource.PENDING: 0.1,        # Very permissive for pending files  
+            ContextSource.PENDING: 0.1,        # Very permissive for pending files
+            ContextSource.COLLECTION: 0.1,     # Very permissive for collection-tagged files (trusted knowledge bases)
             ContextSource.RECENT: 0.5,         # Moderate threshold for recent files (was 0.7)
             ContextSource.GLOBAL: 0.45         # Lowered threshold for global files (was 0.75)
         }
@@ -66,17 +68,18 @@ class SmartContextSelector:
             ContextSource.GLOBAL: 0.05       # 5% for global context
         }
     
-    async def select_context(self, 
+    async def select_context(self,
                            faiss_client,
                            embedding_service,
                            query_text: str,
                            top_k: int = 5,
                            conversation_id: Optional[str] = None,
                            max_tokens: int = 4000,
-                           strict_conversation_isolation: bool = False) -> Tuple[List[ContextResult], Dict[str, Any]]:
+                           strict_conversation_isolation: bool = False,
+                           additional_filters: Optional[Dict[str, Any]] = None) -> Tuple[List[ContextResult], Dict[str, Any]]:
         """
         Select context using progressive fallback strategy.
-        
+
         Args:
             faiss_client: FAISS client for vector search
             embedding_service: Service for generating embeddings
@@ -86,7 +89,8 @@ class SmartContextSelector:
             max_tokens: Maximum token budget for context
             strict_conversation_isolation: If True, ONLY search within conversation boundaries,
                                          no fallback to global/recent files
-            
+            additional_filters: Optional additional filters (e.g., collection_tag) to merge with conversation filters
+
         Returns:
             Tuple of (results, selection_info) where selection_info contains
             transparency information about the selection process
@@ -119,29 +123,51 @@ class SmartContextSelector:
             if conversation_id:
                 self.logger.warning(f"🔒 NUCLEAR: Searching ONLY for files in conversation {conversation_id[:8]}...")
                 
-                # Tier 1: Conversation-specific files
+                # Tier 1: Conversation-specific files (includes collection tags if provided)
                 conversation_results = await self._search_conversation_files(
-                    faiss_client, query_embedding, conversation_id, top_k, selection_info
+                    faiss_client, query_embedding, conversation_id, top_k, selection_info, additional_filters
                 )
                 all_results.extend(conversation_results)
                 selection_info['strategies_attempted'].append('conversation')
-                
-                # Tier 2: Pending conversation files
+
+                # Tier 2: Pending conversation files (includes collection tags if provided)
                 pending_results = await self._search_pending_files(
-                    faiss_client, query_embedding, conversation_id, top_k, selection_info
+                    faiss_client, query_embedding, conversation_id, top_k, selection_info, additional_filters
                 )
                 all_results.extend(pending_results)
                 selection_info['strategies_attempted'].append('pending')
-                
+
+                # Tier 3: Collection-tagged files (if additional_filters provided)
+                self.logger.warning(f"🔍 TIER 3 CHECK: additional_filters = {additional_filters}")
+                self.logger.warning(f"🔍 TIER 3 CHECK: additional_filters is None? {additional_filters is None}")
+                if additional_filters:
+                    self.logger.warning(f"🔍 TIER 3 CHECK: 'collection_tag' in additional_filters? {'collection_tag' in additional_filters}")
+
+                if additional_filters and 'collection_tag' in additional_filters:
+                    collection_tags = additional_filters['collection_tag']
+                    self.logger.warning(f"🔍 TIER 3 CHECK: collection_tags = {collection_tags}, type = {type(collection_tags)}")
+                    if isinstance(collection_tags, list) and len(collection_tags) > 0:
+                        self.logger.warning(f"🏷️  COLLECTION TAGS: Searching for tags {collection_tags}...")
+                        collection_results = await self._search_collection_files(
+                            faiss_client, query_embedding, collection_tags, top_k, selection_info
+                        )
+                        all_results.extend(collection_results)
+                        selection_info['strategies_attempted'].append('collection_tags')
+                        self.logger.info(f"✅ Found {len(collection_results)} results from collection tags")
+                    else:
+                        self.logger.warning(f"🔍 TIER 3 CHECK: collection_tags is not a non-empty list")
+                else:
+                    self.logger.warning(f"🔍 TIER 3 CHECK: SKIPPING - additional_filters is None or no 'collection_tag' key")
+
                 # NUCLEAR OPTION: Log exactly what we found
                 total_found = len(all_results)
-                self.logger.warning(f"🔍 NUCLEAR RESULT: Found {total_found} files STRICTLY from conversation {conversation_id[:8]}...")
-                
+                self.logger.warning(f"🔍 NUCLEAR RESULT: Found {total_found} files STRICTLY from conversation {conversation_id[:8]}... + collections")
+
                 if not all_results:
                     self.logger.warning(f"🚨 NUCLEAR: ZERO files found for conversation {conversation_id[:8]}... - NO FALLBACK - returning EMPTY")
                     selection_info['strict_isolation_enforced'] = True
                 else:
-                    self.logger.warning(f"✅ NUCLEAR: SUCCESS - {total_found} conversation-specific files found")
+                    self.logger.warning(f"✅ NUCLEAR: SUCCESS - {total_found} conversation-specific + collection files found")
         else:
             # TEMPORARY FIX: Relaxed mode with time-based filtering for recent files
             self.logger.warning("🕒 TEMPORARY MODE: Using time-based filtering for recently uploaded files")
@@ -183,20 +209,32 @@ class SmartContextSelector:
         
         return filtered_results, selection_info
     
-    async def _search_conversation_files(self, 
-                                       faiss_client, 
-                                       query_embedding, 
-                                       conversation_id: str, 
+    async def _search_conversation_files(self,
+                                       faiss_client,
+                                       query_embedding,
+                                       conversation_id: str,
                                        top_k: int,
-                                       selection_info: Dict) -> List[ContextResult]:
-        """Search for files specifically from the current conversation."""
+                                       selection_info: Dict,
+                                       additional_filters: Optional[Dict[str, Any]] = None) -> List[ContextResult]:
+        """Search for files specifically from the current conversation (and collection tags if provided)."""
         try:
-            # FIXED: Enhanced conversation filters to handle both stored and pending associations
-            filters = {
-                'conversation_id': conversation_id,
-                '_or_pending_conversation_id': conversation_id
-            }
-            
+            # CRITICAL: If collection_tag filter is present, search ONLY by collection_tag (ignore conversation)
+            # Collection tags are global and not tied to specific conversations
+            if additional_filters and 'collection_tag' in additional_filters:
+                filters = additional_filters.copy()  # Use ONLY collection_tag filter
+                self.logger.warning(f"🏷️  COLLECTION TAG MODE: Searching by collection_tag ONLY (ignoring conversation): {filters}")
+            else:
+                # FIXED: Enhanced conversation filters to handle both stored and pending associations
+                filters = {
+                    'conversation_id': conversation_id,
+                    '_or_pending_conversation_id': conversation_id
+                }
+
+                # Merge other additional_filters (not collection_tag) with conversation filters
+                if additional_filters:
+                    filters.update(additional_filters)
+                    self.logger.warning(f"🏷️  MERGED FILTERS: Conversation + additional filters = {filters}")
+
             # FIXED: Get more results for better filtering coverage
             raw_results = await faiss_client.similarity_search(
                 query_embedding=query_embedding,
@@ -245,12 +283,25 @@ class SmartContextSelector:
                                   query_embedding,
                                   conversation_id: str,
                                   top_k: int,
-                                  selection_info: Dict) -> List[ContextResult]:
-        """Search for files uploaded but not yet saved to conversation."""
+                                  selection_info: Dict,
+                                  additional_filters: Optional[Dict[str, Any]] = None) -> List[ContextResult]:
+        """Search for files uploaded but not yet saved to conversation (and collection tags if provided)."""
         try:
+            # CRITICAL: If collection_tag filter is present, DON'T search pending files
+            # Collection tags are global - they're already searched in conversation files tier
+            if additional_filters and 'collection_tag' in additional_filters:
+                self.logger.warning(f"🏷️  SKIPPING PENDING SEARCH: Collection tag mode bypasses pending tier")
+                selection_info['results_by_tier']['pending'] = 0
+                return []
+
             # FIXED: Multiple filter strategies for pending files
             filters = {'pending_conversation_id': conversation_id}
-            
+
+            # Merge other additional_filters (not collection_tag) with pending filters
+            if additional_filters:
+                filters.update(additional_filters)
+                self.logger.warning(f"🏷️  MERGED FILTERS: Pending + additional filters = {filters}")
+
             self.logger.warning(f"🔍 PENDING SEARCH: About to call FAISS with filters: {filters}")
             self.logger.warning(f"🔍 PENDING SEARCH: Query embedding shape: {len(query_embedding) if query_embedding is not None else 'None'}")
             
@@ -298,7 +349,72 @@ class SmartContextSelector:
             self.logger.error(f"Error searching pending files: {e}")
             selection_info['results_by_tier']['pending'] = 0
             return []
-    
+
+    async def _search_collection_files(self,
+                                      faiss_client,
+                                      query_embedding,
+                                      collection_tags: List[str],
+                                      top_k: int,
+                                      selection_info: Dict) -> List[ContextResult]:
+        """Search for files with collection tags (conversation-independent knowledge bases)."""
+        try:
+            # Build filter for collection tags (supports multiple tags via list)
+            filters = {'collection_tag': collection_tags}
+
+            self.logger.warning(f"🏷️  COLLECTION TAG SEARCH: About to call FAISS with filters: {filters}")
+            self.logger.warning(f"🏷️  COLLECTION TAG SEARCH: Query embedding shape: {len(query_embedding) if query_embedding is not None else 'None'}")
+
+            # Search FAISS with collection_tag filter
+            raw_results = await faiss_client.similarity_search(
+                query_embedding=query_embedding,
+                top_k=top_k * 3,  # Increased multiplier for better coverage
+                filters=filters
+            )
+
+            self.logger.warning(f"🏷️  COLLECTION TAG SEARCH: FAISS returned {len(raw_results)} raw results")
+
+            # Debug collection tag search
+            self.logger.info(f"🏷️  DEBUG Collection Tags: Got {len(raw_results)} raw results for tags {collection_tags}")
+            for i, result in enumerate(raw_results[:3]):  # Log first 3
+                metadata_keys = list(result.metadata.keys()) if hasattr(result, 'metadata') else []
+                coll_tag = result.metadata.get('collection_tag', 'None') if hasattr(result, 'metadata') else 'None'
+                self.logger.info(f"  Collection Result {i+1}: Score={result.score:.4f}, Tag={coll_tag}")
+
+            # Apply threshold filtering
+            results = []
+            passed_count = 0
+            failed_count = 0
+
+            # Use same threshold as conversation files (collection files are trusted knowledge bases)
+            threshold = self.thresholds.get(ContextSource.COLLECTION, self.thresholds[ContextSource.CONVERSATION])
+
+            for result in raw_results:
+                if result.score >= threshold:
+                    results.append(ContextResult(
+                        content=result.content,
+                        metadata=result.metadata,
+                        score=result.score,
+                        chunk_id=result.chunk_id,
+                        source_type=ContextSource.COLLECTION,  # Collection tag source
+                        selection_tier=3,  # Tier 3 for collection tags
+                        threshold_used=threshold
+                    ))
+                    passed_count += 1
+                else:
+                    failed_count += 1
+
+            # Enhanced collection tag search logging
+            self.logger.info(f"🏷️  Collection tag threshold {threshold}: {passed_count} passed, {failed_count} filtered out")
+
+            selection_info['results_by_tier']['collection_tags'] = len(results)
+            self.logger.info(f"🏷️  Tier 3 (Collection Tags): Found {len(results)} results from tags {collection_tags}")
+            return results[:top_k]
+
+        except Exception as e:
+            self.logger.error(f"Error searching collection tag files: {e}")
+            selection_info['results_by_tier']['collection_tags'] = 0
+            return []
+
     async def _search_recent_files(self,
                                  faiss_client,
                                  query_embedding,

@@ -16,7 +16,12 @@
       "Bash(findstr:*)",
       "Bash(find:*)",
       "Bash(timeout /t 10 /nobreak)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(git checkout:*)",
+      "Bash(alembic history:*)",
+      "Bash(alembic current:*)",
+      "Bash(alembic check:*)",
+      "Bash(alembic heads:*)"
     ],
     "deny": [],
     "ask": [],

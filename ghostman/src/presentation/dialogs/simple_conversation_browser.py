@@ -317,19 +317,20 @@ class SimpleConversationBrowser(QDialog):
         
         # Conversations table
         self.conversations_table = QTableWidget()
-        self.conversations_table.setColumnCount(6)
+        self.conversations_table.setColumnCount(7)
         self.conversations_table.setHorizontalHeaderLabels([
-            "☑", "Title", "Status", "Messages", "Attachments", "Updated"
+            "☑", "Title", "Status", "Messages", "Files", "Collections", "Updated"
         ])
-        
+
         # Configure table
         header = self.conversations_table.horizontalHeader()
         header.setStretchLastSection(True)
         header.resizeSection(0, 40)   # Checkbox column
         header.resizeSection(1, 280)  # Title column
-        header.resizeSection(2, 80)   # Status column  
+        header.resizeSection(2, 80)   # Status column
         header.resizeSection(3, 80)   # Messages column
-        header.resizeSection(4, 90)   # Attachments column
+        header.resizeSection(4, 90)   # Files column
+        header.resizeSection(5, 120)  # Collections column
         
         self.conversations_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.conversations_table.setAlternatingRowColors(True)
@@ -550,9 +551,10 @@ class SimpleConversationBrowser(QDialog):
     def _populate_table(self):
         """Populate conversations table with optional search highlighting and batch file loading."""
         self.conversations_table.setRowCount(len(self.conversations))
-        
+
         # Batch load file info for all conversations to solve N+1 query problem
         file_info = {}
+        collection_tags = {}
         if self.conversations and self.conversation_manager:
             conversation_ids = [conv.id for conv in self.conversations]
             try:
@@ -565,6 +567,14 @@ class SimpleConversationBrowser(QDialog):
             except Exception as e:
                 logger.error(f"Failed to batch load file info: {e}")
                 file_info = {}
+
+            # Batch load collection tags for all conversations
+            try:
+                collection_tags = self._batch_load_collection_tags(conversation_ids)
+                logger.debug(f"Batch loaded collection tags for {len(collection_tags)} conversations")
+            except Exception as e:
+                logger.error(f"Failed to batch load collection tags: {e}")
+                collection_tags = {}
         
         for row, conversation in enumerate(self.conversations):
             # Checkbox column (column 0)
@@ -600,9 +610,9 @@ class SimpleConversationBrowser(QDialog):
             count_item = QTableWidgetItem(str(conversation.get_message_count()))
             self.conversations_table.setItem(row, 3, count_item)
             
-            # Attachments - column 4 (using batch-loaded file info)
-            attachments_text = self._get_attachments_text_from_info(conversation.id, file_info)
-            attachments_item = QTableWidgetItem(attachments_text)
+            # Files - column 4 (using batch-loaded file info)
+            files_text = self._get_files_text_from_info(conversation.id, file_info)
+            files_item = QTableWidgetItem(files_text)
             # Set detailed tooltip with file names if available
             files = file_info.get(conversation.id, [])
             if files:
@@ -613,15 +623,25 @@ class SimpleConversationBrowser(QDialog):
                     tooltip_lines.append(f"• {f['filename']}{status_text}")
                 if len(files) > 5:
                     tooltip_lines.append(f"... and {len(files) - 5} more")
-                attachments_item.setToolTip("\n".join(tooltip_lines))
+                files_item.setToolTip("\n".join(tooltip_lines))
             else:
-                attachments_item.setToolTip("No files attached to this conversation")
-            self.conversations_table.setItem(row, 4, attachments_item)
-            
-            # Updated time - column 5
+                files_item.setToolTip("No files attached to this conversation")
+            self.conversations_table.setItem(row, 4, files_item)
+
+            # Collections - column 5
+            tags = collection_tags.get(conversation.id, [])
+            collections_text = ", ".join(tags) if tags else "—"
+            collections_item = QTableWidgetItem(collections_text)
+            if tags:
+                collections_item.setToolTip(f"Collection tags used: {', '.join(tags)}")
+            else:
+                collections_item.setToolTip("No collection tags used")
+            self.conversations_table.setItem(row, 5, collections_item)
+
+            # Updated time - column 6
             updated_text = self._format_datetime(conversation.updated_at)
             updated_item = QTableWidgetItem(updated_text)
-            self.conversations_table.setItem(row, 5, updated_item)
+            self.conversations_table.setItem(row, 6, updated_item)
     
     def _is_current_conversation(self, conversation: Conversation) -> bool:
         """Check if this is the current active conversation."""
@@ -631,33 +651,33 @@ class SimpleConversationBrowser(QDialog):
         # For now, no specific current conversation highlighting
         return False
     
-    def _get_attachments_text(self, conversation_id: str) -> str:
-        """Get attachments count text for a conversation."""
+    def _get_files_text(self, conversation_id: str) -> str:
+        """Get files count text for a conversation."""
         try:
             if not self.conversation_manager:
                 return "—"
-            
+
             # Get conversation service
             conv_service = self.conversation_manager.conversation_service
             if not conv_service:
                 return "—"
-            
+
             # Safely get files count for this conversation - including all processing statuses
             files = self._safe_run_async(conv_service.get_conversation_files(conversation_id, enabled_only=False))
-            
+
             if files is None:
                 return "—"
-            
+
             # Count files by status
             total_files = len(files)
             if total_files == 0:
                 return "—"
-            
-            # Count completed files specifically 
+
+            # Count completed files specifically
             completed_files = sum(1 for f in files if f.get('processing_status') == 'completed')
             processing_files = sum(1 for f in files if f.get('processing_status') in ['queued', 'processing'])
             failed_files = sum(1 for f in files if f.get('processing_status') == 'failed')
-            
+
             # Create informative display text
             if total_files == 1:
                 file_info = files[0]
@@ -683,13 +703,46 @@ class SimpleConversationBrowser(QDialog):
                         return f"{total_files} files (failed)"
                 else:
                     return f"{total_files} files"
-                
+
         except Exception as e:
-            logger.debug(f"Error getting attachments for {conversation_id}: {e}")
+            logger.debug(f"Error getting files for {conversation_id}: {e}")
             return "—"
     
-    def _get_attachments_text_from_count(self, conversation_id: str, file_counts: Dict[str, int]) -> str:
-        """Get attachments text from batch-loaded file counts - optimized for performance."""
+    def _batch_load_collection_tags(self, conversation_ids: List[str]) -> Dict[str, List[str]]:
+        """Batch load collection tags for multiple conversations."""
+        try:
+            from ...infrastructure.conversation_management.repositories.database import DatabaseManager
+            from ...infrastructure.conversation_management.models.database_models import ConversationFileModel
+            from sqlalchemy import func
+
+            db_manager = DatabaseManager()
+            with db_manager.get_session() as session:
+                # Query for all collection tags grouped by conversation_id
+                results = session.query(
+                    ConversationFileModel.conversation_id,
+                    func.group_concat(func.distinct(ConversationFileModel.collection_tag)).label('tags')
+                ).filter(
+                    ConversationFileModel.conversation_id.in_(conversation_ids),
+                    ConversationFileModel.collection_tag.isnot(None)
+                ).group_by(
+                    ConversationFileModel.conversation_id
+                ).all()
+
+                # Convert to dict of conversation_id -> list of tags
+                tags_dict = {}
+                for conv_id, tags_str in results:
+                    if tags_str:
+                        # Split comma-separated tags
+                        tags_dict[conv_id] = [tag.strip() for tag in tags_str.split(',')]
+
+                return tags_dict
+
+        except Exception as e:
+            logger.error(f"Failed to batch load collection tags: {e}")
+            return {}
+
+    def _get_files_text_from_count(self, conversation_id: str, file_counts: Dict[str, int]) -> str:
+        """Get files text from batch-loaded file counts - optimized for performance."""
         try:
             count = file_counts.get(conversation_id, 0)
             if count == 0:
@@ -699,11 +752,11 @@ class SimpleConversationBrowser(QDialog):
             else:
                 return f"{count} files"
         except Exception as e:
-            logger.error(f"Failed to format attachment count for conversation {conversation_id}: {e}")
+            logger.error(f"Failed to format file count for conversation {conversation_id}: {e}")
             return "—"
     
-    def _get_attachments_text_from_info(self, conversation_id: str, file_info: Dict[str, List[Dict[str, Any]]]) -> str:
-        """Get attachments text from batch-loaded file info - shows actual file names."""
+    def _get_files_text_from_info(self, conversation_id: str, file_info: Dict[str, List[Dict[str, Any]]]) -> str:
+        """Get files text from batch-loaded file info - shows actual file names."""
         try:
             files = file_info.get(conversation_id, [])
             if not files:
@@ -726,7 +779,7 @@ class SimpleConversationBrowser(QDialog):
                 first_file = files[0].get('filename', 'unknown')
                 return f"{first_file} +{len(files)-1} more"
         except Exception as e:
-            logger.error(f"Failed to format attachment info for conversation {conversation_id}: {e}")
+            logger.error(f"Failed to format file info for conversation {conversation_id}: {e}")
             return "—"
     
     def _get_status_text(self, status) -> str:

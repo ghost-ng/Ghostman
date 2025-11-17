@@ -50,7 +50,7 @@ class SettingsManager:
             'auto_restore_on_response': True,
             'window_position': {'x': 100, 'y': 100},
             'window_size': {'width': 400, 'height': 600},
-            'repl_window_size': {'width': 520, 'height': 450}
+            'repl_window_size': {'width': 520, 'height': 650}  # Increased from 450 to 650
         },
         'interface': {  # new namespace for percent-based values
             'opacity': 97  # percent (10-100)

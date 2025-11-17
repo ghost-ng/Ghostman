@@ -7,6 +7,7 @@ Fetches and processes web content from URLs:
 - Metadata extraction from HTML meta tags
 - Rate limiting and respectful crawling
 - Error handling for network issues
+- Unified session management with PKI/SSL support
 """
 
 import asyncio
@@ -16,21 +17,16 @@ from datetime import datetime
 from typing import Dict, List, Optional, Union, Any
 from urllib.parse import urlparse, urljoin, urldefrag
 import re
+import requests
 
 try:
-    import aiohttp
-    AIOHTTP_AVAILABLE = True
-except ImportError:
-    AIOHTTP_AVAILABLE = False
-    aiohttp = None
-
-try:
-    from bs4 import BeautifulSoup
+    from bs4 import BeautifulSoup, Comment
     import html2text
     HTML_PROCESSING_AVAILABLE = True
 except ImportError:
     HTML_PROCESSING_AVAILABLE = False
     BeautifulSoup = None
+    Comment = None
     html2text = None
 
 from .base_loader import BaseDocumentLoader, Document, DocumentMetadata, DocumentLoadError
@@ -41,9 +37,9 @@ logger = logging.getLogger("ghostman.web_loader")
 class WebLoader(BaseDocumentLoader):
     """
     Web content loader with HTML processing and content extraction.
-    
+
     Features:
-    - Async HTTP requests with aiohttp
+    - HTTP requests via unified session_manager (with PKI/SSL support)
     - HTML content extraction and cleaning
     - Metadata extraction from HTML meta tags
     - Rate limiting and timeout handling
@@ -51,11 +47,11 @@ class WebLoader(BaseDocumentLoader):
     - Link extraction and processing
     - Respectful crawling practices
     """
-    
+
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
         Initialize web loader.
-        
+
         Args:
             config: Configuration options including:
                 - timeout: Request timeout in seconds (default: 10.0)
@@ -69,13 +65,10 @@ class WebLoader(BaseDocumentLoader):
                 - include_meta: Include HTML meta tags in metadata (default: True)
         """
         super().__init__(config)
-        
-        if not AIOHTTP_AVAILABLE:
-            raise ValueError("aiohttp not available - required for web loading")
-        
+
         if not HTML_PROCESSING_AVAILABLE:
             logger.warning("BeautifulSoup/html2text not available - HTML processing will be limited")
-        
+
         self.timeout = self.config.get('timeout', 10.0)
         self.max_content_length = self.config.get('max_content_length', 1024 * 1024)  # 1MB
         self.user_agent = self.config.get('user_agent', 'Ghostman-RAG/1.0 (Document Indexing)')
@@ -85,12 +78,18 @@ class WebLoader(BaseDocumentLoader):
         self.extract_links = self.config.get('extract_links', True)
         self.clean_html = self.config.get('clean_html', True)
         self.include_meta = self.config.get('include_meta', True)
-        
+
         # Rate limiting
         self._last_request_time = 0.0
-        
-        # Session for connection pooling
-        self._session: Optional[aiohttp.ClientSession] = None
+
+        # Use centralized session manager (has PKI/SSL support)
+        try:
+            from ...ai.session_manager import session_manager
+            self.session_manager = session_manager
+            logger.info("WebLoader using unified session_manager with PKI/SSL support")
+        except ImportError:
+            logger.warning("Could not import session_manager - falling back to direct requests")
+            self.session_manager = None
     
     def supports(self, source: Union[str, 'Path']) -> bool:
         """Check if this loader supports the given source."""
@@ -166,12 +165,20 @@ class WebLoader(BaseDocumentLoader):
             else:
                 raise DocumentLoadError(f"Web content extraction failed: {str(e)}", url, e)
     
-    async def _get_session(self) -> aiohttp.ClientSession:
-        """Get or create aiohttp session."""
-        if self._session is None or self._session.closed:
-            timeout = aiohttp.ClientTimeout(total=self.timeout)
-            connector = aiohttp.TCPConnector(limit_per_host=3, limit=10)
-            
+    def _fetch_content_sync(self, url: str) -> tuple[str, Dict[str, Any]]:
+        """
+        Fetch HTML content from URL using requests (synchronous).
+
+        Args:
+            url: URL to fetch
+
+        Returns:
+            Tuple of (html_content, response_metadata)
+        """
+        response_metadata = {}
+
+        try:
+            # Prepare headers
             headers = {
                 'User-Agent': self.user_agent,
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -180,68 +187,73 @@ class WebLoader(BaseDocumentLoader):
                 'Connection': 'keep-alive',
                 'Upgrade-Insecure-Requests': '1',
             }
-            
-            self._session = aiohttp.ClientSession(
-                timeout=timeout,
-                connector=connector,
-                headers=headers,
-                raise_for_status=False
-            )
-        
-        return self._session
-    
+
+            # Make request using session_manager (or fallback to direct requests)
+            if self.session_manager:
+                response = self.session_manager.make_request(
+                    method='GET',
+                    url=url,
+                    headers=headers,
+                    timeout=self.timeout,
+                    allow_redirects=self.follow_redirects
+                )
+            else:
+                # Fallback to direct requests
+                response = requests.get(
+                    url,
+                    headers=headers,
+                    timeout=self.timeout,
+                    allow_redirects=self.follow_redirects
+                )
+
+            # Record response metadata
+            response_metadata['status_code'] = response.status_code
+            response_metadata['content_type'] = response.headers.get('content-type', '')
+            response_metadata['content_length'] = response.headers.get('content-length')
+            response_metadata['last_modified'] = response.headers.get('last-modified')
+            response_metadata['server'] = response.headers.get('server')
+            response_metadata['final_url'] = str(response.url)
+
+            # Check status code
+            if response.status_code >= 400:
+                raise DocumentLoadError(f"HTTP {response.status_code}: {response.reason}", url)
+
+            # Check content type
+            content_type = response.headers.get('content-type', '').lower()
+            if not any(ct in content_type for ct in ['text/html', 'application/xhtml', 'text/plain']):
+                raise DocumentLoadError(f"Unsupported content type: {content_type}", url)
+
+            # Check content length
+            content_length = response.headers.get('content-length')
+            if content_length and int(content_length) > self.max_content_length:
+                raise DocumentLoadError(f"Content too large: {content_length} bytes", url)
+
+            # Read content with size limit
+            content = response.text
+
+            if len(content) > self.max_content_length:
+                content = content[:self.max_content_length]
+                logger.warning(f"Content truncated to {self.max_content_length} characters")
+
+            return content, response_metadata
+
+        except requests.exceptions.Timeout as e:
+            raise DocumentLoadError("Request timeout", url, e)
+        except requests.exceptions.RequestException as e:
+            raise DocumentLoadError(f"Network error: {str(e)}", url, e)
+
     async def _fetch_content(self, url: str) -> tuple[str, Dict[str, Any]]:
         """
-        Fetch HTML content from URL.
-        
+        Fetch HTML content from URL (async wrapper around sync request).
+
         Args:
             url: URL to fetch
-            
+
         Returns:
             Tuple of (html_content, response_metadata)
         """
-        session = await self._get_session()
-        response_metadata = {}
-        
-        try:
-            async with session.get(url, allow_redirects=self.follow_redirects,
-                                 max_redirects=self.max_redirects) as response:
-                
-                # Record response metadata
-                response_metadata['status_code'] = response.status
-                response_metadata['content_type'] = response.headers.get('content-type', '')
-                response_metadata['content_length'] = response.headers.get('content-length')
-                response_metadata['last_modified'] = response.headers.get('last-modified')
-                response_metadata['server'] = response.headers.get('server')
-                response_metadata['final_url'] = str(response.url)
-                
-                # Check status code
-                if response.status >= 400:
-                    raise DocumentLoadError(f"HTTP {response.status}: {response.reason}", url)
-                
-                # Check content type
-                content_type = response.headers.get('content-type', '').lower()
-                if not any(ct in content_type for ct in ['text/html', 'application/xhtml', 'text/plain']):
-                    raise DocumentLoadError(f"Unsupported content type: {content_type}", url)
-                
-                # Check content length
-                content_length = response.headers.get('content-length')
-                if content_length and int(content_length) > self.max_content_length:
-                    raise DocumentLoadError(f"Content too large: {content_length} bytes", url)
-                
-                # Read content with size limit
-                content = await response.text(encoding='utf-8', errors='replace')
-                
-                if len(content) > self.max_content_length:
-                    content = content[:self.max_content_length]
-                    logger.warning(f"Content truncated to {self.max_content_length} characters")
-                
-                return content, response_metadata
-                
-        except aiohttp.ClientError as e:
-            raise DocumentLoadError(f"Network error: {str(e)}", url, e)
-        except asyncio.TimeoutError as e:
-            raise DocumentLoadError("Request timeout", url, e)
+        # Run synchronous request in thread pool to avoid blocking event loop
+        return await asyncio.to_thread(self._fetch_content_sync, url)
     
     async def _extract_text_content(self, html_content: str, url: str, 
                                    metadata: DocumentMetadata) -> str:
@@ -275,8 +287,9 @@ class WebLoader(BaseDocumentLoader):
             tag.decompose()
         
         # Remove comments
-        for comment in soup.find_all(string=lambda text: isinstance(text, 'Comment')):
-            comment.extract()
+        if Comment:
+            for comment in soup.find_all(string=lambda text: isinstance(text, Comment)):
+                comment.extract()
         
         # Extract main content (prioritize main content areas)
         main_content = None
@@ -452,14 +465,6 @@ class WebLoader(BaseDocumentLoader):
         # Override parent method with lower default concurrency for web requests
         return await super().load_batch(sources, max_concurrent)
     
-    async def __aenter__(self):
-        """Async context manager entry."""
-        return self
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit - cleanup session."""
-        if self._session and not self._session.closed:
-            await self._session.close()
     
     def clean_content(self, content: str) -> str:
         """Override clean_content for web-specific cleaning."""

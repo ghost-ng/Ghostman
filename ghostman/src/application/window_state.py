@@ -60,7 +60,7 @@ def load_window_state(window_type: str) -> dict:
             
         elif window_type == 'repl':
             position = settings.get('ui.repl_position', {'x': 550, 'y': 100})
-            size = settings.get('ui.repl_size', {'width': 520, 'height': 450})
+            size = settings.get('ui.repl_size', {'width': 520, 'height': 650})
         else:
             return {'position': {'x': 100, 'y': 100}, 'size': {'width': 400, 'height': 300}}
         
@@ -73,4 +73,4 @@ def load_window_state(window_type: str) -> dict:
         if window_type == 'avatar':
             return {'position': None, 'size': {'width': 400, 'height': 600}}  # None triggers bottom-right
         else:
-            return {'position': {'x': 550, 'y': 100}, 'size': {'width': 520, 'height': 450}}
+            return {'position': {'x': 550, 'y': 100}, 'size': {'width': 520, 'height': 650}}
