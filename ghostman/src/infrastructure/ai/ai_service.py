@@ -130,17 +130,19 @@ class AIService:
             # Validate configuration
             if not self._validate_config():
                 return False
-            
-            # Configure PKI if enabled before creating API client
-            self._configure_pki_if_enabled()
-            
-            # Create API client
+
+            # Create API client FIRST (this will configure the session)
             self.client = OpenAICompatibleClient(
                 base_url=self._config['base_url'],
                 api_key=self._config.get('api_key'),
                 timeout=self._config.get('timeout', 30),
                 max_retries=self._config.get('max_retries', 3)
             )
+
+            # CRITICAL FIX: Configure PKI AFTER creating API client
+            # This ensures PKI settings are applied to the already-configured session
+            # rather than being wiped out when the client calls configure_session()
+            self._configure_pki_if_enabled()
             
             # Set up system prompt
             system_prompt = self._config.get('system_prompt', '')
