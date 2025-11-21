@@ -160,19 +160,23 @@ class CertificateManager:
                 # Convert config to dict
                 pki_data = self._config.to_dict()
 
-                # Save to main settings
-                settings.set('pki.enabled', pki_data.get('enabled', False))
-                settings.set('pki.client_cert_path', pki_data.get('client_cert_path'))
-                settings.set('pki.client_key_path', pki_data.get('client_key_path'))
-                settings.set('pki.ca_chain_path', pki_data.get('ca_chain_path'))
-                settings.set('pki.p12_file_hash', pki_data.get('p12_file_hash'))
-                settings.set('pki.last_validation', pki_data.get('last_validation'))
-                settings.set('pki.certificate_info', pki_data.get('certificate_info'))
+                # CRITICAL FIX: Update the entire PKI object at once
+                # This prevents partial saves if any individual set() fails
+                # and reduces 7 file writes to 1
+                current_settings = settings.get_all()
+                current_settings['pki'] = pki_data
 
-                logger.debug("PKI configuration saved to main settings")
+                # Save directly to settings file
+                settings._settings['pki'] = pki_data
+                settings.save()
+
+                logger.info(f"✓ PKI configuration saved: enabled={pki_data.get('enabled')}, cert_path={pki_data.get('client_cert_path')}")
+                logger.debug(f"PKI data saved: {pki_data}")
                 return True
         except Exception as e:
             logger.error(f"Failed to save PKI config to settings: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
         return False
     
     def import_p12_file(self, p12_path: str, password: str) -> bool:
