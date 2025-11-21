@@ -22,11 +22,12 @@ scipy>=1.7.0
 scikit-learn>=1.0.0
 
 # Document processing and loaders
-pypdf>=3.17.0
-unstructured>=0.10.0
+pypdf>=3.17.0  # Modern PyPDF2 replacement
+pdfplumber>=0.10.0  # High-quality PDF text extraction with layout
 python-docx>=0.8.11
 beautifulsoup4>=4.12.0
 lxml>=4.9.0
+html2text>=2020.1.16
 pandas>=2.0.0
 openpyxl>=3.1.0
 
@@ -35,7 +36,6 @@ tiktoken>=0.5.0
 nltk>=3.8.0
 chardet>=5.0.0
 markdownify>=0.11.0
-html2text>=2020.1.16
 
 # File type detection (Windows compatible)
 python-magic>=0.4.27

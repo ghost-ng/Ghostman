@@ -36,16 +36,31 @@ class CertificateInfo:
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
-        data = asdict(self)
-        data['not_valid_before'] = self.not_valid_before.isoformat()
-        data['not_valid_after'] = self.not_valid_after.isoformat()
-        return data
+        # Manually construct dict to ensure datetime serialization
+        return {
+            'subject': self.subject,
+            'issuer': self.issuer,
+            'serial_number': self.serial_number,
+            'not_valid_before': self.not_valid_before.isoformat() if self.not_valid_before else None,
+            'not_valid_after': self.not_valid_after.isoformat() if self.not_valid_after else None,
+            'fingerprint': self.fingerprint,
+            'key_usage': self.key_usage,
+            'is_valid': self.is_valid,
+            'days_until_expiry': self.days_until_expiry
+        }
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'CertificateInfo':
         """Create from dictionary."""
-        data['not_valid_before'] = datetime.fromisoformat(data['not_valid_before'])
-        data['not_valid_after'] = datetime.fromisoformat(data['not_valid_after'])
+        # Handle datetime conversion safely
+        if 'not_valid_before' in data and data['not_valid_before']:
+            if isinstance(data['not_valid_before'], str):
+                data['not_valid_before'] = datetime.fromisoformat(data['not_valid_before'])
+
+        if 'not_valid_after' in data and data['not_valid_after']:
+            if isinstance(data['not_valid_after'], str):
+                data['not_valid_after'] = datetime.fromisoformat(data['not_valid_after'])
+
         return cls(**data)
 
 
@@ -62,20 +77,30 @@ class PKIConfig:
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
-        data = asdict(self)
-        if self.last_validation:
-            data['last_validation'] = self.last_validation.isoformat()
-        if self.certificate_info:
-            data['certificate_info'] = self.certificate_info.to_dict()
-        return data
+        # Manually construct dict to ensure proper datetime/object serialization
+        return {
+            'enabled': self.enabled,
+            'client_cert_path': self.client_cert_path,
+            'client_key_path': self.client_key_path,
+            'ca_chain_path': self.ca_chain_path,
+            'p12_file_hash': self.p12_file_hash,
+            'last_validation': self.last_validation.isoformat() if self.last_validation else None,
+            'certificate_info': self.certificate_info.to_dict() if self.certificate_info else None
+        }
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'PKIConfig':
         """Create from dictionary."""
+        # Handle datetime conversion safely
         if 'last_validation' in data and data['last_validation']:
-            data['last_validation'] = datetime.fromisoformat(data['last_validation'])
+            if isinstance(data['last_validation'], str):
+                data['last_validation'] = datetime.fromisoformat(data['last_validation'])
+
+        # Handle nested certificate_info conversion safely
         if 'certificate_info' in data and data['certificate_info']:
-            data['certificate_info'] = CertificateInfo.from_dict(data['certificate_info'])
+            if isinstance(data['certificate_info'], dict):
+                data['certificate_info'] = CertificateInfo.from_dict(data['certificate_info'])
+
         return cls(**data)
 
 

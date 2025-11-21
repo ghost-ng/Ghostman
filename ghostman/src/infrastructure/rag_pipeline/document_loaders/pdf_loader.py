@@ -22,11 +22,13 @@ except ImportError:
     pdfplumber = None
 
 try:
-    import PyPDF2
-    PYPDF2_AVAILABLE = True
+    import pypdf
+    from pypdf import PdfReader
+    PYPDF2_AVAILABLE = True  # Keep variable name for backwards compatibility
 except ImportError:
     PYPDF2_AVAILABLE = False
-    PyPDF2 = None
+    pypdf = None
+    PdfReader = None
 
 from .base_loader import BaseDocumentLoader, Document, DocumentMetadata, DocumentLoadError
 
@@ -227,20 +229,20 @@ class PDFLoader(BaseDocumentLoader):
     
     async def _extract_with_pypdf2(self, path: Path) -> tuple[str, Dict[str, Any]]:
         """
-        Extract text using PyPDF2.
-        
+        Extract text using pypdf (modern PyPDF2 replacement).
+
         Args:
             path: Path to PDF file
-            
+
         Returns:
             Tuple of (content, metadata_dict)
         """
         def extract_sync():
             text_parts = []
             pdf_metadata = {}
-            
+
             with open(path, 'rb') as file:
-                pdf_reader = PyPDF2.PdfReader(file)
+                pdf_reader = PdfReader(file)
                 
                 # Handle password-protected PDFs
                 if pdf_reader.is_encrypted:
@@ -415,12 +417,12 @@ class PDFLoader(BaseDocumentLoader):
     
     async def _extract_pages_pypdf2(self, path: Path, base_metadata: DocumentMetadata,
                                    start_page: int, end_page: Optional[int]) -> List[Document]:
-        """Extract individual pages using PyPDF2."""
+        """Extract individual pages using pypdf (modern PyPDF2 replacement)."""
         def extract_sync():
             documents = []
-            
+
             with open(path, 'rb') as file:
-                pdf_reader = PyPDF2.PdfReader(file)
+                pdf_reader = PdfReader(file)
                 
                 if pdf_reader.is_encrypted and self.password:
                     pdf_reader.decrypt(self.password)
