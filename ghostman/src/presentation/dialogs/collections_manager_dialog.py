@@ -546,12 +546,12 @@ class CollectionsManagerDialog(QDialog):
             )
             return
 
-        # Show file picker
+        # Show file picker - accept all file types, handle errors appropriately
         file_paths, _ = QFileDialog.getOpenFileNames(
             self,
             "Select Files to Upload",
             "",
-            "Supported Files (*.txt *.py *.js *.json *.md *.csv *.html *.css *.xml *.yaml *.yml *.java *.cpp *.c *.h *.rs *.go *.rb *.php *.ts *.tsx *.jsx);;All Files (*.*)"
+            "All Files (*.*)"
         )
 
         if not file_paths:

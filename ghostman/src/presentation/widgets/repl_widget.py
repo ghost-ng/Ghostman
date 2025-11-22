@@ -3958,17 +3958,17 @@ class REPLWidget(QWidget):
         """Handle upload button click - open file dialog or show file browser."""
         try:
             from PyQt6.QtWidgets import QFileDialog
-            
+
             logger.info("📁 Upload button clicked")
-            
-            # Show file dialog
+
+            # Show file dialog - accept all file types, handle errors appropriately
             file_paths, _ = QFileDialog.getOpenFileNames(
                 self,
                 "Select files to upload for context",
                 "",
-                "All supported files (*.txt *.py *.js *.json *.md *.csv *.html *.css *.xml *.yaml *.yml);;All files (*.*)"
+                "All files (*.*)"
             )
-            
+
             if file_paths:
                 logger.info(f"📁 Selected {len(file_paths)} files for upload")
                 self._process_uploaded_files(file_paths)
@@ -3982,17 +3982,17 @@ class REPLWidget(QWidget):
         """Handle upload files request from file browser bar."""
         try:
             from PyQt6.QtWidgets import QFileDialog
-            
+
             logger.info("📁 Upload files requested from browser bar")
-            
-            # Show file dialog
+
+            # Show file dialog - accept all file types, handle errors appropriately
             file_paths, _ = QFileDialog.getOpenFileNames(
                 self,
                 "Select files to upload for context",
                 "",
-                "All supported files (*.txt *.py *.js *.json *.md *.csv *.html *.css *.xml *.yaml *.yml);;All files (*.*)"
+                "All files (*.*)"
             )
-            
+
             if file_paths:
                 logger.info(f"📁 Selected {len(file_paths)} files for upload")
                 self._process_uploaded_files(file_paths)
@@ -4338,13 +4338,10 @@ class REPLWidget(QWidget):
                     # Detect file type
                     file_ext = os.path.splitext(filename)[1].lower().lstrip('.')
 
-                    # Validate file extension
-                    supported_extensions = {'txt', 'py', 'js', 'json', 'md', 'csv', 'html', 'css', 'xml', 'yaml', 'yml', 'java', 'cpp', 'c', 'h', 'rs', 'go', 'rb', 'php', 'ts', 'tsx', 'jsx'}
-                    if file_ext not in supported_extensions:
-                        error_msg = self._get_specific_error_message(Exception(f"Unsupported format: .{file_ext}"), filename, file_path)
-                        failed_files.append(error_msg)
-                        logger.error(error_msg)
-                        continue
+                    # NOTE: File extension validation removed - let document loaders handle errors
+                    # This allows users to try any file type and get appropriate error feedback
+                    # from the RAG pipeline if the format isn't supported
+                    logger.info(f"Processing file with extension: .{file_ext if file_ext else '(no extension)'}")
 
                     # Generate unique file_id for RAG pipeline
                     path_obj = Path(file_path)
