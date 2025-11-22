@@ -13,7 +13,7 @@ from threading import Thread
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from .ai_service import AIService
-from .session_manager import SessionManager
+from .session_manager import session_manager
 
 logger = logging.getLogger("ghostman.api_test_service")
 
@@ -162,7 +162,9 @@ class APITestService(QObject):
     
     def __init__(self):
         super().__init__()
-        self.session_manager = SessionManager()
+        # CRITICAL: Use global singleton, don't create new instance
+        # The global singleton has PKI configuration applied
+        self.session_manager = session_manager
         self._current_test_thread = None
         
     def test_api_config_async(self, config: APITestConfig, 
@@ -275,7 +277,7 @@ class APITestService(QObject):
         try:
             # Use the unified SSL service to get proper SSL verification settings
             from ..ssl.ssl_service import ssl_service
-            
+
             # Override SSL settings based on test configuration
             if config.disable_ssl_verification:
                 logger.info("SSL verification disabled by test configuration")
@@ -291,23 +293,39 @@ class APITestService(QObject):
                         ssl_service.configure_from_settings(settings.get_all_settings())
                     except Exception as e:
                         logger.warning(f"Could not initialize SSL service from settings: {e}")
-                
-                logger.info(f"SSL verification configured: ignore={ssl_service._ignore_ssl}, custom_ca={bool(ssl_service._custom_ca_path)}")
-            
-            # Apply SSL configuration to session manager
-            # This will configure the session with SSL settings from ssl_service
-            ssl_service.configure_session_manager()
 
-            # Configure additional session parameters (timeout, retries, pool size)
-            # DO NOT pass disable_ssl_verification here - it's already configured by ssl_service above
-            self.session_manager.configure_session(
-                timeout=config.timeout,
-                max_retries=0,  # Disable all lower-level retries - we handle retries at the service level
-                pool_maxsize=5
-            )
-            
+                logger.info(f"SSL verification configured: ignore={ssl_service._ignore_ssl}, custom_ca={bool(ssl_service._custom_ca_path)}")
+
+            # CRITICAL FIX: Check if PKI is already configured on the session manager
+            # If PKI is configured, we should NOT recreate the session as it would wipe out PKI credentials
+            pki_info = self.session_manager.get_pki_info()
+            has_pki = pki_info.get('pki_enabled', False)
+
+            if has_pki:
+                # PKI already configured - only update SSL settings without recreating session
+                logger.info("PKI is configured on session - updating SSL settings without recreating session")
+                # Just update the verify parameter on existing session
+                verify_param = ssl_service.get_verify_parameter()
+                if self.session_manager._session:
+                    self.session_manager._session.verify = verify_param
+                    logger.debug(f"Updated existing session SSL verification: {verify_param}")
+            else:
+                # No PKI - safe to recreate session with SSL settings
+                logger.info("No PKI configured - creating fresh session with SSL settings")
+                # Apply SSL configuration to session manager
+                # This will configure the session with SSL settings from ssl_service
+                ssl_service.configure_session_manager()
+
+                # Configure additional session parameters (timeout, retries, pool size)
+                # DO NOT pass disable_ssl_verification here - it's already configured by ssl_service above
+                self.session_manager.configure_session(
+                    timeout=config.timeout,
+                    max_retries=0,  # Disable all lower-level retries - we handle retries at the service level
+                    pool_maxsize=5
+                )
+
             logger.info("Session configured for API testing with unified SSL settings")
-            
+
         except Exception as e:
             logger.error(f"Failed to configure session for testing: {e}")
     
