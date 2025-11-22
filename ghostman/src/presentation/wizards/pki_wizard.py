@@ -195,6 +195,23 @@ class PKISetupWizard(QWizard):
             font-size: 11px;
             spacing: 8px;
         }}
+
+        QRadioButton::indicator {{
+            width: 16px;
+            height: 16px;
+            border-radius: 8px;
+            border: 2px solid {colors.border_primary};
+            background-color: {colors.background_tertiary};
+        }}
+
+        QRadioButton::indicator:checked {{
+            background-color: {colors.primary};
+            border: 2px solid {colors.primary};
+        }}
+
+        QRadioButton::indicator:hover {{
+            border-color: {colors.interactive_hover};
+        }}
         
         QGroupBox {{
             color: {colors.text_primary};
@@ -307,6 +324,23 @@ class PKISetupWizard(QWizard):
             color: #ffffff;
             font-size: 11px;
             spacing: 8px;
+        }
+
+        QRadioButton::indicator {
+            width: 16px;
+            height: 16px;
+            border-radius: 8px;
+            border: 2px solid #555555;
+            background-color: #3c3c3c;
+        }
+
+        QRadioButton::indicator:checked {
+            background-color: #0078d4;
+            border: 2px solid #0078d4;
+        }
+
+        QRadioButton::indicator:hover {
+            border-color: #1e90ff;
         }
         
         QGroupBox {
