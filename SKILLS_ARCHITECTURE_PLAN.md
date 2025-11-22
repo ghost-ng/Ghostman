@@ -244,16 +244,45 @@ User clicks "Use Skill"
    Generate only the email body, no subject line.
    ```
 5. Display draft to user with edit/regenerate options
-6. **Final action options:**
-   - Copy to clipboard
-   - Open in default email client (mailto: link)
-   - **Future:** Direct send via SMTP/API integration
+6. **Final action: Create email in Outlook**
 
-**Email Client Integration:**
-- **Outlook**: `win32com.client` (COM automation) - Windows only
-- **Thunderbird**: MAPI protocol
-- **Gmail/Outlook Web**: Browser automation (Selenium/Playwright)
-- **Fallback**: `mailto:` URI with pre-filled body
+**Outlook Integration (Local Only):**
+```python
+class OutlookEmailDrafter:
+    """Create email drafts in Outlook via COM automation."""
+
+    def create_draft(self, to: str, subject: str, body: str,
+                    cc: str = None, bcc: str = None) -> bool:
+        """
+        Create email draft in Outlook client (local only).
+
+        Returns:
+            True if draft created successfully
+        """
+        import win32com.client
+
+        outlook = win32com.client.Dispatch("Outlook.Application")
+        mail = outlook.CreateItem(0)  # 0 = MailItem
+
+        mail.To = to
+        if cc:
+            mail.CC = cc
+        if bcc:
+            mail.BCC = bcc
+        mail.Subject = subject
+        mail.Body = body
+
+        # Display draft (doesn't send, user must click Send)
+        mail.Display(False)  # False = non-modal window
+
+        return True
+```
+
+**Key Points:**
+- ✅ Creates draft in Outlook - user reviews before sending
+- ✅ No external network calls - all local COM automation
+- ✅ Uses existing Outlook signature if configured
+- ✅ Preserves Outlook formatting and settings
 
 ---
 
@@ -310,57 +339,71 @@ User: "Find emails from John sent last week about the budget"
 
 **Email Search Backend:**
 
-**Option 1: Email Client API Integration**
+**Outlook-Only Integration (Local System)**
 ```python
 class OutlookEmailSearcher:
-    """Search Outlook emails via win32com."""
+    """
+    Search Outlook emails via win32com COM automation.
+
+    IMPORTANT: Only searches local Outlook client - no external queries.
+    All searches are performed against locally cached emails.
+    """
 
     def search(self, filters: EmailSearchFilters) -> List[EmailResult]:
         """
         Search emails using Outlook Object Model.
 
         Filters:
-            - from_address
-            - date_range (start, end)
-            - keywords (subject or body)
-            - has_attachments
+            - from_address: Email sender
+            - date_range: (start_date, end_date) tuple
+            - keywords: Search in subject or body
+            - has_attachments: True/False/None
+            - folder: Inbox, Sent, All (default: Inbox)
         """
         import win32com.client
         outlook = win32com.client.Dispatch("Outlook.Application")
         namespace = outlook.GetNamespace("MAPI")
-        inbox = namespace.GetDefaultFolder(6)  # Inbox
 
-        # Build search filter
+        # Get folder (Inbox=6, Sent=5, All Folders=iterate)
+        folder = namespace.GetDefaultFolder(filters.get('folder', 6))
+
+        # Build Outlook filter string
+        # Examples: "[SenderEmailAddress] = 'john@example.com'"
+        #          "[ReceivedTime] >= '12/01/2024'"
         filter_str = self._build_outlook_filter(filters)
-        items = inbox.Items.Restrict(filter_str)
+        items = folder.Items.Restrict(filter_str)
 
         return [self._parse_email(item) for item in items]
+
+    def _build_outlook_filter(self, filters: EmailSearchFilters) -> str:
+        """
+        Build Outlook filter string using DASL syntax.
+        Only accesses local Outlook data - no server queries.
+        """
+        conditions = []
+
+        if filters.get('from_address'):
+            conditions.append(f"[SenderEmailAddress] = '{filters['from_address']}'")
+
+        if filters.get('date_range'):
+            start, end = filters['date_range']
+            conditions.append(f"[ReceivedTime] >= '{start}'")
+            conditions.append(f"[ReceivedTime] <= '{end}'")
+
+        if filters.get('keywords'):
+            # Search in subject or body
+            kw = filters['keywords']
+            conditions.append(f"(@SQL=\"urn:schemas:httpmail:subject\" LIKE '%{kw}%' OR "
+                            f"\"urn:schemas:httpmail:textdescription\" LIKE '%{kw}%')")
+
+        return " AND ".join(conditions) if conditions else ""
 ```
 
-**Option 2: IMAP Search (Cross-Platform)**
-```python
-class IMAPEmailSearcher:
-    """Search emails via IMAP protocol."""
-
-    def search(self, filters: EmailSearchFilters) -> List[EmailResult]:
-        """Search via IMAP SEARCH command."""
-        import imaplib
-
-        mail = imaplib.IMAP4_SSL(self.server)
-        mail.login(self.username, self.password)
-        mail.select('inbox')
-
-        # Build IMAP search criteria
-        criteria = self._build_imap_criteria(filters)
-        result, data = mail.search(None, criteria)
-
-        return self._fetch_emails(mail, data[0].split())
-```
-
-**Option 3: Local Email Database (PST/MBOX parser)**
-- Parse `.pst` files (Outlook) or `.mbox` files (Thunderbird)
-- Index locally for fast search
-- Privacy-first (no cloud sync needed)
+**Key Points:**
+- ✅ Only searches local Outlook cache - no network queries
+- ✅ Fast search using Outlook's built-in indexing
+- ✅ Access to Inbox, Sent, Drafts, and all custom folders
+- ✅ DASL (DAV Searching and Locating) syntax for complex queries
 
 ---
 
@@ -369,16 +412,70 @@ class IMAPEmailSearcher:
 ### **Skill 3: Calendar Management**
 
 **Capabilities:**
-- Create calendar events
+- Create calendar events in Outlook
 - Find available time slots
 - List upcoming meetings
 - Send meeting invites
 
-**Integrations:**
-- Outlook Calendar (COM API)
-- Google Calendar (API)
-- Windows Calendar app
-- `.ics` file generation (universal)
+**Outlook Calendar Integration (Local Only):**
+```python
+class OutlookCalendarManager:
+    """Manage Outlook calendar via COM automation."""
+
+    def create_event(self, subject: str, start: datetime, end: datetime,
+                    location: str = None, body: str = None,
+                    attendees: List[str] = None) -> bool:
+        """
+        Create calendar appointment DRAFT in Outlook (local only).
+
+        IMPORTANT: Only creates draft - does NOT send invites or save automatically.
+        User must review and click "Send" or "Save" in Outlook window.
+        """
+        import win32com.client
+
+        outlook = win32com.client.Dispatch("Outlook.Application")
+        appointment = outlook.CreateItem(1)  # 1 = AppointmentItem
+
+        appointment.Subject = subject
+        appointment.Start = start
+        appointment.End = end
+
+        if location:
+            appointment.Location = location
+        if body:
+            appointment.Body = body
+        if attendees:
+            for email in attendees:
+                appointment.Recipients.Add(email)
+
+        # Display draft (doesn't save/send, user must click Save or Send)
+        appointment.Display(False)  # False = non-modal window
+
+        return True
+
+    def get_upcoming_meetings(self, days: int = 7) -> List[dict]:
+        """Get upcoming calendar events from Outlook."""
+        import win32com.client
+        from datetime import datetime, timedelta
+
+        outlook = win32com.client.Dispatch("Outlook.Application")
+        namespace = outlook.GetNamespace("MAPI")
+        calendar = namespace.GetDefaultFolder(9)  # 9 = Calendar
+
+        # Filter for upcoming events
+        start_date = datetime.now()
+        end_date = start_date + timedelta(days=days)
+
+        items = calendar.Items
+        items.IncludeRecurrences = True
+        items.Sort("[Start]")
+
+        filter_str = (f"[Start] >= '{start_date.strftime('%m/%d/%Y')}' AND "
+                     f"[Start] <= '{end_date.strftime('%m/%d/%Y')}'")
+        restricted = items.Restrict(filter_str)
+
+        return [self._parse_appointment(item) for item in restricted]
+```
 
 **Example:**
 ```
@@ -386,10 +483,16 @@ User: "Schedule a team meeting for tomorrow at 2pm"
   ↓
 [Calendar Wizard]
   ↓
-Creates event in default calendar app
+Creates DRAFT event and displays in Outlook
   ↓
-"✅ Meeting scheduled: Team Meeting on Dec 20, 2024 at 2:00 PM"
+"✅ Event draft created. Review and click 'Send' in Outlook to send invites."
 ```
+
+**Key Points:**
+- ✅ Creates draft appointment - does NOT auto-save or send
+- ✅ Opens Outlook window for user review
+- ✅ User must click "Send" (for meetings) or "Save" (for appointments)
+- ✅ No invites sent without explicit user confirmation
 
 ---
 
@@ -516,6 +619,522 @@ Creates note with timestamp
   ↓
 "✅ Note saved to Quick Notes"
 ```
+
+---
+
+### **Skill 10: Excel/Spreadsheet Operations**
+
+**Capabilities:**
+- Create spreadsheets from data in chat
+- Read and query Excel files
+- Add/modify data in existing spreadsheets
+- Calculate formulas (sum, average, etc.)
+- Export conversation data to Excel
+
+**Example:**
+```
+User: "Create a spreadsheet with these sales figures"
+  ↓
+[Wizard collects data]
+  ↓
+Creates Excel file and opens it
+  ↓
+"✅ Created sales_report.xlsx"
+```
+
+**Integration:**
+- `openpyxl` for reading/writing .xlsx files
+- `pandas` for data manipulation
+- COM automation to open in Excel
+
+---
+
+### **Skill 11: Document Management & OCR**
+
+**Capabilities:**
+- Summarize PDF documents
+- Extract text from images (OCR)
+- Convert documents between formats
+- Merge/split PDFs
+- Extract tables from documents
+
+**Example:**
+```
+User: "Summarize this contract PDF"
+  ↓
+[Reads PDF, generates summary]
+  ↓
+Shows key points and terms
+```
+
+**Tools:**
+- `pypdf` for PDF operations
+- `pytesseract` for OCR
+- `PIL` (Pillow) for image processing
+- Existing RAG pipeline for document analysis
+
+---
+
+### **Skill 12: Smart Folder Organization**
+
+**Capabilities:**
+- Organize files by type, date, or content
+- Move files based on rules
+- Clean up duplicate files
+- Archive old files
+- Batch rename files
+
+**Example:**
+```
+User: "Organize my downloads folder by file type"
+  ↓
+[Scans Downloads, creates subfolders]
+  ↓
+"✅ Organized 47 files into 5 categories"
+```
+
+**Safety:**
+- Preview changes before executing
+- Undo capability (tracks moves)
+- Never delete without confirmation
+
+---
+
+### **Skill 13: Meeting Preparation Assistant**
+
+**Capabilities:**
+- Prepare meeting agendas from emails/context
+- Summarize action items from meeting notes
+- Find all related emails for meeting context
+- Create meeting notes templates
+- Extract attendees from email threads
+
+**Example:**
+```
+User: "Prepare for my 2pm meeting with John"
+  ↓
+[Searches emails from John, calendar details]
+  ↓
+Shows agenda with context and recent emails
+```
+
+**Integration:**
+- Outlook email search
+- Outlook calendar integration
+- RAG for context extraction
+
+---
+
+### **Skill 14: Teams/Chat Quick Messages**
+
+**Capabilities:**
+- Draft professional chat messages
+- Send status updates
+- Format messages (code blocks, lists)
+- Set presence status
+
+**Example:**
+```
+User: "Send a status update to my team"
+  ↓
+[Wizard: What's the update?]
+  ↓
+Generates professional message
+  ↓
+[Copy to Clipboard] or [Open Teams]
+```
+
+**Note:** No direct Teams API integration (no external queries) - generates formatted message for user to copy
+
+---
+
+### **Skill 15: Window & Workspace Management**
+
+**Capabilities:**
+- Arrange windows (side-by-side, grid)
+- Save workspace layouts
+- Open "work setup" (specific apps + positions)
+- Manage virtual desktops
+
+**Example:**
+```
+User: "Set up my coding workspace"
+  ↓
+Opens VS Code, terminal, browser in configured layout
+  ↓
+"✅ Workspace ready"
+```
+
+**Windows APIs:**
+- `win32gui` for window manipulation
+- `pygetwindow` for window enumeration
+- Windows Virtual Desktop API
+
+---
+
+### **Skill 16: System Maintenance**
+
+**Capabilities:**
+- Clean temporary files
+- Check disk space by folder
+- Find large files
+- Monitor system health
+- Check for Windows updates
+
+**Example:**
+```
+User: "Clean up temporary files"
+  ↓
+[Scans temp folders, shows space to free]
+  ↓
+User confirms
+  ↓
+"✅ Freed 2.3 GB of disk space"
+```
+
+**Safety:**
+- Only touches known safe temp locations
+- Shows preview before deletion
+- Never touches user data without confirmation
+
+---
+
+### **Skill 17: Security & Backup Helper**
+
+**Capabilities:**
+- Backup folders to destination
+- Check Windows Update status
+- Verify file integrity (checksums)
+- Show recent login attempts
+- Monitor firewall status
+
+**Example:**
+```
+User: "Backup my Documents folder"
+  ↓
+[Wizard: Where to backup?]
+  ↓
+Copies files with progress
+  ↓
+"✅ Backed up 1,234 files (4.2 GB)"
+```
+
+**Safety:**
+- Read-only scans for security info
+- Backups are copies, never moves
+- User chooses destination
+
+---
+
+### **Skill 18: Task & Reminder Management**
+
+**Capabilities:**
+- Create reminders with Windows Task Scheduler
+- Add tasks to Outlook Tasks
+- List today's tasks
+- Mark tasks complete
+- Recurring reminders
+
+**Example:**
+```
+User: "Remind me to call John tomorrow at 2pm"
+  ↓
+Creates Outlook task with reminder
+  ↓
+"✅ Reminder set for Dec 20, 2024 at 2:00 PM"
+```
+
+**Integration:**
+- Outlook Tasks (COM API)
+- Windows Task Scheduler (for system-level reminders)
+
+---
+
+### **Skill 19: Bookmark & Link Management**
+
+**Capabilities:**
+- Save URLs with notes
+- Organize bookmarks by category
+- Search saved links
+- Export/import browser bookmarks
+
+**Example:**
+```
+User: "Save this article for later: python.org/docs"
+  ↓
+[Wizard: Add tags/notes?]
+  ↓
+"✅ Saved to Bookmarks > Python > Documentation"
+```
+
+**Storage:**
+- Local SQLite database
+- Optional browser bookmark export
+
+---
+
+### **Skill 20: Screenshot & Screen Capture**
+
+**Capabilities:**
+- Take screenshots (full screen, window, region)
+- OCR text from screenshots
+- Annotate screenshots
+- Save to clipboard or file
+
+**Example:**
+```
+User: "Screenshot this window and extract the text"
+  ↓
+[Captures active window, runs OCR]
+  ↓
+Shows extracted text + saves image
+```
+
+**Tools:**
+- `PIL` for capturing
+- `pytesseract` for OCR
+- Windows Snipping Tool API (optional)
+
+---
+
+### **Skill 21: Network Utilities**
+
+**Capabilities:**
+- Show IP address (local & public)
+- Test connection (ping)
+- Show active network connections
+- Display network adapters
+- Check internet speed (estimate)
+
+**Example:**
+```
+User: "What's my IP address?"
+  ↓
+"Local: 192.168.1.42
+ Public: 203.0.113.45"
+```
+
+**Tools:**
+- `socket` for network info
+- `requests` for public IP (single query to ifconfig.me)
+- `subprocess` for ping
+
+---
+
+### **Skill 22: Text Formatting & Templates**
+
+**Capabilities:**
+- Format text as letter, memo, invoice
+- Apply consistent styling
+- Create templates
+- Proofread and suggest improvements
+- Generate professional bios/intros
+
+**Example:**
+```
+User: "Format this as a formal business letter"
+  ↓
+[Applies letterhead, date, formatting]
+  ↓
+Shows formatted version
+```
+
+**Integration:**
+- AI for content generation
+- Templates stored locally
+
+---
+
+### **Skill 23: Batch Image Operations**
+
+**Capabilities:**
+- Resize images (single or batch)
+- Convert formats (JPG, PNG, etc.)
+- Compress images
+- Add watermarks
+- Rename by EXIF date
+
+**Example:**
+```
+User: "Resize these vacation photos to 1920x1080"
+  ↓
+[Processes batch with progress]
+  ↓
+"✅ Resized 43 images"
+```
+
+**Tools:**
+- `PIL` (Pillow) for image operations
+- `piexif` for EXIF data
+
+---
+
+### **Skill 24: Personal Knowledge Base**
+
+**Capabilities:**
+- Save information to local wiki
+- Tag and categorize notes
+- Search knowledge base
+- Link related notes
+- Export to markdown
+
+**Example:**
+```
+User: "Save this: React hooks use state for local data"
+  ↓
+[Wizard: Tags?]
+  ↓
+"✅ Saved to Knowledge Base > React > Hooks"
+```
+
+**Storage:**
+- Local SQLite database
+- Markdown export option
+- Integration with existing RAG for search
+
+---
+
+### **Skill 25: Cross-App Smart Search**
+
+**Capabilities:**
+- Search across Outlook, Files, Notes in one query
+- Timeline view of all activity
+- Find all mentions of topic/person
+
+**Example:**
+```
+User: "Find everything about the Q4 budget"
+  ↓
+Searches emails, files, notes, calendar
+  ↓
+Shows unified results with dates
+```
+
+**Integration:**
+- Outlook search (emails, calendar)
+- Windows Search API (files)
+- Knowledge base search
+
+---
+
+### **Skill 26: Report Generation**
+
+**Capabilities:**
+- Weekly summary reports
+- Email volume statistics
+- Time tracking summaries
+- Activity reports
+
+**Example:**
+```
+User: "Generate my weekly email summary"
+  ↓
+[Analyzes emails from past week]
+  ↓
+Shows stats: sent, received, top senders, etc.
+```
+
+**Data Sources:**
+- Outlook emails
+- Calendar events
+- File modifications
+- Local activity logs
+
+---
+
+### **Skill 27: Text-to-Speech Reader**
+
+**Capabilities:**
+- Read documents aloud
+- Read emails aloud
+- Adjustable speed and voice
+- Background reading mode
+
+**Example:**
+```
+User: "Read this PDF to me"
+  ↓
+[Converts PDF to text, starts TTS]
+  ↓
+Plays audio with pause/resume controls
+```
+
+**Windows Integration:**
+- Windows Speech API (SAPI)
+- `pyttsx3` for cross-platform TTS
+
+---
+
+### **Skill 28: Environment & Focus Modes**
+
+**Capabilities:**
+- Toggle dark mode
+- Enable night light
+- Mute notifications for duration
+- Set focus mode (DND)
+- Adjust screen brightness
+
+**Example:**
+```
+User: "Enable focus mode for 1 hour"
+  ↓
+Mutes notifications, sets status
+  ↓
+"✅ Focus mode active until 3:45 PM"
+```
+
+**Windows APIs:**
+- Focus Assist API
+- Display settings
+- Notification settings
+
+---
+
+### **Skill 29: Simple Workflow Automation**
+
+**Capabilities:**
+- Auto-save email attachments to folder
+- Daily digest of unread emails
+- Auto-organize downloads
+- Scheduled file backups
+
+**Example:**
+```
+User: "Save all PDF attachments from John to My Documents"
+  ↓
+[Sets up rule]
+  ↓
+"✅ Rule active. PDFs from John will auto-save."
+```
+
+**Implementation:**
+- Outlook rules (for email automation)
+- Windows Task Scheduler (for scheduled tasks)
+- File system watcher for folder monitoring
+
+---
+
+### **Skill 30: Expense Tracking**
+
+**Capabilities:**
+- Log expenses with date/amount/category
+- Monthly spending reports
+- Export to Excel
+- Parse receipts (OCR)
+
+**Example:**
+```
+User: "Log expense: $45 for lunch"
+  ↓
+[Saves to local database]
+  ↓
+"✅ Logged: $45 - Food - Dec 19, 2024"
+```
+
+**Storage:**
+- Local SQLite database
+- No cloud sync (privacy)
+- Export to Excel for analysis
 
 ---
 
