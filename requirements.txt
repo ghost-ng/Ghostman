@@ -48,6 +48,11 @@ asyncio>=3.4.3
 # Caching and performance
 diskcache>=5.6.0
 
+# Skills system dependencies
+pywin32>=306  # Windows COM automation (Outlook, Windows Search)
+pillow>=10.0.0  # Image capture and processing
+pytesseract>=0.3.10  # Optional OCR for screen capture
+
 # Framework compatibility
 pydantic>=2.0.0,<3.0.0
 

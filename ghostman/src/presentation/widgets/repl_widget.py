@@ -2940,9 +2940,17 @@ class REPLWidget(QWidget):
         self.pin_btn.setText = protected_setText
         
         title_layout.addWidget(self.pin_btn)
-        
+
+        # Screen Capture button
+        self.capture_btn = QToolButton()
+        self.capture_btn.setText("📸")  # Camera emoji
+        self.capture_btn.setToolTip("Capture screen region (shapes + borders)")
+        self.capture_btn.clicked.connect(self._on_screen_capture_clicked)
+        self._style_title_button(self.capture_btn)
+        title_layout.addWidget(self.capture_btn)
+
         title_layout.addStretch()
-        
+
         # Minimize button (uniform styling)
         minimize_btn = QPushButton("__")
         minimize_btn.clicked.connect(self.minimize_requested.emit)
@@ -10700,7 +10708,64 @@ def test_theme():
                 # Reset to normal styling
                 self._style_title_button(self.move_btn)
                 print("🔘 Move mode OFF - grips hidden, normal control")
-    
+
+    def _on_screen_capture_clicked(self):
+        """Handle screen capture button click - launch screen capture skill."""
+        try:
+            # Import skill manager
+            from ...infrastructure.skills.core.skill_manager import skill_manager
+            from ...infrastructure.skills.skills_library.screen_capture_skill import ScreenCaptureSkill
+
+            # Register screen capture skill if not already registered
+            try:
+                skill_manager.get_skill("screen_capture")
+            except Exception:
+                # Not registered yet, register it
+                skill_manager.register_skill(ScreenCaptureSkill)
+                logger.info("Registered ScreenCaptureSkill")
+
+            # Execute screen capture skill asynchronously
+            import asyncio
+
+            async def execute_capture():
+                try:
+                    result = await skill_manager.execute_skill(
+                        "screen_capture",
+                        shape="rectangle",  # Default shape
+                        border_width=2,
+                        save_to_file=True,
+                        copy_to_clipboard=True
+                    )
+
+                    if result.success:
+                        file_path = result.data.get("file_path", "")
+                        self.append_output(f"✓ {result.message}", "success")
+                        if file_path:
+                            self.append_output(f"Saved to: {file_path}", "info")
+                    else:
+                        self.append_output(f"✗ {result.message}: {result.error}", "error")
+
+                except Exception as e:
+                    logger.error(f"Screen capture failed: {e}", exc_info=True)
+                    self.append_output(f"Screen capture error: {str(e)}", "error")
+
+            # Run async function
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # If event loop is already running, schedule the coroutine
+                    asyncio.ensure_future(execute_capture())
+                else:
+                    # Run in new event loop
+                    asyncio.run(execute_capture())
+            except RuntimeError:
+                # Fallback if no event loop
+                asyncio.run(execute_capture())
+
+        except Exception as e:
+            logger.error(f"Failed to launch screen capture: {e}", exc_info=True)
+            self.append_output(f"Screen capture unavailable: {str(e)}", "error")
+
     def _save_current_conversation(self):
         """Save the current conversation without starting a new one."""
         try:
