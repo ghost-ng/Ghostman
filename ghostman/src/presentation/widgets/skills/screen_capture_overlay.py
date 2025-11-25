@@ -272,14 +272,17 @@ class ScreenCaptureOverlay(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Draw captured screen
+        # Fill with black background first
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 255))
+
+        # Draw captured screen on top
         if self.screen_pixmap:
             painter.drawPixmap(0, 0, self.screen_pixmap)
 
-        # Draw semi-transparent dimming overlay
-        painter.fillRect(self.rect(), QColor(0, 0, 0, 100))
+            # Apply semi-transparent black overlay for dimming
+            painter.fillRect(self.rect(), QColor(0, 0, 0, 100))
 
-        # Draw selection region (with clear area showing screen underneath)
+        # Draw selection region (will clear dimming in selected area)
         if self.start_point and self.current_point:
             self._draw_selection(painter)
 
@@ -302,10 +305,10 @@ class ScreenCaptureOverlay(QWidget):
             rect.setWidth(size)
             rect.setHeight(size)
 
-        # Clear dimming in selection area (show captured screen clearly)
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
-        painter.fillRect(rect, Qt.GlobalColor.transparent)
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        # Show captured screen clearly in selection area (no dimming)
+        if self.screen_pixmap:
+            # Draw the selected region from screen pixmap without dimming
+            painter.drawPixmap(rect, self.screen_pixmap, rect)
 
         # Draw border if enabled
         if self.show_border:
@@ -322,10 +325,15 @@ class ScreenCaptureOverlay(QWidget):
         """Draw circle/oval selection."""
         rect = QRect(self.start_point, self.current_point).normalized()
 
-        # Clear dimming in selection area
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
-        painter.fillRect(rect, Qt.GlobalColor.transparent)
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        # Show captured screen clearly in selection area (no dimming)
+        if self.screen_pixmap:
+            # Create a circular clip path
+            painter.save()
+            path = QPainterPath()
+            path.addEllipse(rect)
+            painter.setClipPath(path)
+            painter.drawPixmap(rect, self.screen_pixmap, rect)
+            painter.restore()
 
         # Draw border if enabled
         if self.show_border:
@@ -355,10 +363,14 @@ class ScreenCaptureOverlay(QWidget):
         else:
             path.closeSubpath()
 
-        # Clear dimming in path area
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
-        painter.fillPath(path, QBrush(Qt.GlobalColor.transparent))
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        # Show captured screen clearly in freeform path (no dimming)
+        if self.screen_pixmap:
+            painter.save()
+            painter.setClipPath(path)
+            # Get bounding rect of freeform path
+            bounds = path.boundingRect().toRect()
+            painter.drawPixmap(bounds, self.screen_pixmap, bounds)
+            painter.restore()
 
         # Draw border if enabled
         if self.show_border:
