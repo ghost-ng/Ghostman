@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QWidget, QApplication, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QComboBox, QCheckBox, QFrame
 )
-from PyQt6.QtCore import Qt, QRect, QPoint, QPointF, pyqtSignal, QBuffer, QIODevice, QSize
+from PyQt6.QtCore import Qt, QRect, QRectF, QPoint, QPointF, pyqtSignal, QBuffer, QIODevice, QSize
 from PyQt6.QtGui import (
     QPainter, QPen, QBrush, QColor, QCursor, QPixmap, QImage,
     QPainterPath, QPolygon
@@ -126,6 +126,7 @@ class ScreenCaptureOverlay(QWidget):
         """Create floating control panel for shape and border selection."""
         # Control panel frame
         self.control_panel = QFrame(self)
+        self.control_panel.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
         self.control_panel.setStyleSheet("""
             QFrame {
                 background-color: rgba(40, 40, 40, 230);
@@ -349,10 +350,10 @@ class ScreenCaptureOverlay(QWidget):
 
         # Show captured screen clearly in selection area (no dimming)
         if self.screen_pixmap:
-            # Create a circular clip path
+            # Create a circular clip path (convert QRect to QRectF)
             painter.save()
             path = QPainterPath()
-            path.addEllipse(rect)
+            path.addEllipse(QRectF(rect))
             painter.setClipPath(path)
             painter.drawPixmap(rect, self.screen_pixmap, rect)
             painter.restore()
