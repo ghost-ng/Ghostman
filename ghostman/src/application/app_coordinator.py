@@ -101,7 +101,10 @@ class AppCoordinator(QObject):
 
             # Initialize RAG coordinator
             self._initialize_rag_system()
-            
+
+            # Initialize skills system
+            self._initialize_skills_system()
+
             # Apply interface settings (opacity, always on top) immediately
             try:
                 interface_cfg = {
@@ -268,7 +271,47 @@ class AppCoordinator(QObject):
 
         except Exception as e:
             logger.error(f"Failed to initialize RAG system: {e}")
-    
+
+    def _initialize_skills_system(self):
+        """Initialize skills system and register all built-in skills."""
+        try:
+            logger.info("Initializing skills system...")
+
+            # Import skill manager and all built-in skills
+            from ..infrastructure.skills.core.skill_manager import skill_manager
+            from ..infrastructure.skills.skills_library import (
+                EmailDraftSkill,
+                EmailSearchSkill,
+                CalendarEventSkill,
+                FileSearchSkill,
+                ScreenCaptureSkill,
+                TaskTrackerSkill
+            )
+
+            # Register all built-in skills
+            skills_to_register = [
+                EmailDraftSkill,
+                EmailSearchSkill,
+                CalendarEventSkill,
+                FileSearchSkill,
+                ScreenCaptureSkill,
+                TaskTrackerSkill
+            ]
+
+            registered_count = 0
+            for skill_class in skills_to_register:
+                try:
+                    skill_manager.register_skill(skill_class)
+                    registered_count += 1
+                    logger.debug(f"Registered skill: {skill_class.__name__}")
+                except Exception as e:
+                    logger.error(f"Failed to register {skill_class.__name__}: {e}")
+
+            logger.info(f"✓ Skills system initialized: {registered_count}/{len(skills_to_register)} skills registered")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize skills system: {e}", exc_info=True)
+
     def _enhance_main_window_rag(self):
         """Enhance main window REPL with RAG capabilities."""
         if not self._main_window or not self._rag_coordinator:

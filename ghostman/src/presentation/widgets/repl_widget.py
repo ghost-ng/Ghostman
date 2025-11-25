@@ -10744,17 +10744,8 @@ def test_theme():
     def _on_screen_capture_clicked(self):
         """Handle screen capture button click - launch screen capture skill."""
         try:
-            # Import skill manager
+            # Import skill manager (skills registered at app startup)
             from ...infrastructure.skills.core.skill_manager import skill_manager
-            from ...infrastructure.skills.skills_library.screen_capture_skill import ScreenCaptureSkill
-
-            # Register screen capture skill if not already registered
-            try:
-                skill_manager.get_skill("screen_capture")
-            except Exception:
-                # Not registered yet, register it
-                skill_manager.register_skill(ScreenCaptureSkill)
-                logger.info("Registered ScreenCaptureSkill")
 
             # Execute screen capture skill asynchronously
             import asyncio
