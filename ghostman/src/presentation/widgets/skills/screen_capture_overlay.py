@@ -69,6 +69,8 @@ class ScreenCaptureOverlay(QWidget):
         self.current_point: Optional[QPoint] = None
         self.freeform_points: List[QPoint] = []
         self.is_selecting = False
+        self.selection_complete = False
+        self.captured_image: Optional[QPixmap] = None
 
         # Capture screen BEFORE showing overlay
         self._capture_screen()
@@ -221,10 +223,30 @@ class ScreenCaptureOverlay(QWidget):
 
         layout.addLayout(border_layout)
 
+        # Action buttons (Save and Copy) - initially hidden
+        action_layout = QHBoxLayout()
+
+        self.save_button = QPushButton("💾 Save")
+        self.save_button.clicked.connect(self._on_save_clicked)
+        self.save_button.setVisible(False)
+        action_layout.addWidget(self.save_button)
+
+        self.copy_button = QPushButton("📋 Copy")
+        self.copy_button.clicked.connect(self._on_copy_clicked)
+        self.copy_button.setVisible(False)
+        action_layout.addWidget(self.copy_button)
+
+        self.done_button = QPushButton("✓ Done")
+        self.done_button.clicked.connect(self._on_done_clicked)
+        self.done_button.setVisible(False)
+        action_layout.addWidget(self.done_button)
+
+        layout.addLayout(action_layout)
+
         # Instructions
-        instructions = QLabel("Drag to select region • ENTER to confirm • ESC to cancel")
-        instructions.setStyleSheet("font-size: 10px; color: #CCCCCC; padding-top: 5px;")
-        layout.addWidget(instructions)
+        self.instructions = QLabel("Drag to select region • ENTER to confirm • ESC to cancel")
+        self.instructions.setStyleSheet("font-size: 10px; color: #CCCCCC; padding-top: 5px;")
+        layout.addWidget(self.instructions)
 
         # Position control panel at top center
         self.control_panel.adjustSize()
@@ -399,7 +421,7 @@ class ScreenCaptureOverlay(QWidget):
 
     def mousePressEvent(self, event):
         """Handle mouse press - start selection."""
-        if event.button() == Qt.MouseButton.LeftButton:
+        if event.button() == Qt.MouseButton.LeftButton and not self.selection_complete:
             self.start_point = event.pos()
             self.current_point = event.pos()
             self.is_selecting = True
@@ -420,17 +442,173 @@ class ScreenCaptureOverlay(QWidget):
             self.update()
 
     def mouseReleaseEvent(self, event):
-        """Handle mouse release - end selection."""
-        if event.button() == Qt.MouseButton.LeftButton:
+        """Handle mouse release - end selection and auto-copy to clipboard."""
+        if event.button() == Qt.MouseButton.LeftButton and not self.selection_complete:
             self.is_selecting = False
             self.current_point = event.pos()
+
+            # Mark selection as complete
+            self.selection_complete = True
+
+            # Remove crosshair cursor
+            self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
+
+            # Capture the selected region
+            self._capture_selection()
+
+            # Auto-copy to clipboard
+            if self.captured_image:
+                self._copy_to_clipboard(self.captured_image)
+                self.instructions.setText("✓ Copied to clipboard! • Save or Done to finish")
+                self.instructions.setStyleSheet("font-size: 10px; color: #00FF00; padding-top: 5px;")
+
+            # Show action buttons
+            self.save_button.setVisible(True)
+            self.copy_button.setVisible(True)
+            self.done_button.setVisible(True)
+
+            # Reposition control panel to accommodate new buttons
+            self.control_panel.adjustSize()
+            screen_width = self.screen().geometry().width()
+            panel_width = self.control_panel.width()
+            self.control_panel.move((screen_width - panel_width) // 2, 20)
+
             self.update()
 
     def keyPressEvent(self, event):
         """Handle key press - confirm or cancel."""
         if event.key() == Qt.Key.Key_Return or event.key() == Qt.Key.Key_Enter:
-            self._confirm_capture()
+            # If selection complete, treat as Done
+            if self.selection_complete:
+                self._on_done_clicked()
+            else:
+                self._confirm_capture()
         elif event.key() == Qt.Key.Key_Escape:
+            self._cancel_capture()
+
+    def _capture_selection(self):
+        """Capture the selected region to pixmap."""
+        if not self.start_point or not self.current_point:
+            return
+
+        try:
+            # Calculate capture region
+            if self.shape == CaptureShape.FREEFORM:
+                rect = self._get_freeform_bounding_rect()
+            else:
+                rect = QRect(self.start_point, self.current_point).normalized()
+
+                # Force square if needed
+                if hasattr(self, 'force_square') and self.force_square:
+                    size = min(rect.width(), rect.height())
+                    rect.setWidth(size)
+                    rect.setHeight(size)
+
+            if rect.width() < 5 or rect.height() < 5:
+                logger.warning("Selection too small")
+                return
+
+            # Capture region from screen pixmap
+            if self.screen_pixmap:
+                self.captured_image = self.screen_pixmap.copy(rect)
+                logger.debug(f"Captured selection: {rect.width()}x{rect.height()}")
+
+        except Exception as e:
+            logger.error(f"Failed to capture selection: {e}", exc_info=True)
+
+    def _copy_to_clipboard(self, pixmap: QPixmap):
+        """Copy pixmap to system clipboard."""
+        try:
+            clipboard = QApplication.clipboard()
+            clipboard.setPixmap(pixmap)
+            logger.info("✓ Image copied to clipboard")
+        except Exception as e:
+            logger.error(f"Failed to copy to clipboard: {e}", exc_info=True)
+
+    def _on_save_clicked(self):
+        """Handle Save button click."""
+        if not self.captured_image:
+            return
+
+        try:
+            from pathlib import Path
+            from datetime import datetime
+            import os
+
+            # Create captures directory
+            appdata = os.environ.get('APPDATA', '')
+            if not appdata:
+                logger.error("APPDATA environment variable not found")
+                return
+
+            captures_dir = Path(appdata) / "Ghostman" / "captures"
+            captures_dir.mkdir(parents=True, exist_ok=True)
+
+            # Generate filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"capture_{timestamp}.png"
+            file_path = captures_dir / filename
+
+            # Save image
+            self.captured_image.save(str(file_path), "PNG")
+
+            logger.info(f"✓ Image saved: {file_path}")
+            self.instructions.setText(f"✓ Saved to {filename}")
+            self.instructions.setStyleSheet("font-size: 10px; color: #00FF00; padding-top: 5px;")
+
+        except Exception as e:
+            logger.error(f"Failed to save image: {e}", exc_info=True)
+            self.instructions.setText(f"✗ Save failed: {str(e)}")
+            self.instructions.setStyleSheet("font-size: 10px; color: #FF0000; padding-top: 5px;")
+
+    def _on_copy_clicked(self):
+        """Handle Copy button click."""
+        if self.captured_image:
+            self._copy_to_clipboard(self.captured_image)
+            self.instructions.setText("✓ Copied to clipboard!")
+            self.instructions.setStyleSheet("font-size: 10px; color: #00FF00; padding-top: 5px;")
+
+    def _on_done_clicked(self):
+        """Handle Done button click - emit result and close."""
+        if not self.captured_image:
+            self._cancel_capture()
+            return
+
+        try:
+            # Calculate capture region for result
+            if self.shape == CaptureShape.FREEFORM:
+                rect = self._get_freeform_bounding_rect()
+            else:
+                rect = QRect(self.start_point, self.current_point).normalized()
+
+                # Force square if needed
+                if hasattr(self, 'force_square') and self.force_square:
+                    size = min(rect.width(), rect.height())
+                    rect.setWidth(size)
+                    rect.setHeight(size)
+
+            # Convert pixmap to bytes
+            buffer = QBuffer()
+            buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+            self.captured_image.save(buffer, "PNG")
+            image_data = BytesIO(buffer.data().data())
+
+            # Create result
+            result = CaptureResult(
+                shape=self.shape,
+                x=rect.x(),
+                y=rect.y(),
+                width=rect.width(),
+                height=rect.height(),
+                image_data=image_data
+            )
+
+            logger.info(f"✓ Screen capture completed: {rect.width()}x{rect.height()}")
+            self.capture_completed.emit(result)
+            self.close()
+
+        except Exception as e:
+            logger.error(f"Failed to complete capture: {e}", exc_info=True)
             self._cancel_capture()
 
     def _confirm_capture(self):
