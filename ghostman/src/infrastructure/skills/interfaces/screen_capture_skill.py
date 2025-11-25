@@ -10,6 +10,7 @@ from enum import Enum
 from typing import Optional, Tuple, List, Dict, Any
 from datetime import datetime
 from pathlib import Path
+from io import BytesIO
 
 
 class CaptureMode(Enum):
@@ -332,9 +333,9 @@ class OCRResult:
 
 
 @dataclass
-class CaptureResult:
+class DetailedCaptureResult:
     """
-    Result of a screen capture operation.
+    Detailed result of a screen capture operation.
 
     This extends SkillResult with screen-capture-specific data.
 
@@ -530,8 +531,8 @@ if __name__ == "__main__":
         copy_to_clipboard=True
     )
 
-    # Example 5: Processing capture result
-    result = CaptureResult(
+    # Example 5: Processing detailed capture result
+    result = DetailedCaptureResult(
         image_path=Path("C:/screenshots/test.png"),
         image_size=(1920, 1080),
         image_format=ImageFormat.PNG,
@@ -550,3 +551,36 @@ if __name__ == "__main__":
     if result.ocr_result:
         print(f"OCR Text: {result.ocr_result.text}")
         print(f"OCR Confidence: {result.ocr_result.confidence:.2%}")
+
+
+# Alias for backwards compatibility and simpler usage
+CaptureShape = CaptureMode
+
+
+# Simpler CaptureResult for basic skill usage (overlay widget compatibility)
+@dataclass
+class SimpleCaptureResult:
+    """
+    Simplified capture result for basic screen capture operations.
+
+    This is used by the ScreenCaptureOverlay widget for passing
+    capture data back to the skill.
+
+    Attributes:
+        shape: Shape used for capture
+        x: Left edge of captured region
+        y: Top edge of captured region
+        width: Width of captured region
+        height: Height of captured region
+        image_data: BytesIO containing PNG image data
+    """
+    shape: CaptureShape
+    x: int
+    y: int
+    width: int
+    height: int
+    image_data: Optional[BytesIO] = None
+
+
+# For overlay widget compatibility, allow both names
+CaptureResult = SimpleCaptureResult

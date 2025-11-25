@@ -97,6 +97,7 @@ from .skill_manager import (
 # Screen capture skill types
 from .screen_capture_skill import (
     CaptureMode,
+    CaptureShape,  # Alias for CaptureMode
     BorderStyle,
     AnnotationType,
     ImageFormat,
@@ -105,7 +106,9 @@ from .screen_capture_skill import (
     CaptureRegion,
     CaptureOptions,
     OCRResult,
-    CaptureResult,
+    CaptureResult,  # Simple result for overlay
+    DetailedCaptureResult,  # Detailed result with full metadata
+    SimpleCaptureResult,  # Explicit simple result
     ScreenInfo,
 )
 
@@ -137,6 +140,7 @@ __all__ = [
     "SkillExecutionError",
     # Screen capture
     "CaptureMode",
+    "CaptureShape",
     "BorderStyle",
     "AnnotationType",
     "ImageFormat",
@@ -146,6 +150,8 @@ __all__ = [
     "CaptureOptions",
     "OCRResult",
     "CaptureResult",
+    "DetailedCaptureResult",
+    "SimpleCaptureResult",
     "ScreenInfo",
     # Task tracker
     "TaskStatus",
