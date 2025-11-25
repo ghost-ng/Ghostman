@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QWidget, QApplication, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QComboBox, QCheckBox, QFrame
 )
-from PyQt6.QtCore import Qt, QRect, QPoint, pyqtSignal, QBuffer, QIODevice, QSize
+from PyQt6.QtCore import Qt, QRect, QPoint, QPointF, pyqtSignal, QBuffer, QIODevice, QSize
 from PyQt6.QtGui import (
     QPainter, QPen, QBrush, QColor, QCursor, QPixmap, QImage,
     QPainterPath, QPolygon
@@ -86,11 +86,15 @@ class ScreenCaptureOverlay(QWidget):
             Qt.WindowType.Tool
         )
 
-        # Set window to full screen
-        self.setWindowState(Qt.WindowState.WindowFullScreen)
-
-        # Set semi-transparent background
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        # Get screen geometry to cover ALL monitors
+        screen = QApplication.primaryScreen()
+        if screen:
+            # Use virtual geometry to span all screens
+            geometry = screen.virtualGeometry()
+            self.setGeometry(geometry)
+        else:
+            # Fallback to full screen state
+            self.setWindowState(Qt.WindowState.WindowFullScreen)
 
         # Enable mouse tracking for freeform mode
         self.setMouseTracking(True)
@@ -99,10 +103,18 @@ class ScreenCaptureOverlay(QWidget):
         self.setCursor(QCursor(Qt.CursorShape.CrossCursor))
 
     def _capture_screen(self):
-        """Capture full screen before showing overlay."""
+        """Capture full screen (all monitors) before showing overlay."""
         screen = QApplication.primaryScreen()
         if screen:
-            self.screen_pixmap = screen.grabWindow(0)
+            # Capture virtual screen (all monitors)
+            virtual_geometry = screen.virtualGeometry()
+            self.screen_pixmap = screen.grabWindow(
+                0,
+                virtual_geometry.x(),
+                virtual_geometry.y(),
+                virtual_geometry.width(),
+                virtual_geometry.height()
+            )
             logger.debug(f"Captured screen: {self.screen_pixmap.width()}x{self.screen_pixmap.height()}")
         else:
             self.screen_pixmap = None
@@ -331,15 +343,15 @@ class ScreenCaptureOverlay(QWidget):
         if len(self.freeform_points) < 2:
             return
 
-        # Create path from points
+        # Create path from points (convert QPoint to QPointF)
         path = QPainterPath()
-        path.moveTo(self.freeform_points[0])
+        path.moveTo(QPointF(self.freeform_points[0]))
         for point in self.freeform_points[1:]:
-            path.lineTo(point)
+            path.lineTo(QPointF(point))
 
         # If still selecting, add current point
         if self.is_selecting and self.current_point:
-            path.lineTo(self.current_point)
+            path.lineTo(QPointF(self.current_point))
         else:
             path.closeSubpath()
 
