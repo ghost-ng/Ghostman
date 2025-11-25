@@ -54,7 +54,7 @@ class ScreenCaptureSkill(BaseSkill):
             skill_id="screen_capture",
             name="Screen Capture",
             description="Capture screen regions with shapes and borders",
-            category=SkillCategory.UTILITY,
+            category=SkillCategory.SCREEN_CAPTURE,
             icon="📸",
             enabled_by_default=True,
             requires_confirmation=False,  # Safe operation

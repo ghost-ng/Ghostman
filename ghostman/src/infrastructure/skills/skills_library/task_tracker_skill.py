@@ -66,7 +66,7 @@ class TaskTrackerSkill(BaseSkill):
             icon="✅",
             enabled_by_default=True,
             requires_confirmation=False,  # Safe local operation
-            permissions_required=[PermissionType.FILE_SYSTEM_WRITE],
+            permissions_required=[PermissionType.FILE_WRITE],
             version="1.0.0",
             author="Ghostman"
         )

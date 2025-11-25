@@ -56,7 +56,7 @@ class FileSearchSkill(BaseSkill):
             icon="🔍",
             enabled_by_default=True,
             requires_confirmation=False,  # Safe read-only operation
-            permissions_required=[PermissionType.FILE_SYSTEM_READ],
+            permissions_required=[PermissionType.FILE_READ],
             version="1.0.0",
             author="Ghostman"
         )
