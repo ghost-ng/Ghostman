@@ -1645,7 +1645,12 @@ class REPLWidget(QWidget):
             if hasattr(self, 'title_save_btn'):
                 self._load_save_icon(self.title_save_btn)
                 logger.debug("Save button icon updated for theme change")
-            
+
+            # Update camera button icon for theme changes
+            if hasattr(self, 'capture_btn'):
+                self._load_camera_icon(self.capture_btn)
+                logger.debug("Camera button icon updated for theme change")
+
             # Update search elements if they exist - use high-contrast styling
             if hasattr(self, 'search_status_label'):
                 from ...ui.themes.style_templates import StyleTemplates
@@ -2943,7 +2948,8 @@ class REPLWidget(QWidget):
 
         # Screen Capture button
         self.capture_btn = QToolButton()
-        self.capture_btn.setText("📸")  # Camera emoji
+        # Load camera icon (theme-specific)
+        self._load_camera_icon(self.capture_btn)
         self.capture_btn.setToolTip("Capture screen region (shapes + borders)")
         self.capture_btn.clicked.connect(self._on_screen_capture_clicked)
         self._style_title_button(self.capture_btn)
@@ -6715,7 +6721,33 @@ class REPLWidget(QWidget):
         except Exception as e:
             logger.error(f"Failed to load save icon: {e}")
             button.setText("💾")  # Fallback
-    
+
+    def _load_camera_icon(self, button):
+        """Load theme-appropriate camera icon for screen capture button."""
+        try:
+            # Determine if theme is dark or light
+            icon_variant = self._get_icon_variant()
+
+            camera_icon_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..",
+                "assets", "icons", f"camera_{icon_variant}.png"
+            )
+
+            if os.path.exists(camera_icon_path):
+                camera_icon = QIcon(camera_icon_path)
+                button.setIcon(camera_icon)
+                from PyQt6.QtCore import QSize
+                button.setIconSize(QSize(16, 16))
+                logger.debug(f"Loaded camera icon: camera_{icon_variant}.png")
+            else:
+                # Fallback to Unicode symbol
+                button.setText("📸")
+                logger.warning(f"Camera icon not found: {camera_icon_path}")
+
+        except Exception as e:
+            logger.error(f"Failed to load camera icon: {e}")
+            button.setText("📸")  # Fallback
+
     def _get_icon_variant(self) -> str:
         """Determine which icon variant to use based on theme."""
         try:
