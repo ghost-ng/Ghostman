@@ -52,6 +52,7 @@ class AvatarWidget(SimpleAvatarArrowMixin, AvatarResizableMixin, QWidget):
     # Signals
     avatar_clicked = pyqtSignal()
     minimize_requested = pyqtSignal()
+    screen_capture_requested = pyqtSignal()
     settings_requested = pyqtSignal()
     conversations_requested = pyqtSignal()
     help_requested = pyqtSignal()
@@ -404,9 +405,15 @@ class AvatarWidget(SimpleAvatarArrowMixin, AvatarResizableMixin, QWidget):
         conversations_action.triggered.connect(self._on_conversations_clicked)
         context_menu.addAction(conversations_action)
         logger.debug("Added 'Conversations' option to context menu")
-        
+
+        # Screen Capture action
+        screen_capture_action = QAction(self._get_theme_icon("camera"), "Screen Capture", self)
+        screen_capture_action.triggered.connect(self.screen_capture_requested.emit)
+        context_menu.addAction(screen_capture_action)
+        logger.debug("Added 'Screen Capture' option to context menu")
+
         context_menu.addSeparator()
-        
+
         # Settings action
         settings_action = QAction(self._get_theme_icon("gear"), "Settings...", self)
         settings_action.triggered.connect(self.settings_requested.emit)

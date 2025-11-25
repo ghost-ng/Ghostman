@@ -27,6 +27,7 @@ class EnhancedSystemTray(QObject):
     
     # Signals
     show_avatar_requested = pyqtSignal()
+    screen_capture_requested = pyqtSignal()
     settings_requested = pyqtSignal()
     help_requested = pyqtSignal()
     quit_requested = pyqtSignal()
@@ -103,9 +104,14 @@ class EnhancedSystemTray(QObject):
         show_avatar_action = QAction(self._get_theme_icon("chat"), "Show Avatar", self.context_menu)
         show_avatar_action.triggered.connect(self.show_avatar_requested.emit)
         self.context_menu.addAction(show_avatar_action)
-        
+
+        # Screen Capture action
+        screen_capture_action = QAction(self._get_theme_icon("camera"), "Screen Capture", self.context_menu)
+        screen_capture_action.triggered.connect(self.screen_capture_requested.emit)
+        self.context_menu.addAction(screen_capture_action)
+
         self.context_menu.addSeparator()
-        
+
         # Settings action
         settings_action = QAction(self._get_theme_icon("gear"), "Settings...", self.context_menu)
         settings_action.triggered.connect(self.settings_requested.emit)

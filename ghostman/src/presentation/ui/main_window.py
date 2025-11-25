@@ -61,6 +61,7 @@ class MainWindow(QMainWindow):
         self.avatar_widget = AvatarWidget()
         self.avatar_widget.minimize_requested.connect(self.minimize_requested.emit)
         self.avatar_widget.avatar_clicked.connect(self._toggle_repl)
+        self.avatar_widget.screen_capture_requested.connect(self._on_screen_capture_requested)
         self.avatar_widget.settings_requested.connect(self.settings_requested.emit)
         self.avatar_widget.conversations_requested.connect(self._show_conversations)
         self.avatar_widget.help_requested.connect(self.help_requested.emit)
@@ -308,7 +309,14 @@ class MainWindow(QMainWindow):
             self._hide_repl()
         else:
             self._show_repl()
-    
+
+    def _on_screen_capture_requested(self):
+        """Handle screen capture request from avatar menu."""
+        logger.info("Screen capture requested from avatar")
+        # Delegate to app_coordinator's handler
+        if self.app_coordinator:
+            self.app_coordinator._trigger_screen_capture()
+
     def _show_repl(self):
         """Show the floating REPL positioned relative to avatar - avatar never moves."""
         # Get current avatar position and screen info

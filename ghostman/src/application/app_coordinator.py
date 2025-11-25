@@ -204,6 +204,7 @@ class AppCoordinator(QObject):
             # Initialize system tray
             self._system_tray = EnhancedSystemTray(self)
             self._system_tray.show_avatar_requested.connect(self._show_avatar_mode)
+            self._system_tray.screen_capture_requested.connect(self._trigger_screen_capture)
             self._system_tray.settings_requested.connect(self._show_settings)
             self._system_tray.help_requested.connect(self._show_browser_help)
             self._system_tray.quit_requested.connect(self._quit_application)
@@ -708,6 +709,47 @@ class AppCoordinator(QObject):
         if self._state_machine:
             self._state_machine.toggle_state("user_toggle")
     
+    def _trigger_screen_capture(self):
+        """Trigger screen capture skill from system tray or avatar menu."""
+        logger.info("Screen capture requested from menu")
+        try:
+            # Import skill manager
+            from ..infrastructure.skills.core.skill_manager import skill_manager
+
+            # Execute screen capture skill asynchronously
+            import asyncio
+
+            async def execute_capture():
+                try:
+                    result = await skill_manager.execute_skill(
+                        "screen_capture",
+                        shape="rectangle",
+                        border_width=0,
+                        save_to_file=False,  # Don't auto-save, user clicks Save button
+                        copy_to_clipboard=True
+                    )
+
+                    if result.success:
+                        logger.info(f"✓ Screen capture completed: {result.message}")
+                    else:
+                        logger.warning(f"✗ Screen capture failed: {result.error}")
+
+                except Exception as e:
+                    logger.error(f"Screen capture failed: {e}", exc_info=True)
+
+            # Run async capture
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            # Schedule the capture task
+            asyncio.ensure_future(execute_capture(), loop=loop)
+
+        except Exception as e:
+            logger.error(f"Failed to trigger screen capture: {e}", exc_info=True)
+
     def _show_settings(self):
         """Show the settings dialog."""
         logger.info("=== SETTINGS REQUESTED - OPENING SETTINGS DIALOG ===")
