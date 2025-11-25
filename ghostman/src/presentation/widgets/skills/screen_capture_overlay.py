@@ -1,16 +1,19 @@
 """
 Screen Capture Overlay - Full-screen overlay for selecting capture regions.
 
-Provides a translucent full-screen overlay with mouse interaction for selecting
-regions to capture using different shapes (rectangle, circle, freeform).
+Provides a full-screen overlay showing the captured screen with a control panel
+for selecting shapes and configuring borders.
 """
 
 import logging
 from typing import Optional, List
 from io import BytesIO
 
-from PyQt6.QtWidgets import QWidget, QApplication
-from PyQt6.QtCore import Qt, QRect, QPoint, pyqtSignal, QBuffer, QIODevice
+from PyQt6.QtWidgets import (
+    QWidget, QApplication, QVBoxLayout, QHBoxLayout,
+    QPushButton, QLabel, QComboBox, QCheckBox, QFrame
+)
+from PyQt6.QtCore import Qt, QRect, QPoint, pyqtSignal, QBuffer, QIODevice, QSize
 from PyQt6.QtGui import (
     QPainter, QPen, QBrush, QColor, QCursor, QPixmap, QImage,
     QPainterPath, QPolygon
@@ -25,11 +28,10 @@ logger = logging.getLogger("ghostman.ui.screen_capture_overlay")
 
 class ScreenCaptureOverlay(QWidget):
     """
-    Full-screen translucent overlay for screen capture region selection.
+    Full-screen overlay for screen capture with control panel.
 
-    Displays a semi-transparent overlay that allows users to select a region
-    using mouse drag. Supports different shapes (rectangle, circle, freeform)
-    and renders selection borders in real-time.
+    Shows the captured screen with semi-transparent dimming. User can select
+    shape, configure border, and drag to select region.
 
     Signals:
         capture_completed: Emitted when user confirms capture (CaptureResult)
@@ -50,7 +52,7 @@ class ScreenCaptureOverlay(QWidget):
         Initialize screen capture overlay.
 
         Args:
-            shape: Capture shape type
+            shape: Initial capture shape type
             border_width: Selection border width in pixels
             border_color: Selection border color (hex format)
             parent: Parent widget (usually None for full-screen)
@@ -60,6 +62,7 @@ class ScreenCaptureOverlay(QWidget):
         self.shape = shape
         self.border_width = border_width
         self.border_color = QColor(border_color)
+        self.show_border = border_width > 0
 
         # Selection state
         self.start_point: Optional[QPoint] = None
@@ -67,11 +70,12 @@ class ScreenCaptureOverlay(QWidget):
         self.freeform_points: List[QPoint] = []
         self.is_selecting = False
 
-        # Setup widget
-        self._setup_ui()
-
-        # Capture full screen before showing overlay
+        # Capture screen BEFORE showing overlay
         self._capture_screen()
+
+        # Setup UI
+        self._setup_ui()
+        self._create_control_panel()
 
     def _setup_ui(self):
         """Setup overlay UI properties."""
@@ -99,23 +103,173 @@ class ScreenCaptureOverlay(QWidget):
         screen = QApplication.primaryScreen()
         if screen:
             self.screen_pixmap = screen.grabWindow(0)
+            logger.debug(f"Captured screen: {self.screen_pixmap.width()}x{self.screen_pixmap.height()}")
         else:
             self.screen_pixmap = None
+            logger.error("Failed to capture screen")
+
+    def _create_control_panel(self):
+        """Create floating control panel for shape and border selection."""
+        # Control panel frame
+        self.control_panel = QFrame(self)
+        self.control_panel.setStyleSheet("""
+            QFrame {
+                background-color: rgba(40, 40, 40, 230);
+                border-radius: 8px;
+                padding: 10px;
+            }
+            QLabel {
+                color: white;
+                font-size: 12px;
+            }
+            QPushButton {
+                background-color: rgba(70, 70, 70, 255);
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: rgba(90, 90, 90, 255);
+            }
+            QPushButton:pressed {
+                background-color: rgba(50, 50, 50, 255);
+            }
+            QPushButton#selected {
+                background-color: rgba(0, 120, 215, 255);
+            }
+            QComboBox {
+                background-color: rgba(70, 70, 70, 255);
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-size: 11px;
+            }
+            QComboBox::drop-down {
+                border: none;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 6px solid white;
+            }
+            QCheckBox {
+                color: white;
+                font-size: 11px;
+            }
+        """)
+
+        layout = QVBoxLayout(self.control_panel)
+        layout.setSpacing(8)
+
+        # Title
+        title = QLabel("Screen Capture")
+        title.setStyleSheet("font-size: 14px; font-weight: bold;")
+        layout.addWidget(title)
+
+        # Shape selection
+        shape_layout = QHBoxLayout()
+        shape_label = QLabel("Shape:")
+        shape_layout.addWidget(shape_label)
+
+        self.shape_buttons = {}
+        shapes = [
+            ("Rectangle", CaptureShape.RECTANGLE, "▭"),
+            ("Square", CaptureShape.RECTANGLE, "□"),  # Will force 1:1 ratio
+            ("Circle", CaptureShape.CIRCLE, "○"),
+            ("Freeform", CaptureShape.FREEFORM, "✎")
+        ]
+
+        for name, shape_type, icon in shapes:
+            btn = QPushButton(f"{icon} {name}")
+            btn.setCheckable(True)
+            btn.setChecked(shape_type == self.shape and name == "Rectangle")
+            btn.clicked.connect(lambda checked, n=name, s=shape_type: self._on_shape_changed(n, s))
+            self.shape_buttons[name] = btn
+            shape_layout.addWidget(btn)
+
+        layout.addLayout(shape_layout)
+
+        # Border options
+        border_layout = QHBoxLayout()
+
+        self.border_checkbox = QCheckBox("Show Border")
+        self.border_checkbox.setChecked(self.show_border)
+        self.border_checkbox.stateChanged.connect(self._on_border_toggle)
+        border_layout.addWidget(self.border_checkbox)
+
+        border_layout.addWidget(QLabel("Color:"))
+        self.border_color_combo = QComboBox()
+        self.border_color_combo.addItems(["Red", "Blue", "Green", "Yellow", "White", "Black"])
+        self.border_color_combo.currentTextChanged.connect(self._on_border_color_changed)
+        border_layout.addWidget(self.border_color_combo)
+
+        layout.addLayout(border_layout)
+
+        # Instructions
+        instructions = QLabel("Drag to select region • ENTER to confirm • ESC to cancel")
+        instructions.setStyleSheet("font-size: 10px; color: #CCCCCC; padding-top: 5px;")
+        layout.addWidget(instructions)
+
+        # Position control panel at top center
+        self.control_panel.adjustSize()
+        screen_width = self.screen().geometry().width()
+        panel_width = self.control_panel.width()
+        self.control_panel.move((screen_width - panel_width) // 2, 20)
+
+    def _on_shape_changed(self, name: str, shape: CaptureShape):
+        """Handle shape button click."""
+        self.shape = shape
+        self.force_square = (name == "Square")
+
+        # Update button styles
+        for btn_name, btn in self.shape_buttons.items():
+            btn.setChecked(btn_name == name)
+            if btn_name == name:
+                btn.setObjectName("selected")
+            else:
+                btn.setObjectName("")
+            btn.setStyleSheet(btn.styleSheet())  # Force refresh
+
+        self.update()
+        logger.debug(f"Shape changed to: {name}")
+
+    def _on_border_toggle(self, state):
+        """Handle border checkbox toggle."""
+        self.show_border = (state == Qt.CheckState.Checked.value)
+        self.update()
+
+    def _on_border_color_changed(self, color_name: str):
+        """Handle border color change."""
+        color_map = {
+            "Red": "#FF0000",
+            "Blue": "#0000FF",
+            "Green": "#00FF00",
+            "Yellow": "#FFFF00",
+            "White": "#FFFFFF",
+            "Black": "#000000"
+        }
+        self.border_color = QColor(color_map.get(color_name, "#FF0000"))
+        self.update()
 
     def paintEvent(self, event):
-        """Paint the overlay with selection region."""
+        """Paint the overlay with captured screen and selection."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Fill with semi-transparent black
+        # Draw captured screen
+        if self.screen_pixmap:
+            painter.drawPixmap(0, 0, self.screen_pixmap)
+
+        # Draw semi-transparent dimming overlay
         painter.fillRect(self.rect(), QColor(0, 0, 0, 100))
 
-        # Draw selection region if active
+        # Draw selection region (with clear area showing screen underneath)
         if self.start_point and self.current_point:
             self._draw_selection(painter)
-
-        # Draw instructions
-        self._draw_instructions(painter)
 
     def _draw_selection(self, painter: QPainter):
         """Draw the current selection region."""
@@ -127,39 +281,47 @@ class ScreenCaptureOverlay(QWidget):
             self._draw_freeform_selection(painter)
 
     def _draw_rectangle_selection(self, painter: QPainter):
-        """Draw rectangle selection."""
+        """Draw rectangle/square selection."""
         rect = QRect(self.start_point, self.current_point).normalized()
 
-        # Clear selection area (show captured screen)
+        # Force square if needed
+        if hasattr(self, 'force_square') and self.force_square:
+            size = min(rect.width(), rect.height())
+            rect.setWidth(size)
+            rect.setHeight(size)
+
+        # Clear dimming in selection area (show captured screen clearly)
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
         painter.fillRect(rect, Qt.GlobalColor.transparent)
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
 
-        # Draw border
-        pen = QPen(self.border_color, self.border_width)
-        pen.setStyle(Qt.PenStyle.SolidLine)
-        painter.setPen(pen)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRect(rect)
+        # Draw border if enabled
+        if self.show_border:
+            pen = QPen(self.border_color, self.border_width)
+            pen.setStyle(Qt.PenStyle.SolidLine)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRect(rect)
 
         # Draw size label
         self._draw_size_label(painter, rect)
 
     def _draw_circle_selection(self, painter: QPainter):
-        """Draw circle selection."""
+        """Draw circle/oval selection."""
         rect = QRect(self.start_point, self.current_point).normalized()
 
-        # Clear selection area (show captured screen)
+        # Clear dimming in selection area
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
         painter.fillRect(rect, Qt.GlobalColor.transparent)
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
 
-        # Draw border
-        pen = QPen(self.border_color, self.border_width)
-        pen.setStyle(Qt.PenStyle.SolidLine)
-        painter.setPen(pen)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawEllipse(rect)
+        # Draw border if enabled
+        if self.show_border:
+            pen = QPen(self.border_color, self.border_width)
+            pen.setStyle(Qt.PenStyle.SolidLine)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawEllipse(rect)
 
         # Draw size label
         self._draw_size_label(painter, rect)
@@ -175,30 +337,30 @@ class ScreenCaptureOverlay(QWidget):
         for point in self.freeform_points[1:]:
             path.lineTo(point)
 
-        # If selecting, add current point
+        # If still selecting, add current point
         if self.is_selecting and self.current_point:
             path.lineTo(self.current_point)
         else:
-            # Close path when done
             path.closeSubpath()
 
-        # Clear selection area
+        # Clear dimming in path area
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
         painter.fillPath(path, QBrush(Qt.GlobalColor.transparent))
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
 
-        # Draw border
-        pen = QPen(self.border_color, self.border_width)
-        pen.setStyle(Qt.PenStyle.SolidLine)
-        painter.setPen(pen)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawPath(path)
+        # Draw border if enabled
+        if self.show_border:
+            pen = QPen(self.border_color, self.border_width)
+            pen.setStyle(Qt.PenStyle.SolidLine)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPath(path)
 
     def _draw_size_label(self, painter: QPainter, rect: QRect):
         """Draw size label for selection."""
         label = f"{rect.width()} x {rect.height()}"
 
-        # Draw label background
+        # Position label at top-left of selection
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QBrush(QColor(0, 0, 0, 180)))
 
@@ -208,27 +370,8 @@ class ScreenCaptureOverlay(QWidget):
 
         painter.drawRect(label_rect)
 
-        # Draw label text
         painter.setPen(QPen(Qt.GlobalColor.white))
         painter.drawText(label_rect, Qt.AlignmentFlag.AlignCenter, label)
-
-    def _draw_instructions(self, painter: QPainter):
-        """Draw instruction text."""
-        instructions = "Drag to select region • ENTER to confirm • ESC to cancel"
-
-        # Position at top center
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QBrush(QColor(0, 0, 0, 180)))
-
-        text_rect = painter.fontMetrics().boundingRect(instructions)
-        text_rect.adjust(-10, -5, 10, 5)
-        text_rect.moveCenter(QPoint(self.width() // 2, 30))
-
-        painter.drawRect(text_rect)
-
-        # Draw text
-        painter.setPen(QPen(Qt.GlobalColor.white))
-        painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, instructions)
 
     def mousePressEvent(self, event):
         """Handle mouse press - start selection."""
@@ -278,6 +421,12 @@ class ScreenCaptureOverlay(QWidget):
                 rect = self._get_freeform_bounding_rect()
             else:
                 rect = QRect(self.start_point, self.current_point).normalized()
+
+                # Force square if needed
+                if hasattr(self, 'force_square') and self.force_square:
+                    size = min(rect.width(), rect.height())
+                    rect.setWidth(size)
+                    rect.setHeight(size)
 
             if rect.width() < 5 or rect.height() < 5:
                 logger.warning("Selection too small")
