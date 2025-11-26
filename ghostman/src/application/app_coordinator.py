@@ -715,8 +715,7 @@ class AppCoordinator(QObject):
         try:
             # Import skill manager
             from ..infrastructure.skills.core.skill_manager import skill_manager
-
-            # Execute screen capture skill asynchronously
+            from PyQt6.QtCore import QTimer
             import asyncio
 
             async def execute_capture():
@@ -737,15 +736,21 @@ class AppCoordinator(QObject):
                 except Exception as e:
                     logger.error(f"Screen capture failed: {e}", exc_info=True)
 
-            # Run async capture
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+            def run_capture():
+                """Run capture in a new event loop."""
+                try:
+                    # Create a new event loop for this thread
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        loop.run_until_complete(execute_capture())
+                    finally:
+                        loop.close()
+                except Exception as e:
+                    logger.error(f"Screen capture execution failed: {e}", exc_info=True)
 
-            # Schedule the capture task
-            asyncio.ensure_future(execute_capture(), loop=loop)
+            # Schedule execution in Qt event loop
+            QTimer.singleShot(0, run_capture)
 
         except Exception as e:
             logger.error(f"Failed to trigger screen capture: {e}", exc_info=True)

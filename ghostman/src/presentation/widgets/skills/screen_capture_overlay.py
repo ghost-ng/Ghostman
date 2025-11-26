@@ -129,51 +129,87 @@ class ScreenCaptureOverlay(QWidget):
         self.control_panel.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
         self.control_panel.setStyleSheet("""
             QFrame {
-                background-color: rgba(40, 40, 40, 230);
+                background-color: rgba(30, 30, 30, 240);
+                border: 1px solid rgba(80, 80, 80, 200);
                 border-radius: 8px;
                 padding: 10px;
             }
             QLabel {
-                color: white;
+                color: #FFFFFF;
                 font-size: 12px;
             }
             QPushButton {
-                background-color: rgba(70, 70, 70, 255);
-                color: white;
-                border: none;
+                background-color: rgba(60, 60, 60, 255);
+                color: #CCCCCC;
+                border: 1px solid rgba(80, 80, 80, 150);
                 border-radius: 4px;
                 padding: 6px 12px;
                 font-size: 11px;
+                font-weight: normal;
             }
             QPushButton:hover {
-                background-color: rgba(90, 90, 90, 255);
+                background-color: rgba(80, 80, 80, 255);
+                color: #FFFFFF;
+                border: 1px solid rgba(100, 100, 100, 200);
             }
             QPushButton:pressed {
-                background-color: rgba(50, 50, 50, 255);
+                background-color: rgba(40, 40, 40, 255);
+                border: 1px solid rgba(60, 60, 60, 200);
             }
-            QPushButton#selected {
+            QPushButton:checked {
                 background-color: rgba(0, 120, 215, 255);
+                color: #FFFFFF;
+                border: 1px solid rgba(0, 150, 255, 255);
+                font-weight: bold;
+            }
+            QPushButton:checked:hover {
+                background-color: rgba(0, 140, 235, 255);
+                border: 1px solid rgba(0, 170, 255, 255);
             }
             QComboBox {
-                background-color: rgba(70, 70, 70, 255);
-                color: white;
-                border: none;
+                background-color: rgba(60, 60, 60, 255);
+                color: #FFFFFF;
+                border: 1px solid rgba(80, 80, 80, 150);
                 border-radius: 4px;
                 padding: 4px 8px;
                 font-size: 11px;
             }
+            QComboBox:hover {
+                background-color: rgba(80, 80, 80, 255);
+                border: 1px solid rgba(100, 100, 100, 200);
+            }
             QComboBox::drop-down {
                 border: none;
+                width: 20px;
             }
             QComboBox::down-arrow {
                 image: none;
                 border-left: 4px solid transparent;
                 border-right: 4px solid transparent;
-                border-top: 6px solid white;
+                border-top: 6px solid #FFFFFF;
             }
             QCheckBox {
-                color: white;
+                color: #FFFFFF;
                 font-size: 11px;
+                spacing: 8px;
+            }
+            QCheckBox::indicator {
+                width: 16px;
+                height: 16px;
+                border: 1px solid rgba(100, 100, 100, 200);
+                border-radius: 3px;
+                background-color: rgba(60, 60, 60, 255);
+            }
+            QCheckBox::indicator:hover {
+                border: 1px solid rgba(120, 120, 120, 255);
+                background-color: rgba(80, 80, 80, 255);
+            }
+            QCheckBox::indicator:checked {
+                background-color: rgba(0, 120, 215, 255);
+                border: 1px solid rgba(0, 150, 255, 255);
+            }
+            QCheckBox::indicator:checked:hover {
+                background-color: rgba(0, 140, 235, 255);
             }
         """)
 
