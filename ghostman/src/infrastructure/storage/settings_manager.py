@@ -53,7 +53,8 @@ class SettingsManager:
             'repl_window_size': {'width': 520, 'height': 650}  # Increased from 450 to 650
         },
         'interface': {  # new namespace for percent-based values
-            'opacity': 97  # percent (10-100)
+            'opacity': 97,  # percent (10-100)
+            'icon_size': 5   # icon size (1-10, default 5)
         },
         'ai_model': {
             'preset': 'Custom',
@@ -73,7 +74,10 @@ class SettingsManager:
             'custom_ca_path': '',
             'auto_detect_code_language': True,
             'enable_code_lexing': True,
-            'enable_debug_commands': False
+            'enable_debug_commands': False,
+            'enable_ai_intent_classification': False,  # AI-powered skill detection fallback
+            'ai_intent_confidence_threshold': 0.65,    # Minimum confidence for AI classification (0.0-1.0)
+            'ai_intent_timeout_seconds': 5             # Timeout for AI classification requests
         },
         'fonts': {
             'ai_response': {
@@ -126,6 +130,30 @@ class SettingsManager:
             'p12_file_hash': None,
             'last_validation': None,
             'certificate_info': None
+        },
+        'screen_capture': {
+            'default_save_path': '',  # Empty string = use default %APPDATA%\Ghostman\captures
+            'border_color': '#FF0000'  # Default red border color
+        },
+        'tools': {
+            'enabled': True,                    # Master toggle for AI tool calling
+            'max_tool_iterations': 5,           # Max tool-call loop iterations per message
+            'web_search': {
+                'enabled': True,
+                'max_results': 5,
+                'tavily_api_key': ''  # Empty = use DuckDuckGo (free); set key for Tavily
+            },
+            'docx_formatter': {
+                'enabled': True,
+                'default_font': 'Calibri',
+                'default_font_size': 11,
+                'line_spacing': 1.15,
+                'margins': {'top': 1.0, 'bottom': 1.0, 'left': 1.0, 'right': 1.0},
+                'default_operations': [
+                    'standardize_fonts', 'fix_margins', 'normalize_spacing',
+                    'fix_bullets', 'fix_spelling', 'fix_case', 'normalize_headings'
+                ]
+            }
         }
     }
     
@@ -140,6 +168,7 @@ class SettingsManager:
 
         self._settings = {}
         self._encryption_key = None
+        self._change_callbacks = []  # Observer callbacks for settings changes
 
         self._ensure_settings_dir()
         # Clean up any nested path issues
@@ -147,6 +176,32 @@ class SettingsManager:
         self._initialize_encryption()
         self.load()
         self._log_paths()
+
+    # --- Observer pattern for settings changes ------------------------------------
+
+    def on_change(self, callback) -> None:
+        """Register a callback to be notified when settings change.
+
+        Args:
+            callback: Callable accepting one argument (the dot-notation key that changed).
+        """
+        if callback not in self._change_callbacks:
+            self._change_callbacks.append(callback)
+
+    def remove_change_callback(self, callback) -> None:
+        """Remove a previously registered change callback."""
+        try:
+            self._change_callbacks.remove(callback)
+        except ValueError:
+            pass
+
+    def _notify_change(self, key_path: str) -> None:
+        """Notify all registered callbacks that a setting changed."""
+        for cb in self._change_callbacks:
+            try:
+                cb(key_path)
+            except Exception as e:
+                logger.warning(f"Settings change callback error for key '{key_path}': {e}")
 
     # --- Path / Migration helpers -------------------------------------------------
     def _determine_settings_dir(self) -> Path:
@@ -593,7 +648,8 @@ class SettingsManager:
             parent_dict[final_key] = value
             self.save()
             logger.debug(f"Setting '{key_path}' updated")
-            
+            self._notify_change(key_path)
+
         except Exception as e:
             logger.error(f"Failed to set setting '{key_path}': {e}")
     
@@ -606,6 +662,7 @@ class SettingsManager:
                 del parent_dict[final_key]
                 self.save()
                 logger.debug(f"Setting '{key_path}' deleted")
+                self._notify_change(key_path)
                 
         except Exception as e:
             logger.error(f"Failed to delete setting '{key_path}': {e}")

@@ -7,6 +7,9 @@ to execute skills from natural language input.
 
 import logging
 import re
+import json
+import asyncio
+from functools import lru_cache
 from typing import Dict, List, Optional, Callable, Any
 from dataclasses import dataclass, field
 
@@ -96,8 +99,61 @@ class IntentClassifier(IIntentClassifier):
             r"show\s+(my\s+)?tasks",
             r"(mark|complete|finish)\s+task",
             r"task\s+list",
+            r"(open|show)\s+task\s+(list|panel|manager|control)",
+            r"^tasks$",  # Just "tasks" command
+            r"task\s+manager",
+            r"manage\s+tasks",
+            r"view\s+tasks",
+        ],
+        "skills_help": [
+            r"(show|list|display)\s+(me\s+)?(my\s+)?(skills|tools|capabilities)",
+            r"(what|which)\s+(skills|tools|capabilities)\s+(do\s+(you|i)\s+have|are\s+available)",
+            r"(available|enabled)\s+(skills|tools)",
+            r"how\s+do\s+(skills|tools)\s+work",
+            r"tell\s+me\s+about\s+(your\s+)?(skills|tools|capabilities)",
+            r"help\s+(with\s+)?skills",
+            r"skills?\s+help",
+            r"^skills$",
+            r"^my\s+skills$",
+            r"what\s+can\s+you\s+do",
         ],
     }
+
+    # AI Classification Prompt Template
+    AI_CLASSIFICATION_PROMPT_TEMPLATE = """You are a skill classification assistant for Ghostman, a desktop AI assistant. Analyze the user's request and determine which skill (if any) they want to use.
+
+Available Skills:
+{skill_list}
+
+User Request: "{user_input}"
+
+Instructions:
+1. Determine if the user wants to use one of the available skills
+2. If yes, identify which skill and extract any parameters mentioned
+3. Return ONLY valid JSON (no markdown, no code blocks, no explanations)
+4. If no skill matches, set skill_id to null
+
+Response Format (JSON only):
+{{
+  "skill_id": "skill_identifier_or_null",
+  "confidence": 0.85,
+  "reasoning": "Brief explanation of why you chose this skill",
+  "parameters": {{
+    "param_name": "extracted_value"
+  }}
+}}
+
+Examples:
+User: "take a screenshot"
+{{"skill_id": "screen_capture", "confidence": 0.95, "reasoning": "User requests screenshot", "parameters": {{}}}}
+
+User: "find my report.pdf file"
+{{"skill_id": "file_search", "confidence": 0.90, "reasoning": "User wants to search for a file", "parameters": {{"filename": "report.pdf"}}}}
+
+User: "what's the weather today"
+{{"skill_id": null, "confidence": 0.0, "reasoning": "No matching skill available", "parameters": {{}}}}
+
+Now classify the user's request."""
 
     def __init__(
         self,
@@ -126,9 +182,61 @@ class IntentClassifier(IIntentClassifier):
     def _register_default_patterns(self) -> None:
         """Register default patterns for built-in skills."""
         for skill_id, patterns in self.DEFAULT_PATTERNS.items():
-            self.register_patterns(skill_id, patterns)
+            # Add confidence boost for skills with simple, unambiguous keywords
+            # This ensures single-word triggers like "screenshot" meet the 75% threshold
+            confidence_boost = 0.30 if skill_id in ["screen_capture", "task_tracker", "skills_help"] else 0.0
+
+            # Add parameter extractors for task_tracker (extract action based on pattern)
+            parameter_extractors = {}
+            if skill_id == "task_tracker":
+                parameter_extractors["action"] = self._extract_task_action
+
+            intent_pattern = IntentPattern(
+                skill_id=skill_id,
+                patterns=patterns,
+                confidence_boost=confidence_boost,
+                parameter_extractors=parameter_extractors
+            )
+
+            if skill_id not in self._patterns:
+                self._patterns[skill_id] = []
+
+            self._patterns[skill_id].append(intent_pattern)
 
         logger.debug(f"Registered default patterns for {len(self.DEFAULT_PATTERNS)} skills")
+
+    def _extract_task_action(self, user_input: str) -> str:
+        """
+        Extract the appropriate action for task_tracker skill based on user input.
+
+        Args:
+            user_input: User's input text
+
+        Returns:
+            Action string: 'show', 'list', 'create', etc.
+        """
+        text_lower = user_input.lower().strip()
+
+        # Commands that should open the GUI control panel
+        show_patterns = [
+            "tasks", "task list", "show tasks", "view tasks",
+            "open task", "task panel", "task manager", "manage tasks"
+        ]
+
+        for pattern in show_patterns:
+            if pattern in text_lower:
+                return "show"
+
+        # Commands that should create a new task
+        if any(word in text_lower for word in ["add", "create", "new"]):
+            return "create"
+
+        # Commands that should list tasks (text output)
+        if "list" in text_lower:
+            return "list"
+
+        # Default to show (open GUI)
+        return "show"
 
     async def detect_intent(
         self,
@@ -256,6 +364,8 @@ class IntentClassifier(IIntentClassifier):
         """
         Use AI to classify intent (fallback for ambiguous cases).
 
+        Implements robust error handling, timeout protection, and response validation.
+
         Args:
             user_input: User input text
             context: Optional context
@@ -263,15 +373,271 @@ class IntentClassifier(IIntentClassifier):
         Returns:
             SkillIntent if AI detects intent, None otherwise
         """
-        # TODO: Implement AI-based classification using existing AIService
-        # This would involve:
-        # 1. Construct prompt with available skills and their descriptions
-        # 2. Ask AI which skill (if any) the user wants to use
-        # 3. Extract parameters from response
-        # 4. Return SkillIntent with confidence
+        try:
+            # Check if AI classification is enabled (lazy import settings)
+            from ....storage.settings_manager import settings
 
-        logger.debug("AI fallback not yet implemented")
-        return None
+            if not settings.get('advanced.enable_ai_intent_classification', False):
+                logger.debug("AI intent classification disabled in settings")
+                return None
+
+            # Get configuration
+            timeout_seconds = settings.get('advanced.ai_intent_timeout_seconds', 5)
+            ai_threshold = settings.get('advanced.ai_intent_confidence_threshold', 0.65)
+
+            # Import AIService lazily (avoid circular dependency)
+            from ....ai.ai_service import ai_service
+
+            if not ai_service or not ai_service.is_initialized:
+                logger.warning("AIService not initialized, cannot perform AI classification")
+                return None
+
+            # Format prompt with enabled skills only
+            skill_list = self._format_enabled_skill_list()
+            if not skill_list:
+                logger.debug("No enabled skills to classify")
+                return None
+
+            prompt = self.AI_CLASSIFICATION_PROMPT_TEMPLATE.format(
+                skill_list=skill_list,
+                user_input=user_input[:200]  # Limit input length
+            )
+
+            logger.debug(f"Sending AI classification request (timeout={timeout_seconds}s)")
+
+            # Send request with timeout protection
+            try:
+                # Use asyncio.wait_for to enforce timeout
+                response_text = await asyncio.wait_for(
+                    self._call_ai_service(ai_service, prompt),
+                    timeout=timeout_seconds
+                )
+            except asyncio.TimeoutError:
+                logger.warning(f"AI classification timed out after {timeout_seconds}s")
+                return None
+            except Exception as e:
+                logger.error(f"AI service call failed: {e}")
+                return None
+
+            if not response_text:
+                logger.warning("AI returned empty response")
+                return None
+
+            # Parse and validate JSON response
+            ai_result = self._parse_ai_response(response_text)
+            if not ai_result:
+                return None
+
+            # Extract results
+            skill_id = ai_result.get('skill_id')
+            confidence = float(ai_result.get('confidence', 0.0))
+            reasoning = ai_result.get('reasoning', '')
+            parameters = ai_result.get('parameters', {})
+
+            # Check if AI found a match
+            if not skill_id or skill_id == 'null' or skill_id is None:
+                logger.debug(f"AI found no matching skill: {reasoning}")
+                return None
+
+            # Verify skill exists and is enabled
+            if skill_id not in self._patterns:
+                logger.warning(f"AI suggested invalid/disabled skill_id: {skill_id}")
+                return None
+
+            # Calibrate AI confidence (reduce overconfidence)
+            calibrated_confidence = confidence * 0.85
+
+            # Check confidence threshold
+            if calibrated_confidence < ai_threshold:
+                logger.debug(
+                    f"AI confidence {calibrated_confidence:.2%} below threshold {ai_threshold:.2%}"
+                )
+                return None
+
+            # Validate parameters against skill schema
+            validated_params = self._validate_parameters(skill_id, parameters)
+
+            # Create SkillIntent
+            intent = SkillIntent(
+                skill_id=skill_id,
+                confidence=calibrated_confidence,
+                parameters=validated_params,
+                raw_input=user_input,
+                matched_patterns=[f"AI: {reasoning}"]
+            )
+
+            logger.info(
+                f"✓ AI classified intent: {skill_id} ({calibrated_confidence:.2%}) - {reasoning}"
+            )
+            return intent
+
+        except Exception as e:
+            logger.error(f"AI classification error: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
+            return None
+
+    async def _call_ai_service(self, ai_service, prompt: str) -> Optional[str]:
+        """
+        Call AIService to get classification response.
+
+        Args:
+            ai_service: AIService instance
+            prompt: Classification prompt
+
+        Returns:
+            Response text or None
+        """
+        try:
+            # Call async method (wraps sync version)
+            response_text = await ai_service.send_message_without_system_prompt_async(prompt)
+            return response_text if response_text else None
+        except Exception as e:
+            logger.error(f"AIService call exception: {e}")
+            return None
+
+    def _parse_ai_response(self, response_text: str) -> Optional[Dict[str, Any]]:
+        """
+        Parse and validate AI JSON response.
+
+        Handles markdown code blocks and validates structure.
+
+        Args:
+            response_text: Raw AI response
+
+        Returns:
+            Parsed dict or None if invalid
+        """
+        try:
+            # Clean markdown code blocks
+            cleaned = self._clean_json_response(response_text)
+
+            # Parse JSON
+            ai_result = json.loads(cleaned)
+
+            # Validate structure
+            if not self._validate_ai_response(ai_result):
+                return None
+
+            return ai_result
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse AI response as JSON: {e}")
+            logger.debug(f"Raw response: {response_text[:200]}...")
+            return None
+        except Exception as e:
+            logger.error(f"Error parsing AI response: {e}")
+            return None
+
+    def _clean_json_response(self, text: str) -> str:
+        """
+        Remove markdown code blocks and formatting from AI response.
+
+        Handles:
+        - ```json ... ```
+        - ``` ... ```
+        - Text before/after JSON
+
+        Args:
+            text: Raw response text
+
+        Returns:
+            Cleaned JSON string
+        """
+        # Remove markdown code blocks using regex
+        text = re.sub(r'^```(?:json)?\s*\n?', '', text.strip(), flags=re.MULTILINE)
+        text = re.sub(r'\n?```\s*$', '', text, flags=re.MULTILINE)
+
+        # Try to extract JSON object if embedded in text
+        match = re.search(r'\{[\s\S]*\}', text)
+        if match:
+            return match.group(0).strip()
+
+        return text.strip()
+
+    def _validate_ai_response(self, response: Dict[str, Any]) -> bool:
+        """
+        Validate AI response has required fields and correct types.
+
+        Args:
+            response: Parsed JSON response
+
+        Returns:
+            True if valid, False otherwise
+        """
+        # Check required fields
+        required_fields = ['skill_id', 'confidence']
+        for field in required_fields:
+            if field not in response:
+                logger.warning(f"AI response missing required field: {field}")
+                return False
+
+        # Validate confidence is a number between 0 and 1
+        try:
+            confidence = float(response['confidence'])
+            if not 0.0 <= confidence <= 1.0:
+                logger.warning(f"AI confidence out of range: {confidence}")
+                return False
+        except (ValueError, TypeError):
+            logger.warning(f"AI confidence is not a valid number: {response.get('confidence')}")
+            return False
+
+        # Validate parameters is a dict (if present)
+        if 'parameters' in response and not isinstance(response['parameters'], dict):
+            logger.warning("AI parameters field is not a dictionary")
+            return False
+
+        return True
+
+    def _format_enabled_skill_list(self) -> str:
+        """
+        Format enabled skills for AI prompt.
+
+        Only includes enabled skills to prevent AI from suggesting disabled ones.
+
+        Returns:
+            Formatted skill list string
+        """
+        skills_info = []
+
+        for skill_id, patterns in self._patterns.items():
+            # Get first few patterns as examples
+            example_patterns = patterns[0].patterns[:2] if patterns else []
+            examples = "', '".join(example_patterns)
+
+            skills_info.append(
+                f"- {skill_id}: Triggers on patterns like '{examples}'"
+            )
+
+        if not skills_info:
+            return "No skills available"
+
+        return "\n".join(skills_info)
+
+    def _validate_parameters(self, skill_id: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Validate parameters against skill schema.
+
+        Removes invalid parameters and logs warnings.
+
+        Args:
+            skill_id: Skill identifier
+            parameters: Parameters from AI
+
+        Returns:
+            Validated parameters dict
+        """
+        # For Phase 2: Basic validation (non-empty dict check)
+        # Phase 3: Add schema validation against skill metadata
+
+        if not isinstance(parameters, dict):
+            logger.warning(f"Parameters for {skill_id} not a dict: {type(parameters)}")
+            return {}
+
+        # Remove None values
+        validated = {k: v for k, v in parameters.items() if v is not None}
+
+        return validated
 
     def register_patterns(
         self,

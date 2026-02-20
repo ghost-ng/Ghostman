@@ -6083,7 +6083,7 @@ class REPLWidget(QWidget):
                 }
             
             # Use standard unified styling with special colors if needed
-            logger.info(f"Applying unified icon styling to {button_type} button")
+            logger.debug(f"Applying unified icon styling to {button_type} button")
             ButtonStyleManager.apply_unified_button_style(
                 button, colors, button_type, "icon", "normal", special_colors, emoji_font_stack
             )
@@ -6845,7 +6845,61 @@ class REPLWidget(QWidget):
         except Exception as e:
             logger.error(f"Failed to determine menu icon variant: {e}")
             return "lite"  # Default to lite icons for dark backgrounds
-    
+
+    def _update_icon_sizes(self, size: int):
+        """Update icon sizes for all buttons with icons based on slider value (1-10).
+
+        Args:
+            size: Slider value from 1-10, which maps to pixel size range 4-31
+        """
+        try:
+            # Calculate pixel size from slider value
+            # size 1 -> 4px, size 10 -> 31px
+            base_size = size * 3 + 1
+            icon_size = QSize(base_size, base_size)
+
+            logger.debug(f"Updating icon sizes to {base_size}x{base_size} pixels (slider value: {size})")
+
+            # Title bar buttons with icons
+            title_buttons = [
+                'title_new_conv_btn',    # Plus icon
+                'title_save_btn',        # Save icon
+                'title_help_btn',        # Help icon
+                'help_command_btn',      # Help command icon
+                'title_settings_btn',    # Gear icon
+                'chat_btn',              # Chat icon
+                'attach_btn',            # Chain icon (attach to avatar)
+                'upload_btn',            # File browser icon
+                'search_btn',            # Search icon
+                'move_btn',              # Move icon
+                'pin_btn',               # Pin icon
+                'capture_btn',           # Camera/screenshot icon
+            ]
+
+            # Toolbar buttons with icons
+            toolbar_buttons = [
+                'toolbar_new_conv_btn',  # Plus icon
+                'settings_btn',          # Gear icon
+            ]
+
+            # Combine all buttons
+            all_icon_buttons = title_buttons + toolbar_buttons
+
+            # Update icon size for each button that exists
+            updated_count = 0
+            for button_name in all_icon_buttons:
+                if hasattr(self, button_name):
+                    button = getattr(self, button_name)
+                    if button is not None:
+                        button.setIconSize(icon_size)
+                        updated_count += 1
+                        logger.debug(f"Updated icon size for {button_name}")
+
+            logger.info(f"Successfully updated {updated_count} button icon sizes to {base_size}x{base_size} pixels")
+
+        except Exception as e:
+            logger.error(f"Failed to update icon sizes: {e}", exc_info=True)
+
     def _get_emoji_font_stack(self) -> str:
         """Get a font stack that supports emoji rendering on Windows."""
         # Windows emoji-compatible fonts in priority order
@@ -7889,7 +7943,7 @@ class REPLWidget(QWidget):
             elif message.role == MessageRole.ASSISTANT:
                 # AI messages - show with timestamp and proper markdown rendering
                 timestamp = message.timestamp.strftime("%m/%d %H:%M")
-                self.append_output(f"[{timestamp}] 🤖 AI:", "response")
+                self.append_output(f"[{timestamp}] 👻 AI:", "response")
                 # Render the AI response with full markdown support (including code blocks)
                 self.append_output(message.content, "response")
             
@@ -8292,8 +8346,14 @@ class REPLWidget(QWidget):
                 self.append_output("  test_markdown - Test markdown rendering with examples", "info")
                 self.append_output("  test_themes - Test all theme switching and rendering", "info")
             
+            self.append_output("", "info")
+            self.append_output("Skills commands:", "info")
+            self.append_output("  skills   - Show available AI skills and tools", "info")
             self.append_output("\nAny other input will be sent to the AI assistant.", "info")
-        
+
+        elif command_lower in ("skills", "show skills"):
+            self._show_skills_help()
+
         elif command_lower == "clear":
             self.clear_output()
             self.append_output("Output cleared", "system")
@@ -8359,12 +8419,97 @@ class REPLWidget(QWidget):
                 self.append_output("❌ No failed message to resend", "warning")
         
         else:
-            # Send to AI service
-            self._send_to_ai(command)
-            
+            # Check if this is a skill command before sending to AI
+            import asyncio
+            from ...infrastructure.skills.core.skill_manager import skill_manager
+
+            # Try to detect skill intent
+            skill_detected = False
+            try:
+                # Run async skill detection with a fresh event loop
+                # (Qt thread may not have a running asyncio loop)
+                loop = asyncio.new_event_loop()
+                try:
+                    intent = loop.run_until_complete(skill_manager.detect_intent(command))
+
+                    if intent:
+                        # Special case: skills_help is handled locally, not as a skill execution
+                        if intent.skill_id == "skills_help":
+                            skill_detected = True
+                            self._show_skills_help()
+                            loop.close()
+                            self._trigger_autosave_soon()
+                            return
+
+                        # Skill detected! Execute it
+                        skill_detected = True
+                        logger.info(f"✓ Skill detected: {intent.skill_id} ({intent.confidence:.2%})")
+                        self.append_output(f"🔧 **Executing skill: {intent.skill_id}**", "system")
+
+                        # Execute skill
+                        try:
+                            result = loop.run_until_complete(
+                                skill_manager.execute_skill(
+                                    intent.skill_id,
+                                    **intent.parameters
+                                )
+                            )
+
+                            if result.success:
+                                self.append_output(f"✅ {result.message}", "system")
+                                if result.data:
+                                    # Display skill result data
+                                    for key, value in result.data.items():
+                                        self.append_output(f"  • {key}: {value}", "info")
+                            else:
+                                self.append_output(f"❌ Skill failed: {result.message}", "error")
+                                if result.error:
+                                    self.append_output(f"  Error: {result.error}", "error")
+
+                        except Exception as e:
+                            logger.error(f"Skill execution failed: {e}", exc_info=True)
+                            self.append_output(f"❌ Skill execution error: {str(e)}", "error")
+                finally:
+                    loop.close()
+
+            except Exception as e:
+                logger.warning(f"Skill detection failed: {e}")
+                # Fall through to send to AI
+
+            # If no skill detected, send to AI service
+            if not skill_detected:
+                self._send_to_ai(command)
+
             # Trigger autosave after user sends a message
             self._trigger_autosave_soon()
-    
+
+    def _show_skills_help(self):
+        """Display a formatted list of available skills."""
+        try:
+            from ...infrastructure.skills.core.skill_manager import skill_manager
+            from ...infrastructure.storage.settings_manager import settings
+
+            skills = skill_manager.list_skills()
+            if not skills:
+                self.append_output("No skills are currently registered.", "info")
+                return
+
+            lines = ["## Available Skills\n"]
+            for meta in skills:
+                enabled = settings.get(f"tools.{meta.skill_id}.enabled", True)
+                icon = "\u2705" if enabled else "\u2b1c"
+                lines.append(f"- {icon} **{meta.name}** \u2014 {meta.description}")
+
+            lines.append("")
+            lines.append(
+                '*Ask me about any skill for more details, '
+                'e.g. "how does web search work?"*'
+            )
+            self.append_output("\n".join(lines), "system")
+        except Exception as e:
+            logger.error(f"Failed to show skills help: {e}")
+            self.append_output("Could not load skills list.", "error")
+
     def append_output(self, text: str, style: str = "normal", force_plain: bool = False):
         """
         Append text to the output display with advanced markdown rendering and styling.
@@ -8810,6 +8955,7 @@ def test_theme():
         # Create enhanced AI worker thread
         class EnhancedAIWorker(QObject):
             response_received = pyqtSignal(str, bool)  # response, success
+            tool_status_changed = pyqtSignal(str, str, dict)  # status, skill_id, details
 
             def __init__(self, message, conversation_manager, current_conversation, rag_session=None, conversation_id=None, file_browser_bar=None, collection_tags=None, url_mentions=None):
                 super().__init__()
@@ -8860,9 +9006,10 @@ def test_theme():
                             
                             # Send message with full conversation context for strict file isolation
                             result = ai_service.send_message(
-                                enhanced_message, 
+                                enhanced_message,
                                 save_conversation=True,
-                                conversation_context=conversation_context
+                                conversation_context=conversation_context,
+                                tool_status_callback=self._emit_tool_status
                             )
                             
                             if result.get('success', False):
@@ -8895,7 +9042,7 @@ def test_theme():
                     
                     # Send message to basic AI service (without conversation context)
                     logger.debug("Sent Message: %s", enhanced_message)
-                    result = ai_service.send_message(enhanced_message)
+                    result = ai_service.send_message(enhanced_message, tool_status_callback=self._emit_tool_status)
                     
                     if result.get('success', False):
                         response_content = result['response']
@@ -8916,12 +9063,17 @@ def test_theme():
                     friendly_error = self._get_user_friendly_error(str(e))
                     self.response_received.emit(friendly_error, False)
             
+            def _emit_tool_status(self, status: str, skill_id: str, details: dict):
+                """Emit tool status signal (thread-safe via Qt signal)."""
+                try:
+                    self.tool_status_changed.emit(status, skill_id, details)
+                except Exception:
+                    pass
+
             def _enhance_message_with_file_context(self, message: str) -> str:
                 """Enhance message with file context using SafeRAG pipeline."""
-                print(f"🔍 PRINT DEBUG: _enhance_message_with_file_context called with message: '{message[:50]}...'")
-                logger.info(f"🔍 DEBUG: _enhance_message_with_file_context called with message: '{message[:50]}...'")
-                logger.info(f"🔍 DEBUG: rag_session present: {self.rag_session is not None}")
-                print(f"🔍 PRINT DEBUG: rag_session present: {self.rag_session is not None}")
+                logger.debug(f"_enhance_message_with_file_context called with message: '{message[:50]}...'")
+                logger.debug(f"rag_session present: {self.rag_session is not None}")
                 
                 if not self.rag_session:
                     logger.info("🔍 DEBUG: No RAG session available, returning original message")
@@ -9270,11 +9422,62 @@ def test_theme():
         self.ai_worker.response_received.connect(self._on_ai_response)
         self.ai_worker.response_received.connect(self.ai_thread.quit)
         self.ai_worker.response_received.connect(self.ai_worker.deleteLater)
+        self.ai_worker.tool_status_changed.connect(self._on_tool_status_changed)
         self.ai_thread.finished.connect(self._cleanup_ai_thread)
         
         # Start processing
         self.ai_thread.start()
     
+    def _on_tool_status_changed(self, status: str, skill_id: str, details: dict):
+        """Handle tool execution status updates from the AI worker thread."""
+        if not self.output_display:
+            return
+        try:
+            friendly_name = skill_id.replace("_", " ").title()
+            if status == "executing":
+                # Show a temporary tool-execution indicator
+                args_preview = ""
+                if details:
+                    first_val = next(iter(details.values()), None)
+                    if first_val and isinstance(first_val, str):
+                        args_preview = f": {first_val[:60]}"
+                # Add a temporary widget that we can remove later
+                self._add_tool_status_widget(skill_id, friendly_name, args_preview)
+            elif status == "completed":
+                # Remove the temporary running widget
+                self._remove_tool_status_widget(skill_id)
+                success_flag = details.get("success", False)
+                msg = details.get("message", "")
+                if success_flag:
+                    self.append_output(f"✅ **{friendly_name}** — {msg}", "system")
+                else:
+                    self.append_output(f"❌ **{friendly_name}** failed — {msg}", "error")
+        except Exception as e:
+            logger.warning(f"Tool status display error: {e}")
+
+    def _add_tool_status_widget(self, skill_id: str, friendly_name: str, args_preview: str):
+        """Add a temporary tool-running indicator to the output display."""
+        try:
+            display = self.output_display
+            if not display:
+                return
+            display.add_tool_status(
+                skill_id,
+                f"  \U0001f527 Running {friendly_name}{args_preview}...",
+            )
+        except Exception as e:
+            logger.debug(f"Could not add tool status widget: {e}")
+
+    def _remove_tool_status_widget(self, skill_id: str):
+        """Remove a temporary tool-running indicator."""
+        try:
+            display = self.output_display
+            if not display:
+                return
+            display.remove_tool_status(skill_id)
+        except Exception as e:
+            logger.debug(f"Could not remove tool status widget: {e}")
+
     def _on_ai_response(self, response: str, success: bool):
         """Handle AI response with conversation management."""
         # Log all AI responses for debugging
@@ -9307,7 +9510,7 @@ def test_theme():
             
             # Display AI response with better separation
             try:
-                self.append_output("🤖 **Spector:**", "response")
+                self.append_output("👻 **Spector:**", "response")
                 # Display the actual response without prefixing to preserve markdown
                 self.append_output(response, "response")
                 # Add spacing after AI response
@@ -9318,7 +9521,7 @@ def test_theme():
                 # Try fallback plain text display
                 try:
                     if self.output_display:
-                        self.output_display.add_plain_text(f"🤖 Spector: {response}", "response")
+                        self.output_display.add_plain_text(f"👻 Spector: {response}", "response")
                 except Exception as e2:
                     logger.error(f"Fallback display also failed: {e2}", exc_info=True)
             
@@ -9651,7 +9854,7 @@ def test_theme():
                             clean_content = html.unescape(message.content)
 
                             # Display assistant message with role label, matching normal conversation format
-                            self.append_output("🤖 **Spector:**", "response")
+                            self.append_output("👻 **Spector:**", "response")
                             self.append_output(clean_content, "response")
                             # Add spacing and divider after assistant message (matching active REPL format)
                             self.append_output("", "normal")

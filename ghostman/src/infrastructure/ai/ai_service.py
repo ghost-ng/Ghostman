@@ -294,17 +294,21 @@ class AIService:
         )
     
     def send_message(
-        self, 
+        self,
         message: str,
-        stream: bool = False
+        stream: bool = False,
+        tool_status_callback: Optional[Callable[[str, str, Dict[str, Any]], None]] = None
     ) -> Dict[str, Any]:
         """
         Send a message to the AI and get a response.
-        
+
         Args:
             message: User message to send
             stream: Whether to stream the response (not implemented yet)
-            
+            tool_status_callback: Optional callback for tool execution status.
+                Called with (status, skill_id, details) where status is
+                "executing" or "completed".
+
         Returns:
             Dict with response information including 'success', 'response', 'error'
         """
@@ -367,6 +371,44 @@ class AIService:
                             logger.info(f"Using user-specified max_tokens {current_max_tokens} for {model_name} (no artificial cap)")
                             # Keep the original max_tokens value - don't cap it
             
+            # Get tool definitions if tools are enabled
+            provider_format = None
+            tool_definitions = None
+            if settings.get('tools.enabled', True):
+                try:
+                    from ..skills.core.tool_bridge import tool_bridge
+                    from ..skills.core.skill_manager import skill_manager
+                    provider_format = tool_bridge.detect_provider(
+                        self._config.get('base_url', '')
+                    )
+                    tool_definitions = tool_bridge.get_tool_definitions(
+                        skill_manager.registry, provider_format
+                    )
+                    if tool_definitions:
+                        api_params['tools'] = tool_definitions
+                        logger.info(
+                            f"Attached {len(tool_definitions)} tool definitions "
+                            f"({provider_format} format)"
+                        )
+
+                        # Inject tool awareness into system prompt so the AI
+                        # knows it has tools and won't refuse file paths
+                        tool_awareness = tool_bridge.build_tool_awareness_prompt(
+                            skill_manager.registry
+                        )
+                        if tool_awareness:
+                            for msg in api_messages:
+                                if msg.get("role") == "system":
+                                    msg["content"] = tool_awareness + "\n\n" + msg["content"]
+                                    break
+                            else:
+                                api_messages.insert(0, {
+                                    "role": "system",
+                                    "content": tool_awareness,
+                                })
+                except Exception as e:
+                    logger.warning(f"Could not load tool definitions: {e}")
+
             # Make API request
             response = self.client.chat_completion(**api_params)
             
@@ -376,7 +418,137 @@ class AIService:
                 logger.info(f"🔍 GPT-5 RAW RESPONSE - Status code: {response.status_code}")
                 logger.info(f"🔍 GPT-5 RAW RESPONSE - Data keys: {list(response.data.keys()) if response.data else None}")
                 logger.info(f"🔍 GPT-5 RAW RESPONSE - Full data: {response.data}")
-            
+
+            # Tool-call loop: if the model returned tool calls, execute them
+            # and feed results back until the model produces a final text reply.
+            if response.success and tool_definitions and provider_format:
+                from ..skills.core.tool_bridge import tool_bridge
+                from ..skills.core.skill_manager import skill_manager
+                max_iterations = settings.get('tools.max_tool_iterations', 5)
+                iteration = 0
+
+                while (response.success
+                       and iteration < max_iterations
+                       and tool_bridge.is_tool_call_response(
+                           response.data, provider_format)):
+
+                    iteration += 1
+                    logger.info(
+                        f"Tool call detected (iteration {iteration}/{max_iterations})"
+                    )
+
+                    # Parse tool calls from response
+                    tool_calls = tool_bridge.parse_tool_calls(
+                        response.data, provider_format
+                    )
+                    if not tool_calls:
+                        break
+
+                    # Append the assistant's tool-call message to the
+                    # in-memory api_messages list (NOT to self.conversation).
+                    assistant_msg = tool_bridge.format_assistant_tool_call_message(
+                        response.data, provider_format
+                    )
+                    api_messages.append(assistant_msg)
+
+                    # Execute each tool call and collect results
+                    import asyncio
+                    tool_results = []
+                    loop = asyncio.new_event_loop()
+                    try:
+                        for tc in tool_calls:
+                            logger.info(
+                                f"Executing tool: {tc['skill_id']} "
+                                f"(call_id: {tc['id']})"
+                            )
+                            # Notify callback: tool is starting
+                            if tool_status_callback:
+                                try:
+                                    tool_status_callback(
+                                        "executing", tc['skill_id'],
+                                        tc.get('arguments', {})
+                                    )
+                                except Exception:
+                                    pass
+                            try:
+                                result = loop.run_until_complete(
+                                    skill_manager.execute_skill(
+                                        tc['skill_id'],
+                                        skip_confirmation=True,
+                                        **tc['arguments']
+                                    )
+                                )
+                                logger.info(
+                                    f"Tool result: success={result.success}, "
+                                    f"message={result.message}"
+                                )
+                            except Exception as e:
+                                logger.error(f"Tool execution failed: {e}")
+                                from ..skills.interfaces.base_skill import SkillResult
+                                result = SkillResult(
+                                    success=False,
+                                    message=f"Tool execution failed: {str(e)}",
+                                    error=str(e)
+                                )
+                            # Notify callback: tool finished
+                            if tool_status_callback:
+                                try:
+                                    tool_status_callback(
+                                        "completed", tc['skill_id'],
+                                        {"success": result.success,
+                                         "message": result.message}
+                                    )
+                                except Exception:
+                                    pass
+                            tool_results.append((tc, result))
+                    finally:
+                        loop.close()
+
+                    # Append tool results to conversation
+                    if provider_format == "anthropic" and len(tool_results) > 1:
+                        # Anthropic: batch all tool results into one user message
+                        result_blocks = []
+                        import json as _json
+                        for tc, result in tool_results:
+                            result_blocks.append({
+                                "type": "tool_result",
+                                "tool_use_id": tc["id"],
+                                "content": _json.dumps({
+                                    "success": result.success,
+                                    "message": result.message,
+                                    "data": result.data,
+                                }, default=str),
+                            })
+                        api_messages.append({"role": "user", "content": result_blocks})
+                    else:
+                        # OpenAI or single Anthropic result: append individually
+                        for tc, result in tool_results:
+                            tool_result_msg = tool_bridge.format_tool_result(
+                                tc['id'], result, provider_format
+                            )
+                            api_messages.append(tool_result_msg)
+
+                    # Re-call the API with updated messages
+                    # including tool results
+                    api_params['messages'] = api_messages
+                    response = self.client.chat_completion(**api_params)
+
+                if iteration > 0:
+                    logger.info(
+                        f"Tool-call loop completed after {iteration} iteration(s)"
+                    )
+                    # If we hit max iterations and response still has tool calls,
+                    # log a warning. The final response will be processed normally
+                    # which may produce a partial or empty text response.
+                    if (iteration >= max_iterations and response.success
+                            and tool_bridge.is_tool_call_response(
+                                response.data, provider_format)):
+                        logger.warning(
+                            f"Tool-call loop exhausted max iterations "
+                            f"({max_iterations}). Response may still contain "
+                            f"tool calls instead of final text."
+                        )
+
             if response.success:
                 # Extract response content
                 assistant_message = self._extract_response_content(response.data)

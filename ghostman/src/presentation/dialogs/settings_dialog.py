@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QLabel, QLineEdit, QPushButton, QComboBox, QTextEdit,
     QGroupBox, QFormLayout, QCheckBox, QSpinBox, QDoubleSpinBox,
     QFileDialog, QMessageBox, QSplitter, QListWidget, QListWidgetItem,
-    QAbstractSpinBox
+    QAbstractSpinBox, QSlider, QInputDialog
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QStandardPaths, QTimer
 from PyQt6.QtGui import QFont, QIcon
@@ -59,15 +59,12 @@ class SettingsDialog(QDialog):
         self.resize(600, 500)
         # Non-modal tool window that doesn't block main app interaction
         self.setWindowFlags(
-            Qt.WindowType.Window | 
-            Qt.WindowType.WindowCloseButtonHint | 
+            Qt.WindowType.Window |
+            Qt.WindowType.WindowCloseButtonHint |
             Qt.WindowType.WindowMinimizeButtonHint |
             Qt.WindowType.WindowStaysOnTopHint
         )
-        
-        # Apply theme styling
-        self._apply_theme()
-        
+
         # Main layout
         layout = QVBoxLayout(self)
         
@@ -80,6 +77,7 @@ class SettingsDialog(QDialog):
         self._create_interface_tab()
         self._create_font_tab()
         self._create_advanced_tab()
+        self._create_tools_tab()
         self._create_pki_tab()
         
         # Buttons layout
@@ -111,7 +109,10 @@ class SettingsDialog(QDialog):
         button_layout.addWidget(self.ok_btn)
         
         layout.addLayout(button_layout)
-        
+
+        # Apply theme styling AFTER all widgets are created
+        self._apply_theme()
+
         logger.debug("Settings UI initialized")
     
     def _create_ai_model_tab(self):
@@ -370,9 +371,41 @@ class SettingsDialog(QDialog):
         opacity_layout.addWidget(self.opacity_percent_spin)
         opacity_layout.addWidget(self.opacity_increase_btn)
         opacity_layout.addStretch()
-        
+
         appearance_layout.addRow("Panel Opacity (%):", opacity_layout)
 
+        # Icon size slider (1-10)
+        icon_size_layout = QHBoxLayout()
+
+        # Decrease button
+        self.icon_size_decrease_btn = QPushButton("-")
+        self.icon_size_decrease_btn.setMaximumWidth(20)
+        self.icon_size_decrease_btn.clicked.connect(lambda: self._adjust_icon_size(-1))
+
+        # Icon size slider
+        self.icon_size_slider = QSlider(Qt.Orientation.Horizontal)
+        self.icon_size_slider.setRange(1, 10)
+        self.icon_size_slider.setValue(5)
+        self.icon_size_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.icon_size_slider.setTickInterval(1)
+        self.icon_size_slider.valueChanged.connect(self._on_icon_size_changed)
+
+        # Icon size label (shows current value)
+        self.icon_size_label = QLabel("5")
+        self.icon_size_label.setMinimumWidth(20)
+        self.icon_size_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        # Increase button
+        self.icon_size_increase_btn = QPushButton("+")
+        self.icon_size_increase_btn.setMaximumWidth(20)
+        self.icon_size_increase_btn.clicked.connect(lambda: self._adjust_icon_size(1))
+
+        icon_size_layout.addWidget(self.icon_size_decrease_btn)
+        icon_size_layout.addWidget(self.icon_size_slider)
+        icon_size_layout.addWidget(self.icon_size_label)
+        icon_size_layout.addWidget(self.icon_size_increase_btn)
+
+        appearance_layout.addRow("Icon Size:", icon_size_layout)
 
         layout.addWidget(appearance_group)
 
@@ -388,6 +421,52 @@ class SettingsDialog(QDialog):
         behavior_layout.addRow("", self.close_to_tray_check)
 
         layout.addWidget(behavior_group)
+
+        # Screen Capture Group
+        screen_capture_group = QGroupBox("Screen Capture")
+        screen_capture_layout = QFormLayout(screen_capture_group)
+
+        # Default save location
+        save_location_layout = QHBoxLayout()
+        self.screen_capture_path_edit = QLineEdit()
+        self.screen_capture_path_edit.setPlaceholderText("Default: %APPDATA%\\Ghostman\\captures")
+        save_location_layout.addWidget(self.screen_capture_path_edit)
+
+        self.browse_capture_path_btn = QPushButton("Browse...")
+        self.browse_capture_path_btn.clicked.connect(self._browse_capture_path)
+        save_location_layout.addWidget(self.browse_capture_path_btn)
+
+        screen_capture_layout.addRow("Default Save Location:", save_location_layout)
+
+        # Border color picker
+        border_color_layout = QHBoxLayout()
+        self.border_color_btn = QPushButton()
+        self.border_color_btn.setMaximumWidth(60)
+        self.border_color_btn.clicked.connect(self._pick_border_color)
+        border_color_layout.addWidget(self.border_color_btn)
+
+        # Color presets
+        preset_colors = [
+            ("#FF0000", "Red"),
+            ("#0000FF", "Blue"),
+            ("#00FF00", "Green"),
+            ("#FFFF00", "Yellow"),
+            ("#FFFFFF", "White"),
+            ("#000000", "Black")
+        ]
+
+        for color_hex, color_name in preset_colors:
+            preset_btn = QPushButton()
+            preset_btn.setMaximumWidth(30)
+            preset_btn.setStyleSheet(f"background-color: {color_hex}; border: 1px solid #888;")
+            preset_btn.setToolTip(color_name)
+            preset_btn.clicked.connect(lambda checked, c=color_hex: self._set_border_color(c))
+            border_color_layout.addWidget(preset_btn)
+
+        border_color_layout.addStretch()
+        screen_capture_layout.addRow("Border Color:", border_color_layout)
+
+        layout.addWidget(screen_capture_group)
 
         layout.addStretch()
         self.tab_widget.addTab(tab, "Interface")
@@ -731,7 +810,46 @@ class SettingsDialog(QDialog):
         current_opacity = self.opacity_percent_spin.value()
         new_opacity = max(10, min(100, current_opacity + delta))
         self.opacity_percent_spin.setValue(new_opacity)
-    
+
+    def _adjust_icon_size(self, delta):
+        """Adjust icon size by the given delta."""
+        current_size = self.icon_size_slider.value()
+        new_size = max(1, min(10, current_size + delta))
+        self.icon_size_slider.setValue(new_size)
+
+    def _on_icon_size_changed(self, value: int):
+        """Handle icon size changes for immediate visual feedback."""
+        # Update the label to show current value
+        self.icon_size_label.setText(str(value))
+        logger.debug(f"Icon size changed: {value}")
+
+        # Emit signal for live preview (REPL widget can connect to this)
+        # For now, just apply immediately via settings
+        try:
+            from ...infrastructure.storage.settings_manager import settings
+            settings.set('interface.icon_size', value)
+
+            # Trigger immediate icon size update in REPL
+            self._apply_icon_size_immediately(value)
+        except Exception as e:
+            logger.error(f"Failed to apply icon size: {e}")
+
+    def _apply_icon_size_immediately(self, size: int):
+        """Apply icon size changes immediately to the REPL widget."""
+        try:
+            # Get the main window's REPL widget
+            from ...application.app_coordinator import get_app_coordinator
+            coordinator = get_app_coordinator()
+
+            if coordinator and hasattr(coordinator, '_main_window') and coordinator._main_window:
+                main_window = coordinator._main_window
+                if hasattr(main_window, 'repl_widget') and main_window.repl_widget:
+                    # Update icon sizes in REPL widget
+                    main_window.repl_widget._update_icon_sizes(size)
+                    logger.debug(f"Applied icon size {size} to REPL widget")
+        except Exception as e:
+            logger.warning(f"Could not apply icon size immediately: {e}")
+
     def _adjust_log_retention(self, delta):
         """Adjust log retention days by the given delta."""
         current_retention = self.log_retention_spin.value()
@@ -882,32 +1000,78 @@ class SettingsDialog(QDialog):
                 # Apply scroll bar styling to the dialog
                 self.setStyleSheet(self.styleSheet() + scrollbar_style)
                 
-                # Style the spinboxes to remove arrows and look cleaner
+                # Style spinboxes with visible, theme-aware up/down buttons
                 spinbox_style = f"""
-                QSpinBox {{
+                QSpinBox, QDoubleSpinBox {{
                     background-color: {colors.background_tertiary};
                     color: {colors.text_primary};
                     border: 1px solid {colors.border_primary};
                     border-radius: 4px;
                     padding: 4px 8px;
                     min-width: 60px;
+                    min-height: 24px;
                 }}
-                QSpinBox:focus {{
+                QSpinBox:focus, QDoubleSpinBox:focus {{
                     border-color: {colors.primary};
                 }}
-                QSpinBox::up-button, QSpinBox::down-button {{
-                    width: 0px;
-                    border: none;
+                QSpinBox::up-button, QDoubleSpinBox::up-button {{
+                    subcontrol-origin: border;
+                    subcontrol-position: top right;
+                    width: 20px;
+                    border-left: 1px solid {colors.border_primary};
+                    border-bottom: 1px solid {colors.border_primary};
+                    border-top-right-radius: 4px;
+                    background-color: {colors.background_secondary};
+                }}
+                QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover {{
+                    background-color: {colors.primary};
+                }}
+                QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{
+                    width: 8px;
+                    height: 8px;
+                    border-left: 3px solid transparent;
+                    border-right: 3px solid transparent;
+                    border-bottom: 5px solid {colors.text_primary};
+                }}
+                QSpinBox::down-button, QDoubleSpinBox::down-button {{
+                    subcontrol-origin: border;
+                    subcontrol-position: bottom right;
+                    width: 20px;
+                    border-left: 1px solid {colors.border_primary};
+                    border-top: 1px solid {colors.border_primary};
+                    border-bottom-right-radius: 4px;
+                    background-color: {colors.background_secondary};
+                }}
+                QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {{
+                    background-color: {colors.primary};
+                }}
+                QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{
+                    width: 8px;
+                    height: 8px;
+                    border-left: 3px solid transparent;
+                    border-right: 3px solid transparent;
+                    border-top: 5px solid {colors.text_primary};
                 }}
                 """
-                
-                # Apply to all spinboxes
-                self.temperature_spin.setStyleSheet(spinbox_style)
-                self.max_tokens_spin.setStyleSheet(spinbox_style)
-                self.opacity_percent_spin.setStyleSheet(spinbox_style)
-                self.ai_font_size_spin.setStyleSheet(spinbox_style)
-                self.user_font_size_spin.setStyleSheet(spinbox_style)
-                self.log_retention_spin.setStyleSheet(spinbox_style)
+
+                # Apply to all spinboxes (including Tools tab)
+                all_spinboxes = [
+                    self.temperature_spin, self.max_tokens_spin,
+                    self.opacity_percent_spin, self.ai_font_size_spin,
+                    self.user_font_size_spin, self.log_retention_spin,
+                ]
+                # Tools tab spinboxes (may not exist if tab not created yet)
+                for attr in [
+                    'tools_max_iterations_spin', 'web_search_max_results_spin',
+                    'docx_font_size_spin', 'docx_line_spacing_spin',
+                    'docx_margin_top_spin', 'docx_margin_bottom_spin',
+                    'docx_margin_left_spin', 'docx_margin_right_spin',
+                    'ai_intent_threshold_slider',
+                ]:
+                    if hasattr(self, attr):
+                        all_spinboxes.append(getattr(self, attr))
+                for spin in all_spinboxes:
+                    spin.setStyleSheet(spinbox_style)
                 
                 # Apply uniform button style to ALL buttons using ButtonStyleManager
                 regular_button_style = ButtonStyleManager.get_unified_button_style(colors, "push", "medium")
@@ -1089,9 +1253,62 @@ class SettingsDialog(QDialog):
             "When enabled, debug commands are shown in the REPL help menu. "
         )
         code_display_layout.addRow("", self.enable_debug_commands_check)
-        
+
         layout.addWidget(code_display_group)
-        
+
+        # AI Intent Classification Group
+        ai_intent_group = QGroupBox("AI-Powered Skill Detection")
+        ai_intent_layout = QFormLayout(ai_intent_group)
+
+        # Enable AI classification checkbox
+        self.enable_ai_intent_check = QCheckBox("Enable AI Fallback for Skill Detection")
+        self.enable_ai_intent_check.setChecked(False)
+        self.enable_ai_intent_check.setToolTip(
+            "When enabled, uses AI to classify ambiguous skill requests when pattern matching confidence is low.\n\n"
+            "⚠️ WARNING: This will add 1-5 second delay to requests with low pattern confidence (<75%).\n"
+            "Only enable if you frequently use natural language that doesn't match predefined patterns."
+        )
+        ai_intent_layout.addRow("", self.enable_ai_intent_check)
+
+        # Performance warning label (shown when enabled)
+        self.ai_intent_warning_label = QLabel(
+            "⚠️ Performance Impact: AI classification adds 1-5 second delay to ambiguous requests."
+        )
+        self.ai_intent_warning_label.setWordWrap(True)
+        self.ai_intent_warning_label.setStyleSheet("QLabel { color: #ff9800; font-weight: bold; padding: 5px; }")
+        self.ai_intent_warning_label.setVisible(False)
+        ai_intent_layout.addRow("", self.ai_intent_warning_label)
+
+        # Connect checkbox to show/hide warning
+        self.enable_ai_intent_check.toggled.connect(self.ai_intent_warning_label.setVisible)
+
+        # Confidence threshold slider (only visible when AI enabled)
+        self.ai_intent_threshold_label = QLabel("AI Confidence Threshold:")
+        self.ai_intent_threshold_slider = QSpinBox()
+        self.ai_intent_threshold_slider.setRange(50, 95)
+        self.ai_intent_threshold_slider.setValue(65)
+        self.ai_intent_threshold_slider.setSuffix("%")
+        self.ai_intent_threshold_slider.setToolTip(
+            "Minimum confidence score (50-95%) for AI to suggest a skill.\n"
+            "Lower = more suggestions but less accurate.\n"
+            "Higher = fewer suggestions but more accurate."
+        )
+
+        ai_intent_layout.addRow(self.ai_intent_threshold_label, self.ai_intent_threshold_slider)
+
+        # Initially hide threshold controls
+        self.ai_intent_threshold_label.setVisible(False)
+        self.ai_intent_threshold_slider.setVisible(False)
+
+        # Show/hide threshold controls based on checkbox
+        def toggle_threshold_visibility(enabled):
+            self.ai_intent_threshold_label.setVisible(enabled)
+            self.ai_intent_threshold_slider.setVisible(enabled)
+
+        self.enable_ai_intent_check.toggled.connect(toggle_threshold_visibility)
+
+        layout.addWidget(ai_intent_group)
+
         # Data Storage Group
         storage_group = QGroupBox("Data Storage")
         storage_layout = QFormLayout(storage_group)
@@ -1131,6 +1348,187 @@ class SettingsDialog(QDialog):
         # Create theme tab
         self._create_theme_tab()
     
+    def _create_tools_tab(self):
+        """Create Tools settings tab for AI tool calling configuration."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        # ── Global Settings Group ──────────────────────────────────────
+        global_group = QGroupBox("Global Tool Settings")
+        global_layout = QFormLayout(global_group)
+
+        self.tools_enabled_check = QCheckBox("Enable AI Tool Calling")
+        self.tools_enabled_check.setChecked(True)
+        self.tools_enabled_check.setToolTip(
+            "Master toggle for all AI tool calling capabilities."
+        )
+        self.tools_enabled_check.stateChanged.connect(self._on_tools_enabled_changed)
+        global_layout.addRow("", self.tools_enabled_check)
+
+        self.tools_max_iterations_spin = QSpinBox()
+        self.tools_max_iterations_spin.setRange(1, 20)
+        self.tools_max_iterations_spin.setValue(5)
+        self.tools_max_iterations_spin.setToolTip(
+            "Maximum number of tool-call loop iterations per message."
+        )
+        global_layout.addRow("Max Tool Iterations:", self.tools_max_iterations_spin)
+
+        layout.addWidget(global_group)
+
+        # ── Web Search Group ───────────────────────────────────────────
+        web_search_group = QGroupBox("Web Search")
+        web_search_layout = QFormLayout(web_search_group)
+
+        self.web_search_enabled_check = QCheckBox("Enable Web Search")
+        self.web_search_enabled_check.setChecked(True)
+        self.web_search_enabled_check.setToolTip(
+            "Allow the AI to perform web searches when answering questions."
+        )
+        self.web_search_enabled_check.stateChanged.connect(self._on_web_search_enabled_changed)
+        web_search_layout.addRow("", self.web_search_enabled_check)
+
+        self.web_search_max_results_spin = QSpinBox()
+        self.web_search_max_results_spin.setRange(1, 20)
+        self.web_search_max_results_spin.setValue(5)
+        self.web_search_max_results_spin.setToolTip(
+            "Maximum number of search results to retrieve per query."
+        )
+        web_search_layout.addRow("Max Results:", self.web_search_max_results_spin)
+
+        # Search provider selection
+        self.web_search_provider_combo = QComboBox()
+        self.web_search_provider_combo.addItem("DuckDuckGo (Free, no API key)")
+        self.web_search_provider_combo.addItem("Tavily (API key required)")
+        self.web_search_provider_combo.setToolTip(
+            "DuckDuckGo is free and requires no setup.\n"
+            "Tavily provides higher-quality AI-optimised results (1,000 free searches/month)."
+        )
+        self.web_search_provider_combo.currentIndexChanged.connect(self._on_search_provider_changed)
+        web_search_layout.addRow("Provider:", self.web_search_provider_combo)
+
+        # Tavily API key (hidden by default, shown when Tavily selected)
+        self.tavily_api_key_edit = QLineEdit()
+        self.tavily_api_key_edit.setPlaceholderText("Enter your Tavily API key")
+        self.tavily_api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.tavily_api_key_edit.setToolTip(
+            "Get a free API key at https://tavily.com (1,000 searches/month free tier)."
+        )
+        self.tavily_api_key_label = QLabel("Tavily API Key:")
+        web_search_layout.addRow(self.tavily_api_key_label, self.tavily_api_key_edit)
+        # Hide Tavily fields by default (DuckDuckGo is selected)
+        self.tavily_api_key_label.setVisible(False)
+        self.tavily_api_key_edit.setVisible(False)
+
+        layout.addWidget(web_search_group)
+
+        # ── Document Formatter Group ───────────────────────────────────
+        docx_group = QGroupBox("Document Formatter")
+        docx_layout = QFormLayout(docx_group)
+
+        self.docx_enabled_check = QCheckBox("Enable Document Formatter")
+        self.docx_enabled_check.setChecked(True)
+        self.docx_enabled_check.setToolTip(
+            "Allow the AI to format and standardize DOCX documents."
+        )
+        self.docx_enabled_check.stateChanged.connect(self._on_docx_enabled_changed)
+        docx_layout.addRow("", self.docx_enabled_check)
+
+        self.docx_font_combo = QComboBox()
+        self.docx_font_combo.addItems([
+            "Calibri", "Arial", "Times New Roman", "Verdana", "Georgia", "Courier New"
+        ])
+        self.docx_font_combo.setCurrentText("Calibri")
+        docx_layout.addRow("Default Font:", self.docx_font_combo)
+
+        self.docx_font_size_spin = QSpinBox()
+        self.docx_font_size_spin.setRange(8, 28)
+        self.docx_font_size_spin.setValue(11)
+        docx_layout.addRow("Font Size:", self.docx_font_size_spin)
+
+        self.docx_line_spacing_spin = QDoubleSpinBox()
+        self.docx_line_spacing_spin.setRange(0.5, 3.0)
+        self.docx_line_spacing_spin.setSingleStep(0.05)
+        self.docx_line_spacing_spin.setDecimals(2)
+        self.docx_line_spacing_spin.setValue(1.15)
+        docx_layout.addRow("Line Spacing:", self.docx_line_spacing_spin)
+
+        # Margins sub-group
+        margins_group = QGroupBox("Margins")
+        margins_layout = QFormLayout(margins_group)
+
+        self.docx_margin_top_spin = QDoubleSpinBox()
+        self.docx_margin_top_spin.setRange(0.0, 3.0)
+        self.docx_margin_top_spin.setSingleStep(0.1)
+        self.docx_margin_top_spin.setDecimals(2)
+        self.docx_margin_top_spin.setValue(1.0)
+        self.docx_margin_top_spin.setSuffix(" in")
+        margins_layout.addRow("Top:", self.docx_margin_top_spin)
+
+        self.docx_margin_bottom_spin = QDoubleSpinBox()
+        self.docx_margin_bottom_spin.setRange(0.0, 3.0)
+        self.docx_margin_bottom_spin.setSingleStep(0.1)
+        self.docx_margin_bottom_spin.setDecimals(2)
+        self.docx_margin_bottom_spin.setValue(1.0)
+        self.docx_margin_bottom_spin.setSuffix(" in")
+        margins_layout.addRow("Bottom:", self.docx_margin_bottom_spin)
+
+        self.docx_margin_left_spin = QDoubleSpinBox()
+        self.docx_margin_left_spin.setRange(0.0, 3.0)
+        self.docx_margin_left_spin.setSingleStep(0.1)
+        self.docx_margin_left_spin.setDecimals(2)
+        self.docx_margin_left_spin.setValue(1.0)
+        self.docx_margin_left_spin.setSuffix(" in")
+        margins_layout.addRow("Left:", self.docx_margin_left_spin)
+
+        self.docx_margin_right_spin = QDoubleSpinBox()
+        self.docx_margin_right_spin.setRange(0.0, 3.0)
+        self.docx_margin_right_spin.setSingleStep(0.1)
+        self.docx_margin_right_spin.setDecimals(2)
+        self.docx_margin_right_spin.setValue(1.0)
+        self.docx_margin_right_spin.setSuffix(" in")
+        margins_layout.addRow("Right:", self.docx_margin_right_spin)
+
+        docx_layout.addRow(margins_group)
+
+        # Default operations checkboxes
+        ops_group = QGroupBox("Default Operations")
+        ops_layout = QVBoxLayout(ops_group)
+
+        self.docx_op_fonts_check = QCheckBox("Standardize Fonts")
+        self.docx_op_fonts_check.setChecked(True)
+        ops_layout.addWidget(self.docx_op_fonts_check)
+
+        self.docx_op_margins_check = QCheckBox("Fix Margins")
+        self.docx_op_margins_check.setChecked(True)
+        ops_layout.addWidget(self.docx_op_margins_check)
+
+        self.docx_op_spacing_check = QCheckBox("Normalize Spacing")
+        self.docx_op_spacing_check.setChecked(True)
+        ops_layout.addWidget(self.docx_op_spacing_check)
+
+        self.docx_op_bullets_check = QCheckBox("Fix Bullets")
+        self.docx_op_bullets_check.setChecked(True)
+        ops_layout.addWidget(self.docx_op_bullets_check)
+
+        self.docx_op_spelling_check = QCheckBox("Fix Spelling")
+        self.docx_op_spelling_check.setChecked(True)
+        ops_layout.addWidget(self.docx_op_spelling_check)
+
+        self.docx_op_case_check = QCheckBox("Fix Case")
+        self.docx_op_case_check.setChecked(True)
+        ops_layout.addWidget(self.docx_op_case_check)
+
+        self.docx_op_headings_check = QCheckBox("Normalize Headings")
+        self.docx_op_headings_check.setChecked(True)
+        ops_layout.addWidget(self.docx_op_headings_check)
+
+        docx_layout.addRow(ops_group)
+
+        layout.addWidget(docx_group)
+
+        layout.addStretch()
+        self.tab_widget.addTab(tab, "Tools")
+
     def _create_pki_tab(self):
         """Create PKI Authentication settings tab."""
         try:
@@ -2061,7 +2459,7 @@ class SettingsDialog(QDialog):
             import json
             from PyQt6.QtWidgets import QFileDialog, QMessageBox
 
-            # Gather AI model settings only (not general application settings)
+            # Gather AI model settings and AI-related advanced settings
             ai_config = {
                 "ai_model": {
                     "model_name": self.model_name_edit.text(),
@@ -2070,6 +2468,11 @@ class SettingsDialog(QDialog):
                     "temperature": self.temperature_spin.value(),
                     "max_tokens": self.max_tokens_spin.value(),
                     "system_prompt": self.user_prompt_edit.toPlainText()
+                },
+                "advanced": {
+                    "enable_ai_intent_classification": self.enable_ai_intent_check.isChecked(),
+                    "ai_intent_confidence_threshold": self.ai_intent_threshold_slider.value() / 100.0,
+                    "ai_intent_timeout_seconds": 5
                 }
             }
 
@@ -2187,13 +2590,32 @@ class SettingsDialog(QDialog):
             else:
                 logger.debug("  ⚠ system_prompt not found in import file")
 
-            logger.info(f"✅ Import complete: {imported_count}/{len(ai_model)} settings loaded")
+            # Apply advanced AI settings if present
+            if "advanced" in ai_config:
+                advanced = ai_config["advanced"]
+                logger.info(f"Found advanced settings section with {len(advanced)} keys")
+
+                if "enable_ai_intent_classification" in advanced:
+                    value = advanced["enable_ai_intent_classification"]
+                    self.enable_ai_intent_check.setChecked(bool(value))
+                    logger.debug(f"  ✓ Imported enable_ai_intent_classification: {value}")
+                    imported_count += 1
+
+                if "ai_intent_confidence_threshold" in advanced:
+                    value = advanced["ai_intent_confidence_threshold"]
+                    # Convert 0.0-1.0 to 0-100 for slider
+                    slider_value = int(value * 100)
+                    self.ai_intent_threshold_slider.setValue(slider_value)
+                    logger.debug(f"  ✓ Imported ai_intent_confidence_threshold: {value}")
+                    imported_count += 1
+
+            logger.info(f"✅ Import complete: {imported_count} total settings loaded")
             logger.info("=== 📥 IMPORT COMPLETE ===")
             logger.info(f"AI settings imported from: {file_path}")
             QMessageBox.information(
                 self,
                 "Import Successful",
-                f"AI settings have been loaded from:\n{file_path}\n\nClick 'Apply' to save these settings."
+                f"AI settings have been loaded from:\n{file_path}\n\nImported {imported_count} settings.\n\nClick 'Apply' to save these settings."
             )
 
         except json.JSONDecodeError as e:
@@ -2340,7 +2762,51 @@ class SettingsDialog(QDialog):
         self.log_location_edit.setPlaceholderText("Default log location will be used")
         self.log_location_edit.setReadOnly(True)
         logger.debug("Reset to default log location")
-    
+
+    def _browse_capture_path(self):
+        """Browse for screen capture save location."""
+        current_path = self.screen_capture_path_edit.text().strip()
+        if not current_path:
+            # Use default location
+            import os
+            from pathlib import Path
+            appdata = os.environ.get('APPDATA', '')
+            if appdata:
+                current_path = str(Path(appdata) / "Ghostman" / "captures")
+
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "Select Screen Capture Save Directory",
+            current_path
+        )
+
+        if folder:
+            self.screen_capture_path_edit.setText(folder)
+            logger.debug(f"Screen capture save location set to: {folder}")
+
+    def _pick_border_color(self):
+        """Open color picker for border color."""
+        from PyQt6.QtWidgets import QColorDialog
+        from PyQt6.QtGui import QColor
+
+        # Get current color
+        current_color = QColor(getattr(self, '_current_border_color', '#FF0000'))
+
+        # Open color dialog
+        color = QColorDialog.getColor(current_color, self, "Select Border Color")
+
+        if color.isValid():
+            self._set_border_color(color.name())
+
+    def _set_border_color(self, color_hex: str):
+        """Set the border color and update button display."""
+        self._current_border_color = color_hex
+        self.border_color_btn.setStyleSheet(
+            f"background-color: {color_hex}; border: 2px solid #888;"
+        )
+        self.border_color_btn.setText(color_hex.upper())
+        logger.debug(f"Border color set to: {color_hex}")
+
     def _open_log_folder(self):
         """Open the current log folder in file explorer."""
         log_location = self.log_location_edit.text().strip()
@@ -2546,6 +3012,45 @@ class SettingsDialog(QDialog):
                 msg_box.exec()
                 logger.error(f"Failed to load config: {e}")
     
+    # ── Tools tab helpers ───────────────────────────────────────────
+
+    def _on_search_provider_changed(self, index):
+        """Show/hide Tavily API key field based on selected provider."""
+        is_tavily = index == 1
+        self.tavily_api_key_label.setVisible(is_tavily)
+        self.tavily_api_key_edit.setVisible(is_tavily)
+
+    def _get_docx_operations(self):
+        """Return list of operation strings based on checked checkboxes."""
+        ops = []
+        if self.docx_op_fonts_check.isChecked():
+            ops.append("standardize_fonts")
+        if self.docx_op_margins_check.isChecked():
+            ops.append("fix_margins")
+        if self.docx_op_spacing_check.isChecked():
+            ops.append("normalize_spacing")
+        if self.docx_op_bullets_check.isChecked():
+            ops.append("fix_bullets")
+        if self.docx_op_spelling_check.isChecked():
+            ops.append("fix_spelling")
+        if self.docx_op_case_check.isChecked():
+            ops.append("fix_case")
+        if self.docx_op_headings_check.isChecked():
+            ops.append("normalize_headings")
+        return ops
+
+    def _on_tools_enabled_changed(self, state):
+        """Immediately persist the tools enabled toggle."""
+        self.settings_manager.set('tools.enabled', state == Qt.CheckState.Checked.value)
+
+    def _on_web_search_enabled_changed(self, state):
+        """Immediately persist the web search enabled toggle."""
+        self.settings_manager.set('tools.web_search.enabled', state == Qt.CheckState.Checked.value)
+
+    def _on_docx_enabled_changed(self, state):
+        """Immediately persist the document formatter enabled toggle."""
+        self.settings_manager.set('tools.docx_formatter.enabled', state == Qt.CheckState.Checked.value)
+
     def _get_current_config(self) -> Dict[str, Any]:
         """Get current configuration from UI."""
         return {
@@ -2562,6 +3067,7 @@ class SettingsDialog(QDialog):
             "interface": {
                 # Store as integer percent
                 "opacity": int(self.opacity_percent_spin.value()),
+                "icon_size": int(self.icon_size_slider.value()),
                 "start_minimized": self.start_minimized_check.isChecked(),
                 "close_to_tray": self.close_to_tray_check.isChecked()
             },
@@ -2586,7 +3092,36 @@ class SettingsDialog(QDialog):
                 "ignore_ssl_verification": self.ignore_ssl_check.isChecked(),
                 "auto_detect_code_language": self.auto_detect_code_language_check.isChecked(),
                 "enable_code_lexing": self.enable_code_lexing_check.isChecked(),
-                "enable_debug_commands": self.enable_debug_commands_check.isChecked()
+                "enable_debug_commands": self.enable_debug_commands_check.isChecked(),
+                "enable_ai_intent_classification": self.enable_ai_intent_check.isChecked(),
+                "ai_intent_confidence_threshold": self.ai_intent_threshold_slider.value() / 100.0,
+                "ai_intent_timeout_seconds": 5  # Fixed value for now
+            },
+            "screen_capture": {
+                "default_save_path": self.screen_capture_path_edit.text().strip(),
+                "border_color": getattr(self, '_current_border_color', '#FF0000')
+            },
+            "tools": {
+                "enabled": self.tools_enabled_check.isChecked(),
+                "max_tool_iterations": self.tools_max_iterations_spin.value(),
+                "web_search": {
+                    "enabled": self.web_search_enabled_check.isChecked(),
+                    "max_results": self.web_search_max_results_spin.value(),
+                    "tavily_api_key": self.tavily_api_key_edit.text().strip()
+                },
+                "docx_formatter": {
+                    "enabled": self.docx_enabled_check.isChecked(),
+                    "default_font": self.docx_font_combo.currentText(),
+                    "default_font_size": self.docx_font_size_spin.value(),
+                    "line_spacing": self.docx_line_spacing_spin.value(),
+                    "margins": {
+                        "top": self.docx_margin_top_spin.value(),
+                        "bottom": self.docx_margin_bottom_spin.value(),
+                        "left": self.docx_margin_left_spin.value(),
+                        "right": self.docx_margin_right_spin.value()
+                    },
+                    "default_operations": self._get_docx_operations()
+                }
             }
         }
     
@@ -2650,6 +3185,19 @@ class SettingsDialog(QDialog):
                 self.opacity_percent_spin.setValue(op_int)
             except (ValueError, TypeError):
                 self.opacity_percent_spin.setValue(90)  # default
+
+        # Icon size
+        if "icon_size" in interface_config:
+            try:
+                icon_size = int(interface_config["icon_size"])
+                if not (1 <= icon_size <= 10):
+                    icon_size = 5
+                self.icon_size_slider.setValue(icon_size)
+                self.icon_size_label.setText(str(icon_size))
+            except (ValueError, TypeError):
+                self.icon_size_slider.setValue(5)  # default
+                self.icon_size_label.setText("5")
+
         if "start_minimized" in interface_config:
             value = interface_config["start_minimized"]
             if isinstance(value, str):
@@ -2742,7 +3290,62 @@ class SettingsDialog(QDialog):
         
         if "enable_debug_commands" in advanced_config:
             self.enable_debug_commands_check.setChecked(bool(advanced_config["enable_debug_commands"]))
-    
+
+        # AI Intent Classification settings
+        if "enable_ai_intent_classification" in advanced_config:
+            self.enable_ai_intent_check.setChecked(bool(advanced_config["enable_ai_intent_classification"]))
+
+        if "ai_intent_confidence_threshold" in advanced_config:
+            threshold_value = int(advanced_config["ai_intent_confidence_threshold"] * 100)
+            self.ai_intent_threshold_slider.setValue(threshold_value)
+
+        # Screen Capture settings
+        screen_capture_config = config.get("screen_capture", {})
+        if "default_save_path" in screen_capture_config:
+            self.screen_capture_path_edit.setText(str(screen_capture_config["default_save_path"]))
+        if "border_color" in screen_capture_config:
+            border_color = str(screen_capture_config["border_color"])
+            self._set_border_color(border_color)
+
+        # Tools settings
+        tools_config = config.get("tools", {})
+        if tools_config:
+            self.tools_enabled_check.setChecked(tools_config.get("enabled", True))
+            self.tools_max_iterations_spin.setValue(tools_config.get("max_tool_iterations", 5))
+
+            ws = tools_config.get("web_search", {})
+            self.web_search_enabled_check.setChecked(ws.get("enabled", True))
+            self.web_search_max_results_spin.setValue(ws.get("max_results", 5))
+            tavily_key = ws.get("tavily_api_key", "")
+            if tavily_key and isinstance(tavily_key, str) and tavily_key.strip():
+                self.web_search_provider_combo.setCurrentIndex(1)  # Tavily
+                self.tavily_api_key_edit.setText(tavily_key)
+            else:
+                self.web_search_provider_combo.setCurrentIndex(0)  # DuckDuckGo
+
+            df = tools_config.get("docx_formatter", {})
+            self.docx_enabled_check.setChecked(df.get("enabled", True))
+            font_index = self.docx_font_combo.findText(df.get("default_font", "Calibri"))
+            if font_index >= 0:
+                self.docx_font_combo.setCurrentIndex(font_index)
+            self.docx_font_size_spin.setValue(df.get("default_font_size", 11))
+            self.docx_line_spacing_spin.setValue(df.get("line_spacing", 1.15))
+
+            margins = df.get("margins", {})
+            self.docx_margin_top_spin.setValue(margins.get("top", 1.0))
+            self.docx_margin_bottom_spin.setValue(margins.get("bottom", 1.0))
+            self.docx_margin_left_spin.setValue(margins.get("left", 1.0))
+            self.docx_margin_right_spin.setValue(margins.get("right", 1.0))
+
+            operations = df.get("default_operations", [])
+            self.docx_op_fonts_check.setChecked("standardize_fonts" in operations)
+            self.docx_op_margins_check.setChecked("fix_margins" in operations)
+            self.docx_op_spacing_check.setChecked("normalize_spacing" in operations)
+            self.docx_op_bullets_check.setChecked("fix_bullets" in operations)
+            self.docx_op_spelling_check.setChecked("fix_spelling" in operations)
+            self.docx_op_case_check.setChecked("fix_case" in operations)
+            self.docx_op_headings_check.setChecked("normalize_headings" in operations)
+
     def _load_current_settings(self):
         """Load current settings from settings manager."""
         logger.info("=== 📥 LOADING SETTINGS FROM STORAGE ===")
@@ -3060,11 +3663,50 @@ class SettingsDialog(QDialog):
                 border: 1px solid #555555;
                 border-radius: 4px;
                 padding: 5px;
+                min-height: 24px;
             }
             QLineEdit:focus, QTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {
                 border-color: #4CAF50;
             }
-            
+            QSpinBox::up-button, QDoubleSpinBox::up-button {
+                subcontrol-origin: border;
+                subcontrol-position: top right;
+                width: 20px;
+                border-left: 1px solid #555555;
+                border-bottom: 1px solid #555555;
+                border-top-right-radius: 4px;
+                background-color: #3c3c3c;
+            }
+            QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover {
+                background-color: #4CAF50;
+            }
+            QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {
+                width: 8px;
+                height: 8px;
+                border-left: 3px solid transparent;
+                border-right: 3px solid transparent;
+                border-bottom: 5px solid #ffffff;
+            }
+            QSpinBox::down-button, QDoubleSpinBox::down-button {
+                subcontrol-origin: border;
+                subcontrol-position: bottom right;
+                width: 20px;
+                border-left: 1px solid #555555;
+                border-top: 1px solid #555555;
+                border-bottom-right-radius: 4px;
+                background-color: #3c3c3c;
+            }
+            QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
+                background-color: #4CAF50;
+            }
+            QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
+                width: 8px;
+                height: 8px;
+                border-left: 3px solid transparent;
+                border-right: 3px solid transparent;
+                border-top: 5px solid #ffffff;
+            }
+
             /* ComboBox styling */
             QComboBox {
                 background-color: #3c3c3c;
