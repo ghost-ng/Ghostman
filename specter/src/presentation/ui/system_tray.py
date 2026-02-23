@@ -179,12 +179,14 @@ class EnhancedSystemTray(QObject):
     
     def _create_default_icon(self) -> QIcon:
         """Load system tray icon from assets."""
+        # Primary: systray_icon.png in the assets folder
         try:
-            from ...utils.resource_resolver import resolve_asset
-            icon_path = resolve_asset("systray_icon.png")
-            if icon_path:
+            icon_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", "assets", "systray_icon.png"
+            )
+            if os.path.exists(icon_path):
                 logger.debug(f"Loading systray icon from: {icon_path}")
-                return QIcon(str(icon_path))
+                return QIcon(icon_path)
         except Exception as e:
             logger.debug(f"Failed to load systray_icon.png: {e}")
 

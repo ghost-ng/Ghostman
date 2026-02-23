@@ -127,5 +127,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=str(base_path / 'specter' / 'assets' / 'avatar.png') if (base_path / 'specter' / 'assets' / 'avatar.png').exists() else None,
+    icon=str(base_path / 'specter' / 'assets' / 'app_icon.png') if (base_path / 'specter' / 'assets' / 'app_icon.png').exists() else None,
 )

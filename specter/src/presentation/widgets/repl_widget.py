@@ -2745,8 +2745,8 @@ class REPLWidget(QWidget):
         title_layout = QHBoxLayout(self.title_frame)
         # Compensate for main layout's 10px top margin by reducing title layout top margin
         # This makes top (10px main + 0px title = 10px) equal to bottom (10px title)
-        title_layout.setContentsMargins(8, 0, 8, 20) # left, top, right, bottom
-        title_layout.setSpacing(8)  # space in between icon buttons
+        title_layout.setContentsMargins(8, 4, 8, 4) # left, top, right, bottom
+        title_layout.setSpacing(6)  # space in between icon buttons
         
         # New conversation button with menu (with extra padding)
         self.title_new_conv_btn = QToolButton()
@@ -5854,40 +5854,41 @@ class REPLWidget(QWidget):
         )
 
     def _auto_size_button_row(self, buttons, layout, ideal_size, available_width,
-                               non_button_overhead=60, default_spacing=8):
+                               non_button_overhead=60, default_spacing=6):
         """Dynamically adjust a row of buttons based on available width.
 
         Buttons use ``ideal_size`` as their *maximum* size and shrink down
-        when space is tight.  Internal padding (gap between icon edge and
-        button edge) is always preserved so the icons never look cramped.
+        when space is tight.  Spacing scales smoothly between buttons so
+        they stay evenly distributed at any width.
         """
         if not buttons:
             return
         try:
             from PyQt6.QtCore import QSize
             num = len(buttons)
-            needed = num * ideal_size + (num - 1) * default_spacing + non_button_overhead
+            MIN_PADDING = 14  # icon-to-button-border padding (7px each side)
 
-            # Internal padding: keep at least 8px total (4px each side)
-            # between the icon and button edge
-            MIN_PADDING = 8
-
-            if available_width < needed:
-                # Reduce spacing first, then shrink buttons
-                usable = max(
-                    available_width - non_button_overhead - (num - 1) * 2,
-                    num * 16,
-                )
-                btn_size = max(16, min(ideal_size, usable // num))
-                icon_size = max(10, btn_size - MIN_PADDING)
-                if layout:
-                    layout.setSpacing(2)
+            # Use ideal button size, then compute the best uniform spacing
+            btn_size = ideal_size
+            remaining = available_width - non_button_overhead - num * btn_size
+            if num > 1:
+                spacing = max(2, remaining // (num - 1))
             else:
-                btn_size = ideal_size
-                icon_size = max(10, btn_size - MIN_PADDING)
-                if layout:
-                    layout.setSpacing(default_spacing)
+                spacing = default_spacing
 
+            # If spacing would exceed default, cap it and keep buttons at ideal size
+            spacing = min(spacing, default_spacing)
+
+            # If even minimum spacing doesn't fit, shrink buttons
+            if remaining < (num - 1) * 2:
+                usable = max(available_width - non_button_overhead - (num - 1) * 2, num * 16)
+                btn_size = max(16, usable // num)
+                spacing = 2
+
+            icon_size = max(10, btn_size - MIN_PADDING)
+
+            if layout:
+                layout.setSpacing(spacing)
             for btn in buttons:
                 btn.setFixedSize(btn_size, btn_size)
                 btn.setIconSize(QSize(icon_size, icon_size))
@@ -5902,7 +5903,7 @@ class REPLWidget(QWidget):
             getattr(self, '_title_ideal_btn_size', 28),
             available_width,
             non_button_overhead=20,  # margins only (minimize is now in the list)
-            default_spacing=8,
+            default_spacing=6,
         )
 
     def _adjust_toolbar_sizes(self, available_width: int):
@@ -5913,7 +5914,7 @@ class REPLWidget(QWidget):
             getattr(self, '_toolbar_ideal_btn_size', 28),
             available_width,
             non_button_overhead=60,  # collection widget + stretch
-            default_spacing=5,
+            default_spacing=6,
         )
 
     def _apply_move_button_toggle_style(self, button: QToolButton):
