@@ -2993,7 +2993,16 @@ class REPLWidget(QWidget):
         self._style_title_button(self.capture_btn)
         title_layout.addWidget(self.capture_btn)
 
-        # Track title bar buttons for dynamic resizing when window is narrow
+        title_layout.addStretch()
+
+        # Minimize button — same styling and auto-resize as other title buttons
+        minimize_btn = QPushButton("__")
+        minimize_btn.clicked.connect(self.minimize_requested.emit)
+        self._style_title_button(minimize_btn)
+        title_layout.addWidget(minimize_btn)
+        self._minimize_btn = minimize_btn
+
+        # Track ALL title bar buttons (including minimize) for dynamic resizing
         from PyQt6.QtWidgets import QSizePolicy
         self._title_buttons = [
             self.title_new_conv_btn, self.title_save_btn,
@@ -3002,14 +3011,13 @@ class REPLWidget(QWidget):
             self.attach_btn, self.upload_btn,
             self.search_btn, self.move_btn,
             self.pin_btn, self.capture_btn,
+            minimize_btn,
         ]
         self._title_layout = title_layout
-        # Record ideal button size before we relax constraints
-        self._title_ideal_btn_size = 0
-        for btn in self._title_buttons:
-            sz = btn.minimumWidth()
-            if sz > self._title_ideal_btn_size:
-                self._title_ideal_btn_size = sz
+        # Record ideal button size — use ButtonStyleManager's computed size
+        # (the "natural" size before we relax constraints for auto-sizing)
+        computed = ButtonStyleManager.get_computed_sizes()
+        self._title_ideal_btn_size = computed["button_size"]
         # Allow buttons to shrink when space is tight
         for btn in self._title_buttons:
             btn.setMinimumSize(16, 16)
@@ -3019,14 +3027,6 @@ class REPLWidget(QWidget):
             )
         # Install event filter on title_frame for resize detection
         self.title_frame.installEventFilter(self)
-
-        title_layout.addStretch()
-
-        # Minimize button (uniform styling) - NOT in auto-resize list
-        minimize_btn = QPushButton("__")
-        minimize_btn.clicked.connect(self.minimize_requested.emit)
-        self._style_title_button(minimize_btn)
-        title_layout.addWidget(minimize_btn)
 
         parent_layout.addWidget(self.title_frame)
 
@@ -5855,28 +5855,39 @@ class REPLWidget(QWidget):
 
     def _auto_size_button_row(self, buttons, layout, ideal_size, available_width,
                                non_button_overhead=60, default_spacing=8):
-        """Dynamically adjust a row of buttons based on available width."""
+        """Dynamically adjust a row of buttons based on available width.
+
+        Buttons use ``ideal_size`` as their *maximum* size and shrink down
+        when space is tight.  Internal padding (gap between icon edge and
+        button edge) is always preserved so the icons never look cramped.
+        """
         if not buttons:
             return
         try:
             from PyQt6.QtCore import QSize
             num = len(buttons)
             needed = num * ideal_size + (num - 1) * default_spacing + non_button_overhead
+
+            # Internal padding: keep at least 8px total (4px each side)
+            # between the icon and button edge
+            MIN_PADDING = 8
+
             if available_width < needed:
-                # First reduce spacing, then shrink buttons
+                # Reduce spacing first, then shrink buttons
                 usable = max(
                     available_width - non_button_overhead - (num - 1) * 2,
                     num * 16,
                 )
                 btn_size = max(16, min(ideal_size, usable // num))
-                icon_size = max(10, btn_size - 4)
+                icon_size = max(10, btn_size - MIN_PADDING)
                 if layout:
                     layout.setSpacing(2)
             else:
                 btn_size = ideal_size
-                icon_size = ButtonStyleManager.get_icon_size()
+                icon_size = max(10, btn_size - MIN_PADDING)
                 if layout:
                     layout.setSpacing(default_spacing)
+
             for btn in buttons:
                 btn.setFixedSize(btn_size, btn_size)
                 btn.setIconSize(QSize(icon_size, icon_size))
@@ -5890,7 +5901,7 @@ class REPLWidget(QWidget):
             getattr(self, '_title_layout', None),
             getattr(self, '_title_ideal_btn_size', 28),
             available_width,
-            non_button_overhead=50,  # minimize btn + margins
+            non_button_overhead=20,  # margins only (minimize is now in the list)
             default_spacing=8,
         )
 
@@ -9257,6 +9268,29 @@ class REPLWidget(QWidget):
             panel.deleteLater()
             self._docx_preview_panel = None
 
+    def _open_docx_tool_call_preview(self):
+        """Open preview for docx_formatter tool-call result (outside of a session).
+
+        When the AI calls docx_formatter as a tool (not via the intent classifier
+        session flow), the skill creates a ``*_formatted.docx`` output file.
+        This method finds that file and opens the preview panel on it.
+        """
+        try:
+            original = getattr(self, '_docx_tool_call_path', None)
+            if not original:
+                return
+            p = Path(original)
+            formatted = p.parent / f"{p.stem}_formatted.docx"
+            if formatted.exists():
+                self._open_docx_preview(str(formatted))
+                logger.info(f"Opened preview for tool-call output: {formatted}")
+            elif p.exists():
+                # Fallback: preview the original (it may have been modified in-place)
+                self._open_docx_preview(str(p))
+            self._docx_tool_call_path = None
+        except Exception as e:
+            logger.warning(f"Could not open docx tool-call preview: {e}")
+
     def _update_session_banner(self):
         """Show or hide a visual indicator that a skill session is active."""
         if not hasattr(self, "command_input"):
@@ -10594,6 +10628,9 @@ def test_theme():
                     first_val = next(iter(details.values()), None)
                     if first_val and isinstance(first_val, str):
                         args_preview = f": {first_val[:60]}"
+                    # Track file_path for docx_formatter so we can open preview on completion
+                    if skill_id == "docx_formatter" and "file_path" in details:
+                        self._docx_tool_call_path = details["file_path"]
                 # Add a temporary widget that we can remove later
                 self._add_tool_status_widget(skill_id, friendly_name, args_preview)
             elif status == "completed":
@@ -10603,6 +10640,9 @@ def test_theme():
                 msg = details.get("message", "")
                 if success_flag:
                     self.append_output(f"\n✅ **{friendly_name}** — {msg}\n", "system")
+                    # Auto-open document preview when docx_formatter completes via tool calling
+                    if skill_id == "docx_formatter" and not self._skill_session:
+                        self._open_docx_tool_call_preview()
                 else:
                     self.append_output(f"\n❌ **{friendly_name}** failed — {msg}\n", "error")
         except Exception as e:

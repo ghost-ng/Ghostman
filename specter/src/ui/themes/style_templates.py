@@ -109,7 +109,7 @@ class ButtonStyleManager:
     PADDING = "8px"           # Universal padding for all buttons
     BORDER_RADIUS = "4px"     # Universal border radius for all buttons
     FONT_SIZE = "12px"        # Universal font size for button text
-    DEFAULT_ICON_SIZE = 16    # Default icon size in pixels (fallback)
+    DEFAULT_ICON_SIZE = 18    # Default icon size in pixels (fallback)
     
     @staticmethod
     def get_icon_size():
@@ -160,9 +160,9 @@ class ButtonStyleManager:
                 - padding_each_side: Padding applied to each side
                 
         Padding Logic:
-            - Icons ≤10px: 2px total padding (minimal for tiny icons)
-            - Icons 11-16px: 4px total padding (small padding for small icons)
-            - Icons ≥17px: 6px total padding (standard padding for larger icons)
+            - Icons ≤10px: 4px total padding (small padding for tiny icons)
+            - Icons 11-16px: 8px total padding (comfortable padding for small icons)
+            - Icons ≥17px: 10px total padding (generous padding for larger icons)
             
         This algorithm ensures buttons remain usable at all icon sizes while
         maintaining visual proportions and providing adequate click targets.
@@ -170,15 +170,15 @@ class ButtonStyleManager:
         icon_size = ButtonStyleManager.get_icon_size()
         # Use same smart padding calculation as apply_unified_button_style
         if icon_size <= 10:
-            padding_total = 2  # Minimal padding for tiny icons (8-10px)
+            padding_total = 4   # Small padding for tiny icons (8-10px)
         elif icon_size <= 16:
-            padding_total = 4  # Small padding for small icons (11-16px)
+            padding_total = 8   # Comfortable padding for small icons (11-16px)
         else:
-            padding_total = 6  # Standard padding for larger icons (17px+)
-        
+            padding_total = 10  # Generous padding for larger icons (17px+)
+
         button_size = icon_size + padding_total
         padding_each_side = padding_total // 2
-        
+
         return {
             "icon_size": icon_size,
             "button_size": button_size,
@@ -514,14 +514,14 @@ class ButtonStyleManager:
         # Apply both CSS and Qt size constraints for reliable sizing
         # Get configurable icon size and calculate proportional button size
         icon_size = ButtonStyleManager.get_icon_size()
-        # Use smarter padding calculation for better proportions with small icons
+        # Padding between icon edge and button border
         if icon_size <= 10:
-            padding = 2  # Minimal padding for tiny icons (8-10px)
+            padding = 4   # Small padding for tiny icons (8-10px)
         elif icon_size <= 16:
-            padding = 4  # Small padding for small icons (11-16px)
+            padding = 8   # Comfortable padding for small icons (11-16px)
         else:
-            padding = 6  # Standard padding for larger icons (17px+)
-        
+            padding = 10  # Generous padding for larger icons (17px+)
+
         icon_button_size = icon_size + padding
         
         # Size configuration mapping for Qt widget constraints

@@ -100,6 +100,14 @@ class IntentClassifier(IIntentClassifier):
             r"(fix|normalize|standardize)\s+(the\s+)?(fonts?|margins?|spacing|bullets?|headings?|spelling|formatting)",
             r"(set|change|update)\s+(all\s+)?(text|everything)\s+to\s+\d+\s*(pt|point)",
             r"(fix|check|correct)\s+(the\s+)?spelling",
+            # "put/make/convert this document in/into X format/style/look"
+            r"(put|make|convert|transform)\s+(this|the|my)\s+(document|doc|file)\s+(in|into)\s+\w+\s*(format|style|look)",
+            # "make this document look professional/executive/formal"
+            r"(make|put)\s+(this|the|my)\s+(document|doc|file)\s+(look\s+)?(professional|executive|formal|official|corporate|polished|clean)",
+            # "executive/professional/formal format" mentioned with document context
+            r"(executive|professional|formal|standard|official|corporate|apa|mla)\s+(format|formatting|style|layout)\b",
+            # reversed: "format ... document" or "document ... format"
+            r"\b(document|doc|docx|file)\b.{0,30}\b(format|reformat|style|restyle)\b",
         ],
         "screen_capture": [
             r"(take|capture|grab)\s+(a\s+)?(screenshot|screen\s+capture|screen\s+shot)",
