@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Release Management Script for ghost-ng
+Release Management Script for specter
 Automates the release process including version bumping, tagging, and pushing
 """
 
@@ -22,7 +22,7 @@ def run_script(script_path, args):
         return False
 
 def main():
-    parser = argparse.ArgumentParser(description="Release ghost-ng")
+    parser = argparse.ArgumentParser(description="Release specter")
     parser.add_argument('version_type', choices=['major', 'minor', 'patch'],
                        help='Type of version bump')
     parser.add_argument('--dry-run', action='store_true',
@@ -31,8 +31,8 @@ def main():
     args = parser.parse_args()
     
     # Check if we're in the right directory
-    if not Path("ghostman").exists():
-        print("❌ Error: Run this script from the ghost-ng root directory")
+    if not Path("specter").exists():
+        print("❌ Error: Run this script from the specter root directory")
         sys.exit(1)
     
     scripts_dir = Path("scripts")
@@ -43,7 +43,7 @@ def main():
         sys.exit(1)
     
     # Show what will be done
-    print(f"🚀 Release Process for ghost-ng")
+    print(f"🚀 Release Process for specter")
     print(f"📋 Version bump type: {args.version_type}")
     print(f"🔧 Steps:")
     print(f"   1. Bump version ({args.version_type})")
@@ -75,7 +75,7 @@ def main():
     
     print(f"\\n🎉 Release process initiated successfully!")
     print(f"📡 GitHub Actions should now be building the release.")
-    print(f"🔗 Check progress at: https://github.com/ghost-ng/ghost-ng/actions")
+    print(f"🔗 Check progress at: https://github.com/specter/specter/actions")
 
 if __name__ == "__main__":
     main()

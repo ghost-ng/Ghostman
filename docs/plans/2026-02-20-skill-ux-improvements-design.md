@@ -13,8 +13,8 @@
 ## Task 1: Dynamic Tool Awareness in System Prompt
 
 **Files:**
-- Modify: `ghostman/src/infrastructure/ai/ai_service.py:370-394`
-- Modify: `ghostman/src/infrastructure/skills/core/tool_bridge.py` (add helper method)
+- Modify: `specter/src/infrastructure/ai/ai_service.py:370-394`
+- Modify: `specter/src/infrastructure/skills/core/tool_bridge.py` (add helper method)
 
 The AI model receives tool definitions via the `tools` API parameter but the system prompt never mentions them. The model doesn't know it has local file access, web search, etc. This causes it to refuse file paths and suggest cloud uploads.
 
@@ -105,7 +105,7 @@ Run the app, type "can you analyze file:///C:/Users/miguel/Downloads/321-Ribs.do
 **Step 4: Commit**
 
 ```bash
-git add ghostman/src/infrastructure/ai/ai_service.py ghostman/src/infrastructure/skills/core/tool_bridge.py
+git add specter/src/infrastructure/ai/ai_service.py specter/src/infrastructure/skills/core/tool_bridge.py
 git commit -m "feat: inject dynamic tool awareness into AI system prompt"
 ```
 
@@ -114,9 +114,9 @@ git commit -m "feat: inject dynamic tool awareness into AI system prompt"
 ## Task 2: Skills Help Intent (Instant Display)
 
 **Files:**
-- Modify: `ghostman/src/infrastructure/skills/core/intent_classifier.py:71-108`
-- Modify: `ghostman/src/presentation/widgets/repl_widget.py:8327-8349` (help command)
-- Modify: `ghostman/src/presentation/widgets/repl_widget.py:8415-8467` (intent handling)
+- Modify: `specter/src/infrastructure/skills/core/intent_classifier.py:71-108`
+- Modify: `specter/src/presentation/widgets/repl_widget.py:8327-8349` (help command)
+- Modify: `specter/src/presentation/widgets/repl_widget.py:8415-8467` (intent handling)
 
 Add a "skills" intent pattern so users can type "show me my skills", "what tools do you have", etc. and get an instant formatted list.
 
@@ -162,8 +162,8 @@ Add near the existing help command handler (after line ~8349):
 def _show_skills_help(self):
     """Display a formatted list of available skills."""
     try:
-        from ghostman.src.infrastructure.skills.core.skill_manager import skill_manager
-        from ghostman.src.infrastructure.storage.settings_manager import settings
+        from specter.src.infrastructure.skills.core.skill_manager import skill_manager
+        from specter.src.infrastructure.storage.settings_manager import settings
 
         skills = skill_manager.list_skills()
         if not skills:
@@ -216,7 +216,7 @@ Run the app and type:
 **Step 6: Commit**
 
 ```bash
-git add ghostman/src/infrastructure/skills/core/intent_classifier.py ghostman/src/presentation/widgets/repl_widget.py
+git add specter/src/infrastructure/skills/core/intent_classifier.py specter/src/presentation/widgets/repl_widget.py
 git commit -m "feat: add skills help command and intent detection"
 ```
 
@@ -225,8 +225,8 @@ git commit -m "feat: add skills help command and intent detection"
 ## Task 3: QTextBrowser Refactor (Copy-Paste + Clickable URLs)
 
 **Files:**
-- Modify: `ghostman/src/presentation/widgets/mixed_content_display.py` (major refactor)
-- Modify: `ghostman/src/presentation/widgets/repl_widget.py` (minor: adapt any direct widget access)
+- Modify: `specter/src/presentation/widgets/mixed_content_display.py` (major refactor)
+- Modify: `specter/src/presentation/widgets/repl_widget.py` (minor: adapt any direct widget access)
 
 This is the largest task. Replace the QLabel-per-message architecture with a single QTextBrowser. This enables cross-message text selection and native link handling.
 
@@ -534,7 +534,7 @@ Run the app and verify:
 ### Step 12: Commit
 
 ```bash
-git add ghostman/src/presentation/widgets/mixed_content_display.py
+git add specter/src/presentation/widgets/mixed_content_display.py
 git commit -m "feat: refactor MixedContentDisplay to single QTextBrowser for cross-message selection"
 ```
 

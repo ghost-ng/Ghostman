@@ -1,4 +1,4 @@
-# PKI Implementation in Ghostman
+# PKI Implementation in Specter
 
 ## Table of Contents
 1. [Overview](#overview)
@@ -16,9 +16,9 @@
 
 ## Overview
 
-### What is PKI in Ghostman?
+### What is PKI in Specter?
 
-The Public Key Infrastructure (PKI) implementation in Ghostman enables **enterprise-grade certificate-based authentication** for secure API communications. This is essential for organizations that require mutual TLS (mTLS) authentication using client certificates.
+The Public Key Infrastructure (PKI) implementation in Specter enables **enterprise-grade certificate-based authentication** for secure API communications. This is essential for organizations that require mutual TLS (mTLS) authentication using client certificates.
 
 ### Key Features
 
@@ -46,7 +46,7 @@ For standard cloud services (OpenAI, Anthropic, etc.), PKI is **not required** -
 
 ### Layered Design
 
-Ghostman's PKI implementation follows a clean architecture pattern with clear separation of concerns:
+Specter's PKI implementation follows a clean architecture pattern with clear separation of concerns:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -108,7 +108,7 @@ AI Service Request → Session Manager (with PKI cert) → HTTPS + mTLS → API 
 
 ### 1. PKI Service (`pki_service.py`)
 
-**Location**: `ghostman/src/infrastructure/pki/pki_service.py`
+**Location**: `specter/src/infrastructure/pki/pki_service.py`
 
 The main coordinator for PKI operations. Acts as a high-level interface for the entire PKI system.
 
@@ -142,12 +142,12 @@ pki_service.get_certificate_status() -> Dict[str, Any]
 
 **Global Instance:**
 ```python
-from ghostman.src.infrastructure.pki import pki_service
+from specter.src.infrastructure.pki import pki_service
 ```
 
 ### 2. Certificate Manager (`certificate_manager.py`)
 
-**Location**: `ghostman/src/infrastructure/pki/certificate_manager.py`
+**Location**: `specter/src/infrastructure/pki/certificate_manager.py`
 
 Handles low-level certificate operations including import, validation, and storage.
 
@@ -203,7 +203,7 @@ cert_manager.get_ca_chain_file() -> Optional[str]
 
 ### 3. SSL Service (`ssl_service.py`)
 
-**Location**: `ghostman/src/infrastructure/ssl/ssl_service.py`
+**Location**: `specter/src/infrastructure/ssl/ssl_service.py`
 
 Centralized SSL/TLS verification management that integrates with PKI.
 
@@ -231,12 +231,12 @@ ssl_service.configure_from_pki_service() -> bool
 
 **Global Instance:**
 ```python
-from ghostman.src.infrastructure.ssl import ssl_service
+from specter.src.infrastructure.ssl import ssl_service
 ```
 
 ### 4. Session Manager (`session_manager.py`)
 
-**Location**: `ghostman/src/infrastructure/ai/session_manager.py`
+**Location**: `specter/src/infrastructure/ai/session_manager.py`
 
 Thread-safe HTTP session manager that applies PKI certificates to all requests.
 
@@ -268,7 +268,7 @@ All HTTP requests MUST go through `session_manager`. Never create raw `requests.
 
 ### 5. PKI Setup Wizard (`pki_wizard.py`)
 
-**Location**: `ghostman/src/presentation/wizards/pki_wizard.py`
+**Location**: `specter/src/presentation/wizards/pki_wizard.py`
 
 Interactive wizard for PKI configuration with 6 pages:
 
@@ -281,7 +281,7 @@ Interactive wizard for PKI configuration with 6 pages:
 
 **Usage:**
 ```python
-from ghostman.src.presentation.wizards.pki_wizard import show_pki_wizard
+from specter.src.presentation.wizards.pki_wizard import show_pki_wizard
 
 result = show_pki_wizard(parent_widget)
 # Returns: True (PKI enabled), False (standard auth), None (cancelled)
@@ -289,7 +289,7 @@ result = show_pki_wizard(parent_widget)
 
 ### 6. PKI Settings Widget (`pki_settings_widget.py`)
 
-**Location**: `ghostman/src/presentation/widgets/pki_settings_widget.py`
+**Location**: `specter/src/presentation/widgets/pki_settings_widget.py`
 
 Settings dialog tab for PKI management.
 
@@ -405,15 +405,15 @@ The certificate manager intelligently parses CA chains in various formats:
 
 ### Settings Structure
 
-PKI configuration is stored in `%APPDATA%\Ghostman\configs\settings.json` under the `pki` key:
+PKI configuration is stored in `%APPDATA%\Specter\configs\settings.json` under the `pki` key:
 
 ```json
 {
   "pki": {
     "enabled": false,
-    "client_cert_path": "C:\\Users\\user\\AppData\\Roaming\\Ghostman\\pki\\client.crt",
-    "client_key_path": "C:\\Users\\user\\AppData\\Roaming\\Ghostman\\pki\\client.pem",
-    "ca_chain_path": "C:\\Users\\user\\AppData\\Roaming\\Ghostman\\pki\\ca_chain.pem",
+    "client_cert_path": "C:\\Users\\user\\AppData\\Roaming\\Specter\\pki\\client.crt",
+    "client_key_path": "C:\\Users\\user\\AppData\\Roaming\\Specter\\pki\\client.pem",
+    "ca_chain_path": "C:\\Users\\user\\AppData\\Roaming\\Specter\\pki\\ca_chain.pem",
     "p12_file_hash": "abc123...",
     "last_validation": "2025-10-29T12:00:00+00:00",
     "certificate_info": {
@@ -435,15 +435,15 @@ PKI configuration is stored in `%APPDATA%\Ghostman\configs\settings.json` under 
 
 The system automatically migrates from the old separate PKI config file:
 
-**Old Location** (deprecated): `%APPDATA%\Ghostman\pki\pki_config.json`
-**New Location**: `%APPDATA%\Ghostman\configs\settings.json` (under `pki` key)
+**Old Location** (deprecated): `%APPDATA%\Specter\pki\pki_config.json`
+**New Location**: `%APPDATA%\Specter\configs\settings.json` (under `pki` key)
 
 Migration happens automatically on first load via `certificate_manager.load_config()`.
 
 ### Accessing PKI Settings
 
 ```python
-from ghostman.src.infrastructure.storage.settings_manager import settings
+from specter.src.infrastructure.storage.settings_manager import settings
 
 # Get PKI configuration
 pki_enabled = settings.get('pki.enabled', False)
@@ -481,7 +481,7 @@ PKI is initialized during app startup in `app_coordinator.py`:
 
 ```python
 # Initialize PKI service
-from ghostman.src.infrastructure.pki import pki_service
+from specter.src.infrastructure.pki import pki_service
 pki_service.initialize()
 ```
 
@@ -597,7 +597,7 @@ The widget provides:
 All PKI files are stored in the Windows AppData directory:
 
 ```
-%APPDATA%\Ghostman\
+%APPDATA%\Specter\
 ├── configs\
 │   └── settings.json          # PKI configuration (under 'pki' key)
 ├── pki\                        # Certificate storage directory
@@ -612,12 +612,12 @@ All PKI files are stored in the Windows AppData directory:
 
 **Windows:**
 ```
-C:\Users\<username>\AppData\Roaming\Ghostman\pki\
+C:\Users\<username>\AppData\Roaming\Specter\pki\
 ```
 
 **Linux/Mac (fallback):**
 ```
-~/.Ghostman/pki/
+~/.Specter/pki/
 ```
 
 ### File Permissions
@@ -631,11 +631,11 @@ C:\Users\<username>\AppData\Roaming\Ghostman\pki\
 ### Accessing PKI Directory
 
 ```python
-from ghostman.src.infrastructure.pki import pki_service
+from specter.src.infrastructure.pki import pki_service
 
 # Get PKI directory path
 pki_dir = pki_service.cert_manager.pki_dir
-# Returns: WindowsPath('C:/Users/user/AppData/Roaming/Ghostman/pki')
+# Returns: WindowsPath('C:/Users/user/AppData/Roaming/Specter/pki')
 
 # Get individual file paths
 cert_path, key_path = pki_service.cert_manager.get_client_cert_files()
@@ -737,7 +737,7 @@ logger.error("✗ PKI service initialization failed: {error}")
 logger.error("✗ Certificate validation failed: {error}")
 ```
 
-**Log Location**: `%APPDATA%\Ghostman\logs\`
+**Log Location**: `%APPDATA%\Specter\logs\`
 
 ---
 
@@ -746,7 +746,7 @@ logger.error("✗ Certificate validation failed: {error}")
 ### Example 1: Initial PKI Setup via Wizard
 
 ```python
-from ghostman.src.presentation.wizards.pki_wizard import show_pki_wizard
+from specter.src.presentation.wizards.pki_wizard import show_pki_wizard
 
 # Show wizard (returns True/False/None)
 result = show_pki_wizard(parent_widget)
@@ -762,7 +762,7 @@ else:
 ### Example 2: Programmatic PKI Setup
 
 ```python
-from ghostman.src.infrastructure.pki import pki_service
+from specter.src.infrastructure.pki import pki_service
 
 # Setup PKI from P12 file
 p12_path = "C:/certificates/user.p12"
@@ -783,7 +783,7 @@ else:
 ### Example 3: Check PKI Status
 
 ```python
-from ghostman.src.infrastructure.pki import pki_service
+from specter.src.infrastructure.pki import pki_service
 
 # Initialize and check status
 pki_service.initialize()
@@ -807,7 +807,7 @@ if status['warnings']:
 ### Example 4: Test PKI Connection
 
 ```python
-from ghostman.src.infrastructure.pki import pki_service
+from specter.src.infrastructure.pki import pki_service
 
 # Test connection to an API endpoint
 test_url = "https://api.example.com/health"
@@ -826,7 +826,7 @@ else:
 ### Example 5: Disable PKI
 
 ```python
-from ghostman.src.infrastructure.pki import pki_service
+from specter.src.infrastructure.pki import pki_service
 
 # Disable PKI authentication
 success = pki_service.disable_pki_authentication()
@@ -840,7 +840,7 @@ else:
 ### Example 6: Making API Requests with PKI
 
 ```python
-from ghostman.src.infrastructure.ai.session_manager import session_manager
+from specter.src.infrastructure.ai.session_manager import session_manager
 
 # PKI is automatically applied by session manager
 # Just make requests normally:
@@ -861,7 +861,7 @@ response = session_manager.make_request(
 ### Example 7: Custom Certificate Validation
 
 ```python
-from ghostman.src.infrastructure.pki import pki_service
+from specter.src.infrastructure.pki import pki_service
 
 # Validate current certificates
 is_valid = pki_service.validate_current_certificates()
@@ -881,7 +881,7 @@ else:
 ### Example 8: Monitoring Certificate Expiration
 
 ```python
-from ghostman.src.infrastructure.pki import pki_service
+from specter.src.infrastructure.pki import pki_service
 
 # Check for expiration warnings
 warning = pki_service.get_certificate_expiry_warning()
@@ -897,8 +897,8 @@ if warning:
 ### Example 9: SSL Service Configuration
 
 ```python
-from ghostman.src.infrastructure.ssl import ssl_service
-from ghostman.src.infrastructure.pki import pki_service
+from specter.src.infrastructure.ssl import ssl_service
+from specter.src.infrastructure.pki import pki_service
 
 # Configure SSL with PKI CA chain
 ssl_service.configure_from_pki_service()
@@ -922,7 +922,7 @@ if test_result['success']:
 ### Example 10: Accessing Certificate Files
 
 ```python
-from ghostman.src.infrastructure.pki import pki_service
+from specter.src.infrastructure.pki import pki_service
 
 # Get certificate file paths
 cert_path, key_path = pki_service.cert_manager.get_client_cert_files()
@@ -985,7 +985,7 @@ os.path.exists("path/to/file.p12")  # Should be True
 **Solutions:**
 ```python
 # Check certificate info
-from ghostman.src.infrastructure.pki import pki_service
+from specter.src.infrastructure.pki import pki_service
 
 status = pki_service.get_certificate_status()
 cert_info = status.get('certificate_info')
@@ -1019,7 +1019,7 @@ for error in status.get('errors', []):
 **Solutions:**
 ```python
 # Option 1: Import CA chain
-from ghostman.src.infrastructure.pki import pki_service
+from specter.src.infrastructure.pki import pki_service
 
 ca_path = "C:/path/to/ca_chain.pem"
 success = pki_service.cert_manager.import_ca_chain_file(ca_path)
@@ -1030,7 +1030,7 @@ if success:
     pki_service.test_pki_connection("https://api.example.com")
 
 # Option 2: Temporarily disable SSL verification (development only)
-from ghostman.src.infrastructure.storage.settings_manager import settings
+from specter.src.infrastructure.storage.settings_manager import settings
 settings.set('advanced.ignore_ssl_verification', True)
 
 # Note: Re-enable for production!
@@ -1051,12 +1051,12 @@ settings.set('advanced.ignore_ssl_verification', False)
 **Solutions:**
 ```python
 # 1. Initialize PKI
-from ghostman.src.infrastructure.pki import pki_service
+from specter.src.infrastructure.pki import pki_service
 initialized = pki_service.initialize()
 print(f"PKI Initialized: {initialized}")
 
 # 2. Verify session manager has PKI
-from ghostman.src.infrastructure.ai.session_manager import session_manager
+from specter.src.infrastructure.ai.session_manager import session_manager
 pki_info = session_manager.get_pki_info()
 print(f"Session Manager PKI: {pki_info}")
 
@@ -1066,7 +1066,7 @@ print(f"Session Manager PKI: {pki_info}")
 # response = requests.get("https://api.example.com")
 
 # CORRECT:
-from ghostman.src.infrastructure.ai.session_manager import session_manager
+from specter.src.infrastructure.ai.session_manager import session_manager
 response = session_manager.make_request(
     method="GET",
     url="https://api.example.com"
@@ -1087,7 +1087,7 @@ response = session_manager.make_request(
 **Solutions:**
 ```python
 # Check PKI directory
-from ghostman.src.infrastructure.pki import pki_service
+from specter.src.infrastructure.pki import pki_service
 import os
 
 pki_dir = pki_service.cert_manager.pki_dir
@@ -1122,19 +1122,19 @@ if os.path.exists(pki_dir):
 ```python
 # Check imports
 try:
-    from ghostman.src.infrastructure.pki import pki_service
+    from specter.src.infrastructure.pki import pki_service
     print("PKI service import: OK")
 except Exception as e:
     print(f"PKI service import failed: {e}")
 
 try:
-    from ghostman.src.presentation.wizards.pki_wizard import show_pki_wizard
+    from specter.src.presentation.wizards.pki_wizard import show_pki_wizard
     print("PKI wizard import: OK")
 except Exception as e:
     print(f"PKI wizard import failed: {e}")
 
 # Check logs for detailed error
-# Location: %APPDATA%\Ghostman\logs\
+# Location: %APPDATA%\Specter\logs\
 ```
 
 #### Issue 7: Connection Timeout with PKI
@@ -1151,7 +1151,7 @@ except Exception as e:
 **Solutions:**
 ```python
 # Increase timeout
-from ghostman.src.infrastructure.pki import pki_service
+from specter.src.infrastructure.pki import pki_service
 
 success, error = pki_service.test_pki_connection(
     test_url="https://api.example.com",
@@ -1184,7 +1184,7 @@ pki_service.disable_pki_authentication()
 **Solutions:**
 ```python
 # Check settings file
-from ghostman.src.infrastructure.storage.settings_manager import settings
+from specter.src.infrastructure.storage.settings_manager import settings
 import os
 
 settings_file = settings.settings_file
@@ -1207,9 +1207,9 @@ settings.save()
 
 ```python
 # Complete PKI diagnostic
-from ghostman.src.infrastructure.pki import pki_service
-from ghostman.src.infrastructure.ssl import ssl_service
-from ghostman.src.infrastructure.ai.session_manager import session_manager
+from specter.src.infrastructure.pki import pki_service
+from specter.src.infrastructure.ssl import ssl_service
+from specter.src.infrastructure.ai.session_manager import session_manager
 import json
 
 def diagnose_pki():
@@ -1260,20 +1260,20 @@ diagnose_pki()
 ### Getting Help
 
 **Log Files:**
-- Location: `%APPDATA%\Ghostman\logs\`
-- PKI logs: Search for `ghostman.pki` logger
-- Session logs: Search for `ghostman.session_manager`
-- SSL logs: Search for `ghostman.ssl`
+- Location: `%APPDATA%\Specter\logs\`
+- PKI logs: Search for `specter.pki` logger
+- Session logs: Search for `specter.session_manager`
+- SSL logs: Search for `specter.ssl`
 
 **Debug Mode:**
 ```bash
-# Run Ghostman with debug logging
-python -m ghostman --debug
+# Run Specter with debug logging
+python -m specter --debug
 ```
 
 **Community Support:**
 - Check CLAUDE.md for architecture details
-- Review source code in `ghostman/src/infrastructure/pki/`
+- Review source code in `specter/src/infrastructure/pki/`
 - Check recent commits for PKI-related changes
 
 ---
@@ -1338,7 +1338,7 @@ MIIEvQIBADANBgkqhkiG9w0BAQEFexample...
 
 ## Summary
 
-Ghostman's PKI implementation provides enterprise-grade certificate-based authentication with:
+Specter's PKI implementation provides enterprise-grade certificate-based authentication with:
 
 - **Easy Setup**: User-friendly wizard for certificate configuration
 - **Automatic Management**: Certificate validation, expiration monitoring, and session integration

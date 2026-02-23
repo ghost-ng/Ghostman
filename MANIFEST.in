@@ -4,12 +4,12 @@ include requirements.txt
 include LICENSE
 
 # Include version and spec files
-include ghostman/__version__.py
-include ghost-ng.spec
+include specter/__version__.py
+include specter.spec
 
 # Include all assets
-recursive-include ghostman/assets *
-recursive-include ghostman/config *
+recursive-include specter/assets *
+recursive-include specter/config *
 
 # Include documentation
 recursive-include docs *.md

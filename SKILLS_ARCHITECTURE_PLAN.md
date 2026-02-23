@@ -1,8 +1,8 @@
-# Ghostman Skills System - Architecture Plan
+# Specter Skills System - Architecture Plan
 
 ## Overview
 
-A **Skills System** that allows Ghostman to execute common desktop tasks automatically based on user intent. Designed for both technical and non-technical users with intuitive invocation methods.
+A **Skills System** that allows Specter to execute common desktop tasks automatically based on user intent. Designed for both technical and non-technical users with intuitive invocation methods.
 
 ---
 
@@ -1143,7 +1143,7 @@ User: "Log expense: $45 for lunch"
 ### **Directory Structure**
 
 ```
-ghostman/src/
+specter/src/
 ├── infrastructure/
 │   └── skills/
 │       ├── __init__.py

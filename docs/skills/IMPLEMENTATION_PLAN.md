@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document outlines the complete implementation plan for Ghostman's skills system, focusing on the top 5 priority skills plus screen capture and local task tracking.
+This document outlines the complete implementation plan for Specter's skills system, focusing on the top 5 priority skills plus screen capture and local task tracking.
 
 ## Priority Skills
 
@@ -72,7 +72,7 @@ See full details in:
 - PyQt6 widgets
 - Theme-aware (ColorSystem compliance)
 - WCAG AA contrast (all 39 themes)
-- AppData storage (%APPDATA%\Ghostman\)
+- AppData storage (%APPDATA%\Specter\)
 
 ## Next Steps
 

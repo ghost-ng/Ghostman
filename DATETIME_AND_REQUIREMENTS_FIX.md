@@ -289,7 +289,7 @@ pip install -r requirements.txt
 
 **Test 2: PDF Upload**
 ```python
-# Upload PDF through Ghostman
+# Upload PDF through Specter
 # Should not see:
 # - "PyPDF2 not available" warning
 # - ImportError for pdfplumber
@@ -312,13 +312,13 @@ pip install -r requirements.txt
 
 ### Files Modified
 
-1. **[certificate_manager.py](ghostman/src/infrastructure/pki/certificate_manager.py)**
+1. **[certificate_manager.py](specter/src/infrastructure/pki/certificate_manager.py)**
    - Fixed CertificateInfo.to_dict() - manual dict construction
    - Fixed PKIConfig.to_dict() - manual dict construction
    - Enhanced CertificateInfo.from_dict() - safe datetime parsing
    - Enhanced PKIConfig.from_dict() - safe nested conversion
 
-2. **[pdf_loader.py](ghostman/src/infrastructure/rag_pipeline/document_loaders/pdf_loader.py)**
+2. **[pdf_loader.py](specter/src/infrastructure/rag_pipeline/document_loaders/pdf_loader.py)**
    - Changed import from PyPDF2 to pypdf
    - Added PdfReader import
    - Updated all PyPDF2.PdfReader() calls to PdfReader()
@@ -354,8 +354,8 @@ pip install -r requirements.txt
 - [ ] Go through PKI setup wizard
 - [ ] Import P12 certificate
 - [ ] Complete wizard successfully
-- [ ] Close Ghostman
-- [ ] Open `%APPDATA%\Ghostman\configs\settings.json`
+- [ ] Close Specter
+- [ ] Open `%APPDATA%\Specter\configs\settings.json`
 - [ ] Verify PKI section has:
   - [ ] `"enabled": true`
   - [ ] `"last_validation": "2025-11-19T..."` (ISO format string)
@@ -363,7 +363,7 @@ pip install -r requirements.txt
     - [ ] `"not_valid_before": "2024-..."` (ISO string)
     - [ ] `"not_valid_after": "2026-..."` (ISO string)
     - [ ] `"days_until_expiry": 365` (number)
-- [ ] Restart Ghostman
+- [ ] Restart Specter
 - [ ] Open Settings → PKI Auth
 - [ ] Verify certificate info still displayed
 - [ ] Verify no JSON errors in logs
@@ -373,7 +373,7 @@ pip install -r requirements.txt
 - [ ] Create fresh virtual environment
 - [ ] Run: `pip install -r requirements.txt`
 - [ ] Verify no import errors
-- [ ] Start Ghostman
+- [ ] Start Specter
 - [ ] Upload PDF file to conversation
 - [ ] Verify PDF loads without errors
 - [ ] Check logs for:

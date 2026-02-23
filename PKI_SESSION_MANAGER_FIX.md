@@ -41,7 +41,7 @@ AIService.initialize()
 
 ### The Bug
 
-**File:** [ai_service.py](ghostman/src/infrastructure/ai/ai_service.py)
+**File:** [ai_service.py](specter/src/infrastructure/ai/ai_service.py)
 **Location:** Lines 131-143 (before fix)
 
 **Problematic Code Flow:**
@@ -102,7 +102,7 @@ Both test scenarios (`api_test_service.py` and PKI wizard) create **fresh AIServ
 
 ### Solution: Reorder Initialization
 
-**File:** [ai_service.py:131-145](ghostman/src/infrastructure/ai/ai_service.py#L131-L145)
+**File:** [ai_service.py:131-145](specter/src/infrastructure/ai/ai_service.py#L131-L145)
 
 **Changed Code:**
 ```python
@@ -151,7 +151,7 @@ AIService.initialize()
 ## Impact Analysis
 
 ### Files Modified
-- [ai_service.py](ghostman/src/infrastructure/ai/ai_service.py) - Reordered PKI configuration
+- [ai_service.py](specter/src/infrastructure/ai/ai_service.py) - Reordered PKI configuration
 
 ### Code Paths Affected
 All code that creates `AIService()` instances:
@@ -349,16 +349,16 @@ After deploying this fix, verify:
 ## Related Files
 
 **Core Files:**
-- [ai_service.py](ghostman/src/infrastructure/ai/ai_service.py) - Fixed initialization order
-- [session_manager.py](ghostman/src/infrastructure/ai/session_manager.py) - Singleton session with PKI support
-- [api_client.py](ghostman/src/infrastructure/ai/api_client.py) - Uses session_manager
+- [ai_service.py](specter/src/infrastructure/ai/ai_service.py) - Fixed initialization order
+- [session_manager.py](specter/src/infrastructure/ai/session_manager.py) - Singleton session with PKI support
+- [api_client.py](specter/src/infrastructure/ai/api_client.py) - Uses session_manager
 
 **PKI Infrastructure:**
-- [pki_service.py](ghostman/src/infrastructure/pki/pki_service.py) - PKI certificate management
-- [pki_wizard.py](ghostman/src/presentation/wizards/pki_wizard.py) - PKI setup wizard
+- [pki_service.py](specter/src/infrastructure/pki/pki_service.py) - PKI certificate management
+- [pki_wizard.py](specter/src/presentation/wizards/pki_wizard.py) - PKI setup wizard
 
 **Test Infrastructure:**
-- [api_test_service.py](ghostman/src/infrastructure/ai/api_test_service.py) - Unified API testing
+- [api_test_service.py](specter/src/infrastructure/ai/api_test_service.py) - Unified API testing
 
 ---
 

@@ -1,4 +1,4 @@
-# Ghostman
+# Specter
 
 A beautiful AI chat application featuring Spector, your friendly desktop AI assistant. Chat with multiple AI providers through an elegant floating interface.
 
@@ -16,12 +16,12 @@ A beautiful AI chat application featuring Spector, your friendly desktop AI assi
 **Requirements**: Python 3.12+ and Windows 10/11, macOS, or Linux
 
 ```bash
-git clone https://github.com/ghost-ng/Ghostman.git
-cd Ghostman
+git clone https://github.com/ghost-ng/Specter.git
+cd Specter
 python -m venv venv
 venv\Scripts\activate  # Windows (use source venv/bin/activate on macOS/Linux)
 pip install -r requirements.txt
-python -m ghostman
+python -m specter
 ```
 
 ### Get Your API Key
@@ -69,7 +69,7 @@ Type these in the chat:
 
 🔧 **[Technical Documentation](TECHNICAL.md)** - For developers and advanced users
 
-💬 **[Built-in Help](ghostman/assets/help/index.html)** - Detailed help within the app
+💬 **[Built-in Help](specter/assets/help/index.html)** - Detailed help within the app
 
 ## Keyboard Shortcuts
 - `Ctrl+Enter` - Send message

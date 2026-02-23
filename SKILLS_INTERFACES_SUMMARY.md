@@ -1,8 +1,8 @@
-# Ghostman Skills System Interfaces - Design Summary
+# Specter Skills System Interfaces - Design Summary
 
 ## Overview
 
-I've designed and implemented comprehensive, type-safe interfaces for the Ghostman skills system. The design focuses on clean API contracts, extensibility, and developer experience.
+I've designed and implemented comprehensive, type-safe interfaces for the Specter skills system. The design focuses on clean API contracts, extensibility, and developer experience.
 
 ## Created Files
 
@@ -397,7 +397,7 @@ for task in result.data["tasks"]:
 ## API Structure
 
 ```
-ghostman/src/infrastructure/skills/interfaces/
+specter/src/infrastructure/skills/interfaces/
 │
 ├── Core Interfaces
 │   ├── base_skill.py
@@ -517,7 +517,7 @@ ghostman/src/infrastructure/skills/interfaces/
 
 All files created in:
 ```
-c:\Users\miguel\OneDrive\Documents\Ghostman\ghostman\src\infrastructure\skills\interfaces\
+c:\Users\miguel\OneDrive\Documents\Specter\specter\src\infrastructure\skills\interfaces\
 ```
 
 **Core Interfaces** (2,100+ lines):
@@ -542,7 +542,7 @@ c:\Users\miguel\OneDrive\Documents\Ghostman\ghostman\src\infrastructure\skills\i
 
 ## Summary
 
-I've designed a comprehensive, production-ready interface system for Ghostman skills with:
+I've designed a comprehensive, production-ready interface system for Specter skills with:
 
 - **Clean Architecture**: Clear separation of concerns, explicit contracts
 - **Type Safety**: Full type hints for IDE support and type checking

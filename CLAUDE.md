@@ -4,19 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Ghostman is a PyQt6-based desktop AI assistant featuring a floating avatar interface ("Spector"), multi-provider AI chat, tabbed conversations, RAG file context, and 39 themes. Windows AppData storage for all configuration, databases, and logs.
+Specter is a PyQt6-based desktop AI assistant featuring a floating avatar interface ("Spector"), multi-provider AI chat, tabbed conversations, RAG file context, and 39 themes. Windows AppData storage for all configuration, databases, and logs.
 
 ## Running the Application
 
 ```bash
 # Development run
-python -m ghostman
+python -m specter
 
 # Or via entry point
-ghostman
+specter
 
 # Run with debug logging
-python -m ghostman --debug
+python -m specter --debug
 ```
 
 ## Architecture
@@ -71,10 +71,10 @@ Settings Dialog → ThemeManager → ColorSystem validation →
 - Never create raw `requests.Session()` objects
 
 **Settings Storage (Windows-Aware)**
-- ALL settings in `%APPDATA%\Ghostman\configs\settings.json`
-- Database: `%APPDATA%\Ghostman\db\conversations.db`
-- RAG data: `%APPDATA%\Ghostman\rag\`
-- PKI certs: `%APPDATA%\Ghostman\pki\`
+- ALL settings in `%APPDATA%\Specter\configs\settings.json`
+- Database: `%APPDATA%\Specter\db\conversations.db`
+- RAG data: `%APPDATA%\Specter\rag\`
+- PKI certs: `%APPDATA%\Specter\pki\`
 - Never use home directory (`~`) for data storage on Windows
 
 **Conversation Lifecycle**
@@ -96,7 +96,7 @@ Settings Dialog → ThemeManager → ColorSystem validation →
 
 ```bash
 # Create new migration
-cd ghostman/src/infrastructure/conversation_management
+cd specter/src/infrastructure/conversation_management
 alembic revision --autogenerate -m "description"
 
 # Apply migrations
@@ -106,7 +106,7 @@ alembic upgrade head
 alembic downgrade -1
 ```
 
-**Important:** Migrations use `%APPDATA%\Ghostman\db\conversations.db`. The `migrations/env.py` has fallback logic to find the database.
+**Important:** Migrations use `%APPDATA%\Specter\db\conversations.db`. The `migrations/env.py` has fallback logic to find the database.
 
 ### Testing
 
@@ -115,13 +115,13 @@ alembic downgrade -1
 pytest
 
 # Run specific test file
-pytest ghostman/tests/test_conversation_service.py
+pytest specter/tests/test_conversation_service.py
 
 # Run with coverage
-pytest --cov=ghostman --cov-report=html
+pytest --cov=specter --cov-report=html
 
 # Run Qt tests (requires display)
-pytest -v ghostman/tests/test_repl_widget.py
+pytest -v specter/tests/test_repl_widget.py
 ```
 
 ### Code Quality
@@ -189,24 +189,50 @@ pytest -v ghostman/tests/test_repl_widget.py
 **PKI Certificate Paths:**
 - All PKI settings now in main `settings.json` under `pki` key
 - Old `pki/pki_config.json` migrated automatically
-- Client cert + key in `%APPDATA%\Ghostman\pki\`
+- Client cert + key in `%APPDATA%\Specter\pki\`
 
 ## File Locations Reference
 
 ```
-%APPDATA%\Ghostman\
+%APPDATA%\Specter\
 ├── configs\
 │   └── settings.json          # All settings (including PKI)
 ├── db\
 │   └── conversations.db       # SQLite database
+├── logs\
+│   ├── specter.log            # Main application log (rotates daily)
+│   └── crash.log              # C-level crash traces (faulthandler)
 ├── pki\
 │   ├── client.crt
 │   ├── client.pem
 │   └── ca_chain.pem
+├── captures\                  # Screen capture screenshots
 └── rag\
     ├── rag_pipeline.log
     └── faiss_db\
         └── [vector store files]
+```
+
+## Viewing App Logs
+
+```bash
+# View recent log entries (last 10 minutes)
+python -c "
+from pathlib import Path; import os, time
+log = Path(os.environ['APPDATA']) / 'Specter' / 'logs' / 'specter.log'
+cutoff = time.time() - 600
+for line in log.read_text(encoding='utf-8', errors='replace').splitlines():
+    print(line)
+" 2>NUL
+
+# Tail the main log (live)
+tail -f "%APPDATA%\Specter\logs\specter.log"
+
+# Check for C-level crashes (segfaults)
+cat "%APPDATA%\Specter\logs\crash.log"
+
+# Quick PowerShell: last 10 minutes of logs
+powershell -c "Get-Content \"$env:APPDATA\Specter\logs\specter.log\" -Tail 100"
 ```
 
 ## Recent Architectural Changes
@@ -215,7 +241,7 @@ pytest -v ghostman/tests/test_repl_widget.py
 - Removed unused `ai` settings key from DEFAULT_SETTINGS
 - Merged PKI config from separate file into main settings.json
 - Database files always in `db/` folder (no more root-level duplicates)
-- RAG data moved from `~/.Ghostman` to `%APPDATA%\Ghostman\rag`
+- RAG data moved from `~/.Specter` to `%APPDATA%\Specter\rag`
 
 **Button Color System (October 2025):**
 - Replaced hardcoded `rgba(255, 215, 0, 0.8)` with theme colors

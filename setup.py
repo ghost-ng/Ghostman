@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ghost-ng Setup Script
+Specter Setup Script
 A sleek AI-powered desktop assistant
 """
 
@@ -9,7 +9,7 @@ import os
 import sys
 
 # Add the package directory to the path to import version
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'ghostman'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'specter'))
 from __version__ import (
     __version__,
     __title__,
@@ -57,13 +57,12 @@ setup(
     install_requires=requirements,
     entry_points={
         "console_scripts": [
-            "ghost-ng=ghostman.__main__:main",
-            "ghostman=ghostman.__main__:main",  # Keep backward compatibility
+            "specter=specter.__main__:main",
         ],
     },
     include_package_data=True,
     package_data={
-        "ghostman": [
+        "specter": [
             "assets/**/*",
             "config/**/*",
         ],

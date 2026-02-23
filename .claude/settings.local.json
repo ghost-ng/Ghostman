@@ -21,12 +21,15 @@
       "Bash(alembic history:*)",
       "Bash(alembic current:*)",
       "Bash(alembic check:*)",
-      "Bash(alembic heads:*)"
+      "Bash(alembic heads:*)",
+      "Bash(nul)",
+      "Bash(git reset:*)",
+      "Bash(\"C:\\Users\\miguel\\AppData\\Local\\Programs\\Python\\Python312\\python.exe\" test_task_panel.py)"
     ],
     "deny": [],
     "ask": [],
     "additionalDirectories": [
-      "C:\\Users\\miguel\\AppData\\Roaming\\Ghostman\\logs"
+      "C:\\Users\\miguel\\AppData\\Roaming\\Specter\\logs"
     ]
   }
 }

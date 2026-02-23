@@ -1,4 +1,4 @@
-# Ghostman Skills System - Implementation Summary
+# Specter Skills System - Implementation Summary
 
 ## ✅ COMPLETED COMPONENTS
 
@@ -63,7 +63,7 @@
 
 **Global Instance:**
 ```python
-from ghostman.src.infrastructure.skills.core import skill_manager
+from specter.src.infrastructure.skills.core import skill_manager
 
 # Ready to use immediately
 skill_manager.register_skill(MySkill)
@@ -290,7 +290,7 @@ class ScreenCaptureOverlay(QWidget):
 **Status:** ⏳ Skeleton created - Needs full implementation
 
 **Requirements:**
-- SQLite database at `%APPDATA%\Ghostman\db\tasks.db`
+- SQLite database at `%APPDATA%\Specter\db\tasks.db`
 - Schema: `tasks(id, title, description, status, priority, due_date, created_at)`
 - CRUD operations: create_task, update_task, delete_task, list_tasks
 - **CRITICAL:** 100% local - no cloud sync
@@ -309,7 +309,7 @@ import os
 
 # Database path
 appdata = os.environ.get('APPDATA')
-db_path = Path(appdata) / "Ghostman" / "db" / "tasks.db"
+db_path = Path(appdata) / "Specter" / "db" / "tasks.db"
 db_path.parent.mkdir(parents=True, exist_ok=True)
 
 # Create table if not exists
@@ -389,7 +389,7 @@ class TaskPanelWidget(QWidget):
 **Implementation Pattern:**
 ```python
 # In MainWindow.__init__ or _setup_title_bar()
-from ghostman.src.infrastructure.skills.core import skill_manager
+from specter.src.infrastructure.skills.core import skill_manager
 
 camera_btn = QPushButton("📷")  # Or use QIcon
 camera_btn.clicked.connect(lambda: asyncio.create_task(
@@ -449,7 +449,7 @@ Tesseract OCR must be installed separately:
 
 ### Directory Structure (Created)
 ```
-ghostman/src/infrastructure/skills/
+specter/src/infrastructure/skills/
 ├── __init__.py                          # Main package exports
 ├── interfaces/                          # Abstract contracts
 │   ├── __init__.py
@@ -578,8 +578,8 @@ ghostman/src/infrastructure/skills/
 
 ### Basic Skill Registration
 ```python
-from ghostman.src.infrastructure.skills.core import skill_manager
-from ghostman.src.infrastructure.skills.skills_library import ScreenCaptureSkill
+from specter.src.infrastructure.skills.core import skill_manager
+from specter.src.infrastructure.skills.skills_library import ScreenCaptureSkill
 
 # Register skill
 skill_manager.register_skill(ScreenCaptureSkill)
@@ -701,7 +701,7 @@ with patch('win32com.client.Dispatch', return_value=mock_outlook):
 
 **Architecture Quality:** Production-ready
 - Clean separation of concerns
-- Follows existing Ghostman patterns (ColorSystem, Settings, Logging)
+- Follows existing Specter patterns (ColorSystem, Settings, Logging)
 - Type-annotated throughout
 - Comprehensive error handling
 - Well-documented with examples

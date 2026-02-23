@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Version Bump Script for ghost-ng
+Version Bump Script for specter
 Manages semantic versioning and git tagging
 """
 
@@ -12,7 +12,7 @@ from pathlib import Path
 
 def get_current_version():
     """Get the current version from __version__.py"""
-    version_file = Path("ghostman") / "__version__.py"
+    version_file = Path("specter") / "__version__.py"
     if not version_file.exists():
         raise FileNotFoundError("Version file not found")
     
@@ -63,7 +63,7 @@ def bump_version(current_version, bump_type):
 
 def update_version_file(new_version):
     """Update the version in __version__.py"""
-    version_file = Path("ghostman") / "__version__.py"
+    version_file = Path("specter") / "__version__.py"
     content = version_file.read_text()
     
     # Update __version__
@@ -143,7 +143,7 @@ def check_git_status():
         return False
 
 def main():
-    parser = argparse.ArgumentParser(description="Bump version for ghost-ng")
+    parser = argparse.ArgumentParser(description="Bump version for specter")
     parser.add_argument('bump_type', choices=['major', 'minor', 'patch'],
                        help='Type of version bump')
     parser.add_argument('--tag', action='store_true',
@@ -156,8 +156,8 @@ def main():
     args = parser.parse_args()
     
     # Check if we're in the right directory
-    if not Path("ghostman").exists():
-        print("❌ Error: Run this script from the ghost-ng root directory")
+    if not Path("specter").exists():
+        print("❌ Error: Run this script from the specter root directory")
         sys.exit(1)
     
     # Check git status unless forced
@@ -183,7 +183,7 @@ def main():
         update_version_file(new_version)
         
         # Commit the version change
-        if not run_command('git add ghostman/__version__.py', "Staging version file"):
+        if not run_command('git add specter/__version__.py', "Staging version file"):
             sys.exit(1)
         
         if not run_command(f'git commit -m "Bump version to {new_version}"', "Committing version bump"):

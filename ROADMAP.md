@@ -1,6 +1,6 @@
-# Ghostman Feature Roadmap
+# Specter Feature Roadmap
 
-This roadmap outlines planned enhancements and improvements for the Ghostman AI assistant application.
+This roadmap outlines planned enhancements and improvements for the Specter AI assistant application.
 
 ---
 
@@ -135,8 +135,8 @@ This roadmap outlines planned enhancements and improvements for the Ghostman AI 
 27. **Cost Tracking** - Track API costs per conversation with budget alerts
 28. **Custom System Prompts Library** - Save and manage multiple system prompts with descriptions
 29. **Conversation Import** - Import conversations from ChatGPT/Claude exports
-30. **Browser Extension** - Capture web content directly into Ghostman with one click
-31. **VS Code Extension** - Send code selections to Ghostman with context
+30. **Browser Extension** - Capture web content directly into Specter with one click
+31. **VS Code Extension** - Send code selections to Specter with context
 
 ---
 
@@ -180,28 +180,28 @@ Based on immediate impact and user value:
    - **Why First:** Developers use code blocks constantly, copy button saves time every single day
    - **Effort:** Medium (2-3 days)
    - **Impact:** Immediate productivity boost for every code-related conversation
-   - **Location:** `ghostman/src/presentation/widgets/repl_widget.py` - enhance Pygments code rendering
+   - **Location:** `specter/src/presentation/widgets/repl_widget.py` - enhance Pygments code rendering
 
 **2. Search Functionality (#1)**
    - **Why Second:** Users with 10+ conversations need this desperately
    - **Effort:** Medium-High (3-4 days)
    - **Impact:** Makes app usable for power users with many conversations
-   - **Location:** `ghostman/src/infrastructure/conversation_management/ui/conversation_browser.py` - add search bar and filtering logic
+   - **Location:** `specter/src/infrastructure/conversation_management/ui/conversation_browser.py` - add search bar and filtering logic
 
 **3. Message Actions (#14)**
    - **Why Third:** Copy message text is requested by users frequently
    - **Effort:** Medium (2-3 days)
    - **Impact:** Better message management and workflow
-   - **Location:** `ghostman/src/presentation/widgets/repl_widget.py` - add context menu to messages
+   - **Location:** `specter/src/presentation/widgets/repl_widget.py` - add context menu to messages
 
 **4. Auto-Save Drafts (#20)**
    - **Why Fourth:** Prevents frustration from lost work if app crashes
    - **Effort:** Low-Medium (1-2 days)
    - **Impact:** Safety net that users appreciate daily
-   - **Location:** `ghostman/src/presentation/widgets/repl_widget.py` + `ghostman/src/infrastructure/storage/settings_manager.py`
+   - **Location:** `specter/src/presentation/widgets/repl_widget.py` + `specter/src/infrastructure/storage/settings_manager.py`
 
 **5. Keyboard Navigation (#19)** ✅ COMPLETE
-   - **Status:** Implemented in `ghostman/src/presentation/widgets/repl_widget.py`
+   - **Status:** Implemented in `specter/src/presentation/widgets/repl_widget.py`
    - **Shortcuts Added:**
      - `Ctrl+K` - Open conversation browser (search conversations)
      - `Ctrl+N` - Create new tab

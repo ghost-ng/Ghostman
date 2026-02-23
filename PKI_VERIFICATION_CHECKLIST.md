@@ -9,7 +9,7 @@
 
 ### ✅ VERIFIED - web_loader Uses Unified Session Manager
 
-**File:** [web_loader.py:86-92, 191-199](ghostman/src/infrastructure/rag_pipeline/document_loaders/web_loader.py)
+**File:** [web_loader.py:86-92, 191-199](specter/src/infrastructure/rag_pipeline/document_loaders/web_loader.py)
 
 **Initialization (lines 86-92):**
 ```python
@@ -57,7 +57,7 @@ else:
 
 #### Check 1: AIService._configure_pki_if_enabled()
 
-**File:** [ai_service.py:204-227](ghostman/src/infrastructure/ai/ai_service.py#L204-L227)
+**File:** [ai_service.py:204-227](specter/src/infrastructure/ai/ai_service.py#L204-L227)
 
 **Line 209: First Safety Check**
 ```python
@@ -87,7 +87,7 @@ def _configure_pki_if_enabled(self):
 
 #### Check 2: session_manager.configure_pki()
 
-**File:** [session_manager.py:165-186](ghostman/src/infrastructure/ai/session_manager.py#L165-L186)
+**File:** [session_manager.py:165-186](specter/src/infrastructure/ai/session_manager.py#L165-L186)
 
 **Only Called When PKI Enabled:**
 ```python
@@ -105,7 +105,7 @@ def configure_pki(self, cert_path: str, key_path: str, ca_path: Optional[str] = 
 
 #### Check 3: session_manager._apply_pki_config()
 
-**File:** [session_manager.py:209-212](ghostman/src/infrastructure/ai/session_manager.py#L209-L212)
+**File:** [session_manager.py:209-212](specter/src/infrastructure/ai/session_manager.py#L209-L212)
 
 **Line 211: Final Safety Check**
 ```python
@@ -125,7 +125,7 @@ def _apply_pki_config(self) -> None:
 
 #### Check 4: session_manager.configure_session()
 
-**File:** [session_manager.py:132-134](ghostman/src/infrastructure/ai/session_manager.py#L132-L134)
+**File:** [session_manager.py:132-134](specter/src/infrastructure/ai/session_manager.py#L132-L134)
 
 **Optional PKI Reapplication:**
 ```python

@@ -96,7 +96,7 @@ def save_config(self) -> bool:
 
 ### NEW save_config() Method
 
-**File:** [certificate_manager.py:154-180](ghostman/src/infrastructure/pki/certificate_manager.py#L154-L180)
+**File:** [certificate_manager.py:154-180](specter/src/infrastructure/pki/certificate_manager.py#L154-L180)
 
 ```python
 def save_config(self) -> bool:
@@ -160,9 +160,9 @@ def save_config(self) -> bool:
 {
   "pki": {
     "enabled": true,                              // ✅ Now true!
-    "client_cert_path": "C:\\Users\\miguel\\AppData\\Roaming\\Ghostman\\pki\\client.crt",
-    "client_key_path": "C:\\Users\\miguel\\AppData\\Roaming\\Ghostman\\pki\\client.pem",
-    "ca_chain_path": "C:\\Users\\miguel\\AppData\\Roaming\\Ghostman\\pki\\ca_chain.pem",
+    "client_cert_path": "C:\\Users\\miguel\\AppData\\Roaming\\Specter\\pki\\client.crt",
+    "client_key_path": "C:\\Users\\miguel\\AppData\\Roaming\\Specter\\pki\\client.pem",
+    "ca_chain_path": "C:\\Users\\miguel\\AppData\\Roaming\\Specter\\pki\\ca_chain.pem",
     "p12_file_hash": "abc123...",
     "last_validation": "2025-11-19T10:30:00+00:00",
     "certificate_info": {
@@ -189,7 +189,7 @@ DEBUG: PKI configuration saved to main settings
 
 **After (with details):**
 ```
-INFO: ✓ PKI configuration saved: enabled=True, cert_path=C:\Users\miguel\AppData\Roaming\Ghostman\pki\client.crt
+INFO: ✓ PKI configuration saved: enabled=True, cert_path=C:\Users\miguel\AppData\Roaming\Specter\pki\client.crt
 DEBUG: PKI data saved: {'enabled': True, 'client_cert_path': '...', ...}
 ```
 
@@ -218,7 +218,7 @@ ERROR: Traceback: <full stack trace>
 
 **Check settings file:**
 ```powershell
-notepad "%APPDATA%\Ghostman\configs\settings.json"
+notepad "%APPDATA%\Specter\configs\settings.json"
 ```
 
 **Look for:**
@@ -236,10 +236,10 @@ notepad "%APPDATA%\Ghostman\configs\settings.json"
 
 ### 4. Test Persistence
 
-**Restart Ghostman:**
+**Restart Specter:**
 ```
-1. Close Ghostman completely
-2. Open Ghostman again
+1. Close Specter completely
+2. Open Specter again
 3. Open Settings → PKI Auth tab
 4. Should show "PKI Enabled" status
 5. Certificate info should be displayed

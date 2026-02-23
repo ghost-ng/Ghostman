@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Build script for Ghostman
+Build script for Specter
 Creates production packages and executables
 """
 
@@ -47,45 +47,44 @@ def build_source():
 
 def build_executable():
     """Build standalone executable with PyInstaller."""
-    # Create a PyInstaller command for Ghostman
     pyinstaller_cmd = [
         "pyinstaller",
-        "--name=ghostman",
+        "--name=specter",
         "--onefile",
         "--windowed",
-        "--icon=ghostman/assets/avatar.ico" if Path('ghostman/assets/avatar.ico').exists() else "",
-        "--add-data=ghostman/assets:ghostman/assets",
-        "--add-data=ghostman/__version__.py:ghostman",
+        "--icon=specter/assets/avatar.ico" if Path('specter/assets/avatar.ico').exists() else "",
+        "--add-data=specter/assets:specter/assets",
+        "--add-data=specter/__version__.py:specter",
         "--hidden-import=PyQt6",
         "--hidden-import=markdown",
         "--hidden-import=aiohttp",
         "--hidden-import=sqlalchemy",
-        "ghostman/__main__.py"
+        "specter/__main__.py"
     ]
-    
+
     # Filter out empty strings
     pyinstaller_cmd = [arg for arg in pyinstaller_cmd if arg]
-    
+
     return run_command(' '.join(pyinstaller_cmd), "Building standalone executable")
 
 def main():
     """Main build process."""
-    print("🚀 Starting Ghostman build process...")
-    
+    print("🚀 Starting Specter build process...")
+
     # Check if we're in the right directory
-    if not Path('ghostman').exists():
-        print("❌ Error: Run this script from the Ghostman root directory")
+    if not Path('specter').exists():
+        print("❌ Error: Run this script from the Specter root directory")
         sys.exit(1)
-    
+
     # Clean previous builds
     print("\n🧹 Cleaning previous builds...")
     clean_build()
-    
+
     # Build packages
     success = True
     success &= build_source()
     success &= build_wheel()
-    
+
     # Check if PyInstaller is available for executable build
     try:
         subprocess.run("pyinstaller --version", shell=True, check=True, capture_output=True)
@@ -93,14 +92,14 @@ def main():
     except subprocess.CalledProcessError:
         print("⚠️  PyInstaller not found, skipping executable build")
         print("   Install with: pip install pyinstaller")
-    
+
     if success:
         print("\n🎉 Build completed successfully!")
         print("\nArtifacts created:")
         print("📦 Source: dist/*.tar.gz")
         print("🎯 Wheel: dist/*.whl")
-        if Path('dist/ghostman').exists() or Path('dist/ghostman.exe').exists():
-            print("💾 Executable: dist/ghostman or dist/ghostman.exe")
+        if Path('dist/specter').exists() or Path('dist/specter.exe').exists():
+            print("💾 Executable: dist/specter or dist/specter.exe")
     else:
         print("\n❌ Build failed!")
         sys.exit(1)
