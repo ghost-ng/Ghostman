@@ -5,6 +5,6 @@ This package contains UI widgets for skill interactions and management.
 """
 
 from .task_list_control_panel import TaskListControlPanel, TaskEditDialog
-from .docx_preview_panel import DocxPreviewPanel
+from .docx_preview_panel import DocxBrowserPreview, DocxPreviewPanel
 
-__all__ = ["TaskListControlPanel", "TaskEditDialog", "DocxPreviewPanel"]
+__all__ = ["TaskListControlPanel", "TaskEditDialog", "DocxBrowserPreview", "DocxPreviewPanel"]

@@ -243,29 +243,23 @@ class PKISettingsWidget(QWidget):
     def _load_refresh_icon(self):
         """Load custom refresh icon based on current theme."""
         try:
-            # Determine icon variant based on theme
+            from ...utils.resource_resolver import resolve_icon
             icon_variant = self._get_icon_variant()
-            
-            # Build path to refresh icon
-            refresh_icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", 
-                "assets", "icons", f"refresh_{icon_variant}.png"
-            )
-            
-            if os.path.exists(refresh_icon_path):
+
+            refresh_icon_path = resolve_icon("refresh", icon_variant)
+
+            if refresh_icon_path and refresh_icon_path.exists():
                 from PyQt6.QtGui import QIcon
-                icon = QIcon(refresh_icon_path)
+                icon = QIcon(str(refresh_icon_path))
                 self.refresh_button.setIcon(icon)
-                self.refresh_button.setText("")  # Remove any text
-                logger.debug(f"Loaded refresh icon: {refresh_icon_path}")
+                self.refresh_button.setText("")
+                logger.debug(f"Loaded refresh icon: refresh_{icon_variant}.png")
             else:
-                # Fallback to Unicode emoji if custom icon not found
                 self.refresh_button.setText("🔄")
-                logger.warning(f"Refresh icon not found: {refresh_icon_path}")
-                
+                logger.warning(f"Refresh icon not found for variant: {icon_variant}")
+
         except Exception as e:
             logger.error(f"Failed to load refresh icon: {e}")
-            # Fallback to Unicode emoji
             self.refresh_button.setText("🔄")
     
     def _get_icon_variant(self) -> str:
@@ -429,24 +423,21 @@ class PKISettingsWidget(QWidget):
         """Show enabled PKI status."""
         # Load green check icon
         try:
-            check_icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", 
-                "assets", "icons", "check_green.png"
-            )
-            
-            if os.path.exists(check_icon_path):
+            from ...utils.resource_resolver import resolve_icon
+            check_icon_path = resolve_icon("check_green", "")
+
+            if check_icon_path and check_icon_path.exists():
                 from PyQt6.QtGui import QPixmap
-                check_pixmap = QPixmap(check_icon_path)
+                check_pixmap = QPixmap(str(check_icon_path))
                 scaled_pixmap = check_pixmap.scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                 self.status_icon.setPixmap(scaled_pixmap)
                 self.status_icon.show()
                 self.status_label.setText("PKI Authentication Enabled")
                 logger.debug("Loaded green check icon")
             else:
-                # Fallback to text symbol
                 self.status_icon.hide()
                 self.status_label.setText("✓ PKI Authentication Enabled")
-                logger.warning(f"Check icon not found: {check_icon_path}")
+                logger.warning("Check icon not found via resource resolver")
         except Exception as e:
             logger.error(f"Failed to load check icon: {e}")
             self.status_icon.hide()
@@ -486,25 +477,21 @@ Last validated: {status.get('last_validation', 'Unknown')}"""
         """Show invalid PKI status."""
         # Load warning icon
         try:
-            icon_variant = self._get_icon_variant()
-            warning_icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", 
-                "assets", "icons", "warning_color.png"
-            )
-            
-            if os.path.exists(warning_icon_path):
+            from ...utils.resource_resolver import resolve_icon
+            warning_icon_path = resolve_icon("warning_color", "")
+
+            if warning_icon_path and warning_icon_path.exists():
                 from PyQt6.QtGui import QPixmap
-                warning_pixmap = QPixmap(warning_icon_path)
+                warning_pixmap = QPixmap(str(warning_icon_path))
                 scaled_pixmap = warning_pixmap.scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                 self.status_icon.setPixmap(scaled_pixmap)
                 self.status_icon.show()
                 self.status_label.setText("PKI Configuration Invalid")
                 logger.debug("Loaded warning icon: warning_color.png")
             else:
-                # Fallback to text symbol
                 self.status_icon.hide()
                 self.status_label.setText("⚠ PKI Configuration Invalid")
-                logger.warning(f"Warning icon not found: {warning_icon_path}")
+                logger.warning("Warning icon not found via resource resolver")
         except Exception as e:
             logger.error(f"Failed to load warning icon: {e}")
             self.status_icon.hide()
@@ -542,28 +529,22 @@ Last validated: {status.get('last_validation', 'Unknown')}"""
         """Show disabled PKI status."""
         # Load warning icon
         try:
-            icon_variant = self._get_icon_variant()
-            warning_icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", 
-                "assets", "icons", "warning_color.png"
-            )
-            
-            if os.path.exists(warning_icon_path):
+            from ...utils.resource_resolver import resolve_icon
+            warning_icon_path = resolve_icon("warning_color", "")
+
+            if warning_icon_path and warning_icon_path.exists():
                 from PyQt6.QtGui import QPixmap
-                warning_pixmap = QPixmap(warning_icon_path)
-                # Scale icon to appropriate size
+                warning_pixmap = QPixmap(str(warning_icon_path))
                 scaled_pixmap = warning_pixmap.scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                 self.status_icon.setPixmap(scaled_pixmap)
                 self.status_label.setText("PKI Authentication Disabled")
                 logger.debug("Loaded warning icon: warning_color.png")
             else:
-                # Fallback to text symbol - hide icon and show symbol in text
                 self.status_icon.hide()
                 self.status_label.setText("⚠ PKI Authentication Disabled")
-                logger.warning(f"Warning icon not found: {warning_icon_path}")
+                logger.warning("Warning icon not found via resource resolver")
         except Exception as e:
             logger.error(f"Failed to load warning icon: {e}")
-            # Fallback to text symbol - hide icon and show symbol in text
             self.status_icon.hide()
             self.status_label.setText("⚠ PKI Authentication Disabled")
         
@@ -588,39 +569,26 @@ You can enable PKI authentication if your organization requires certificate-base
         """Show error status."""
         # Load error icon
         try:
+            from ...utils.resource_resolver import resolve_icon, resolve_multiple_icons
             icon_variant = self._get_icon_variant()
-            error_icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", 
-                "assets", "icons", f"x_{icon_variant}.png"
-            )
-            
-            if os.path.exists(error_icon_path):
+
+            # Try themed x icon first, then x_red as fallback
+            error_icon_path = resolve_icon("x", icon_variant)
+            if not (error_icon_path and error_icon_path.exists()):
+                error_icon_path = resolve_icon("x_red", "")
+
+            if error_icon_path and error_icon_path.exists():
                 from PyQt6.QtGui import QPixmap
-                error_pixmap = QPixmap(error_icon_path)
+                error_pixmap = QPixmap(str(error_icon_path))
                 scaled_pixmap = error_pixmap.scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                 self.status_icon.setPixmap(scaled_pixmap)
                 self.status_icon.show()
                 self.status_label.setText("PKI Service Error")
-                logger.debug(f"Loaded error icon: x_{icon_variant}.png")
+                logger.debug(f"Loaded error icon: {error_icon_path.name}")
             else:
-                # Try the red error icon as fallback
-                error_icon_path = os.path.join(
-                    os.path.dirname(__file__), "..", "..", "..", 
-                    "assets", "icons", "x_red.png"
-                )
-                if os.path.exists(error_icon_path):
-                    from PyQt6.QtGui import QPixmap
-                    error_pixmap = QPixmap(error_icon_path)
-                    scaled_pixmap = error_pixmap.scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                    self.status_icon.setPixmap(scaled_pixmap)
-                    self.status_icon.show()
-                    self.status_label.setText("PKI Service Error")
-                    logger.debug("Loaded red error icon")
-                else:
-                    # Fallback to text symbol
-                    self.status_icon.hide()
-                    self.status_label.setText("✗ PKI Service Error")
-                    logger.warning(f"Error icon not found: {error_icon_path}")
+                self.status_icon.hide()
+                self.status_label.setText("✗ PKI Service Error")
+                logger.warning("Error icon not found via resource resolver")
         except Exception as e:
             logger.error(f"Failed to load error icon: {e}")
             self.status_icon.hide()

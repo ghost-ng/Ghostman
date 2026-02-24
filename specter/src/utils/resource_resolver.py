@@ -45,7 +45,9 @@ class ResourceResolver:
         
         # Define possible paths for help documentation
         possible_paths = [
-            # Development mode - relative to this file
+            # Development mode - relative to this file (specter/src/utils/ → specter/assets/)
+            Path(__file__).parent.parent.parent / "assets" / "help" / filename,
+            # Development mode - project root (specter/src/utils/ → project_root/specter/assets/)
             Path(__file__).parent.parent.parent.parent / "assets" / "help" / filename,
             # Installed package mode
             Path(sys.prefix) / "share" / "specter" / "help" / filename,
@@ -129,7 +131,9 @@ class ResourceResolver:
         
         # Define possible paths for generic assets
         possible_paths = [
-            # Development mode - relative to this file
+            # Development mode - relative to this file (specter/src/utils/ → specter/assets/)
+            Path(__file__).parent.parent.parent / "assets" / asset_path,
+            # Development mode - project root
             Path(__file__).parent.parent.parent.parent / "assets" / asset_path,
             # Installed package mode
             Path(sys.prefix) / "share" / "specter" / asset_path,

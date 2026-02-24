@@ -12,6 +12,7 @@ import re
 import uuid
 from pathlib import Path
 from typing import Optional, List, Dict, Any
+import random as _random
 from datetime import datetime, timedelta
 
 logger = logging.getLogger("specter.repl_widget")
@@ -947,21 +948,21 @@ class MarkdownRenderer:
         code_font_css = font_service.get_css_font_style('code_snippets')
         
         # Wrap entire content with base color and font configuration - explicitly remove backgrounds
-        styled_html = f'<div style="color: {base_color}; line-height: {{\'1.4\'}}; {font_css}; background: none !important;">{html_content}</div>'
-        
+        styled_html = f'<div style="color: {base_color}; line-height: 1.4; {font_css}; background: none !important;">{html_content}</div>'
+
         # Apply specific styling to elements - remove backgrounds to prevent line coloring
         replacements = {
-            '<code>': f'<code style="padding: {{\'2px\'}} {{\'4px\'}}; border-radius: {{\'3px\'}}; color: {style_colors["code"]}; {code_font_css}; background: none !important;">',
+            '<code>': f'<code style="padding: 2px 4px; border-radius: 3px; color: {style_colors["code"]}; {code_font_css}; background: none !important;">',
             # Skip pre tag replacement to avoid overriding code snippet solid backgrounds
             '<em>': f'<em style="color: {style_colors["em"]}; font-style: italic; background: none !important;">',
             '<strong>': f'<strong style="color: {style_colors["strong"]}; font-weight: bold; background: none !important;">',
-            '<h1>': f'<h1 style="color: {style_colors["h1"]}; font-size: {{\'1.4em\'}}; margin: {{\'8px\'}} {{\'0\'}} {{\'4px\'}} {{\'0\'}}; border-bottom: {{\'2px\'}} solid {base_color}; background: none !important;">',
-            '<h2>': f'<h2 style="color: {style_colors["h2"]}; font-size: {{\'1.3em\'}}; margin: {{\'6px\'}} {{\'0\'}} {{\'3px\'}} {{\'0\'}}; border-bottom: {{\'1px\'}} solid {base_color}; background: none !important;">',
-            '<h3>': f'<h3 style="color: {style_colors["h3"]}; font-size: {{\'1.2em\'}}; margin: {{\'4px\'}} {{\'0\'}} {{\'2px\'}} {{\'0\'}}; background: none !important;">',
-            '<blockquote>': f'<blockquote style="color: {style_colors["blockquote"]}; border-left: {{\'3px\'}} solid {base_color}; padding-left: {{\'12px\'}}; margin: {{\'4px\'}} {{\'0\'}}; font-style: italic; background: none !important;">',
+            '<h1>': f'<h1 style="color: {style_colors["h1"]}; font-size: 1.4em; margin: 8px 0 4px 0; border-bottom: 2px solid {base_color}; background: none !important;">',
+            '<h2>': f'<h2 style="color: {style_colors["h2"]}; font-size: 1.3em; margin: 6px 0 3px 0; border-bottom: 1px solid {base_color}; background: none !important;">',
+            '<h3>': f'<h3 style="color: {style_colors["h3"]}; font-size: 1.2em; margin: 4px 0 2px 0; background: none !important;">',
+            '<blockquote>': f'<blockquote style="color: {style_colors["blockquote"]}; border-left: 3px solid {base_color}; padding-left: 12px; margin: 4px 0; font-style: italic; background: none !important;">',
             '<ul>': '<ul style="margin: 4px 0; padding-left: 20px; background: none !important;">',
             '<ol>': '<ol style="margin: 4px 0; padding-left: 20px; background: none !important;">',
-            '<li>': f'<li style="margin: {{\'2px\'}} {{\'0\'}}; background: none !important;">',
+            '<li>': '<li style="margin: 2px 0; background: none !important;">',
             '<table>': f'<table style="border-collapse: collapse; margin: 8px 0; border: 1px solid {base_color}; background: none !important;">',
             '<th>': f'<th style="padding: 4px 8px; border: 1px solid {base_color}; font-weight: bold; background: none !important;">',
             '<td>': f'<td style="padding: 4px 8px; border: 1px solid {base_color}; background: none !important;">',
@@ -1071,25 +1072,28 @@ class MarkdownRenderer:
     def _render_plain_text(self, text: str, base_color: str) -> str:
         """
         Render plain text with HTML escaping and color styling.
-        
+
         Args:
             text: Plain text to render
             base_color: Color for the text
-            
+
         Returns:
             HTML-formatted plain text
         """
         # HTML escape the text to prevent injection
         escaped_text = html.escape(text)
-        
+
         # Convert newlines to <br> tags
         escaped_text = escaped_text.replace('\n', '<br>')
-        
+
         # Preserve spaces and tabs
         escaped_text = escaped_text.replace('  ', '&nbsp;&nbsp;')
         escaped_text = escaped_text.replace('\t', '&nbsp;&nbsp;&nbsp;&nbsp;')
-        
-        return f'<span style="color: {base_color};">{escaped_text}</span><br>'
+
+        # Include font CSS for consistent rendering
+        font_css = font_service.get_css_font_style('ai_response')
+
+        return f'<span style="color: {base_color}; {font_css};">{escaped_text}</span><br>'
     
     def _manage_cache(self, key: str, content: str):
         """
@@ -1253,6 +1257,49 @@ class IdleDetector(QObject):
             self.current_conversation_id = None  # Prevent repeated signals
 
 
+class PersonalityIdleDetector(QObject):
+    """
+    Detects extended user inactivity and triggers an in-character AI comment.
+
+    After 20-40 minutes of idle time (randomized), emits a signal so the REPL
+    can send a personality-driven prompt to the AI.  Resets after each trigger
+    and picks a new random interval.
+    """
+    idle_comment_requested = pyqtSignal()  # No args — REPL reads avatar itself
+
+    MIN_IDLE_MINUTES = 20
+    MAX_IDLE_MINUTES = 40
+
+    def __init__(self):
+        super().__init__()
+        self.last_activity = datetime.now()
+        self._idle_threshold = self._pick_random_threshold()
+        self._triggered = False
+
+        self.check_timer = QTimer()
+        self.check_timer.timeout.connect(self._check_idle_state)
+        self.check_timer.start(60000)  # Check every minute
+
+    def reset_activity(self):
+        """Reset the idle clock after user interaction."""
+        self.last_activity = datetime.now()
+        self._triggered = False
+
+    def _pick_random_threshold(self) -> timedelta:
+        minutes = _random.randint(self.MIN_IDLE_MINUTES, self.MAX_IDLE_MINUTES)
+        return timedelta(minutes=minutes)
+
+    def _check_idle_state(self):
+        if self._triggered:
+            return
+        elapsed = datetime.now() - self.last_activity
+        if elapsed >= self._idle_threshold:
+            self._triggered = True
+            self.idle_comment_requested.emit()
+            # Pick a new random threshold for next time
+            self._idle_threshold = self._pick_random_threshold()
+
+
 class REPLWidget(QWidget):
     """
     Enhanced REPL interface with visual conversation management.
@@ -1314,6 +1361,10 @@ class REPLWidget(QWidget):
         # Idle detection for background summarization
         self.idle_detector = IdleDetector(idle_threshold_minutes=5)
         self.idle_detector.idle_detected.connect(self._on_idle_detected)
+
+        # Personality idle detector — in-character comment after 20-40 min
+        self._personality_idle = PersonalityIdleDetector()
+        self._personality_idle.idle_comment_requested.connect(self._on_personality_idle)
         
         # Background summarization state
         self.summarization_queue: List[str] = []  # conversation IDs
@@ -1405,18 +1456,36 @@ class REPLWidget(QWidget):
         # Return None during initialization or when no tabs exist
         return None
 
-    def _get_avatar_label(self) -> str:
-        """Get current avatar's response label (e.g., '\U0001f47b **Specter:**')."""
+    def _get_current_avatar(self):
+        """Get the current avatar persona object."""
         try:
             from ...domain.models.avatar_personas import get_avatar, DEFAULT_AVATAR_ID
             from ...infrastructure.storage.settings_manager import settings
             avatar_id = settings.get('avatar.selected', DEFAULT_AVATAR_ID)
-            avatar = get_avatar(avatar_id)
-            if avatar:
-                return f"{avatar.emoji} **{avatar.name}:**"
+            return get_avatar(avatar_id)
         except Exception:
-            pass
+            return None
+
+    def _get_avatar_label(self) -> str:
+        """Get current avatar's response label (e.g., '\U0001f47b **Specter:**')."""
+        avatar = self._get_current_avatar()
+        if avatar:
+            return f"{avatar.emoji} **{avatar.name}:**"
         return "\U0001f47b **Specter:**"
+
+    def _get_thinking_phrase(self) -> str:
+        """Get a random personality-appropriate thinking phrase."""
+        avatar = self._get_current_avatar()
+        if avatar:
+            return avatar.random_thinking_phrase()
+        return "Thinking..."
+
+    def _get_running_phrase(self) -> str:
+        """Get a random personality-appropriate running phrase."""
+        avatar = self._get_current_avatar()
+        if avatar:
+            return avatar.random_running_phrase()
+        return "Working on it..."
 
     def _init_dynamic_input_height(self):
         """Initialize dynamic input height system."""
@@ -2863,14 +2932,12 @@ class REPLWidget(QWidget):
 
         # SET ICON DIRECTLY HERE - NO SEPARATE METHOD CALL
         try:
+            from ...utils.resource_resolver import resolve_icon
             icon_variant = self._get_icon_variant()
-            filebar_icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..",
-                "assets", "icons", f"upload_{icon_variant}.png"
-            )
+            filebar_icon_path = resolve_icon("upload", icon_variant)
 
-            if os.path.exists(filebar_icon_path):
-                filebar_icon = QIcon(filebar_icon_path)
+            if filebar_icon_path and filebar_icon_path.exists():
+                filebar_icon = QIcon(str(filebar_icon_path))
                 if not filebar_icon.isNull():
                     self.upload_btn.setIcon(filebar_icon)
                     from PyQt6.QtCore import QSize
@@ -5692,7 +5759,7 @@ class REPLWidget(QWidget):
         from PyQt6.QtWidgets import QSizePolicy
         self._toolbar_container = QWidget()
         toolbar_layout = QHBoxLayout(self._toolbar_container)
-        toolbar_layout.setContentsMargins(0, 0, 0, 0)
+        toolbar_layout.setContentsMargins(4, 1, 4, 1)
         toolbar_layout.setSpacing(5)
         self._toolbar_layout = toolbar_layout
 
@@ -5854,7 +5921,8 @@ class REPLWidget(QWidget):
         )
 
     def _auto_size_button_row(self, buttons, layout, ideal_size, available_width,
-                               non_button_overhead=60, default_spacing=6):
+                               non_button_overhead=60, default_spacing=6,
+                               icon_padding=14):
         """Dynamically adjust a row of buttons based on available width.
 
         Buttons use ``ideal_size`` as their *maximum* size and shrink down
@@ -5866,7 +5934,7 @@ class REPLWidget(QWidget):
         try:
             from PyQt6.QtCore import QSize
             num = len(buttons)
-            MIN_PADDING = 14  # icon-to-button-border padding (7px each side)
+            MIN_PADDING = icon_padding  # icon-to-button-border padding
 
             # Use ideal button size, then compute the best uniform spacing
             btn_size = ideal_size
@@ -5914,7 +5982,8 @@ class REPLWidget(QWidget):
             getattr(self, '_toolbar_ideal_btn_size', 28),
             available_width,
             non_button_overhead=60,  # collection widget + stretch
-            default_spacing=6,
+            default_spacing=8,
+            icon_padding=16,
         )
 
     def _apply_move_button_toggle_style(self, button: QToolButton):
@@ -6579,350 +6648,263 @@ class REPLWidget(QWidget):
     def _load_search_icon(self):
         """Load theme-appropriate search icon."""
         try:
-            # Determine if theme is dark or light
+            from ...utils.resource_resolver import resolve_icon
             icon_variant = self._get_icon_variant()
-            
-            search_icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", 
-                "assets", "icons", f"search_{icon_variant}.png"
-            )
-            
-            if os.path.exists(search_icon_path):
-                search_icon = QIcon(search_icon_path)
+
+            search_icon_path = resolve_icon("search", icon_variant)
+
+            if search_icon_path and search_icon_path.exists():
+                search_icon = QIcon(str(search_icon_path))
                 self.search_btn.setIcon(search_icon)
                 logger.debug(f"Loaded search icon: search_{icon_variant}.png")
             else:
-                # Fallback to Unicode symbol
                 self.search_btn.setText("⌕")
-                logger.warning(f"Search icon not found: {search_icon_path}")
-                
+                logger.warning(f"Search icon not found for variant: {icon_variant}")
+
         except Exception as e:
             logger.error(f"Failed to load search icon: {e}")
             if hasattr(self, 'search_btn') and self.search_btn:
-                self.search_btn.setText("⌕")  # Fallback
+                self.search_btn.setText("⌕")
     
     def _load_chain_icon(self):
         """Load theme-appropriate chain icon."""
         try:
-            # Check if attach_btn exists first
             if not hasattr(self, 'attach_btn') or not self.attach_btn:
                 logger.debug("attach_btn not yet created, skipping chain icon loading")
                 return
-                
-            # Determine if theme is dark or light  
+
+            from ...utils.resource_resolver import resolve_icon
             icon_variant = self._get_icon_variant()
-            
-            chain_icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", 
-                "assets", "icons", f"chain_{icon_variant}.png"
-            )
-            
-            if os.path.exists(chain_icon_path):
-                chain_icon = QIcon(chain_icon_path)
+
+            chain_icon_path = resolve_icon("chain", icon_variant)
+
+            if chain_icon_path and chain_icon_path.exists():
+                chain_icon = QIcon(str(chain_icon_path))
                 self.attach_btn.setIcon(chain_icon)
                 logger.debug(f"Loaded chain icon: chain_{icon_variant}.png")
             else:
-                # Fallback to Unicode symbol
                 self.attach_btn.setText("⚲")
-                logger.warning(f"Chain icon not found: {chain_icon_path}")
-                
+                logger.warning(f"Chain icon not found for variant: {icon_variant}")
+
         except Exception as e:
             logger.error(f"Failed to load chain icon: {e}")
             if hasattr(self, 'attach_btn') and self.attach_btn:
-                self.attach_btn.setText("⚲")  # Fallback
+                self.attach_btn.setText("⚲")
     
     def _load_filebar_icon(self):
-        """Load theme-appropriate filebar icon - EXACT COPY of _load_search_icon pattern."""
-        logger.info("🎨 ICON: Loading filebar icon...")
+        """Load theme-appropriate filebar icon."""
         try:
-            # Check button exists
             if not hasattr(self, 'upload_btn'):
-                logger.error("❌ ICON: upload_btn doesn't exist yet!")
                 return
-                
-            # Determine if theme is dark or light
+
+            from ...utils.resource_resolver import resolve_icon
             icon_variant = self._get_icon_variant()
-            logger.info(f"🎨 ICON: Theme variant = {icon_variant}")
-            
-            filebar_icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", 
-                "assets", "icons", f"upload_{icon_variant}.png"
-            )
-            logger.info(f"🎨 ICON: Looking for icon at: {filebar_icon_path}")
-            
-            if os.path.exists(filebar_icon_path):
-                logger.info(f"✅ ICON: File exists at {filebar_icon_path}")
-                filebar_icon = QIcon(filebar_icon_path)
-                
-                if filebar_icon.isNull():
-                    logger.error(f"❌ ICON: QIcon is null after loading from {filebar_icon_path}")
-                    self.upload_btn.setText("📁")
-                else:
+
+            filebar_icon_path = resolve_icon("upload", icon_variant)
+
+            if filebar_icon_path and filebar_icon_path.exists():
+                filebar_icon = QIcon(str(filebar_icon_path))
+                if not filebar_icon.isNull():
                     self.upload_btn.setIcon(filebar_icon)
-                    
-                    # Set icon size explicitly
                     from PyQt6.QtCore import QSize
                     self.upload_btn.setIconSize(QSize(16, 16))
-                    
-                    # Verify the icon was actually set
-                    final_icon = self.upload_btn.icon()
-                    if final_icon.isNull():
-                        logger.error("❌ ICON: Icon is null after setting!")
-                        self.upload_btn.setText("📁")  # Fallback
-                    else:
-                        logger.info(f"✅ ICON: Icon successfully set and verified: upload_{icon_variant}.png")
-                        # Clear any text when icon is set successfully
-                        self.upload_btn.setText("")
-                    
-                    # Check final button state
-                    button_text = self.upload_btn.text()
-                    logger.info(f"🔧 ICON: Final button text = '{button_text}'")
+                    self.upload_btn.setText("")
+                    logger.debug(f"Loaded filebar icon: upload_{icon_variant}.png")
+                else:
+                    self.upload_btn.setText("📁")
             else:
-                # Fallback to Unicode symbol
-                logger.warning(f"❌ ICON: Filebar icon not found at: {filebar_icon_path}")
                 self.upload_btn.setText("📁")
-                
+                logger.warning(f"Filebar icon not found for variant: {icon_variant}")
+
         except Exception as e:
-            logger.error(f"❌ ICON: Exception loading filebar icon: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Failed to load filebar icon: {e}")
             if hasattr(self, 'upload_btn') and self.upload_btn:
-                self.upload_btn.setText("📁")  # Fallback
+                self.upload_btn.setText("📁")
     
     def _load_chat_icon(self):
         """Load theme-appropriate chat icon."""
         try:
-            # Determine if theme is dark or light  
+            from ...utils.resource_resolver import resolve_icon
             icon_variant = self._get_icon_variant()
-            
-            chat_icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", 
-                "assets", "icons", f"chat_{icon_variant}.png"
-            )
-            
-            if os.path.exists(chat_icon_path):
-                chat_icon = QIcon(chat_icon_path)
+
+            chat_icon_path = resolve_icon("chat", icon_variant)
+
+            if chat_icon_path and chat_icon_path.exists():
+                chat_icon = QIcon(str(chat_icon_path))
                 self.chat_btn.setIcon(chat_icon)
                 logger.debug(f"Loaded chat icon: chat_{icon_variant}.png")
             else:
-                # Fallback to Unicode symbol
                 self.chat_btn.setText("☰")
-                logger.warning(f"Chat icon not found: {chat_icon_path}")
-                
+                logger.warning(f"Chat icon not found for variant: {icon_variant}")
+
         except Exception as e:
             logger.error(f"Failed to load chat icon: {e}")
-            self.chat_btn.setText("☰")  # Fallback
+            self.chat_btn.setText("☰")
     
     def _load_gear_icon(self, button):
         """Load theme-appropriate gear icon for a given button."""
         try:
-            # Determine if theme is dark or light  
+            from ...utils.resource_resolver import resolve_icon
             icon_variant = self._get_icon_variant()
-            
-            gear_icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", 
-                "assets", "icons", f"gear_{icon_variant}.png"
-            )
-            
-            if os.path.exists(gear_icon_path):
-                gear_icon = QIcon(gear_icon_path)
+
+            gear_icon_path = resolve_icon("gear", icon_variant)
+
+            if gear_icon_path and gear_icon_path.exists():
+                gear_icon = QIcon(str(gear_icon_path))
                 button.setIcon(gear_icon)
                 logger.debug(f"Loaded gear icon: gear_{icon_variant}.png")
             else:
-                # Fallback to Unicode symbol
                 button.setText("⚙")
-                logger.warning(f"Gear icon not found: {gear_icon_path}")
-                
+                logger.warning(f"Gear icon not found for variant: {icon_variant}")
+
         except Exception as e:
             logger.error(f"Failed to load gear icon: {e}")
-            button.setText("⚙")  # Fallback
+            button.setText("⚙")
     
     def _load_plus_icon(self, button):
         """Load theme-appropriate plus icon for a given button."""
         try:
-            # Determine if theme is dark or light  
+            from ...utils.resource_resolver import resolve_icon
             icon_variant = self._get_icon_variant()
-            
-            plus_icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", 
-                "assets", "icons", f"plus_{icon_variant}.png"
-            )
-            
-            if os.path.exists(plus_icon_path):
-                plus_icon = QIcon(plus_icon_path)
+
+            plus_icon_path = resolve_icon("plus", icon_variant)
+
+            if plus_icon_path and plus_icon_path.exists():
+                plus_icon = QIcon(str(plus_icon_path))
                 button.setIcon(plus_icon)
                 logger.debug(f"Loaded plus icon: plus_{icon_variant}.png")
             else:
-                # Fallback to Unicode symbol
                 button.setText("➕")
-                logger.warning(f"Plus icon not found: {plus_icon_path}")
-                
+                logger.warning(f"Plus icon not found for variant: {icon_variant}")
+
         except Exception as e:
             logger.error(f"Failed to load plus icon: {e}")
-            button.setText("➕")  # Fallback
+            button.setText("➕")
     
     def _load_themed_icon(self, icon_name):
         """Load theme-appropriate icon and return QIcon object for menus."""
         try:
-            # Determine icon variant based on menu background color
+            from ...utils.resource_resolver import resolve_icon
             icon_variant = self._get_menu_icon_variant()
-            
-            icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", 
-                "assets", "icons", f"{icon_name}_{icon_variant}.png"
-            )
-            
-            if os.path.exists(icon_path):
+
+            icon_path = resolve_icon(icon_name, icon_variant)
+
+            if icon_path and icon_path.exists():
                 logger.debug(f"Loaded themed icon: {icon_name}_{icon_variant}.png")
-                return QIcon(icon_path)
+                return QIcon(str(icon_path))
             else:
-                logger.warning(f"Themed icon not found: {icon_path}")
-                return QIcon()  # Return empty icon
-                
+                logger.warning(f"Themed icon not found: {icon_name}_{icon_variant}")
+                return QIcon()
+
         except Exception as e:
             logger.error(f"Failed to load themed icon '{icon_name}': {e}")
-            return QIcon()  # Return empty icon
+            return QIcon()
     
     def _load_help_icon(self, button):
         """Load theme-appropriate help-docs icon for a given button."""
         try:
-            # Determine if theme is dark or light  
+            from ...utils.resource_resolver import resolve_icon, resolve_multiple_icons
             icon_variant = self._get_icon_variant()
-            
-            # First try help-docs icon (preferred)
-            help_docs_icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", 
-                "assets", "icons", f"help-docs_{icon_variant}.png"
-            )
-            
-            # Fallback to regular help icon if help-docs not found
-            help_icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", 
-                "assets", "icons", f"help_{icon_variant}.png"
-            )
-            
-            if os.path.exists(help_docs_icon_path):
-                help_icon = QIcon(help_docs_icon_path)
+
+            # Try help-docs first, then regular help
+            icon_path = resolve_multiple_icons(["help-docs", "help"], icon_variant)
+
+            if icon_path and icon_path.exists():
+                help_icon = QIcon(str(icon_path))
                 button.setIcon(help_icon)
-                logger.debug(f"Loaded help-docs icon: help-docs_{icon_variant}.png")
-            elif os.path.exists(help_icon_path):
-                help_icon = QIcon(help_icon_path)
-                button.setIcon(help_icon)
-                logger.debug(f"Loaded help icon: help_{icon_variant}.png")
+                logger.debug(f"Loaded help icon: {icon_path.name}")
             else:
-                # Fallback to Unicode symbol
                 button.setText("❓")
-                logger.warning(f"Help icons not found: {help_docs_icon_path} or {help_icon_path}")
-                
+                logger.warning(f"Help icons not found for variant: {icon_variant}")
+
         except Exception as e:
             logger.error(f"Failed to load help icon: {e}")
-            button.setText("❓")  # Fallback
+            button.setText("❓")
     
     def _load_help_command_icon(self, button):
         """Load theme-appropriate regular help icon for help command button."""
         try:
-            # Determine if theme is dark or light  
+            from ...utils.resource_resolver import resolve_icon
             icon_variant = self._get_icon_variant()
-            
-            # Use regular help icon (not help-docs)
-            help_icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", 
-                "assets", "icons", f"help_{icon_variant}.png"
-            )
-            
-            if os.path.exists(help_icon_path):
-                help_icon = QIcon(help_icon_path)
+
+            help_icon_path = resolve_icon("help", icon_variant)
+
+            if help_icon_path and help_icon_path.exists():
+                help_icon = QIcon(str(help_icon_path))
                 button.setIcon(help_icon)
                 logger.debug(f"Loaded help command icon: help_{icon_variant}.png")
             else:
-                logger.warning(f"Help command icon not found: {help_icon_path}")
-                button.setText("❓")  # Fallback
-                
+                button.setText("❓")
+                logger.warning(f"Help command icon not found for variant: {icon_variant}")
+
         except Exception as e:
             logger.error(f"Failed to load help command icon: {e}")
-            button.setText("❓")  # Fallback
+            button.setText("❓")
     
     def _load_move_icon(self, button):
         """Load theme-appropriate move icon for a given button."""
         try:
-            # Determine if theme is dark or light  
+            from ...utils.resource_resolver import resolve_icon
             icon_variant = self._get_icon_variant()
-            
-            move_icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", 
-                "assets", "icons", f"move_{icon_variant}.png"
-            )
-            
-            if os.path.exists(move_icon_path):
-                move_icon = QIcon(move_icon_path)
+
+            move_icon_path = resolve_icon("move", icon_variant)
+
+            if move_icon_path and move_icon_path.exists():
+                move_icon = QIcon(str(move_icon_path))
                 button.setIcon(move_icon)
                 logger.debug(f"Loaded move icon: move_{icon_variant}.png")
             else:
-                # Fallback to Unicode symbol
                 button.setText("✥")
-                logger.warning(f"Move icon not found: {move_icon_path}")
-                
+                logger.warning(f"Move icon not found for variant: {icon_variant}")
+
         except Exception as e:
             logger.error(f"Failed to load move icon: {e}")
-            button.setText("✥")  # Fallback
+            button.setText("✥")
     
     def _load_save_icon(self, button):
         """Load theme-appropriate save icon for a given button."""
         try:
-            # Use the enhanced theme manager's icon suffix
+            from ...utils.resource_resolver import resolve_icon
             if self.theme_manager and hasattr(self.theme_manager, 'current_icon_suffix'):
                 icon_suffix = self.theme_manager.current_icon_suffix
-                current_theme_name = getattr(self.theme_manager, '_current_theme_name', 'unknown')
-                theme_mode = self.theme_manager.current_theme_mode if hasattr(self.theme_manager, 'current_theme_mode') else 'unknown'
-                logger.debug(f"Theme info - Name: {current_theme_name}, Mode: {theme_mode}, Icon suffix: {icon_suffix}")
             else:
-                # Fallback to old method if theme manager not available
                 icon_suffix = f"_{self._get_icon_variant()}"
-                logger.debug(f"Using fallback icon variant: {icon_suffix}")
-            
-            save_icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", 
-                "assets", "icons", f"save{icon_suffix}.png"
-            )
-            
-            if os.path.exists(save_icon_path):
-                save_icon = QIcon(save_icon_path)
+
+            save_icon_path = resolve_icon("save", icon_suffix)
+
+            if save_icon_path and save_icon_path.exists():
+                save_icon = QIcon(str(save_icon_path))
                 button.setIcon(save_icon)
-                logger.info(f"✓ Loaded save icon: save{icon_suffix}.png")
+                logger.debug(f"Loaded save icon: save{icon_suffix}.png")
             else:
-                # Fallback to Unicode symbol
                 button.setText("💾")
-                logger.warning(f"Save icon not found: {save_icon_path}")
-                
+                logger.warning(f"Save icon not found for suffix: {icon_suffix}")
+
         except Exception as e:
             logger.error(f"Failed to load save icon: {e}")
-            button.setText("💾")  # Fallback
+            button.setText("💾")
 
     def _load_camera_icon(self, button):
         """Load theme-appropriate camera icon for screen capture button."""
         try:
-            # Determine if theme is dark or light
+            from ...utils.resource_resolver import resolve_icon
             icon_variant = self._get_icon_variant()
 
-            camera_icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..",
-                "assets", "icons", f"camera_{icon_variant}.png"
-            )
+            camera_icon_path = resolve_icon("camera", icon_variant)
 
-            if os.path.exists(camera_icon_path):
-                camera_icon = QIcon(camera_icon_path)
+            if camera_icon_path and camera_icon_path.exists():
+                camera_icon = QIcon(str(camera_icon_path))
                 button.setIcon(camera_icon)
                 from PyQt6.QtCore import QSize
                 button.setIconSize(QSize(16, 16))
                 logger.debug(f"Loaded camera icon: camera_{icon_variant}.png")
             else:
-                # Fallback to Unicode symbol
                 button.setText("📸")
-                logger.warning(f"Camera icon not found: {camera_icon_path}")
+                logger.warning(f"Camera icon not found for variant: {icon_variant}")
 
         except Exception as e:
             logger.error(f"Failed to load camera icon: {e}")
-            button.setText("📸")  # Fallback
+            button.setText("📸")
 
     def _get_icon_variant(self) -> str:
         """Determine which icon variant to use based on theme."""
@@ -7717,9 +7699,22 @@ class REPLWidget(QWidget):
             
             # Handle Enter key - submit on Enter, newline on Shift+Enter
             if key_event.key() == Qt.Key.Key_Return or key_event.key() == Qt.Key.Key_Enter:
-                # Let QCompleter handle Enter when its popup is visible
-                if hasattr(self, '_slash_completer') and self._slash_completer.popup().isVisible():
-                    return False
+                # Manually activate QCompleter selection (QCompleter doesn't auto-handle Enter with QTextEdit)
+                for attr, handler in [
+                    ('_slash_completer', '_on_slash_completed'),
+                    ('_mention_completer', '_on_mention_type_completed'),
+                    ('_collection_completer', '_on_collection_name_completed'),
+                ]:
+                    completer = getattr(self, attr, None)
+                    if completer and completer.popup().isVisible():
+                        index = completer.popup().currentIndex()
+                        if index.isValid():
+                            text = completer.popup().model().data(index)
+                            completer.popup().hide()
+                            getattr(self, handler)(text)
+                        else:
+                            completer.popup().hide()
+                        return True
                 if key_event.modifiers() == Qt.KeyboardModifier.ShiftModifier:
                     # Shift+Enter: Insert newline and trigger height update
                     logger.debug("🔥 Shift+Enter pressed - inserting newline")
@@ -7737,9 +7732,11 @@ class REPLWidget(QWidget):
             
             # Handle history navigation (only when at boundaries AND no text selection)
             elif key_event.key() == Qt.Key.Key_Up:
-                # Let QCompleter handle Up when its popup is visible
-                if hasattr(self, '_slash_completer') and self._slash_completer.popup().isVisible():
-                    return False
+                # Let QCompleter handle Up/Down when its popup is visible
+                for attr in ('_slash_completer', '_mention_completer', '_collection_completer'):
+                    c = getattr(self, attr, None)
+                    if c and c.popup().isVisible():
+                        return False
                 cursor = self.command_input.textCursor()
                 # Only navigate history if:
                 # 1. On first line (blockNumber == 0)
@@ -7753,9 +7750,11 @@ class REPLWidget(QWidget):
 
             # Down arrow - next command (only at end of last line)
             elif key_event.key() == Qt.Key.Key_Down:
-                # Let QCompleter handle Down when its popup is visible
-                if hasattr(self, '_slash_completer') and self._slash_completer.popup().isVisible():
-                    return False
+                # Let QCompleter handle Up/Down when its popup is visible
+                for attr in ('_slash_completer', '_mention_completer', '_collection_completer'):
+                    c = getattr(self, attr, None)
+                    if c and c.popup().isVisible():
+                        return False
                 cursor = self.command_input.textCursor()
                 document = self.command_input.document()
                 last_block = document.blockCount() - 1
@@ -8019,6 +8018,7 @@ class REPLWidget(QWidget):
         # Save current conversation state if needed and mark as inactive
         if self.current_conversation:
             self.idle_detector.reset_activity(conversation.id)
+            self._personality_idle.reset_activity()
         # Set new conversation as active (this will automatically mark others as pinned)
         if self.conversation_manager:
             success = self.conversation_manager.set_conversation_active_simple(conversation.id)
@@ -8065,6 +8065,7 @@ class REPLWidget(QWidget):
         
         # Reset idle detector for new conversation
         self.idle_detector.reset_activity(conversation.id)
+        self._personality_idle.reset_activity()
 
         # Sync tab title with conversation
         self._sync_tab_with_conversation()
@@ -8367,6 +8368,37 @@ class REPLWidget(QWidget):
         if not self.is_summarizing:
             self._start_background_summarization()
     
+    def _on_personality_idle(self):
+        """Handle extended idle — ask the AI to make an in-character comment."""
+        try:
+            avatar = self._get_current_avatar()
+            if not avatar:
+                return
+
+            # Don't interrupt if AI is already processing
+            if getattr(self, '_streaming_started', False):
+                return
+
+            idle_minutes = int(
+                (datetime.now() - self._personality_idle.last_activity).total_seconds() / 60
+            )
+
+            # Build a system-level prompt that instructs the AI to stay in character
+            idle_prompt = (
+                f"[SYSTEM: The local Specter app detected the user has been idle for "
+                f"approximately {idle_minutes} minutes. Based on your personality as "
+                f"{avatar.name} — {avatar.tagline} — say something brief to the user. "
+                f"It could be funny, intriguing, an off-the-wall observation, a gentle "
+                f"nudge, or a witty comment. Keep it to 1-2 sentences maximum. "
+                f"Stay fully in character. Do NOT ask if they need help.]"
+            )
+
+            logger.info(f"Personality idle trigger after {idle_minutes}min — sending to AI as {avatar.name}")
+            self._send_to_ai(idle_prompt)
+
+        except Exception as e:
+            logger.warning(f"Personality idle comment failed: {e}")
+
     def _start_background_summarization(self):
         """Start background summarization process."""
         if not self.summarization_queue or self.is_summarizing:
@@ -8668,6 +8700,7 @@ class REPLWidget(QWidget):
             try:
                 # Run async skill detection with a fresh event loop
                 # (Qt thread may not have a running asyncio loop)
+                self.append_output(f"{self._get_thinking_phrase()}\n", "system")
                 loop = asyncio.new_event_loop()
                 try:
                     intent = loop.run_until_complete(skill_manager.detect_intent(command))
@@ -8714,14 +8747,16 @@ class REPLWidget(QWidget):
 
                         if intent:
                             skill_detected = True
+                            friendly = intent.skill_id.replace("_", " ").title()
                             logger.info(f"Skill detected: {intent.skill_id} ({intent.confidence:.2%})")
+                            self.append_output(f"Skill matched: **{friendly}** ({intent.confidence:.0%} confidence)\n", "system")
 
                             # ── docx_formatter → start interactive session ──
                             if intent.skill_id == "docx_formatter" and "file_path" in intent.parameters:
                                 self._start_docx_session(intent, command)
                             else:
                                 # One-shot execution for all other skills
-                                self.append_output(f"**Executing skill: {intent.skill_id}**", "system")
+                                self.append_output(f"Invoking **{friendly}**...\n", "system")
                                 try:
                                     result = loop.run_until_complete(
                                         skill_manager.execute_skill(
@@ -9233,9 +9268,9 @@ class REPLWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _open_docx_preview(self, file_path: str):
-        """Open (or re-use) the DOCX preview panel for the given file."""
+        """Open (or re-use) the browser-based DOCX preview for the given file."""
         try:
-            from .skills.docx_preview_panel import DocxPreviewPanel
+            from .skills.docx_preview_panel import DocxBrowserPreview
 
             # Get current theme colors
             colors = None
@@ -9245,36 +9280,35 @@ class REPLWidget(QWidget):
                 except Exception:
                     pass
 
-            panel = getattr(self, '_docx_preview_panel', None)
-            if panel is None or not panel.isVisible():
-                self._docx_preview_panel = DocxPreviewPanel(colors=colors)
-                panel = self._docx_preview_panel
+            preview = getattr(self, '_docx_preview', None)
+            if preview is None or not preview.is_running:
+                self._docx_preview = DocxBrowserPreview(colors=colors)
+                preview = self._docx_preview
 
-            panel.open_document(file_path)
-            logger.info(f"DOCX preview opened: {file_path}")
+            preview.open_document(file_path)
+            logger.info(f"DOCX browser preview opened: {file_path}")
         except Exception as e:
             logger.warning(f"Could not open DOCX preview: {e}")
 
     def _refresh_docx_preview(self):
-        """Refresh the DOCX preview panel if it is open."""
-        panel = getattr(self, '_docx_preview_panel', None)
-        if panel and panel.isVisible():
-            panel.refresh_preview()
+        """Refresh the DOCX preview if the server is running."""
+        preview = getattr(self, '_docx_preview', None)
+        if preview and preview.is_running:
+            preview.refresh_preview()
 
     def _close_docx_preview(self):
-        """Close and clean up the DOCX preview panel."""
-        panel = getattr(self, '_docx_preview_panel', None)
-        if panel:
-            panel.hide()
-            panel.deleteLater()
-            self._docx_preview_panel = None
+        """Stop the DOCX preview server."""
+        preview = getattr(self, '_docx_preview', None)
+        if preview:
+            preview.close()
+            self._docx_preview = None
 
-    def _open_docx_tool_call_preview(self):
-        """Open preview for docx_formatter tool-call result (outside of a session).
+    def _refresh_docx_tool_call_preview(self):
+        """Refresh the browser preview with the formatted docx_formatter output.
 
-        When the AI calls docx_formatter as a tool (not via the intent classifier
-        session flow), the skill creates a ``*_formatted.docx`` output file.
-        This method finds that file and opens the preview panel on it.
+        The browser was already opened when the tool started executing.
+        Now the formatted file exists, so open it (which replaces the
+        original) and let the browser pick up the change.
         """
         try:
             original = getattr(self, '_docx_tool_call_path', None)
@@ -9284,13 +9318,13 @@ class REPLWidget(QWidget):
             formatted = p.parent / f"{p.stem}_formatted.docx"
             if formatted.exists():
                 self._open_docx_preview(str(formatted))
-                logger.info(f"Opened preview for tool-call output: {formatted}")
-            elif p.exists():
-                # Fallback: preview the original (it may have been modified in-place)
-                self._open_docx_preview(str(p))
+                logger.info(f"Preview refreshed with formatted output: {formatted}")
+            else:
+                # No formatted file — just refresh the original
+                self._refresh_docx_preview()
             self._docx_tool_call_path = None
         except Exception as e:
-            logger.warning(f"Could not open docx tool-call preview: {e}")
+            logger.warning(f"Could not refresh docx tool-call preview: {e}")
 
     def _update_session_banner(self):
         """Show or hide a visual indicator that a skill session is active."""
@@ -10093,11 +10127,12 @@ def test_theme():
         # Show spinner in prompt instead of "Processing with AI..." message
         self._set_processing_mode(True)
         
-        # Reset idle detector
+        # Reset idle detectors
         self.idle_detector.reset_activity(
             self.current_conversation.id if self.current_conversation else None
         )
-        
+        self._personality_idle.reset_activity()
+
         # Create enhanced AI worker thread
         class EnhancedAIWorker(QObject):
             response_received = pyqtSignal(str, bool)  # response, success
@@ -10629,9 +10664,10 @@ def test_theme():
                     first_val = next(iter(details.values()), None)
                     if first_val and isinstance(first_val, str):
                         args_preview = f": {first_val[:60]}"
-                    # Track file_path for docx_formatter so we can open preview on completion
+                    # Track file_path for docx_formatter and open preview immediately
                     if skill_id == "docx_formatter" and "file_path" in details:
                         self._docx_tool_call_path = details["file_path"]
+                        self._open_docx_preview(details["file_path"])
                 # Add a temporary widget that we can remove later
                 self._add_tool_status_widget(skill_id, friendly_name, args_preview)
             elif status == "completed":
@@ -10641,9 +10677,9 @@ def test_theme():
                 msg = details.get("message", "")
                 if success_flag:
                     self.append_output(f"\n✅ **{friendly_name}** — {msg}\n", "system")
-                    # Auto-open document preview when docx_formatter completes via tool calling
+                    # Refresh preview with formatted output when docx_formatter completes
                     if skill_id == "docx_formatter" and not self._skill_session:
-                        self._open_docx_tool_call_preview()
+                        self._refresh_docx_tool_call_preview()
                 else:
                     self.append_output(f"\n❌ **{friendly_name}** failed — {msg}\n", "error")
         except Exception as e:
@@ -10655,9 +10691,10 @@ def test_theme():
             display = self.output_display
             if not display:
                 return
+            running_phrase = self._get_running_phrase()
             display.add_tool_status(
                 skill_id,
-                f"  >> Running {friendly_name}{args_preview}...\n",
+                f"  >> {running_phrase} ({friendly_name}{args_preview})\n",
             )
         except Exception as e:
             logger.debug(f"Could not add tool status widget: {e}")
@@ -10736,11 +10773,12 @@ def test_theme():
                 # Insert thinking header with styled left border
                 thinking_color = self._theme_color('text_secondary', '#888888')
                 border_color = self._theme_color('border', '#555555')
+                thinking_phrase = self._get_thinking_phrase()
                 self.output_display._append_raw_html(
                     f'<div style="color:{thinking_color}; font-style:italic; '
                     f'padding:4px 8px; border-left:3px solid {border_color}; '
                     f'margin:4px 0;">'
-                    f'<b>Thinking...</b><br>'
+                    f'<b>{thinking_phrase}</b><br>'
                 )
 
             self._thinking_text += text
@@ -10815,10 +10853,11 @@ def test_theme():
         self._set_processing_mode(False)
         self.command_input.setFocus()
 
-        # Reset idle detector
+        # Reset idle detectors
         self.idle_detector.reset_activity(
             self.current_conversation.id if self.current_conversation else None
         )
+        self._personality_idle.reset_activity()
 
         # Clear thread references
         self.current_ai_thread = None
@@ -11805,45 +11844,28 @@ def test_theme():
     def _load_pin_icon_immediate(self):
         """Immediately load pin icon with maximum force - no fallbacks."""
         try:
-            # Determine if theme is dark or light  
+            from ...utils.resource_resolver import resolve_icon
             icon_variant = self._get_icon_variant()
-            
-            pin_icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", 
-                "assets", "icons", f"pin_{icon_variant}.png"
-            )
-            
-            if os.path.exists(pin_icon_path):
-                # Create icon and verify it loads
-                icon = QIcon(pin_icon_path)
+
+            pin_icon_path = resolve_icon("pin", icon_variant)
+
+            if pin_icon_path and pin_icon_path.exists():
+                icon = QIcon(str(pin_icon_path))
                 if not icon.isNull():
-                    # FORCE clear any existing content
                     self.pin_btn.setText("")
-                    self.pin_btn.setIcon(QIcon())  # Clear first
-                    
-                    # Set the new icon
+                    self.pin_btn.setIcon(QIcon())
                     self.pin_btn.setIcon(icon)
-                    
-                    # Set icon size explicitly
                     self.pin_btn.setIconSize(QSize(16, 16))
-                    
-                    # FORCE icon-only mode
                     self.pin_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-                    
-                    # Clear text again
                     self.pin_btn.setText("")
-                    
-                    # Force update
                     self.pin_btn.update()
-                    
                 else:
-                    logger.error(f"✗ QIcon creation failed for: {pin_icon_path}")
+                    logger.error(f"QIcon creation failed for: {pin_icon_path}")
             else:
-                logger.error(f"✗ Pin icon file not found: {pin_icon_path}")
-                
+                logger.error(f"Pin icon file not found for variant: {icon_variant}")
+
         except Exception as e:
-            logger.error(f"✗ Failed to force load pin icon: {e}")
-            # Clear everything on error - NO EMOJI FALLBACK
+            logger.error(f"Failed to force load pin icon: {e}")
             self.pin_btn.setText("")
             self.pin_btn.setIcon(QIcon())
     
@@ -14170,9 +14192,11 @@ def test_theme():
         logger.info("Shutting down Enhanced REPL Widget...")
         
         try:
-            # Stop idle detector
+            # Stop idle detectors
             if hasattr(self, 'idle_detector'):
                 self.idle_detector.check_timer.stop()
+            if hasattr(self, '_personality_idle'):
+                self._personality_idle.check_timer.stop()
             
             # Stop autosave timer
             if hasattr(self, 'autosave_timer'):

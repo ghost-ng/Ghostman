@@ -822,15 +822,15 @@ class AppCoordinator(QObject):
         import os
         import webbrowser
         try:
-            logger.info("📖 Opening help documentation in browser")
-            # Get the help file path
-            current_dir = os.path.dirname(__file__)
-            # Go up from src/application to src, then stay in specter, then to assets
-            specter_src_root = os.path.dirname(os.path.dirname(current_dir))
-            help_file = os.path.join(specter_src_root, 'assets', 'help', 'index.html')
-            help_url = f'file:///{help_file.replace(os.sep, "/")}'
-            webbrowser.open(help_url)
-            logger.info(f"📖 Opened help documentation: {help_url}")
+            logger.info("Opening help documentation in browser")
+            from ..utils.resource_resolver import resolve_help_file
+            help_path = resolve_help_file("index.html")
+            if help_path and help_path.exists():
+                help_url = f'file:///{str(help_path).replace(os.sep, "/")}'
+                webbrowser.open(help_url)
+                logger.info(f"Opened help documentation: {help_url}")
+            else:
+                logger.error("Help file not found via resource resolver")
             
         except Exception as e:
             logger.error(f"Failed to open help documentation: {e}")

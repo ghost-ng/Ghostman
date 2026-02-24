@@ -446,11 +446,11 @@ class ThemedInstanceWarningDialog(QDialog):
         # Icon
         icon_label = QLabel()
         try:
-            # Try to load warning icon
-            icon_path = Path(__file__).parent.parent.parent / "assets" / "icons" / "warning_color.png"
-            if icon_path.exists():
+            from ...utils.resource_resolver import resolve_icon
+            icon_path = resolve_icon("warning_color", "")
+            if icon_path and icon_path.exists():
                 pixmap = QPixmap(str(icon_path))
-                icon_label.setPixmap(pixmap.scaled(48, 48, Qt.AspectRatioMode.KeepAspectRatio, 
+                icon_label.setPixmap(pixmap.scaled(48, 48, Qt.AspectRatioMode.KeepAspectRatio,
                                                  Qt.TransformationMode.SmoothTransformation))
             else:
                 icon_label.setText("⚠️")

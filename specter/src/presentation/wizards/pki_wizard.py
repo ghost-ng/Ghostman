@@ -800,60 +800,40 @@ class ValidationPage(QWizardPage):
             logger.error(f"PKI validation error: {e}")
     
     def _test_connection(self):
-        """Test PKI connection to specified URL with max 3 attempts using consolidated function."""
-        from ...infrastructure.ai.api_test_service import test_network_connection_consolidated
+        """Test PKI connection to specified URL using the PKI service's own test method."""
         from ...infrastructure.storage.settings_manager import settings
-        
+
         test_url = self.test_url_edit.text().strip()
         if not test_url:
             self._log_result("✗ Please enter a test URL")
             return
-        
+
         # Get ignore_ssl setting from settings
         ignore_ssl = settings.get('advanced.ignore_ssl_verification', False)
-        
-        self._log_result(f"🌐 Testing connection to: {test_url}")
-        self._log_result(f"📡 Using max 3 attempts, SSL verification: {'Disabled' if ignore_ssl else 'Enabled'}")
-        
+
+        self._log_result(f"Testing connection to: {test_url}")
+        self._log_result(f"Using max 3 attempts, SSL verification: {'Disabled' if ignore_ssl else 'Enabled'}")
+
         # Disable the test button during testing
         self.test_button.setEnabled(False)
         self.test_button.setText("Testing...")
-        
+
         try:
-            # Get PKI configuration for test
-            pki_config = None
-            if pki_service.cert_manager.is_pki_enabled():
-                cert_path, key_path = pki_service.cert_manager.get_client_cert_files()
-                ca_path = pki_service.cert_manager.get_ca_chain_file()
-                pki_config = {
-                    'cert_path': cert_path,
-                    'key_path': key_path,
-                    'ca_path': ca_path
-                }
-            
-            # Test connection using consolidated function
-            result = test_network_connection_consolidated(
-                base_url=test_url,
-                api_key="test",  # Dummy API key for connection test
-                model_name="test-model",  # Dummy model for connection test
-                pki_config=pki_config,
-                ignore_ssl=ignore_ssl,
+            # Use PKI service's own test method — it makes a simple GET
+            # to the exact URL provided using the real session with PKI certs
+            success, error_msg = pki_service.test_pki_connection(
+                test_url=test_url,
                 max_attempts=3,
-                timeout=15
+                ignore_ssl=ignore_ssl
             )
-            
-            # Log configuration details for debugging
-            logger.debug(f"PKI test details: pki_config={bool(pki_config)}, ignore_ssl={ignore_ssl}")
-            if pki_config:
-                logger.debug(f"Cert path: {pki_config.get('cert_path')}, CA path: {pki_config.get('ca_path')}")
-            
-            if result.success:
-                self._log_result("✅ Connection test successful!")
-                self._log_result("🎉 Your PKI authentication is working correctly")
+
+            if success:
+                self._log_result("Connection test successful!")
+                self._log_result("Your PKI authentication is working correctly")
             else:
-                self._log_result(f"❌ Connection test failed: {result.message}")
-                self._log_result("💡 Check your URL and certificate configuration")
-                
+                self._log_result(f"Connection test failed: {error_msg}")
+                self._log_result("Check your URL and certificate configuration")
+
         except Exception as e:
             # User-friendly error message
             error_msg = str(e)

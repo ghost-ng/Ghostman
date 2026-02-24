@@ -241,12 +241,14 @@ class AvatarWidget(SimpleAvatarArrowMixin, AvatarResizableMixin, QWidget):
             logger.warning(f"Persona avatar lookup failed, using default: {e}")
 
         # Fallback: old avatar.png
-        avatar_path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "..", "assets", "avatar.png"
-        )
+        try:
+            from ...utils.resource_resolver import resolve_asset
+            avatar_path = resolve_asset("avatar.png")
+        except ImportError:
+            avatar_path = None
 
-        if os.path.exists(avatar_path):
-            self.avatar_pixmap = QPixmap(avatar_path)
+        if avatar_path and avatar_path.exists():
+            self.avatar_pixmap = QPixmap(str(avatar_path))
             if not self.avatar_pixmap.isNull():
                 logger.info(f"Avatar loaded from: {avatar_path}")
                 self._update_scaled_pixmap()
@@ -254,7 +256,7 @@ class AvatarWidget(SimpleAvatarArrowMixin, AvatarResizableMixin, QWidget):
                 logger.error(f"Failed to load avatar from: {avatar_path}")
                 self._create_fallback_avatar()
         else:
-            logger.warning(f"Avatar not found at: {avatar_path}")
+            logger.warning("Avatar not found via resource resolver")
             self._create_fallback_avatar()
     
     def _create_fallback_avatar(self):
@@ -559,18 +561,17 @@ class AvatarWidget(SimpleAvatarArrowMixin, AvatarResizableMixin, QWidget):
     
     def _on_help_clicked(self):
         """Handle help documentation menu item clicked."""
-        import os
         import webbrowser
         try:
-            logger.info("📖 Help documentation menu item clicked by user")
-            # Get the help file path
-            current_dir = os.path.dirname(__file__)
-            # Go up from widgets to presentation, then to src, then stay in specter, then to assets
-            specter_src_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
-            help_file = os.path.join(specter_src_root, 'assets', 'help', 'index.html')
-            help_url = f'file:///{help_file.replace(os.sep, "/")}'
-            webbrowser.open(help_url)
-            logger.info(f"📖 Opened help documentation: {help_url}")
+            logger.info("Help documentation menu item clicked by user")
+            from ...utils.resource_resolver import resolve_help_file
+            help_path = resolve_help_file("index.html")
+            if help_path and help_path.exists():
+                help_url = f'file:///{str(help_path).replace(os.sep, "/")}'
+                webbrowser.open(help_url)
+                logger.info(f"Opened help documentation: {help_url}")
+            else:
+                logger.error("Help file not found via resource resolver")
         except Exception as e:
             logger.error(f"Failed to open help documentation: {e}")
 

@@ -178,27 +178,22 @@ class EnhancedSystemTray(QObject):
             pass
     
     def _create_default_icon(self) -> QIcon:
-        """Load system tray icon from assets."""
-        # Primary: systray_icon.png in the assets folder
+        """Load system tray icon from assets via resource resolver."""
         try:
-            icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", "assets", "systray_icon.png"
-            )
-            if os.path.exists(icon_path):
-                logger.debug(f"Loading systray icon from: {icon_path}")
-                return QIcon(icon_path)
-        except Exception as e:
-            logger.debug(f"Failed to load systray_icon.png: {e}")
+            from ...utils.resource_resolver import resolve_asset, resolve_multiple_icons
 
-        # Fallback: try legacy icon names
-        try:
-            from ...utils.resource_resolver import resolve_multiple_icons
-            icon_names = ["avatar", "icon", "ghost"]
-            icon_path = resolve_multiple_icons(icon_names)
+            # Primary: systray_icon.png
+            icon_path = resolve_asset("systray_icon.png")
+            if icon_path:
+                logger.debug(f"Loading systray icon from: {icon_path}")
+                return QIcon(str(icon_path))
+
+            # Fallback: try legacy icon names
+            icon_path = resolve_multiple_icons(["avatar", "icon", "ghost"])
             if icon_path:
                 return QIcon(str(icon_path))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Failed to load systray icon: {e}")
 
         logger.debug("Creating default programmatic icon")
         return self._create_programmatic_icon()
@@ -235,30 +230,26 @@ class EnhancedSystemTray(QObject):
         return QIcon(pixmap)
     
     def _get_avatar_icon(self) -> QIcon:
-        """Get the avatar icon for notifications."""
-        # Try to load avatar icon from assets
-        avatar_path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "..", "assets", "avatar.png"
-        )
-        
-        if os.path.exists(avatar_path):
-            try:
-                # Load and resize avatar for notification (typically 32x32 or 64x64)
-                pixmap = QPixmap(avatar_path)
+        """Get the app icon for notifications via resource resolver."""
+        try:
+            from ...utils.resource_resolver import resolve_asset
+            # Use the app icon for toast notifications
+            icon_path = resolve_asset("app_icon.png")
+            if icon_path:
+                pixmap = QPixmap(str(icon_path))
                 if not pixmap.isNull():
-                    # Scale to appropriate size for notifications
                     scaled_pixmap = pixmap.scaled(
-                        32, 32, 
+                        64, 64,
                         Qt.AspectRatioMode.KeepAspectRatio,
                         Qt.TransformationMode.SmoothTransformation
                     )
-                    logger.debug(f"Loaded avatar icon from: {avatar_path}")
+                    logger.debug(f"Loaded notification icon from: {icon_path}")
                     return QIcon(scaled_pixmap)
-            except Exception as e:
-                logger.warning(f"Failed to load avatar icon: {e}")
-        
-        logger.debug("Avatar icon not found, will use system icon")
-        return QIcon()  # Return empty icon to trigger fallback
+        except Exception as e:
+            logger.warning(f"Failed to load notification icon: {e}")
+
+        logger.debug("Notification icon not found, will use system icon")
+        return QIcon()
     
     def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason):
         """Handle tray icon activation."""

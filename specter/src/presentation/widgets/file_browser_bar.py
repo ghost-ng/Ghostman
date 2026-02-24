@@ -1444,42 +1444,20 @@ class FileBrowserBar(QFrame):
                 logger.error("❌ FB_ICON: upload_files_btn doesn't exist yet!")
                 return
                 
-            # Determine if theme is dark or light (use EXACT same method as REPL)
+            from ...utils.resource_resolver import resolve_icon
             variant = self._get_icon_variant()
-            logger.info(f"🎨 FB_ICON: Theme variant = {variant}")
-            
-            upload_icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", 
-                "assets", "icons", f"upload_{variant}.png"
-            )
-            logger.info(f"🎨 FB_ICON: Looking for icon at: {upload_icon_path}")
-            
-            if os.path.exists(upload_icon_path):
-                logger.info(f"✅ FB_ICON: File exists at {upload_icon_path}")
-                upload_icon = QIcon(upload_icon_path)
-                
-                if upload_icon.isNull():
-                    logger.error(f"❌ FB_ICON: QIcon is null after loading from {upload_icon_path}")
-                else:
-                    # Set icon on QPushButton
+
+            upload_icon_path = resolve_icon("upload", variant)
+
+            if upload_icon_path and upload_icon_path.exists():
+                upload_icon = QIcon(str(upload_icon_path))
+                if not upload_icon.isNull():
                     self.upload_files_btn.setIcon(upload_icon)
-                    # Set icon size explicitly for QPushButton
                     from PyQt6.QtCore import QSize
                     self.upload_files_btn.setIconSize(QSize(16, 16))
-                    
-                    # Verify the icon was actually set
-                    final_icon = self.upload_files_btn.icon()
-                    if final_icon.isNull():
-                        logger.error("❌ FB_ICON: Icon is null after setting!")
-                    else:
-                        logger.info(f"✅ FB_ICON: Icon successfully set and verified: upload_{variant}.png with size 16x16")
-                        
-                    # Check button text
-                    button_text = self.upload_files_btn.text()
-                    logger.info(f"🔧 FB_ICON: Button text = '{button_text}'")
+                    logger.debug(f"Loaded upload icon: upload_{variant}.png")
             else:
-                # No fallback text for this button, just log warning
-                logger.warning(f"❌ FB_ICON: Upload icon not found at: {upload_icon_path}")
+                logger.warning(f"Upload icon not found for variant: {variant}")
                 
         except Exception as e:
             logger.error(f"❌ FB_ICON: Exception loading upload icon: {e}")
@@ -1495,45 +1473,26 @@ class FileBrowserBar(QFrame):
                 logger.error("❌ FB_ICON: clear_all_btn doesn't exist yet!")
                 return
                 
-            # Determine if theme is dark or light (use EXACT same method as REPL)
+            from ...utils.resource_resolver import resolve_icon
             variant = self._get_icon_variant()
-            logger.info(f"🎨 FB_ICON: Theme variant = {variant}")
-            
-            # Use clear icon with theme variant
-            clear_icon_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", 
-                "assets", "icons", f"clear_{variant}.png"
-            )
-            logger.info(f"🎨 FB_ICON: Looking for icon at: {clear_icon_path}")
-            
-            if os.path.exists(clear_icon_path):
-                logger.info(f"✅ FB_ICON: File exists at {clear_icon_path}")
-                clear_icon = QIcon(clear_icon_path)
-                
+
+            clear_icon_path = resolve_icon("clear", variant)
+
+            if clear_icon_path and clear_icon_path.exists():
+                clear_icon = QIcon(str(clear_icon_path))
                 if not clear_icon.isNull():
-                    # Set icon on QToolButton
                     self.clear_all_btn.setIcon(clear_icon)
-                    # Set icon size explicitly for QToolButton
                     from PyQt6.QtCore import QSize
                     self.clear_all_btn.setIconSize(QSize(16, 16))
-                    
-                    # Verify the icon was actually set
-                    final_icon = self.clear_all_btn.icon()
-                    if not final_icon.isNull():
-                        logger.info(f"✅ FB_ICON: Icon successfully set: clear_{variant}.png")
-                    else:
-                        logger.error(f"❌ FB_ICON: Icon is null after setting!")
-                        self.clear_all_btn.setText("Clear")
+                    logger.debug(f"Loaded clear icon: clear_{variant}.png")
                 else:
-                    logger.error(f"❌ FB_ICON: QIcon is null after loading from {clear_icon_path}")
                     self.clear_all_btn.setText("Clear")
             else:
-                logger.warning(f"❌ FB_ICON: Clear icon not found at: {clear_icon_path}")
                 self.clear_all_btn.setText("Clear")
-                
+                logger.warning(f"Clear icon not found for variant: {variant}")
+
         except Exception as e:
-            logger.error(f"❌ FB_ICON: Exception loading clear icon: {e}")
-            # Fallback to text
+            logger.error(f"Failed to load clear icon: {e}")
             self.clear_all_btn.setText("Clear")
     
     def _on_theme_changed(self, new_theme):
