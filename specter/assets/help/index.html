@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ghostman Help - Complete User Guide</title>
+    <title>Specter Help - Complete User Guide</title>
     <link rel="stylesheet" href="css/help.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,13 +15,14 @@
         <header class="header">
             <div class="header-content">
                 <div class="logo">
-                    <h1><img src="../avatar.png" alt="Spector Avatar" style="width: 32px; height: 32px; vertical-align: middle; margin-right: 8px; border-radius: 50%;"> Ghostman</h1>
-                    <span class="version">Complete User Guide - Meet Spector, your AI companion</span>
+                    <h1><img src="../avatar.png" alt="Specter Avatar" style="width: 32px; height: 32px; vertical-align: middle; margin-right: 8px; border-radius: 50%;"> Specter</h1>
+                    <span class="version">Complete User Guide - Your AI Desktop Companion</span>
                 </div>
                 <nav class="nav">
                     <a href="#installation" class="nav-link">Installation</a>
                     <a href="#interface" class="nav-link">Interface</a>
                     <a href="#features" class="nav-link">Features</a>
+                    <a href="#skills" class="nav-link">Skills & Tools</a>
                     <a href="#workflows" class="nav-link">Workflows</a>
                     <a href="#settings" class="nav-link">Settings</a>
                     <a href="technical.html" class="nav-link" style="color: var(--accent-color);">Technical Docs</a>
@@ -61,10 +62,11 @@
                         <h3>Interface Overview</h3>
                         <ul>
                             <li><a href="#main-window">Main Window</a></li>
-                            <li><a href="#spector-avatar">Spector Avatar</a></li>
+                            <li><a href="#spector-avatar">Specter Avatar</a></li>
                             <li><a href="#tab-management">Tab Management</a></li>
                             <li><a href="#file-browser">File Browser Bar</a></li>
                             <li><a href="#search-interface">Search Interface</a></li>
+                            <li><a href="#system-tray">System Tray & Menus</a></li>
                         </ul>
                     </div>
 
@@ -75,6 +77,36 @@
                             <li><a href="#conversation-system">Tabbed Conversations</a></li>
                             <li><a href="#file-context">File Context System</a></li>
                             <li><a href="#conversation-management">Conversation Management</a></li>
+                            <li><a href="#slash-commands">Slash Commands</a></li>
+                            <li><a href="#mentions">@ Mentions</a></li>
+                        </ul>
+                    </div>
+
+                    <div class="nav-section">
+                        <h3>Skills & Tools</h3>
+                        <ul>
+                            <li><a href="#skills">AI Skills Overview</a></li>
+                            <li><a href="#skill-email">Email & Calendar</a></li>
+                            <li><a href="#skill-files">File & Web Search</a></li>
+                            <li><a href="#skill-capture">Screen Capture</a></li>
+                            <li><a href="#skill-tasks">Task Tracker</a></li>
+                            <li><a href="#skill-docx">DOCX Formatter</a></li>
+                        </ul>
+                    </div>
+
+                    <div class="nav-section">
+                        <h3>Avatar Personas</h3>
+                        <ul>
+                            <li><a href="#personas">Persona Overview</a></li>
+                            <li><a href="#persona-list">Available Personas</a></li>
+                        </ul>
+                    </div>
+
+                    <div class="nav-section">
+                        <h3>Collections</h3>
+                        <ul>
+                            <li><a href="#collections">Collections Overview</a></li>
+                            <li><a href="#collection-usage">Using Collections</a></li>
                         </ul>
                     </div>
 
@@ -83,6 +115,7 @@
                         <ul>
                             <li><a href="#themes">39 Themes</a></li>
                             <li><a href="#ai-models">AI Models</a></li>
+                            <li><a href="#settings-tabs">Settings Tabs</a></li>
                             <li><a href="#advanced-settings">Advanced Settings</a></li>
                         </ul>
                     </div>
@@ -104,32 +137,40 @@
             <!-- Welcome Section -->
             <section id="welcome" class="content-section">
                 <div class="hero">
-                    <h1>Ghostman Complete Guide</h1>
-                    <p class="hero-subtitle">Your comprehensive guide to mastering Spector, your intelligent AI desktop companion with context-aware file search, professional tabbed conversations, and beautiful theming.</p>
+                    <h1>Specter Complete Guide</h1>
+                    <p class="hero-subtitle">Your comprehensive guide to mastering Specter, your intelligent AI desktop companion with AI skills, context-aware file search, avatar personas, tabbed conversations, and beautiful theming.</p>
 
                     <div class="hero-features">
                         <div class="feature-item">
-                            <span class="feature-icon">🤖</span>
+                            <span class="feature-icon">&#x1F916;</span>
                             <span>Multi-AI Support</span>
                         </div>
                         <div class="feature-item">
-                            <span class="feature-icon">👻</span>
+                            <span class="feature-icon">&#x1F47B;</span>
                             <span>Floating Avatar</span>
                         </div>
                         <div class="feature-item">
-                            <span class="feature-icon">📑</span>
+                            <span class="feature-icon">&#x1F4D1;</span>
                             <span>Tabbed Conversations</span>
                         </div>
                         <div class="feature-item">
-                            <span class="feature-icon">📁</span>
+                            <span class="feature-icon">&#x1F4C1;</span>
                             <span>File Context Search</span>
                         </div>
                         <div class="feature-item">
-                            <span class="feature-icon">🎨</span>
+                            <span class="feature-icon">&#x1F3A8;</span>
                             <span>39 Beautiful Themes</span>
                         </div>
                         <div class="feature-item">
-                            <span class="feature-icon">🔍</span>
+                            <span class="feature-icon">&#x1F9E0;</span>
+                            <span>AI Skills & Tools</span>
+                        </div>
+                        <div class="feature-item">
+                            <span class="feature-icon">&#x1F3AD;</span>
+                            <span>Avatar Personas</span>
+                        </div>
+                        <div class="feature-item">
+                            <span class="feature-icon">&#x1F50D;</span>
                             <span>Advanced Search</span>
                         </div>
                     </div>
@@ -139,7 +180,7 @@
             <!-- User Workflows Section -->
             <section id="workflows" class="content-section">
                 <h2>User Workflows</h2>
-                <p>Learn step-by-step how to accomplish common tasks in Ghostman.</p>
+                <p>Learn step-by-step how to accomplish common tasks in Specter.</p>
 
                 <div id="starting-conversation" class="subsection">
                     <h3>Starting a New Conversation</h3>
@@ -147,10 +188,10 @@
                         <div class="feature-card">
                             <h4>Quick Start</h4>
                             <ol class="step-list">
-                                <li>Click the Spector avatar to open the chat window</li>
+                                <li>Click the Specter avatar to open the chat window</li>
                                 <li>Type your message in the input box at the bottom</li>
                                 <li>Press <kbd>Enter</kbd> to send</li>
-                                <li>Watch as Spector responds in real-time</li>
+                                <li>Watch as Specter responds in real-time</li>
                             </ol>
                             <div class="info-box" style="margin-top: 1rem;">
                                 <p><strong>Tip:</strong> Use <kbd>Shift</kbd>+<kbd>Enter</kbd> to add line breaks without sending the message.</p>
@@ -161,7 +202,7 @@
                             <h4>Creating Multiple Tabs</h4>
                             <ol class="step-list">
                                 <li>Click the <strong>+</strong> button in the tab bar</li>
-                                <li>Or press <kbd>Ctrl</kbd>+<kbd>T</kbd> for a new tab</li>
+                                <li>Or press <kbd>Ctrl</kbd>+<kbd>N</kbd> for a new tab</li>
                                 <li>Each tab has its own conversation context</li>
                                 <li>Switch between tabs by clicking them</li>
                                 <li>Tabs auto-save and restore on restart</li>
@@ -188,7 +229,7 @@
                             <ol class="step-list">
                                 <li><strong>Method 1 - Click Upload Button:</strong>
                                     <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
-                                        <li>Click the 📎 attach/upload icon in the file browser bar</li>
+                                        <li>Click the attach/upload icon in the file browser bar</li>
                                         <li>Select one or more files from the file picker dialog</li>
                                         <li>Files are added to the current conversation's context</li>
                                     </ul>
@@ -196,7 +237,7 @@
                                 <li><strong>Method 2 - Drag and Drop:</strong>
                                     <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
                                         <li>Drag files directly from your file explorer</li>
-                                        <li>Drop them anywhere in the Ghostman window</li>
+                                        <li>Drop them anywhere in the Specter window</li>
                                         <li>Files are automatically added and processed</li>
                                         <li>No clicking required - fastest method!</li>
                                     </ul>
@@ -228,7 +269,7 @@
                                 <li><strong>File Name:</strong> Truncated if too long (hover for full name)</li>
                                 <li><strong>Status Indicator:</strong> Visual feedback on processing state</li>
                                 <li><strong>Toggle Button:</strong> Enable/disable file in current context</li>
-                                <li><strong>Remove Button (×):</strong> Delete file from conversation</li>
+                                <li><strong>Remove Button (x):</strong> Delete file from conversation</li>
                             </ul>
                             <p style="margin-top: 1rem;"><strong>Badge Colors:</strong></p>
                             <ul>
@@ -317,11 +358,12 @@
                         <div class="feature-card">
                             <h4>Tab Operations</h4>
                             <ul>
-                                <li><strong>Create Tab:</strong> Click + or press <kbd>Ctrl</kbd>+<kbd>T</kbd></li>
+                                <li><strong>Create Tab:</strong> Click + or press <kbd>Ctrl</kbd>+<kbd>N</kbd></li>
                                 <li><strong>Switch Tabs:</strong> Click any tab to switch</li>
-                                <li><strong>Close Tab:</strong> Click X on tab or press <kbd>Ctrl</kbd>+<kbd>W</kbd></li>
+                                <li><strong>Close Tab:</strong> Click X on tab or press <kbd>Ctrl</kbd>+<kbd>X</kbd></li>
                                 <li><strong>Rename Tab:</strong> Right-click tab for options</li>
                                 <li><strong>Reorder Tabs:</strong> Drag tabs to rearrange</li>
+                                <li><strong>Next/Previous Tab:</strong> <kbd>Ctrl</kbd>+<kbd>Tab</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Tab</kbd></li>
                             </ul>
                         </div>
 
@@ -386,6 +428,7 @@
                                 <li><strong>Font Selection:</strong> Customize AI response fonts</li>
                                 <li><strong>Always on Top:</strong> Keep window above others</li>
                                 <li><strong>Window Size:</strong> Resize using corner/edge handles</li>
+                                <li><strong>Avatar Persona:</strong> Choose from 8 AI personalities</li>
                             </ul>
                         </div>
                     </div>
@@ -397,7 +440,7 @@
                 <h2>Installation</h2>
 
                 <div class="info-box">
-                    <p><strong>Requirements:</strong> Python 3.12+ and Windows 10/11, macOS, or Linux</p>
+                    <p><strong>Requirements:</strong> Python 3.12+ and Windows 10/11</p>
                 </div>
 
                 <div class="feature-grid">
@@ -407,20 +450,52 @@
                             <pre><code>git clone https://github.com/ghost-ng/Ghostman.git
 cd Ghostman
 python -m venv venv
-venv\Scripts\activate  # Windows
-# source venv/bin/activate  # macOS/Linux
+venv\Scripts\activate
 pip install -r requirements.txt</code></pre>
                         </div>
                     </div>
 
                     <div class="feature-card">
-                        <h4>Run Ghostman</h4>
+                        <h4>Run Specter</h4>
                         <div class="code-block">
-                            <pre><code>python -m ghostman</code></pre>
+                            <pre><code>python -m specter</code></pre>
                         </div>
                         <p>For debug mode:</p>
                         <div class="code-block">
-                            <pre><code>python -m ghostman --debug</code></pre>
+                            <pre><code>python -m specter --debug</code></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="first-setup" class="subsection">
+                    <h3>First Time Setup</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Initial Configuration</h4>
+                            <ol class="step-list">
+                                <li>Launch Specter - the avatar appears on your desktop</li>
+                                <li>Click the avatar to open the chat window</li>
+                                <li>Open Settings (gear icon or <kbd>Ctrl</kbd>+<kbd>,</kbd>)</li>
+                                <li>Go to the "AI Settings" tab</li>
+                                <li>Select a model preset or configure a custom endpoint</li>
+                                <li>Enter your API key</li>
+                                <li>Click "Apply" to save</li>
+                            </ol>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Data Storage</h4>
+                            <p>All Specter data is stored in Windows AppData:</p>
+                            <div class="code-block">
+                                <pre><code>%APPDATA%\Specter\
+  configs\settings.json    # All settings
+  db\conversations.db      # Conversation database
+  logs\specter.log         # Application log
+  logs\crash.log           # Crash traces
+  pki\                     # PKI certificates
+  captures\                # Screen captures
+  rag\                     # RAG vector data</code></pre>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -434,7 +509,8 @@ pip install -r requirements.txt</code></pre>
                                 <li><strong>OpenAI:</strong> <a href="https://platform.openai.com/" target="_blank">platform.openai.com</a></li>
                                 <li><strong>Anthropic:</strong> <a href="https://console.anthropic.com/" target="_blank">console.anthropic.com</a></li>
                                 <li><strong>Google:</strong> <a href="https://makersuite.google.com/" target="_blank">makersuite.google.com</a></li>
-                                <li><strong>Local:</strong> Ollama and OpenAI-compatible APIs</li>
+                                <li><strong>OpenRouter:</strong> <a href="https://openrouter.ai/" target="_blank">openrouter.ai</a></li>
+                                <li><strong>Custom:</strong> Any OpenAI-compatible endpoint</li>
                             </ul>
                         </div>
 
@@ -442,9 +518,167 @@ pip install -r requirements.txt</code></pre>
                             <h4>Key Features</h4>
                             <ul>
                                 <li>Real-time AI response streaming</li>
-                                <li>Enhanced markdown formatting (37% faster)</li>
+                                <li>Enhanced markdown formatting</li>
                                 <li>Code syntax highlighting</li>
                                 <li>Copy individual messages</li>
+                                <li>AI tool calling with skills</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Interface Overview -->
+            <section id="interface" class="content-section">
+                <h2>Interface Overview</h2>
+
+                <div id="main-window" class="subsection">
+                    <h3>Main Window</h3>
+                    <div class="screenshot">
+                        <img src="images/appwindow.png" alt="Specter main window showing chat interface">
+                        <p class="caption">The Specter main window with tab bar, chat display, and input area</p>
+                    </div>
+
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Window Features</h4>
+                            <ul>
+                                <li><strong>Attach Mode:</strong> REPL window attaches to avatar (link icon)</li>
+                                <li><strong>Pin Mode:</strong> Always-on-top toggle</li>
+                                <li><strong>Resize:</strong> Edge and corner drag handles</li>
+                                <li><strong>Position Memory:</strong> Window position and size remembered between sessions</li>
+                                <li><strong>Opacity Control:</strong> Adjustable transparency</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Title Bar Controls</h4>
+                            <div class="screenshot">
+                                <img src="images/titlebar.png" alt="Title bar with action buttons">
+                                <p class="caption">Title bar with attach, pin, settings, save, and minimize buttons</p>
+                            </div>
+                            <ul>
+                                <li><strong>Attach (Link Icon):</strong> Attach/detach REPL from avatar</li>
+                                <li><strong>Pin:</strong> Toggle always-on-top mode</li>
+                                <li><strong>Settings (Gear):</strong> Open settings dialog</li>
+                                <li><strong>Save:</strong> Export current conversation</li>
+                                <li><strong>Minimize:</strong> Minimize to system tray</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="spector-avatar" class="subsection">
+                    <h3>Specter Avatar</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Avatar Interactions</h4>
+                            <ul>
+                                <li><strong>Left Click:</strong> Show/hide the REPL chat window</li>
+                                <li><strong>Right Click:</strong> Open context menu</li>
+                                <li><strong>Drag:</strong> Move avatar anywhere on screen</li>
+                                <li><strong>Animated States:</strong> Idle, sleeping, fidget animations</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Avatar Context Menu</h4>
+                            <ul>
+                                <li><strong>Conversations:</strong> Open the conversation browser</li>
+                                <li><strong>Screen Capture:</strong> Start a screen capture</li>
+                                <li><strong>Settings:</strong> Open settings dialog</li>
+                                <li><strong>Help:</strong> Open this help documentation</li>
+                                <li><strong>Minimize to Tray:</strong> Hide avatar to system tray</li>
+                                <li><strong>Quit:</strong> Exit the application</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="system-tray" class="subsection">
+                    <h3>System Tray & Avatar Menus</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>System Tray Menu</h4>
+                            <p>Right-click the Specter icon in the Windows system tray:</p>
+                            <ul>
+                                <li><strong>Show Avatar:</strong> Restore the avatar to the desktop</li>
+                                <li><strong>Screen Capture:</strong> Start a screen capture session</li>
+                                <li><strong>Settings:</strong> Open the settings dialog</li>
+                                <li><strong>Help:</strong> Open help documentation</li>
+                                <li><strong>Quit:</strong> Exit the application completely</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Avatar Right-Click Menu</h4>
+                            <p>Right-click the floating avatar on your desktop:</p>
+                            <ul>
+                                <li><strong>Conversations:</strong> Browse and manage saved conversations</li>
+                                <li><strong>Screen Capture:</strong> Capture a region of your screen</li>
+                                <li><strong>Settings:</strong> Open full settings dialog</li>
+                                <li><strong>Help:</strong> Open this help guide</li>
+                                <li><strong>Minimize to Tray:</strong> Hide avatar to system tray</li>
+                                <li><strong>Quit:</strong> Exit the application</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-management" class="subsection">
+                    <h3>Tab Management</h3>
+                    <div class="screenshot">
+                        <img src="images/titlebar_tabs.png" alt="Tab bar showing multiple conversation tabs">
+                        <p class="caption">Tab bar for managing multiple conversations</p>
+                    </div>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Tab Controls</h4>
+                            <ul>
+                                <li><strong>New Tab (+):</strong> Create a new conversation (<kbd>Ctrl</kbd>+<kbd>N</kbd>)</li>
+                                <li><strong>Close Tab (X):</strong> Close the current tab (<kbd>Ctrl</kbd>+<kbd>X</kbd>)</li>
+                                <li><strong>Switch Tabs:</strong> Click any tab or use <kbd>Ctrl</kbd>+<kbd>Tab</kbd></li>
+                                <li><strong>Auto-Naming:</strong> Tabs auto-name based on conversation content</li>
+                                <li><strong>Drag to Reorder:</strong> Drag tabs to change order</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="file-browser" class="subsection">
+                    <h3>File Browser Bar</h3>
+                    <div class="screenshot">
+                        <img src="images/file_browser_bar.png" alt="File browser bar">
+                        <p class="caption">File browser bar with upload and management controls</p>
+                    </div>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>File Browser Controls</h4>
+                            <ul>
+                                <li><strong>Upload Button:</strong> Select files for RAG processing</li>
+                                <li><strong>Clear Button:</strong> Remove all files from context</li>
+                                <li><strong>Toggle Visibility:</strong> Show/hide with <kbd>Ctrl</kbd>+<kbd>U</kbd></li>
+                                <li><strong>File Badges:</strong> Color-coded status indicators</li>
+                                <li><strong>Per-Tab Isolation:</strong> Each tab has its own files</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="search-interface" class="subsection">
+                    <h3>Search Interface</h3>
+                    <div class="screenshot">
+                        <img src="images/searchbar.png" alt="Search bar for finding messages">
+                        <p class="caption">Search bar for finding messages within a conversation</p>
+                    </div>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Search Features</h4>
+                            <ul>
+                                <li><strong>Open Search:</strong> Press <kbd>Ctrl</kbd>+<kbd>F</kbd></li>
+                                <li><strong>Search Within:</strong> Find text in the current conversation</li>
+                                <li><strong>Conversation Browser:</strong> <kbd>Ctrl</kbd>+<kbd>K</kbd> to search across all conversations</li>
+                                <li><strong>Close Search:</strong> Press <kbd>Escape</kbd></li>
                             </ul>
                         </div>
                     </div>
@@ -497,6 +731,7 @@ pip install -r requirements.txt</code></pre>
                                 <li><strong>Message History:</strong> Scroll to see previous conversations</li>
                                 <li><strong>Copy Messages:</strong> Right-click any message to copy</li>
                                 <li><strong>Multi-line Input:</strong> Shift+Enter for new lines without sending</li>
+                                <li><strong>Clickable URLs:</strong> Links in responses open in your browser</li>
                             </ul>
                         </div>
 
@@ -505,9 +740,11 @@ pip install -r requirements.txt</code></pre>
                             <ul>
                                 <li><strong>Enter:</strong> Send message</li>
                                 <li><strong>Shift+Enter:</strong> New line without sending</li>
+                                <li><strong>Ctrl+Enter:</strong> Send message (alternative)</li>
                                 <li><strong>Up/Down:</strong> Navigate message history</li>
-                                <li><strong>Ctrl+A:</strong> Select all text in input</li>
-                                <li><strong>Ctrl+Z/Y:</strong> Undo/Redo in text input</li>
+                                <li><strong>Escape:</strong> Cancel streaming response</li>
+                                <li><strong>/ (slash):</strong> Open command autocomplete</li>
+                                <li><strong>@ (at sign):</strong> Open mention autocomplete</li>
                             </ul>
                         </div>
                     </div>
@@ -538,6 +775,591 @@ pip install -r requirements.txt</code></pre>
                                 <li><strong>Theme-Aware Icons:</strong> Automatic dark/light adaptation</li>
                                 <li><strong>Quick Save:</strong> No menu navigation required</li>
                                 <li><strong>Export Options:</strong> Multiple format support</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="conversation-management" class="subsection">
+                    <h3>Conversation Management</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Conversation Browser</h4>
+                            <p>Open with <kbd>Ctrl</kbd>+<kbd>K</kbd> or from the avatar context menu.</p>
+                            <ul>
+                                <li><strong>Search:</strong> Find conversations by title or content</li>
+                                <li><strong>Load:</strong> Open any saved conversation in a new tab</li>
+                                <li><strong>Delete:</strong> Remove conversations you no longer need</li>
+                                <li><strong>Pin:</strong> Mark important conversations for quick access</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Smart Saving</h4>
+                            <ul>
+                                <li><strong>Auto-Save:</strong> Conversations save after each message exchange</li>
+                                <li><strong>No Empty Saves:</strong> Conversations are only saved after the first message</li>
+                                <li><strong>Per-Tab State:</strong> Each tab's state is independently preserved</li>
+                                <li><strong>Restore on Launch:</strong> Previous session tabs restore automatically</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="slash-commands" class="subsection">
+                    <h3>Slash Commands</h3>
+                    <div class="info-box">
+                        <p><strong>Quick Tip:</strong> Typing <code>/</code> in the input box triggers an autocomplete popup showing all available commands.</p>
+                    </div>
+
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Standard Commands (Always Available)</h4>
+                            <ul>
+                                <li><strong>/help</strong> - Show available commands and usage info</li>
+                                <li><strong>/clear</strong> - Clear the output display</li>
+                                <li><strong>/history</strong> - Show last 10 commands from history</li>
+                                <li><strong>/resend</strong> - Resend the last failed message</li>
+                                <li><strong>/exit</strong> - Minimize the application to system tray</li>
+                                <li><strong>/skills</strong> - Show available AI skills and tools</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Debug Commands (Advanced Settings)</h4>
+                            <p>Enable debug mode in Settings &gt; Advanced to unlock these commands:</p>
+                            <ul>
+                                <li><strong>/quit</strong> - Exit the application entirely</li>
+                                <li><strong>/context</strong> - Show AI context status and conversation info</li>
+                                <li><strong>/render_stats</strong> - Show markdown rendering statistics</li>
+                                <li><strong>/test_markdown</strong> - Test markdown rendering with sample content</li>
+                                <li><strong>/test_themes</strong> - Cycle through all themes for testing</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="mentions" class="subsection">
+                    <h3>@ Mentions System</h3>
+                    <div class="info-box">
+                        <p><strong>Quick Tip:</strong> Typing <code>@</code> in the input box triggers an autocomplete popup showing available mention targets.</p>
+                    </div>
+
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Collection Mentions</h4>
+                            <p>Reference a saved collection to load its files into context:</p>
+                            <div class="code-block">
+                                <pre><code>@collection:my-research-papers</code></pre>
+                            </div>
+                            <ul>
+                                <li>Loads all files from the named collection into the current conversation's RAG context</li>
+                                <li>Autocomplete shows all available collections as you type</li>
+                                <li>Combine with a question in the same message</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>URL Mentions</h4>
+                            <p>Load webpage content temporarily into context:</p>
+                            <div class="code-block">
+                                <pre><code>@url:https://example.com/article</code></pre>
+                            </div>
+                            <ul>
+                                <li>Fetches and processes the webpage content</li>
+                                <li>Content is available as temporary context for the conversation</li>
+                                <li>Useful for asking questions about web pages</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- AI Skills & Tools -->
+            <section id="skills" class="content-section">
+                <h2>AI Skills & Tools</h2>
+                <p>Specter includes 9 AI-callable skills that the AI can invoke automatically when relevant to the conversation. Skills extend the AI beyond text chat into real-world actions like sending emails, searching files, capturing screens, and formatting documents.</p>
+
+                <div class="info-box">
+                    <p><strong>How it works:</strong> When you ask the AI to do something that matches a skill's capability, the AI automatically invokes the appropriate tool. You can also type <code>/skills</code> to see all available skills, or manage them in Settings &gt; Tools.</p>
+                </div>
+
+                <div id="skill-email" class="subsection">
+                    <h3>Email & Calendar Skills</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Email Draft</h4>
+                            <p>Create email drafts in Microsoft Outlook.</p>
+                            <ul>
+                                <li><strong>Draft Only:</strong> Emails are never auto-sent - always saved as drafts</li>
+                                <li><strong>Full Control:</strong> Set To, CC, BCC, Subject, and Body</li>
+                                <li><strong>HTML Support:</strong> Rich formatting in email body</li>
+                                <li><strong>Safe by Design:</strong> You review and send manually from Outlook</li>
+                            </ul>
+                            <p style="margin-top: 0.5rem;"><strong>Example:</strong> "Draft an email to john@example.com about the project status update"</p>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Email Search</h4>
+                            <p>Search your Outlook mailbox or retrieve recent messages.</p>
+                            <ul>
+                                <li><strong>Keyword Search:</strong> Find emails matching search terms</li>
+                                <li><strong>Recent Messages:</strong> Retrieve last N emails from inbox</li>
+                                <li><strong>Folder Browsing:</strong> Search specific Outlook folders</li>
+                                <li><strong>Rich Results:</strong> Returns subject, sender, date, and preview</li>
+                            </ul>
+                            <p style="margin-top: 0.5rem;"><strong>Example:</strong> "Search my email for messages from Sarah about the budget"</p>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Calendar Event</h4>
+                            <p>Create calendar appointments in Microsoft Outlook.</p>
+                            <ul>
+                                <li><strong>Draft Mode:</strong> Events are created as drafts you can review</li>
+                                <li><strong>Full Details:</strong> Subject, location, start/end time, body</li>
+                                <li><strong>Attendees:</strong> Add required and optional attendees</li>
+                                <li><strong>Recurring:</strong> Set up recurring event patterns</li>
+                            </ul>
+                            <p style="margin-top: 0.5rem;"><strong>Example:</strong> "Create a meeting for tomorrow at 2pm with the design team"</p>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Calendar Search</h4>
+                            <p>Search your Outlook calendar for events.</p>
+                            <ul>
+                                <li><strong>Date Range:</strong> Find events within specific dates</li>
+                                <li><strong>Keyword Search:</strong> Search by event subject or content</li>
+                                <li><strong>Upcoming Events:</strong> View your next scheduled appointments</li>
+                                <li><strong>Event Details:</strong> Returns full event information</li>
+                            </ul>
+                            <p style="margin-top: 0.5rem;"><strong>Example:</strong> "What meetings do I have this week?"</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="skill-files" class="subsection">
+                    <h3>File & Web Search Skills</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>File Search</h4>
+                            <p>Search files on your computer using the Windows Search API.</p>
+                            <ul>
+                                <li><strong>System-Wide:</strong> Searches across all indexed drives</li>
+                                <li><strong>File Types:</strong> Filter by extension or content type</li>
+                                <li><strong>Content Search:</strong> Find files containing specific text</li>
+                                <li><strong>Results:</strong> Returns file paths, sizes, and dates</li>
+                            </ul>
+                            <p style="margin-top: 0.5rem;"><strong>Example:</strong> "Find all PDF files related to quarterly reports"</p>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Web Search</h4>
+                            <p>Search the web via DuckDuckGo or Tavily.</p>
+                            <ul>
+                                <li><strong>DuckDuckGo:</strong> Free, no API key required (default)</li>
+                                <li><strong>Tavily:</strong> Higher quality results with API key</li>
+                                <li><strong>Configurable:</strong> Set search provider in Settings &gt; Tools</li>
+                                <li><strong>Content Extraction:</strong> Parses page content for context</li>
+                            </ul>
+                            <p style="margin-top: 0.5rem;"><strong>Example:</strong> "Search the web for the latest Python 3.13 release notes"</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="skill-capture" class="subsection">
+                    <h3>Screen Capture Skill</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Screen Capture</h4>
+                            <p>Capture regions of your screen with flexible selection modes.</p>
+                            <ul>
+                                <li><strong>Rectangle Selection:</strong> Draw a rectangular region</li>
+                                <li><strong>Circle Selection:</strong> Capture a circular area</li>
+                                <li><strong>Freeform Selection:</strong> Draw any shape to capture</li>
+                                <li><strong>Auto-Copy:</strong> Capture is automatically copied to clipboard</li>
+                                <li><strong>Save Option:</strong> Save captures to the captures folder</li>
+                                <li><strong>AI Analysis:</strong> Send captures to AI for description or analysis</li>
+                            </ul>
+                            <p style="margin-top: 0.5rem;"><strong>Access:</strong> Right-click avatar &gt; Screen Capture, or system tray &gt; Screen Capture</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="skill-tasks" class="subsection">
+                    <h3>Task Tracker Skill</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Task Tracker</h4>
+                            <p>Manage tasks and to-do items with a local SQLite database.</p>
+                            <ul>
+                                <li><strong>Create Tasks:</strong> Add new tasks with descriptions and priorities</li>
+                                <li><strong>List Tasks:</strong> View all tasks filtered by status</li>
+                                <li><strong>Complete Tasks:</strong> Mark tasks as done</li>
+                                <li><strong>Delete Tasks:</strong> Remove tasks from the list</li>
+                                <li><strong>Priority Levels:</strong> Low, Medium, High priority support</li>
+                                <li><strong>Persistent Storage:</strong> Tasks survive application restarts</li>
+                            </ul>
+                            <p style="margin-top: 0.5rem;"><strong>Example:</strong> "Add a task to review the Q4 budget with high priority"</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="skill-docx" class="subsection">
+                    <h3>DOCX Formatter Skill</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>DOCX Formatter</h4>
+                            <p>Reformat and modify Word documents (.docx) with 11 supported operations.</p>
+                            <ul>
+                                <li><strong>Change Fonts:</strong> Update font family across the document</li>
+                                <li><strong>Set Margins:</strong> Adjust page margins (inches)</li>
+                                <li><strong>Line Spacing:</strong> Change line spacing (single, 1.5, double, custom)</li>
+                                <li><strong>Bullet Lists:</strong> Convert paragraphs to bullet points</li>
+                                <li><strong>Spell Check:</strong> Find and correct spelling errors</li>
+                                <li><strong>Change Case:</strong> Convert text to upper, lower, or title case</li>
+                                <li><strong>Format Headings:</strong> Apply heading styles to text</li>
+                                <li><strong>Find/Replace:</strong> Search and replace text throughout</li>
+                                <li><strong>Font Color:</strong> Change text color</li>
+                                <li><strong>Alignment:</strong> Set paragraph alignment (left, center, right, justify)</li>
+                                <li><strong>Indent:</strong> Adjust paragraph indentation</li>
+                            </ul>
+                            <p style="margin-top: 0.5rem;"><strong>Example:</strong> "Change the font in report.docx to Arial 12pt with 1-inch margins"</p>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Managing Skills</h4>
+                            <p>Configure skills globally in Settings &gt; Tools:</p>
+                            <ul>
+                                <li><strong>Enable/Disable Tool Calling:</strong> Global toggle for all skills</li>
+                                <li><strong>Max Iterations:</strong> Limit how many tool calls per message</li>
+                                <li><strong>Web Search Provider:</strong> Choose DuckDuckGo or Tavily</li>
+                                <li><strong>Tavily API Key:</strong> Enter key for Tavily web search</li>
+                                <li><strong>DOCX Defaults:</strong> Set default font, margins, spacing</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Avatar Personas -->
+            <section id="personas" class="content-section">
+                <h2>Avatar Personas</h2>
+                <p>Specter offers 8 selectable AI personalities, each with unique traits, system prompts, and communication styles. Choose a persona that matches your workflow and preferences.</p>
+
+                <div class="info-box">
+                    <p><strong>How to change:</strong> Open Settings &gt; Avatar tab to browse and select personas using the carousel interface.</p>
+                </div>
+
+                <div id="persona-list" class="subsection">
+                    <h3>Available Personas</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Specter (Default)</h4>
+                            <p><strong>Whimsical Productivity Companion</strong></p>
+                            <ul>
+                                <li>Friendly and approachable communication style</li>
+                                <li>Balanced between professional and casual tone</li>
+                                <li>Great all-around persona for everyday use</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Aegis</h4>
+                            <p><strong>Strategic Productivity Partner</strong></p>
+                            <ul>
+                                <li>Focused on strategic thinking and planning</li>
+                                <li>Structured, methodical communication</li>
+                                <li>Best for project management and strategy work</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Opus</h4>
+                            <p><strong>Systems-Oriented Architect</strong></p>
+                            <ul>
+                                <li>Technical and systems-thinking focused</li>
+                                <li>Precise, detail-oriented responses</li>
+                                <li>Best for engineering and architecture tasks</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Spark</h4>
+                            <p><strong>Energetic Productivity Catalyst</strong></p>
+                            <ul>
+                                <li>High-energy, motivating communication</li>
+                                <li>Action-oriented and fast-paced</li>
+                                <li>Best for brainstorming and rapid ideation</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Sage</h4>
+                            <p><strong>Calm & Reflective Guide</strong></p>
+                            <ul>
+                                <li>Thoughtful, measured responses</li>
+                                <li>Wisdom-oriented approach to problems</li>
+                                <li>Best for research and deep analysis</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Vector</h4>
+                            <p><strong>Tactical Execution Partner</strong></p>
+                            <ul>
+                                <li>Direct, no-nonsense communication</li>
+                                <li>Focused on execution and results</li>
+                                <li>Best for task completion and operations</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Nova</h4>
+                            <p><strong>Creative & Visionary Partner</strong></p>
+                            <ul>
+                                <li>Imaginative and creative communication</li>
+                                <li>Excels at out-of-the-box thinking</li>
+                                <li>Best for creative writing and design work</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Simon</h4>
+                            <p><strong>Steady Operational Partner</strong></p>
+                            <ul>
+                                <li>Reliable, consistent communication style</li>
+                                <li>Focused on process and routine</li>
+                                <li>Best for daily workflows and standard tasks</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Collections -->
+            <section id="collections" class="content-section">
+                <h2>Collections</h2>
+                <p>Collections let you organize files into named groups that can be reused across conversations. Think of them as persistent file bundles you can load into any conversation's context on demand.</p>
+
+                <div id="collection-usage" class="subsection">
+                    <h3>Using Collections</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Creating Collections</h4>
+                            <ol class="step-list">
+                                <li>Open the Collections Manager from the file browser bar</li>
+                                <li>Click "New Collection" and give it a name</li>
+                                <li>Add files to the collection by uploading or browsing</li>
+                                <li>Files are processed through the RAG pipeline and embedded</li>
+                                <li>The collection is saved and available across all conversations</li>
+                            </ol>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Referencing Collections</h4>
+                            <p>Load a collection into your current conversation using the @ mention syntax:</p>
+                            <div class="code-block">
+                                <pre><code>@collection:project-docs What are the API endpoints?</code></pre>
+                            </div>
+                            <ul>
+                                <li><strong>Instant Context:</strong> All files in the collection are loaded into RAG</li>
+                                <li><strong>Autocomplete:</strong> Typing <code>@collection:</code> shows available collections</li>
+                                <li><strong>Combine with Questions:</strong> Ask about the collection in the same message</li>
+                                <li><strong>Per-Conversation:</strong> Collections are loaded per-tab, maintaining isolation</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Managing Collections</h4>
+                            <ul>
+                                <li><strong>Add Files:</strong> Upload new files to existing collections</li>
+                                <li><strong>Remove Files:</strong> Remove individual files from a collection</li>
+                                <li><strong>Delete Collections:</strong> Remove entire collections and their data</li>
+                                <li><strong>Tag System:</strong> Collections use tags for organization</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Best Practices</h4>
+                            <ul>
+                                <li><strong>Themed Groups:</strong> Group related documents (e.g., "Q4 Reports", "API Docs")</li>
+                                <li><strong>Keep Focused:</strong> Smaller, focused collections yield better search results</li>
+                                <li><strong>Update Regularly:</strong> Add new files as your project evolves</li>
+                                <li><strong>Descriptive Names:</strong> Use clear names for easy autocomplete</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Settings -->
+            <section id="settings" class="content-section">
+                <h2>Settings</h2>
+                <p>Specter's settings dialog has 8 tabs for comprehensive customization. Open with the gear icon or <kbd>Ctrl</kbd>+<kbd>,</kbd>.</p>
+
+                <div id="settings-tabs" class="subsection">
+                    <h3>Settings Tabs Overview</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>1. AI Settings</h4>
+                            <div class="screenshot">
+                                <img src="images/ai-settings.png" alt="AI Settings tab">
+                                <p class="caption">AI model configuration with presets and API key</p>
+                            </div>
+                            <ul>
+                                <li><strong>Model Presets:</strong> Quick-select from popular AI models</li>
+                                <li><strong>Base URL:</strong> API endpoint URL</li>
+                                <li><strong>API Key:</strong> Your provider's authentication key</li>
+                                <li><strong>Temperature:</strong> Response creativity (0.0 = precise, 2.0 = creative)</li>
+                                <li><strong>Max Tokens:</strong> Maximum response length</li>
+                                <li><strong>System Prompt:</strong> Custom instructions for the AI</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>2. Interface</h4>
+                            <div class="screenshot">
+                                <img src="images/interface-settings.png" alt="Interface Settings tab">
+                                <p class="caption">Interface customization with theme and opacity controls</p>
+                            </div>
+                            <ul>
+                                <li><strong>Theme:</strong> Select from 39 themes in a dropdown</li>
+                                <li><strong>Window Opacity:</strong> Adjust transparency (20-100%)</li>
+                                <li><strong>Icon Size:</strong> Configure toolbar icon dimensions</li>
+                                <li><strong>Always on Top:</strong> Keep Specter above other windows</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>3. Fonts</h4>
+                            <div class="screenshot">
+                                <img src="images/font-settings.png" alt="Font Settings tab">
+                                <p class="caption">Font customization for AI responses and user input</p>
+                            </div>
+                            <ul>
+                                <li><strong>Font Family:</strong> Choose any installed system font</li>
+                                <li><strong>Font Size:</strong> Set text size for the chat display</li>
+                                <li><strong>AI Response Font:</strong> Separate font for AI messages</li>
+                                <li><strong>User Input Font:</strong> Font for the input area</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>4. Advanced</h4>
+                            <div class="screenshot">
+                                <img src="images/advanced-settings.png" alt="Advanced Settings tab">
+                                <p class="caption">Advanced options for debugging and SSL</p>
+                            </div>
+                            <ul>
+                                <li><strong>Debug Mode:</strong> Enable debug slash commands and verbose logging</li>
+                                <li><strong>SSL Verification:</strong> Toggle SSL certificate verification</li>
+                                <li><strong>AI Intent Classification:</strong> Enable/disable automatic skill matching</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>5. Themes</h4>
+                            <div class="screenshot">
+                                <img src="images/theme-settings.png" alt="Theme browser tab">
+                                <p class="caption">Visual theme browser with live previews</p>
+                            </div>
+                            <ul>
+                                <li><strong>Theme Browser:</strong> Visual gallery of all 39 themes</li>
+                                <li><strong>Live Preview:</strong> See theme colors before applying</li>
+                                <li><strong>Categories:</strong> Dark, light, nature, tech, creative themes</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>6. Tools</h4>
+                            <ul>
+                                <li><strong>Tool Calling Toggle:</strong> Enable/disable all AI tool calling globally</li>
+                                <li><strong>Max Iterations:</strong> Limit tool call loops per message (safety)</li>
+                                <li><strong>Web Search Config:</strong> Choose provider (DuckDuckGo or Tavily)</li>
+                                <li><strong>Tavily API Key:</strong> Enter key for Tavily web search</li>
+                                <li><strong>DOCX Formatter Defaults:</strong> Set default font, margins, and spacing</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>7. PKI Auth</h4>
+                            <div class="screenshot">
+                                <img src="images/pki-settings.png" alt="PKI authentication settings">
+                                <p class="caption">PKI certificate management for enterprise authentication</p>
+                            </div>
+                            <ul>
+                                <li><strong>Client Certificate:</strong> Upload .crt file for authentication</li>
+                                <li><strong>Client Key:</strong> Upload .pem private key file</li>
+                                <li><strong>CA Chain:</strong> Upload certificate authority chain</li>
+                                <li><strong>PKI Wizard:</strong> Guided setup for PKI configuration</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>8. Avatar</h4>
+                            <ul>
+                                <li><strong>Persona Selector:</strong> Carousel interface to browse personas</li>
+                                <li><strong>Persona Preview:</strong> See personality traits before selecting</li>
+                                <li><strong>8 Personas:</strong> Specter, Aegis, Opus, Spark, Sage, Vector, Nova, Simon</li>
+                                <li><strong>Instant Switch:</strong> Persona changes take effect immediately</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="ai-models" class="subsection">
+                    <h3>AI Model Presets</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Anthropic Models</h4>
+                            <ul>
+                                <li><strong>Claude 3.5 Sonnet</strong> - Fast, capable general-purpose model</li>
+                                <li><strong>Claude 3.5 Haiku</strong> - Fastest Anthropic model</li>
+                                <li><strong>Claude 3 Opus</strong> - Most capable Anthropic model</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>OpenAI Models</h4>
+                            <ul>
+                                <li><strong>GPT-5 (Latest)</strong> - Latest flagship OpenAI model</li>
+                                <li><strong>GPT-5-mini</strong> - Smaller, faster variant</li>
+                                <li><strong>GPT-5-nano</strong> - Lightest variant</li>
+                                <li><strong>GPT-4o</strong> - Optimized multimodal model</li>
+                                <li><strong>o3-mini</strong> - Efficient reasoning model</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Google Models</h4>
+                            <ul>
+                                <li><strong>Gemini 2.5 Pro</strong> - Most capable Google model</li>
+                                <li><strong>Gemini 2.5 Flash</strong> - Fast, efficient Google model</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>OpenAI Reasoning</h4>
+                            <ul>
+                                <li><strong>o1-preview</strong> - Advanced reasoning model</li>
+                                <li><strong>o1-mini</strong> - Compact reasoning model</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Legacy Models</h4>
+                            <ul>
+                                <li><strong>GPT-4 Turbo</strong> - Previous generation flagship</li>
+                                <li><strong>GPT-4o-mini</strong> - Compact previous generation</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>OpenRouter Models</h4>
+                            <ul>
+                                <li><strong>GPT-4o via OpenRouter</strong> - OpenAI through OpenRouter</li>
+                                <li><strong>Claude 3.5 Sonnet via OpenRouter</strong> - Anthropic through OpenRouter</li>
+                                <li><strong>Custom:</strong> Any OpenAI-compatible endpoint or model</li>
                             </ul>
                         </div>
                     </div>
@@ -582,6 +1404,36 @@ pip install -r requirements.txt</code></pre>
                                 <li><strong>ocean:</strong> Ocean blue theme</li>
                             </ul>
                         </div>
+
+                        <div class="feature-card">
+                            <h4>Pop Culture & Fandom</h4>
+                            <ul>
+                                <li><strong>dracula:</strong> Popular developer theme</li>
+                                <li><strong>solarized_dark:</strong> Classic developer favorite</li>
+                                <li><strong>gryffindor:</strong> Red and gold wizarding</li>
+                                <li><strong>slytherin:</strong> Green and silver wizarding</li>
+                                <li><strong>ravenclaw:</strong> Blue and bronze wizarding</li>
+                                <li><strong>hufflepuff:</strong> Yellow and black wizarding</li>
+                                <li><strong>empire:</strong> Imperial dark theme</li>
+                                <li><strong>republic:</strong> Republic-inspired theme</li>
+                                <li><strong>jedi:</strong> Light side of the Force</li>
+                                <li><strong>sith:</strong> Dark side of the Force</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Aesthetic & Mood</h4>
+                            <ul>
+                                <li><strong>moonlight:</strong> Soft moonlit palette</li>
+                                <li><strong>dusk:</strong> Evening twilight tones</li>
+                                <li><strong>dawn:</strong> Early morning colors</li>
+                                <li><strong>firefly:</strong> Warm glowing accents</li>
+                                <li><strong>jade:</strong> Rich green jade tones</li>
+                                <li><strong>pulse:</strong> Vibrant rhythmic theme</li>
+                                <li><strong>winter:</strong> Cool icy palette</li>
+                                <li><strong>mintly:</strong> Fresh mint accent theme</li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
 
@@ -594,6 +1446,7 @@ pip install -r requirements.txt</code></pre>
                                 <li><strong>arctic_white:</strong> Clean professional look</li>
                                 <li><strong>openai_like:</strong> OpenAI-inspired design</li>
                                 <li><strong>openui_like:</strong> Modern UI theme</li>
+                                <li><strong>openwebui_like:</strong> Open WebUI-inspired design</li>
                             </ul>
                         </div>
 
@@ -603,6 +1456,7 @@ pip install -r requirements.txt</code></pre>
                                 <li><strong>lilac:</strong> Soft purple light theme</li>
                                 <li><strong>sunburst:</strong> Golden orange theme</li>
                                 <li><strong>solarized_light:</strong> Popular light developer theme</li>
+                                <li><strong>birthday_cake:</strong> Festive pastel colors</li>
                             </ul>
                         </div>
                     </div>
@@ -613,7 +1467,7 @@ pip install -r requirements.txt</code></pre>
             <section id="keyboard-shortcuts" class="content-section">
                 <a id="hotkeys"></a>
                 <h2>Keyboard Shortcuts</h2>
-                <p>Master these shortcuts to boost your productivity with Ghostman.</p>
+                <p>Master these shortcuts to boost your productivity with Specter.</p>
 
                 <div class="shortcuts-grid">
                     <div class="shortcuts-category">
@@ -683,12 +1537,16 @@ pip install -r requirements.txt</code></pre>
                             <span>Toggle always on top</span>
                         </div>
                         <div class="shortcut-item">
-                            <kbd>Ctrl</kbd> + <kbd>,</kbd>
-                            <span>Open settings</span>
+                            <kbd>Ctrl</kbd> + <kbd>H</kbd>
+                            <span>Hide REPL window</span>
                         </div>
                         <div class="shortcut-item">
                             <kbd>Ctrl</kbd> + <kbd>M</kbd>
                             <span>Minimize to tray</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>,</kbd>
+                            <span>Open settings</span>
                         </div>
                     </div>
 
@@ -741,6 +1599,8 @@ pip install -r requirements.txt</code></pre>
                                 <li>Verify API key is correct and has credits</li>
                                 <li>Confirm AI service is available</li>
                                 <li>Check firewall/proxy settings</li>
+                                <li>If using PKI, verify certificates are valid</li>
+                                <li>Check SSL verification setting in Advanced settings</li>
                             </ul>
                         </div>
 
@@ -750,9 +1610,10 @@ pip install -r requirements.txt</code></pre>
                             <ul>
                                 <li>Check file size (max 50MB)</li>
                                 <li>Verify file type is supported</li>
-                                <li>Ensure API key is configured</li>
+                                <li>Ensure API key is configured (embeddings require API)</li>
                                 <li>Check logs for error messages</li>
                                 <li>Try smaller files first</li>
+                                <li>Verify the RAG data folder exists at <code>%APPDATA%\Specter\rag\</code></li>
                             </ul>
                         </div>
 
@@ -761,10 +1622,22 @@ pip install -r requirements.txt</code></pre>
                             <p><strong>Slow responses</strong></p>
                             <ul>
                                 <li>Check network speed</li>
-                                <li>Try different AI model</li>
-                                <li>Reduce conversation length</li>
-                                <li>Clear application cache</li>
-                                <li>Restart application</li>
+                                <li>Try a different or smaller AI model</li>
+                                <li>Reduce conversation length (start a new tab)</li>
+                                <li>Disable tools if not needed (Settings &gt; Tools)</li>
+                                <li>Restart the application</li>
+                            </ul>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Skills Not Working</h4>
+                            <p><strong>AI not using tools</strong></p>
+                            <ul>
+                                <li>Check that tool calling is enabled in Settings &gt; Tools</li>
+                                <li>Verify AI intent classification is enabled in Advanced settings</li>
+                                <li>Some skills require Outlook (email, calendar)</li>
+                                <li>Web search requires either DuckDuckGo (free) or Tavily API key</li>
+                                <li>Check <code>/skills</code> to see which skills are active</li>
                             </ul>
                         </div>
                     </div>
@@ -776,20 +1649,69 @@ pip install -r requirements.txt</code></pre>
                         <div class="feature-card">
                             <h4>Log Locations</h4>
                             <ul>
-                                <li><strong>Windows:</strong> <code>%APPDATA%\Ghostman\logs\</code></li>
-                                <li><strong>macOS:</strong> <code>~/Library/Application Support/Ghostman/logs/</code></li>
-                                <li><strong>Linux:</strong> <code>~/.config/Ghostman/logs/</code></li>
+                                <li><strong>Application Log:</strong> <code>%APPDATA%\Specter\logs\specter.log</code></li>
+                                <li><strong>Crash Log:</strong> <code>%APPDATA%\Specter\logs\crash.log</code></li>
+                                <li><strong>RAG Log:</strong> <code>%APPDATA%\Specter\rag\rag_pipeline.log</code></li>
                             </ul>
+                            <div class="info-box" style="margin-top: 1rem;">
+                                <p><strong>Quick Access:</strong> Open File Explorer and type <code>%APPDATA%\Specter\logs</code> in the address bar to navigate directly to the logs folder.</p>
+                            </div>
                         </div>
 
                         <div class="feature-card">
                             <h4>Using Logs</h4>
                             <ol class="step-list">
+                                <li>Enable debug mode in Settings &gt; Advanced for verbose logging</li>
                                 <li>Reproduce the issue</li>
-                                <li>Check latest log entries</li>
-                                <li>Look for ERROR or WARNING</li>
-                                <li>Note timestamps</li>
+                                <li>Open the latest log file</li>
+                                <li>Look for ERROR or WARNING entries</li>
+                                <li>Note timestamps around when the issue occurred</li>
+                                <li>Check <code>crash.log</code> for C-level crashes (segfaults)</li>
                             </ol>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Viewing Logs from Command Line</h4>
+                            <div class="code-block">
+                                <pre><code># PowerShell: View last 100 lines
+Get-Content "$env:APPDATA\Specter\logs\specter.log" -Tail 100
+
+# PowerShell: Live tail
+Get-Content "$env:APPDATA\Specter\logs\specter.log" -Wait -Tail 50
+
+# Check for crashes
+Get-Content "$env:APPDATA\Specter\logs\crash.log"</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <h3>Reset & Recovery</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h4>Reset Settings</h4>
+                            <p>If Specter becomes misconfigured, you can reset settings:</p>
+                            <ol class="step-list">
+                                <li>Close Specter completely</li>
+                                <li>Navigate to <code>%APPDATA%\Specter\configs\</code></li>
+                                <li>Rename or delete <code>settings.json</code></li>
+                                <li>Restart Specter - default settings will be recreated</li>
+                            </ol>
+                            <div class="warning-box" style="margin-top: 1rem;">
+                                <p><strong>Warning:</strong> This will reset all settings including your API key. Make a backup of settings.json first if you want to preserve any values.</p>
+                            </div>
+                        </div>
+
+                        <div class="feature-card">
+                            <h4>Database Recovery</h4>
+                            <p>If conversations are corrupted:</p>
+                            <ul>
+                                <li><strong>Database Location:</strong> <code>%APPDATA%\Specter\db\conversations.db</code></li>
+                                <li><strong>Backup First:</strong> Copy the .db file before any recovery</li>
+                                <li><strong>Fresh Start:</strong> Delete the database file and restart</li>
+                                <li><strong>Migrations:</strong> The app automatically runs migrations on startup</li>
+                            </ul>
                         </div>
                     </div>
                 </div>
@@ -810,18 +1732,29 @@ pip install -r requirements.txt</code></pre>
                     </div>
 
                     <div class="feature-card">
+                        <h4>In-App Help</h4>
+                        <ul>
+                            <li><strong>/help</strong> - Type in chat for quick command reference</li>
+                            <li><strong>/skills</strong> - View available AI skills</li>
+                            <li><strong>Tooltips:</strong> Hover over any button for shortcut hints</li>
+                            <li><strong>Avatar Menu:</strong> Right-click avatar &gt; Help</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-card">
                         <h4>Reporting Issues</h4>
                         <ol class="step-list">
                             <li>Visit <a href="https://github.com/ghost-ng/Ghostman/issues" target="_blank">GitHub Issues</a></li>
                             <li>Search for existing reports</li>
                             <li>Create new issue with details</li>
                             <li>Include logs and screenshots</li>
+                            <li>Mention your Specter version and Windows version</li>
                         </ol>
                     </div>
                 </div>
 
                 <div class="info-box">
-                    <p><strong>Ready to Start!</strong> Meet Spector, your AI companion for desktop productivity with context-aware file search and beautiful theming. For technical details about the RAG architecture, visit the <a href="technical.html">Technical Documentation</a>.</p>
+                    <p><strong>Ready to Start!</strong> Specter is your AI companion for desktop productivity with AI skills, avatar personas, context-aware file search, collections, and beautiful theming. For technical details about the architecture, visit the <a href="technical.html">Technical Documentation</a>.</p>
                 </div>
             </section>
         </main>

@@ -450,25 +450,52 @@ class TabConversationManager(QObject):
             pass
     
     def _rename_tab(self, tab_id: str):
-        """Rename a tab with user input dialog."""
+        """Rename a tab with user input dialog. Also persists to conversation DB."""
         if tab_id not in self.tabs:
             return
-            
+
         tab = self.tabs[tab_id]
         current_title = getattr(tab, 'full_title', tab.title)
-        
+
         # Show input dialog for new title
         from PyQt6.QtWidgets import QInputDialog
         new_title, ok = QInputDialog.getText(
             self.parent_repl,
             "Rename Tab",
-            "Enter new tab name:",
+            "Enter new name:",
             text=current_title
         )
-        
+
         if ok and new_title.strip():
-            self.update_tab_title(tab_id, new_title.strip())
-            logger.info(f"Tab {tab_id} renamed to: {new_title.strip()}")
+            title = new_title.strip()
+            self.update_tab_title(tab_id, title)
+            logger.info(f"Tab {tab_id} renamed to: {title}")
+
+            # Persist the new title to the conversation database
+            conversation_id = tab.conversation_id
+            if conversation_id:
+                self._persist_conversation_title(conversation_id, title)
+
+    def _persist_conversation_title(self, conversation_id: str, title: str):
+        """Save renamed title to the conversation database."""
+        try:
+            import asyncio
+            from ...infrastructure.ai.ai_service import AIService
+
+            ai_service = AIService.get_instance()
+            if ai_service and ai_service.conversation_service:
+                loop = asyncio.new_event_loop()
+                try:
+                    loop.run_until_complete(
+                        ai_service.conversation_service.update_conversation_title(
+                            conversation_id, title
+                        )
+                    )
+                    logger.info(f"Persisted conversation title '{title}' for {conversation_id[:8]}")
+                finally:
+                    loop.close()
+        except Exception as e:
+            logger.warning(f"Could not persist conversation title: {e}")
     
     def _close_other_tabs(self, keep_tab_id: str):
         """Close all tabs except the specified one."""

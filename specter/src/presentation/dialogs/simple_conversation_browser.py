@@ -335,7 +335,14 @@ class SimpleConversationBrowser(QDialog):
         header.resizeSection(3, 80)   # Messages column
         header.resizeSection(4, 90)   # Files column
         header.resizeSection(5, 120)  # Collections column
-        
+
+        # Enable clickable column headers for sorting
+        self.conversations_table.setSortingEnabled(True)
+        header.setSortIndicatorShown(True)
+        header.sectionClicked.connect(self._on_header_clicked)
+        self._current_sort_column = 6  # Default sort by Updated
+        self._current_sort_order = Qt.SortOrder.DescendingOrder
+
         self.conversations_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.conversations_table.setAlternatingRowColors(True)
         self.conversations_table.verticalHeader().setVisible(False)
@@ -552,8 +559,27 @@ class SimpleConversationBrowser(QDialog):
         self.loader_thread.quit()
         self.loader_thread.wait()
     
+    def _on_header_clicked(self, logical_index: int):
+        """Handle column header click for sorting."""
+        if logical_index == 0:
+            return  # Don't sort by checkbox column
+
+        # Toggle sort order if clicking the same column
+        if logical_index == self._current_sort_column:
+            if self._current_sort_order == Qt.SortOrder.AscendingOrder:
+                self._current_sort_order = Qt.SortOrder.DescendingOrder
+            else:
+                self._current_sort_order = Qt.SortOrder.AscendingOrder
+        else:
+            self._current_sort_column = logical_index
+            self._current_sort_order = Qt.SortOrder.AscendingOrder
+
+        self.conversations_table.sortItems(logical_index, self._current_sort_order)
+
     def _populate_table(self):
         """Populate conversations table with optional search highlighting and batch file loading."""
+        # Disable sorting while populating to avoid re-sort on each row insert
+        self.conversations_table.setSortingEnabled(False)
         self.conversations_table.setRowCount(len(self.conversations))
 
         # Batch load file info for all conversations to solve N+1 query problem
@@ -646,7 +672,11 @@ class SimpleConversationBrowser(QDialog):
             updated_text = self._format_datetime(conversation.updated_at)
             updated_item = QTableWidgetItem(updated_text)
             self.conversations_table.setItem(row, 6, updated_item)
-    
+
+        # Re-enable sorting and apply default sort
+        self.conversations_table.setSortingEnabled(True)
+        self.conversations_table.sortItems(self._current_sort_column, self._current_sort_order)
+
     def _is_current_conversation(self, conversation: Conversation) -> bool:
         """Check if this is the current active conversation."""
         if not self.conversation_manager:
@@ -1256,6 +1286,10 @@ class SimpleConversationBrowser(QDialog):
                     padding: 6px;
                     border: 1px solid {colors.border_primary};
                     font-weight: bold;
+                    cursor: pointer;
+                }}
+                QHeaderView::section:hover {{
+                    background-color: {colors.interactive_hover};
                 }}
                 QTableWidget::item:selected {{
                     background-color: {colors.primary};

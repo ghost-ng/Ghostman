@@ -5928,6 +5928,9 @@ class REPLWidget(QWidget):
         Buttons use ``ideal_size`` as their *maximum* size and shrink down
         when space is tight.  Spacing scales smoothly between buttons so
         they stay evenly distributed at any width.
+
+        The user's icon_size setting (1-10) drives both icon AND button
+        container sizes so the toolbar visibly scales.
         """
         if not buttons:
             return
@@ -5936,15 +5939,34 @@ class REPLWidget(QWidget):
             num = len(buttons)
             MIN_PADDING = icon_padding  # icon-to-button-border padding
 
-            # Use ideal button size, then compute the best uniform spacing
-            btn_size = ideal_size
+            # Read user icon_size preference (1-10) — default 5
+            user_slider = None
+            try:
+                from ...infrastructure.storage.settings_manager import settings
+                user_slider = settings.get('interface.icon_size', None)
+                if user_slider is not None:
+                    user_slider = int(user_slider)
+                    if not (1 <= user_slider <= 10):
+                        user_slider = None
+            except Exception:
+                pass
+
+            # If user has a preference, scale the ideal button size accordingly
+            # slider 5 = 100% of ideal_size, slider 1 = 60%, slider 10 = 140%
+            if user_slider is not None:
+                scale = 0.6 + (user_slider - 1) * (0.8 / 9)  # 0.6 .. 1.4
+                target_btn_size = max(16, int(ideal_size * scale))
+            else:
+                target_btn_size = ideal_size
+
+            btn_size = target_btn_size
             remaining = available_width - non_button_overhead - num * btn_size
             if num > 1:
                 spacing = max(2, remaining // (num - 1))
             else:
                 spacing = default_spacing
 
-            # If spacing would exceed default, cap it and keep buttons at ideal size
+            # If spacing would exceed default, cap it and keep buttons at target size
             spacing = min(spacing, default_spacing)
 
             # If even minimum spacing doesn't fit, shrink buttons
@@ -5953,7 +5975,11 @@ class REPLWidget(QWidget):
                 btn_size = max(16, usable // num)
                 spacing = 2
 
-            icon_size = max(10, btn_size - MIN_PADDING)
+            # Icon size from the user slider, or derived from button size
+            if user_slider is not None:
+                icon_size = user_slider * 3 + 1  # 4px .. 31px
+            else:
+                icon_size = max(10, btn_size - MIN_PADDING)
 
             if layout:
                 layout.setSpacing(spacing)
@@ -7005,55 +7031,38 @@ class REPLWidget(QWidget):
             return "lite"  # Default to lite icons for dark backgrounds
 
     def _update_icon_sizes(self, size: int):
-        """Update icon sizes for all buttons with icons based on slider value (1-10).
+        """Update icon AND button sizes for all toolbar buttons based on slider value (1-10).
 
         Args:
-            size: Slider value from 1-10, which maps to pixel size range 4-31
+            size: Slider value from 1-10
         """
         try:
-            # Calculate pixel size from slider value
-            # size 1 -> 4px, size 10 -> 31px
+            # Icon pixel size: size 1 -> 4px, size 10 -> 31px
             base_size = size * 3 + 1
             icon_size = QSize(base_size, base_size)
 
-            logger.debug(f"Updating icon sizes to {base_size}x{base_size} pixels (slider value: {size})")
+            # Button container scale: slider 5 = 100%, 1 = 60%, 10 = 140%
+            scale = 0.6 + (size - 1) * (0.8 / 9)
 
-            # Title bar buttons with icons
-            title_buttons = [
-                'title_new_conv_btn',    # Plus icon
-                'title_save_btn',        # Save icon
-                'title_help_btn',        # Help icon
-                'help_command_btn',      # Help command icon
-                'title_settings_btn',    # Gear icon
-                'chat_btn',              # Chat icon
-                'attach_btn',            # Chain icon (attach to avatar)
-                'upload_btn',            # File browser icon
-                'search_btn',            # Search icon
-                'move_btn',              # Move icon
-                'pin_btn',               # Pin icon
-                'capture_btn',           # Camera/screenshot icon
+            logger.debug(f"Updating icon sizes to {base_size}px, scale {scale:.2f} (slider: {size})")
+
+            # Re-run the auto-size logic for both rows so button containers scale too
+            if hasattr(self, 'title_frame') and self.title_frame:
+                self._adjust_title_bar_sizes(self.title_frame.width())
+            if hasattr(self, '_toolbar_container') and self._toolbar_container:
+                self._adjust_toolbar_sizes(self._toolbar_container.width())
+
+            # Also set icon size on any buttons that auto_size_button_row missed
+            extra_buttons = [
+                'browse_btn', 'export_btn',
             ]
-
-            # Toolbar buttons with icons
-            toolbar_buttons = [
-                'toolbar_new_conv_btn',  # Plus icon
-                'settings_btn',          # Gear icon
-            ]
-
-            # Combine all buttons
-            all_icon_buttons = title_buttons + toolbar_buttons
-
-            # Update icon size for each button that exists
-            updated_count = 0
-            for button_name in all_icon_buttons:
+            for button_name in extra_buttons:
                 if hasattr(self, button_name):
                     button = getattr(self, button_name)
                     if button is not None:
                         button.setIconSize(icon_size)
-                        updated_count += 1
-                        logger.debug(f"Updated icon size for {button_name}")
 
-            logger.info(f"Successfully updated {updated_count} button icon sizes to {base_size}x{base_size} pixels")
+            logger.info(f"Applied icon size {base_size}px (slider {size}) to toolbar buttons")
 
         except Exception as e:
             logger.error(f"Failed to update icon sizes: {e}", exc_info=True)
@@ -10868,10 +10877,8 @@ def test_theme():
             # Clear failed message on successful response
             self.last_failed_message = None
 
-            # Debug: Check response content
-            if not response or not response.strip():
-                logger.warning(f"Empty AI response received: '{response}'")
-                response = "[No response content received]"
+            # Check for empty response (e.g. AI only did tool calls with no text)
+            is_empty_response = not response or not response.strip()
 
             # Display AI response with better separation
             try:
@@ -10885,13 +10892,22 @@ def test_theme():
 
                     if streamed_text.strip() and stream_start is not None:
                         self._replace_stream_with_markdown(stream_start, streamed_text)
-                else:
+                    elif is_empty_response:
+                        # AI only performed tool calls with no text reply —
+                        # skip rendering (tool results were already displayed)
+                        logger.debug("Empty AI response after tool calls, skipping display")
+                elif not is_empty_response:
                     # Non-streaming path — display full response
                     self.append_output(self._get_avatar_label(), "response")
                     self.append_output(response, "response")
-                # Add spacing after AI response
-                self.append_output("", "normal")
-                self.append_output("\n--------------------------------------------------\n", "normal")
+                else:
+                    # Empty non-streamed response after tool calls — skip
+                    logger.debug("Empty non-streamed AI response, skipping display")
+                    is_empty_response = True
+                # Add spacing after AI response (skip for empty tool-call-only responses)
+                if not is_empty_response:
+                    self.append_output("", "normal")
+                    self.append_output("\n--------------------------------------------------\n", "normal")
             except Exception as e:
                 logger.error(f"Error displaying AI response: {e}", exc_info=True)
                 # Try fallback plain text display

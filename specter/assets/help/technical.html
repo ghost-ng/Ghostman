@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ghostman Technical Documentation</title>
+    <title>Specter Technical Documentation</title>
     <link rel="stylesheet" href="css/help.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,7 +15,7 @@
         <header class="header">
             <div class="header-content">
                 <div class="logo">
-                    <h1><img src="../avatar.png" alt="Spector Avatar" style="width: 32px; height: 32px; vertical-align: middle; margin-right: 8px; border-radius: 50%;"> Ghostman</h1>
+                    <h1><img src="../avatar.png" alt="Spector Avatar" style="width: 32px; height: 32px; vertical-align: middle; margin-right: 8px; border-radius: 50%;"> Specter</h1>
                     <span class="version">Technical Documentation - RAG Architecture & Implementation</span>
                 </div>
                 <nav class="nav">
@@ -109,8 +109,8 @@
             <!-- Introduction -->
             <section id="introduction" class="content-section">
                 <div class="hero">
-                    <h1>Ghostman Technical Documentation</h1>
-                    <p class="hero-subtitle">Deep dive into the RAG architecture, FAISS vector store implementation, and technical design decisions powering Ghostman's context-aware file search capabilities.</p>
+                    <h1>Specter Technical Documentation</h1>
+                    <p class="hero-subtitle">Deep dive into the RAG architecture, FAISS vector store implementation, and technical design decisions powering Specter's context-aware file search capabilities.</p>
                 </div>
 
                 <div class="info-box">
@@ -121,7 +121,7 @@
             <!-- Architecture Overview -->
             <section id="architecture-overview" class="content-section">
                 <h2>Architecture Overview</h2>
-                <p>Ghostman implements a sophisticated RAG (Retrieval-Augmented Generation) system that combines document retrieval with AI generation to provide context-aware responses based on uploaded files.</p>
+                <p>Specter implements a sophisticated RAG (Retrieval-Augmented Generation) system that combines document retrieval with AI generation to provide context-aware responses based on uploaded files.</p>
 
                 <div class="feature-grid">
                     <div class="feature-card">
@@ -310,7 +310,7 @@
                 <h2>FAISS Vector Store Implementation</h2>
 
                 <div class="info-box">
-                    <p><strong>Design Decision:</strong> Ghostman uses FAISS instead of ChromaDB due to stability issues with ChromaDB's SQLite backend causing segmentation faults in PyQt6 applications.</p>
+                    <p><strong>Design Decision:</strong> Specter uses FAISS instead of ChromaDB due to stability issues with ChromaDB's SQLite backend causing segmentation faults in PyQt6 applications.</p>
                 </div>
 
                 <div class="subsection">
@@ -383,7 +383,7 @@ _conversation_index: {conv_id: [indices]}</code></pre>
                             <ul>
                                 <li><strong>Index File:</strong> optimized_faiss_index.bin</li>
                                 <li><strong>Metadata File:</strong> optimized_metadata.pkl</li>
-                                <li><strong>Location:</strong> %APPDATA%/Ghostman/db/faiss_db/</li>
+                                <li><strong>Location:</strong> %APPDATA%/Specter/db/faiss_db/</li>
                                 <li><strong>Auto-Save:</strong> After each document addition</li>
                                 <li><strong>Format:</strong> Binary FAISS format + Python pickle</li>
                             </ul>
@@ -473,7 +473,7 @@ def search_by_conversation(query, conv_id):
 
                 <div id="embedding-models" class="subsection">
                     <h3>Embedding Model Selection</h3>
-                    <p>Ghostman uses OpenAI's text-embedding-3-small model for several reasons:</p>
+                    <p>Specter uses OpenAI's text-embedding-3-small model for several reasons:</p>
 
                     <div class="feature-grid">
                         <div class="feature-card">
@@ -750,7 +750,7 @@ max_context_length: 4000</code></pre>
                             <p>Multiple ways to customize configuration:</p>
                             <ul>
                                 <li><strong>Environment Variables:</strong> RAG_CHUNK_SIZE, RAG_TOP_K, etc.</li>
-                                <li><strong>Config File:</strong> JSON file via GHOSTMAN_RAG_CONFIG</li>
+                                <li><strong>Config File:</strong> JSON file via SPECTER_RAG_CONFIG</li>
                                 <li><strong>Programmatic:</strong> Direct instantiation in code</li>
                                 <li><strong>Defaults:</strong> Sensible defaults work out-of-box</li>
                             </ul>
@@ -808,13 +808,13 @@ RAG_BATCH_SIZE=100</code></pre>
                             <h4>Storage Paths</h4>
                             <div class="code-block">
                                 <pre><code># Data directory
-GHOSTMAN_DATA_DIR=~/.Ghostman
+SPECTER_DATA_DIR=~/.Specter
 
 # FAISS database
-RAG_CHROMADB_PATH=%APPDATA%/Ghostman/db
+RAG_CHROMADB_PATH=%APPDATA%/Specter/db
 
 # Config file
-GHOSTMAN_RAG_CONFIG=/path/to/config.json</code></pre>
+SPECTER_RAG_CONFIG=/path/to/config.json</code></pre>
                             </div>
                         </div>
                     </div>
@@ -1075,7 +1075,7 @@ pip install faiss-gpu</code></pre>
                             <p><strong>Solution:</strong></p>
                             <div class="code-block">
                                 <pre><code># Delete corrupted index files
-rm %APPDATA%/Ghostman/db/faiss_db/*
+rm %APPDATA%/Specter/db/faiss_db/*
 
 # Restart application - will rebuild</code></pre>
                             </div>
@@ -1127,7 +1127,7 @@ rm %APPDATA%/Ghostman/db/faiss_db/*
                         <div class="feature-card">
                             <h4>Check FAISS Statistics</h4>
                             <div class="code-block">
-                                <pre><code>from ghostman.infrastructure.rag_pipeline.vector_store import get_faiss_client
+                                <pre><code>from specter.infrastructure.rag_pipeline.vector_store import get_faiss_client
 
 client = get_faiss_client()
 stats = client.get_optimized_stats()
@@ -1142,7 +1142,7 @@ print(f"Memory: {stats['memory_usage_mb']} MB")</code></pre>
                         <div class="feature-card">
                             <h4>Verify Embeddings</h4>
                             <div class="code-block">
-                                <pre><code>from ghostman.infrastructure.rag_pipeline.services import EmbeddingService
+                                <pre><code>from specter.infrastructure.rag_pipeline.services import EmbeddingService
 
 service = EmbeddingService(
     api_endpoint="https://api.openai.com/v1",
@@ -1160,7 +1160,7 @@ else:
                         <div class="feature-card">
                             <h4>Inspect Conversation Index</h4>
                             <div class="code-block">
-                                <pre><code>from ghostman.infrastructure.rag_pipeline.vector_store import get_faiss_client
+                                <pre><code>from specter.infrastructure.rag_pipeline.vector_store import get_faiss_client
 
 client = get_faiss_client()
 docs = client.get_conversation_documents("conversation_id")
@@ -1181,8 +1181,8 @@ for doc in docs:
 logging.basicConfig(level=logging.DEBUG)
 
 # Or for specific modules
-logging.getLogger("ghostman.rag_pipeline").setLevel(logging.DEBUG)
-logging.getLogger("ghostman.optimized_faiss").setLevel(logging.DEBUG)</code></pre>
+logging.getLogger("specter.rag_pipeline").setLevel(logging.DEBUG)
+logging.getLogger("specter.optimized_faiss").setLevel(logging.DEBUG)</code></pre>
                             </div>
                         </div>
                     </div>
@@ -1226,9 +1226,9 @@ logging.getLogger("ghostman.optimized_faiss").setLevel(logging.DEBUG)</code></pr
                     <div class="feature-card">
                         <h4>Community</h4>
                         <ul>
-                            <li><a href="https://github.com/ghost-ng/Ghostman" target="_blank">GitHub Repository</a></li>
-                            <li><a href="https://github.com/ghost-ng/Ghostman/issues" target="_blank">Issue Tracker</a></li>
-                            <li><a href="https://github.com/ghost-ng/Ghostman/discussions" target="_blank">Discussions</a></li>
+                            <li><a href="https://github.com/ghost-ng/Specter" target="_blank">GitHub Repository</a></li>
+                            <li><a href="https://github.com/ghost-ng/Specter/issues" target="_blank">Issue Tracker</a></li>
+                            <li><a href="https://github.com/ghost-ng/Specter/discussions" target="_blank">Discussions</a></li>
                         </ul>
                     </div>
                 </div>

@@ -1,6 +1,6 @@
 """
-Help Dialog for ghost-ng
-Displays comprehensive help documentation in a web browser or embedded web view
+Help Dialog for Specter.
+Displays comprehensive help documentation in a web browser or embedded web view.
 """
 
 import os
@@ -29,7 +29,7 @@ class HelpDialog(QDialog):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("ghost-ng Help")
+        self.setWindowTitle("Specter Help")
         self.setMinimumSize(900, 700)
         self.resize(1200, 800)
         

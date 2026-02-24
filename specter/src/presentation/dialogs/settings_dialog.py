@@ -380,7 +380,7 @@ class SettingsDialog(QDialog):
 
         # Decrease button
         self.icon_size_decrease_btn = QPushButton("-")
-        self.icon_size_decrease_btn.setMaximumWidth(20)
+        self.icon_size_decrease_btn.setFixedSize(28, 28)
         self.icon_size_decrease_btn.clicked.connect(lambda: self._adjust_icon_size(-1))
 
         # Icon size slider
@@ -393,12 +393,12 @@ class SettingsDialog(QDialog):
 
         # Icon size label (shows current value)
         self.icon_size_label = QLabel("5")
-        self.icon_size_label.setMinimumWidth(20)
+        self.icon_size_label.setFixedWidth(24)
         self.icon_size_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # Increase button
         self.icon_size_increase_btn = QPushButton("+")
-        self.icon_size_increase_btn.setMaximumWidth(20)
+        self.icon_size_increase_btn.setFixedSize(28, 28)
         self.icon_size_increase_btn.clicked.connect(lambda: self._adjust_icon_size(1))
 
         icon_size_layout.addWidget(self.icon_size_decrease_btn)
@@ -913,16 +913,16 @@ class SettingsDialog(QDialog):
     def _apply_icon_size_immediately(self, size: int):
         """Apply icon size changes immediately to the REPL widget."""
         try:
-            # Get the main window's REPL widget
-            from ...application.app_coordinator import get_app_coordinator
-            coordinator = get_app_coordinator()
-
-            if coordinator and hasattr(coordinator, '_main_window') and coordinator._main_window:
-                main_window = coordinator._main_window
-                if hasattr(main_window, 'repl_widget') and main_window.repl_widget:
-                    # Update icon sizes in REPL widget
-                    main_window.repl_widget._update_icon_sizes(size)
+            # Settings dialog parent is MainWindow — REPL is at parent.floating_repl.repl_widget
+            main_window = self.parent()
+            if main_window and hasattr(main_window, 'floating_repl') and main_window.floating_repl:
+                repl_widget = getattr(main_window.floating_repl, 'repl_widget', None)
+                if repl_widget:
+                    repl_widget._update_icon_sizes(size)
                     logger.debug(f"Applied icon size {size} to REPL widget")
+                    return
+
+            logger.debug("Could not find REPL widget via parent chain")
         except Exception as e:
             logger.warning(f"Could not apply icon size immediately: {e}")
 

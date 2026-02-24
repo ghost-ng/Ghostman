@@ -50,11 +50,21 @@ class SettingsManager:
             'auto_restore_on_response': True,
             'window_position': {'x': 100, 'y': 100},
             'window_size': {'width': 400, 'height': 600},
-            'repl_window_size': {'width': 520, 'height': 650}  # Increased from 450 to 650
+            'repl_window_size': {'width': 520, 'height': 650},
+            'avatar_position': None,
+            'avatar_size': {'width': 120, 'height': 120},
+            'repl_position': None,
+            'repl_size': {'width': 520, 'height': 650},
+            'repl_width': 520,
+            'repl_height': 650
         },
-        'interface': {  # new namespace for percent-based values
+        'interface': {
             'opacity': 97,  # percent (10-100)
-            'icon_size': 5   # icon size (1-10, default 5)
+            'icon_size': 5,  # icon size (1-10, default 5)
+            'repl_attached': False,
+            'repl_attach_offset': None,
+            'repl_was_visible': False,
+            'always_on_top': True
         },
         'ai_model': {
             'preset': 'Custom',
