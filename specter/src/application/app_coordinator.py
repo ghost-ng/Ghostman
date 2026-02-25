@@ -299,10 +299,8 @@ class AppCoordinator(QObject):
             # Import skill manager and all built-in skills
             from ..infrastructure.skills.core.skill_manager import skill_manager
             from ..infrastructure.skills.skills_library import (
-                EmailDraftSkill,
-                EmailSearchSkill,
-                CalendarEventSkill,
-                CalendarSearchSkill,
+                OutlookEmailSkill,
+                OutlookCalendarSkill,
                 FileSearchSkill,
                 ScreenCaptureSkill,
                 TaskTrackerSkill,
@@ -312,10 +310,8 @@ class AppCoordinator(QObject):
 
             # Register all built-in skills
             skills_to_register = [
-                EmailDraftSkill,
-                EmailSearchSkill,
-                CalendarEventSkill,
-                CalendarSearchSkill,
+                OutlookEmailSkill,
+                OutlookCalendarSkill,
                 FileSearchSkill,
                 ScreenCaptureSkill,
                 TaskTrackerSkill,

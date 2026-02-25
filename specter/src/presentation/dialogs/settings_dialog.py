@@ -1430,7 +1430,37 @@ class SettingsDialog(QDialog):
         storage_layout.addRow("Reset Data:", purge_layout)
         
         layout.addWidget(storage_group)
-        
+
+        # Embedding Provider Group
+        embedding_group = QGroupBox("Embedding Provider (for File Context / RAG)")
+        embedding_layout = QFormLayout(embedding_group)
+        embedding_layout.setSpacing(8)
+
+        embedding_info = QLabel(
+            "Leave fields empty to use your AI Model settings automatically. "
+            "Only configure these if your chat provider doesn't support embeddings "
+            "(e.g., Anthropic) or you want a different embedding model."
+        )
+        embedding_info.setWordWrap(True)
+        embedding_info.setStyleSheet("color: gray; font-size: 10px; margin-bottom: 6px;")
+        embedding_layout.addRow(embedding_info)
+
+        self.embedding_base_url_edit = QLineEdit()
+        self.embedding_base_url_edit.setPlaceholderText("Leave empty to use AI Model URL")
+        embedding_layout.addRow("Embedding Base URL:", self.embedding_base_url_edit)
+
+        self.embedding_api_key_edit = QLineEdit()
+        self.embedding_api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.embedding_api_key_edit.setPlaceholderText("Leave empty to use AI Model Key")
+        embedding_layout.addRow("Embedding API Key:", self.embedding_api_key_edit)
+
+        self.embedding_model_edit = QLineEdit()
+        self.embedding_model_edit.setPlaceholderText("text-embedding-3-small")
+        self.embedding_model_edit.setText("text-embedding-3-small")
+        embedding_layout.addRow("Embedding Model:", self.embedding_model_edit)
+
+        layout.addWidget(embedding_group)
+
         layout.addStretch()
         self.tab_widget.addTab(tab, "Advanced")
         
@@ -3955,6 +3985,11 @@ class SettingsDialog(QDialog):
                     "default_operations": self._get_docx_operations()
                 }
             },
+            "embedding": {
+                "base_url": self.embedding_base_url_edit.text().strip(),
+                "api_key": self.embedding_api_key_edit.text().strip(),
+                "model": self.embedding_model_edit.text().strip() or "text-embedding-3-small",
+            },
             "avatar": {
                 "selected": getattr(self, '_selected_avatar_id', 'specter'),
                 "scale": getattr(self, '_avatar_scale_slider', None) and self._avatar_scale_slider.value() / 100.0 or 1.0
@@ -4189,6 +4224,15 @@ class SettingsDialog(QDialog):
             self.docx_op_spelling_check.setChecked("fix_spelling" in operations)
             self.docx_op_case_check.setChecked("fix_case" in operations)
             self.docx_op_headings_check.setChecked("normalize_headings" in operations)
+
+        # Embedding settings
+        embedding_config = config.get("embedding", {})
+        if hasattr(self, 'embedding_base_url_edit'):
+            self.embedding_base_url_edit.setText(embedding_config.get("base_url", ""))
+            self.embedding_api_key_edit.setText(embedding_config.get("api_key", ""))
+            self.embedding_model_edit.setText(
+                embedding_config.get("model", "text-embedding-3-small")
+            )
 
         # Avatar settings
         avatar_config = config.get("avatar", {})

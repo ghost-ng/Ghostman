@@ -151,30 +151,28 @@ class ToolCallingBridge:
             "docx_formatter": "User says 'format my report.docx' or provides a .docx file path → call docx_formatter. Operations: standardize_fonts, fix_margins, normalize_spacing, fix_bullets, fix_spelling, fix_case, normalize_headings, find_replace, set_font_color, set_alignment, set_indent.",
             "screen_capture": "User says 'take a screenshot' or 'capture my screen' → call screen_capture.",
             "task_tracker": "User says 'add a task' or 'show my tasks' → call task_tracker.",
-            "email_draft": (
-                "User says 'draft an email to John about the meeting' or 'compose an email' "
-                "→ call email_draft with to, subject, body."
+            "outlook_email": (
+                "User says 'draft an email', 'search my inbox', 'reply to the email from John', "
+                "'forward that email to Sarah', or asks to do something custom with email. "
+                "REQUIRED: pass 'operation' parameter (draft_email/search_email/reply_email/forward_email/custom). "
+                "draft_email: to, subject, body, cc, bcc, html, importance. "
+                "search_email: sender, recipient, subject, body_contains, days_back, has_attachments, "
+                "unread_only, folder (inbox/sent/drafts/deleted/junk/outbox/all), max_results, semantic_query. "
+                "'show my last email' → operation='search_email', folder='inbox', max_results=1. "
+                "'recall my last sent email' → operation='search_email', folder='sent', max_results=1. "
+                "reply_email: reply_subject, reply_body. forward_email: reply_subject, forward_to, reply_body. "
+                "custom: custom_code (sandboxed Python for Outlook COM)."
             ),
-            "email_search": (
-                "User says 'show my last email' → folder='inbox', max_results=1; "
-                "'recall my last sent email' → folder='sent', max_results=1; "
-                "'find emails from John' → sender='John'; "
-                "'emails about budget' → subject='budget'. "
-                "Call with NO filters for recent emails. "
-                "Supports: sender, recipient, subject, body_contains, days_back, "
-                "has_attachments, unread_only, importance, folder (inbox/sent/all), "
-                "semantic_query, max_results."
-            ),
-            "calendar_event": (
-                "User says 'schedule a meeting tomorrow at 3pm', 'create an appointment', "
-                "'set up a call with John at 2pm' → call calendar_event with subject, start, end. "
-                "Supports: location, body, reminder_minutes, attendees."
-            ),
-            "calendar_search": (
-                "User says 'what meetings do I have today', 'check my calendar this week', "
-                "'am I free at 3pm tomorrow', 'meetings with John' "
-                "→ call calendar_search. Supports: subject, start_date, end_date, days_ahead, "
-                "attendee (fuzzy), location, include_recurring, max_results."
+            "outlook_calendar": (
+                "User says 'schedule a meeting', 'what meetings do I have this week', "
+                "'update my 3pm meeting', 'cancel the standup', or asks to do something custom with calendar. "
+                "REQUIRED: pass 'operation' parameter (create_event/search_events/update_event/cancel_event/custom). "
+                "create_event: subject, start, end, location, body, reminder_minutes, attendees. "
+                "search_events: subject, start_date, end_date, days_ahead, attendee (fuzzy), location, "
+                "include_recurring, max_results. "
+                "update_event: subject (finds and opens for editing). "
+                "cancel_event: cancel_subject (finds and opens for user to cancel). "
+                "custom: custom_code (sandboxed Python for Outlook COM)."
             ),
             "file_search": "User says 'find files named report' → call file_search.",
         }

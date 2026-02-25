@@ -166,6 +166,11 @@ class SettingsManager:
                 ]
             }
         },
+        'embedding': {
+            'base_url': '',      # Empty = inherit from ai_model.base_url
+            'api_key': '',       # Empty = inherit from ai_model.api_key
+            'model': 'text-embedding-3-small',
+        },
         'avatar': {
             'selected': 'specter',
             'scale': 1.0

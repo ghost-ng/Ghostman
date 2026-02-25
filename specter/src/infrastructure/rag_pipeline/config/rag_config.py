@@ -76,19 +76,41 @@ class EmbeddingConfig:
     
     def __post_init__(self):
         """Validate configuration after initialization."""
-        # Load API endpoint from settings if not explicitly set
+        # Fallback chain: embedding.* settings → ai_model.* settings
         if not self.api_endpoint:
-            self.api_endpoint = settings.get("ai_model.base_url", "") if settings else ""
+            # Try dedicated embedding base_url first
+            self.api_endpoint = settings.get("embedding.base_url", "") if settings else ""
+            # Fall back to ai_model base_url
+            if not self.api_endpoint:
+                self.api_endpoint = settings.get("ai_model.base_url", "") if settings else ""
             if not self.api_endpoint:
                 logger.warning("No API endpoint configured - RAG embeddings will fail")
 
-        if self.provider == EmbeddingProvider.OPENAI and not self.api_key:
-            # Use API key from settings file first, then fallback to environment
-            self.api_key = settings.get("ai_model.api_key") if settings else None
+        # Detect Anthropic endpoint (no embeddings API)
+        self._is_anthropic_endpoint = False
+        if self.api_endpoint and "anthropic" in self.api_endpoint.lower():
+            self._is_anthropic_endpoint = True
+            dedicated_url = settings.get("embedding.base_url", "") if settings else ""
+            if not dedicated_url:
+                logger.warning(
+                    "Chat provider appears to be Anthropic, which has no embeddings API. "
+                    "Configure a separate embedding provider in Settings → Advanced "
+                    "to use file context features."
+                )
+
+        # API key fallback chain
+        if not self.api_key:
+            self.api_key = settings.get("embedding.api_key", "") if settings else ""
             if not self.api_key:
-                logger.warning("OpenAI API key not found - embeddings will fail")
-                # Don't raise exception here to prevent crashes
-                # The pipeline will handle failed embeddings gracefully
+                self.api_key = settings.get("ai_model.api_key") if settings else None
+            if not self.api_key:
+                logger.warning("No embedding API key found - embeddings will fail")
+
+        # Model from embedding settings (override default if configured)
+        if settings:
+            embedding_model = settings.get("embedding.model", "")
+            if embedding_model:
+                self.model = embedding_model
 
         # Set default dimensions based on model
         if not self.dimensions:
@@ -96,6 +118,9 @@ class EmbeddingConfig:
                 "text-embedding-ada-002": 1536,
                 "text-embedding-3-small": 1536,
                 "text-embedding-3-large": 3072,
+                "voyage-3": 1024,
+                "voyage-3-lite": 512,
+                "voyage-code-3": 1024,
             }
             self.dimensions = model_dimensions.get(self.model, 1536)
 

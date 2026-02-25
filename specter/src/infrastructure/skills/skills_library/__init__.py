@@ -1,23 +1,12 @@
 """
 Skills Library - Built-in skills for Specter.
 
-This package contains all pre-built skills including:
-- Email management (draft, search)
-- Calendar management
-- File search
-- Screen capture
-- Task tracking
-- Web search
-
 Each skill implements the BaseSkill interface and can be registered with the SkillManager.
 """
 
-# Email skills
-from .email_draft_skill import EmailDraftSkill
-from .email_search_skill import EmailSearchSkill
-
-# Calendar skill
-from .calendar_event_skill import CalendarEventSkill
+# Outlook skills (unified)
+from .outlook_email_skill import OutlookEmailSkill
+from .outlook_calendar_skill import OutlookCalendarSkill
 
 # File operations
 from .file_search_skill import FileSearchSkill
@@ -34,14 +23,9 @@ from .web_search_skill import WebSearchSkill
 # Document formatting
 from .docx_formatter_skill import DocxFormatterSkill
 
-# Calendar search
-from .calendar_search_skill import CalendarSearchSkill
-
 __all__ = [
-    "EmailDraftSkill",
-    "EmailSearchSkill",
-    "CalendarEventSkill",
-    "CalendarSearchSkill",
+    "OutlookEmailSkill",
+    "OutlookCalendarSkill",
     "FileSearchSkill",
     "ScreenCaptureSkill",
     "TaskTrackerSkill",

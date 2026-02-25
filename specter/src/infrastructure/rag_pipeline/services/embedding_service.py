@@ -149,7 +149,41 @@ class EmbeddingService:
             if time_since_last < self.rate_limit_delay:
                 time.sleep(self.rate_limit_delay - time_since_last)
         self._last_request_time = time.time()
-    
+
+    def _should_retry(self, status_code: int, attempt: int, max_retries: int = 3) -> float:
+        """
+        Determine if request should be retried and return delay in seconds.
+        Returns 0 if should not retry.
+        """
+        if attempt >= max_retries:
+            return 0
+        if status_code == 429:
+            # Rate limit: exponential backoff 1s, 2s, 4s
+            return min(2 ** attempt, 8)
+        if status_code >= 500:
+            # Server error: backoff 1s, 2s
+            return min(2 ** attempt, 4) if attempt < 2 else 0
+        return 0
+
+    def _get_error_message(self, status_code: int, response_text: str) -> str:
+        """Return actionable error message based on HTTP status."""
+        if status_code == 404:
+            return (
+                f"Embedding endpoint returned 404 (Not Found). "
+                f"If using Anthropic for chat, configure a separate embedding "
+                f"provider in Settings → Advanced. URL: {self.api_endpoint}/embeddings"
+            )
+        if status_code in (401, 403):
+            return (
+                f"Embedding API key is invalid or expired (HTTP {status_code}). "
+                f"Check Settings → Advanced → Embedding API Key."
+            )
+        if status_code == 429:
+            return "Embedding rate limit exceeded after retries. Try again in a few minutes."
+        if status_code >= 500:
+            return f"Embedding server error (HTTP {status_code}). The provider may be experiencing issues."
+        return f"Embedding API error: HTTP {status_code} - {response_text[:200]}"
+
     def _validate_input(self, text: str) -> str:
         """Validate and sanitize input text."""
         if not isinstance(text, str):
@@ -201,92 +235,114 @@ class EmbeddingService:
     
     def create_embedding(self, text: str, model: str = None) -> Optional[np.ndarray]:
         """
-        Create embedding for text with caching and error handling.
-        
+        Create embedding for text with caching, retry, and error handling.
+
         Args:
             text: Input text to embed
             model: Override default model
-            
+
         Returns:
             numpy array embedding or None if failed
         """
         try:
-            # Validate input
             text = self._validate_input(text)
             model = model or self.model
-            
+
             # Check cache first
             cache_key = self._generate_cache_key(text, model)
             cached_embedding = self._get_embedding_from_cache(cache_key)
             if cached_embedding is not None:
                 logger.debug(f"Cache hit for text hash: {cache_key[:8]}...")
                 return cached_embedding
-            
+
             # Rate limiting
             self._rate_limit()
-            
+
             # Prepare request
             request_data = {
                 'input': text,
                 'model': model
             }
-            
-            # Add any provider-specific parameters
             request_data.update(self._get_provider_params())
-            
+
             logger.debug(f"Creating embedding for {len(text)} characters")
 
-            # Make API request using centralized session manager (has PKI/SSL config)
-            response = self.session_manager.make_request(
-                method="POST",
-                url=f"{self.api_endpoint}/embeddings",
-                json=request_data,
-                headers=self.headers,
-                timeout=self.timeout
-            )
-            
-            self.stats['requests_made'] += 1
-            
-            # Handle response
-            if response.status_code == 200:
-                response_data = response.json()
-                embedding = self._parse_response(response_data)
-                
-                if embedding is not None:
-                    # Store in cache
-                    self._store_in_cache(cache_key, embedding)
-                    
-                    # Update stats
-                    if 'usage' in response_data:
-                        self.stats['total_tokens_processed'] += response_data['usage'].get('total_tokens', 0)
-                    
-                    logger.debug(f"Successfully created embedding: {embedding.shape}")
-                    return embedding
-                else:
-                    logger.error("Failed to parse embedding from response")
+            # Retry loop
+            max_retries = 3
+            last_error = None
+            for attempt in range(max_retries + 1):
+                try:
+                    response = self.session_manager.make_request(
+                        method="POST",
+                        url=f"{self.api_endpoint}/embeddings",
+                        json=request_data,
+                        headers=self.headers,
+                        timeout=self.timeout
+                    )
+                    self.stats['requests_made'] += 1
+
+                    if response.status_code == 200:
+                        response_data = response.json()
+                        embedding = self._parse_response(response_data)
+                        if embedding is not None:
+                            self._store_in_cache(cache_key, embedding)
+                            if 'usage' in response_data:
+                                self.stats['total_tokens_processed'] += response_data['usage'].get('total_tokens', 0)
+                            logger.debug(f"Successfully created embedding: {embedding.shape}")
+                            return embedding
+                        else:
+                            logger.error("Failed to parse embedding from response")
+                            self.stats['errors'] += 1
+                            return None
+
+                    # Check if we should retry
+                    retry_delay = self._should_retry(response.status_code, attempt, max_retries)
+                    if retry_delay > 0:
+                        logger.warning(
+                            f"Embedding request failed (HTTP {response.status_code}), "
+                            f"retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries})"
+                        )
+                        time.sleep(retry_delay)
+                        continue
+
+                    # Non-retryable error
+                    error_msg = self._get_error_message(response.status_code, response.text)
+                    logger.error(error_msg)
                     self.stats['errors'] += 1
                     return None
-            
-            elif response.status_code == 429:
-                logger.warning("Rate limit hit, request failed")
-                self.stats['errors'] += 1
-                return None
-            
-            else:
-                logger.error(f"API request failed: {response.status_code} - {response.text}")
-                self.stats['errors'] += 1
-                return None
-                
-        except requests.exceptions.Timeout:
-            logger.error("Request timeout while creating embedding")
+
+                except requests.exceptions.Timeout:
+                    last_error = "timeout"
+                    if attempt < max_retries:
+                        logger.warning(f"Embedding request timed out, retrying (attempt {attempt + 1}/{max_retries})")
+                        time.sleep(1)
+                        continue
+                    logger.error(f"Embedding request timed out after {max_retries} retries")
+                    self.stats['errors'] += 1
+                    return None
+
+                except requests.exceptions.ConnectionError as e:
+                    last_error = str(e)
+                    if attempt < max_retries:
+                        logger.warning(f"Connection error, retrying (attempt {attempt + 1}/{max_retries})")
+                        time.sleep(1)
+                        continue
+                    logger.error(
+                        f"Cannot connect to embedding endpoint: {self.api_endpoint}. "
+                        f"Verify the URL in Settings → Advanced. Error: {e}"
+                    )
+                    self.stats['errors'] += 1
+                    return None
+
+            # All retries exhausted
+            logger.error(f"Embedding failed after all retries. Last error: {last_error}")
             self.stats['errors'] += 1
             return None
-            
-        except requests.exceptions.ConnectionError as e:
-            logger.error(f"Connection error while creating embedding: {e}")
+
+        except ValueError as e:
+            logger.error(f"Invalid embedding input: {e}")
             self.stats['errors'] += 1
             return None
-            
         except Exception as e:
             logger.error(f"Unexpected error creating embedding: {e}")
             self.stats['errors'] += 1
@@ -341,7 +397,39 @@ class EmbeddingService:
         """Get provider-specific parameters."""
         # Can be extended for different providers
         return {}
-    
+
+    def validate_endpoint(self) -> dict:
+        """
+        Test that the embedding endpoint is reachable and functional.
+        Returns dict with 'valid' (bool), 'error' (str), 'dimensions' (int or None).
+        """
+        try:
+            test_text = "test"
+            response = self.session_manager.make_request(
+                method="POST",
+                url=f"{self.api_endpoint}/embeddings",
+                json={'input': test_text, 'model': self.model},
+                headers=self.headers,
+                timeout=min(self.timeout, 10.0)
+            )
+            if response.status_code == 200:
+                data = response.json()
+                embedding = self._parse_response(data)
+                if embedding is not None:
+                    return {'valid': True, 'error': '', 'dimensions': len(embedding)}
+                return {'valid': False, 'error': 'Could not parse embedding response'}
+            return {
+                'valid': False,
+                'error': self._get_error_message(response.status_code, response.text)
+            }
+        except requests.exceptions.ConnectionError:
+            return {
+                'valid': False,
+                'error': f"Cannot connect to {self.api_endpoint}. Check the URL."
+            }
+        except Exception as e:
+            return {'valid': False, 'error': str(e)}
+
     def get_embedding_dimensions(self, model: str = None) -> Optional[int]:
         """
         Get embedding dimensions for a model.
