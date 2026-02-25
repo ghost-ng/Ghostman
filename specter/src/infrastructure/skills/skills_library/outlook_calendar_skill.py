@@ -120,7 +120,7 @@ class OutlookCalendarSkill(BaseSkill):
         if operation not in ALL_OPERATIONS:
             return SkillResult(
                 success=False,
-                skill_id=self.metadata.skill_id,
+                message="Invalid operation",
                 error=f"Unknown operation: '{operation}'. Valid: {', '.join(ALL_OPERATIONS)}"
             )
 
@@ -138,7 +138,8 @@ class OutlookCalendarSkill(BaseSkill):
         except Exception as e:
             logger.error(f"Operation '{operation}' failed: {e}", exc_info=True)
             return SkillResult(
-                success=False, skill_id=self.metadata.skill_id,
+                success=False,
+                message="Operation failed",
                 error=f"Operation '{operation}' failed: {e}"
             )
 
@@ -158,20 +159,28 @@ class OutlookCalendarSkill(BaseSkill):
         end_str = params.get("end", "")
 
         if not subject:
-            return SkillResult(success=False, skill_id=self.metadata.skill_id,
-                             error="'subject' is required for create_event")
+            return SkillResult(
+                success=False, message="Missing parameter",
+                error="'subject' is required for create_event"
+            )
         if not start_str or not end_str:
-            return SkillResult(success=False, skill_id=self.metadata.skill_id,
-                             error="'start' and 'end' are required for create_event")
+            return SkillResult(
+                success=False, message="Missing parameter",
+                error="'start' and 'end' are required for create_event"
+            )
 
         start_dt = self._parse_datetime(start_str)
         end_dt = self._parse_datetime(end_str)
         if not start_dt or not end_dt:
-            return SkillResult(success=False, skill_id=self.metadata.skill_id,
-                             error=f"Cannot parse datetime. Supported formats: YYYY-MM-DD HH:MM")
+            return SkillResult(
+                success=False, message="Invalid datetime format",
+                error="Cannot parse datetime. Supported formats: YYYY-MM-DD HH:MM"
+            )
         if end_dt <= start_dt:
-            return SkillResult(success=False, skill_id=self.metadata.skill_id,
-                             error="End time must be after start time")
+            return SkillResult(
+                success=False, message="Invalid time range",
+                error="End time must be after start time"
+            )
 
         location = params.get("location", "")
         body = params.get("body", "")
@@ -221,11 +230,11 @@ class OutlookCalendarSkill(BaseSkill):
         result = execute_in_com_thread(_create, timeout=30)
         if result.success:
             return SkillResult(
-                success=True, skill_id=self.metadata.skill_id,
+                success=True,
                 message="Calendar event created and opened in Outlook",
                 data=result.data
             )
-        return SkillResult(success=False, skill_id=self.metadata.skill_id, error=result.error)
+        return SkillResult(success=False, message="Operation failed", error=result.error)
 
     async def _search_events(self, params: dict) -> SkillResult:
         """Search Outlook calendar. Refactored from CalendarSearchSkill."""
@@ -323,18 +332,20 @@ class OutlookCalendarSkill(BaseSkill):
         if result.success:
             items = result.data or []
             return SkillResult(
-                success=True, skill_id=self.metadata.skill_id,
+                success=True,
                 message=f"Found {len(items)} calendar event(s)",
                 data={"items": items, "count": len(items)}
             )
-        return SkillResult(success=False, skill_id=self.metadata.skill_id, error=result.error)
+        return SkillResult(success=False, message="Operation failed", error=result.error)
 
     async def _update_event(self, params: dict) -> SkillResult:
         """Find an event by subject and open it for editing."""
         subject = params.get("subject", "") or params.get("cancel_subject", "")
         if not subject:
-            return SkillResult(success=False, skill_id=self.metadata.skill_id,
-                             error="'subject' is required for update_event")
+            return SkillResult(
+                success=False, message="Missing parameter",
+                error="'subject' is required for update_event"
+            )
 
         def _update(outlook, namespace, **kw):
             calendar = namespace.GetDefaultFolder(9)
@@ -368,21 +379,25 @@ class OutlookCalendarSkill(BaseSkill):
         result = execute_in_com_thread(_update, timeout=30)
         if result.success:
             if "error" in (result.data or {}):
-                return SkillResult(success=False, skill_id=self.metadata.skill_id,
-                                 error=result.data["error"])
+                return SkillResult(
+                    success=False, message="Event not found",
+                    error=result.data["error"]
+                )
             return SkillResult(
-                success=True, skill_id=self.metadata.skill_id,
+                success=True,
                 message="Event opened for editing",
                 data=result.data
             )
-        return SkillResult(success=False, skill_id=self.metadata.skill_id, error=result.error)
+        return SkillResult(success=False, message="Operation failed", error=result.error)
 
     async def _cancel_event(self, params: dict) -> SkillResult:
         """Find an event and open it for user to cancel/delete."""
         cancel_subject = params.get("cancel_subject", "") or params.get("subject", "")
         if not cancel_subject:
-            return SkillResult(success=False, skill_id=self.metadata.skill_id,
-                             error="'cancel_subject' or 'subject' is required for cancel_event")
+            return SkillResult(
+                success=False, message="Missing parameter",
+                error="'cancel_subject' or 'subject' is required for cancel_event"
+            )
 
         def _cancel(outlook, namespace, **kw):
             calendar = namespace.GetDefaultFolder(9)
@@ -417,33 +432,38 @@ class OutlookCalendarSkill(BaseSkill):
         result = execute_in_com_thread(_cancel, timeout=30)
         if result.success:
             if "error" in (result.data or {}):
-                return SkillResult(success=False, skill_id=self.metadata.skill_id,
-                                 error=result.data["error"])
+                return SkillResult(
+                    success=False, message="Event not found",
+                    error=result.data["error"]
+                )
             return SkillResult(
-                success=True, skill_id=self.metadata.skill_id,
+                success=True,
                 message="Event opened for cancellation review",
                 data=result.data
             )
-        return SkillResult(success=False, skill_id=self.metadata.skill_id, error=result.error)
+        return SkillResult(success=False, message="Operation failed", error=result.error)
 
     async def _execute_custom(self, params: dict) -> SkillResult:
         """Execute AI-generated custom COM code via sandbox."""
         code = params.get("custom_code", "")
         if not code:
-            return SkillResult(success=False, skill_id=self.metadata.skill_id,
-                             error="'custom_code' is required for custom operation")
+            return SkillResult(
+                success=False, message="Missing parameter",
+                error="'custom_code' is required for custom operation"
+            )
 
         sandbox = OutlookCOMSandbox()
         exec_result = sandbox.execute_code(code, timeout=30)
 
         if exec_result.success:
             return SkillResult(
-                success=True, skill_id=self.metadata.skill_id,
+                success=True,
                 message=exec_result.message,
                 data={"output": str(exec_result.output) if exec_result.output else None}
             )
         return SkillResult(
-            success=False, skill_id=self.metadata.skill_id,
+            success=False,
+            message="Custom operation failed",
             error=exec_result.error
         )
 

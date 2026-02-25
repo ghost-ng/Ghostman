@@ -118,7 +118,7 @@ class OutlookEmailSkill(BaseSkill):
         if operation not in ALL_OPERATIONS:
             return SkillResult(
                 success=False,
-                skill_id=self.metadata.skill_id,
+                message="Invalid operation",
                 error=f"Unknown operation: '{operation}'. Valid: {', '.join(ALL_OPERATIONS)}"
             )
 
@@ -137,7 +137,7 @@ class OutlookEmailSkill(BaseSkill):
             logger.error(f"Operation '{operation}' failed: {e}", exc_info=True)
             return SkillResult(
                 success=False,
-                skill_id=self.metadata.skill_id,
+                message="Operation failed",
                 error=f"Operation '{operation}' failed: {e}"
             )
 
@@ -149,12 +149,16 @@ class OutlookEmailSkill(BaseSkill):
         """Create and display an email draft. Refactored from EmailDraftSkill."""
         to = params.get("to", "")
         if not to:
-            return SkillResult(success=False, skill_id=self.metadata.skill_id,
-                             error="'to' is required for draft_email")
+            return SkillResult(
+                success=False, message="Missing parameter",
+                error="'to' is required for draft_email"
+            )
         body = params.get("body", "")
         if not body:
-            return SkillResult(success=False, skill_id=self.metadata.skill_id,
-                             error="'body' is required for draft_email")
+            return SkillResult(
+                success=False, message="Missing parameter",
+                error="'body' is required for draft_email"
+            )
 
         subject = params.get("subject", "")
         cc = params.get("cc", "")
@@ -195,11 +199,11 @@ class OutlookEmailSkill(BaseSkill):
         result = execute_in_com_thread(_create_draft, timeout=30)
         if result.success:
             return SkillResult(
-                success=True, skill_id=self.metadata.skill_id,
-                message=f"Email draft created and opened in Outlook",
+                success=True,
+                message="Email draft created and opened in Outlook",
                 data=result.data
             )
-        return SkillResult(success=False, skill_id=self.metadata.skill_id, error=result.error)
+        return SkillResult(success=False, message="Operation failed", error=result.error)
 
     async def _search_email(self, params: dict) -> SkillResult:
         """Search Outlook mailbox. Refactored from EmailSearchSkill."""
@@ -330,18 +334,20 @@ class OutlookEmailSkill(BaseSkill):
         if result.success:
             items = result.data or []
             return SkillResult(
-                success=True, skill_id=self.metadata.skill_id,
+                success=True,
                 message=f"Found {len(items)} email(s)",
                 data={"items": items, "count": len(items), "folder": folder_name}
             )
-        return SkillResult(success=False, skill_id=self.metadata.skill_id, error=result.error)
+        return SkillResult(success=False, message="Operation failed", error=result.error)
 
     async def _reply_email(self, params: dict) -> SkillResult:
         """Reply to the most recent email matching subject."""
         reply_subject = params.get("reply_subject", "")
         if not reply_subject:
-            return SkillResult(success=False, skill_id=self.metadata.skill_id,
-                             error="'reply_subject' is required for reply_email")
+            return SkillResult(
+                success=False, message="Missing parameter",
+                error="'reply_subject' is required for reply_email"
+            )
         reply_body = params.get("reply_body", "")
 
         def _reply(outlook, namespace, **kw):
@@ -383,25 +389,31 @@ class OutlookEmailSkill(BaseSkill):
         result = execute_in_com_thread(_reply, timeout=30)
         if result.success:
             if "error" in (result.data or {}):
-                return SkillResult(success=False, skill_id=self.metadata.skill_id,
-                                 error=result.data["error"])
+                return SkillResult(
+                    success=False, message="Email not found",
+                    error=result.data["error"]
+                )
             return SkillResult(
-                success=True, skill_id=self.metadata.skill_id,
+                success=True,
                 message="Reply draft opened in Outlook",
                 data=result.data
             )
-        return SkillResult(success=False, skill_id=self.metadata.skill_id, error=result.error)
+        return SkillResult(success=False, message="Operation failed", error=result.error)
 
     async def _forward_email(self, params: dict) -> SkillResult:
         """Forward the most recent email matching subject."""
         reply_subject = params.get("reply_subject", "") or params.get("subject", "")
         forward_to = params.get("forward_to", "")
         if not reply_subject:
-            return SkillResult(success=False, skill_id=self.metadata.skill_id,
-                             error="'reply_subject' or 'subject' is required for forward_email")
+            return SkillResult(
+                success=False, message="Missing parameter",
+                error="'reply_subject' or 'subject' is required for forward_email"
+            )
         if not forward_to:
-            return SkillResult(success=False, skill_id=self.metadata.skill_id,
-                             error="'forward_to' is required for forward_email")
+            return SkillResult(
+                success=False, message="Missing parameter",
+                error="'forward_to' is required for forward_email"
+            )
         reply_body = params.get("reply_body", "")
 
         def _forward(outlook, namespace, **kw):
@@ -443,33 +455,38 @@ class OutlookEmailSkill(BaseSkill):
         result = execute_in_com_thread(_forward, timeout=30)
         if result.success:
             if "error" in (result.data or {}):
-                return SkillResult(success=False, skill_id=self.metadata.skill_id,
-                                 error=result.data["error"])
+                return SkillResult(
+                    success=False, message="Email not found",
+                    error=result.data["error"]
+                )
             return SkillResult(
-                success=True, skill_id=self.metadata.skill_id,
+                success=True,
                 message="Forward draft opened in Outlook",
                 data=result.data
             )
-        return SkillResult(success=False, skill_id=self.metadata.skill_id, error=result.error)
+        return SkillResult(success=False, message="Operation failed", error=result.error)
 
     async def _execute_custom(self, params: dict) -> SkillResult:
         """Execute AI-generated custom COM code via sandbox."""
         code = params.get("custom_code", "")
         if not code:
-            return SkillResult(success=False, skill_id=self.metadata.skill_id,
-                             error="'custom_code' is required for custom operation")
+            return SkillResult(
+                success=False, message="Missing parameter",
+                error="'custom_code' is required for custom operation"
+            )
 
         sandbox = OutlookCOMSandbox()
         exec_result = sandbox.execute_code(code, timeout=30)
 
         if exec_result.success:
             return SkillResult(
-                success=True, skill_id=self.metadata.skill_id,
+                success=True,
                 message=exec_result.message,
                 data={"output": str(exec_result.output) if exec_result.output else None}
             )
         return SkillResult(
-            success=False, skill_id=self.metadata.skill_id,
+            success=False,
+            message="Custom operation failed",
             error=exec_result.error
         )
 
