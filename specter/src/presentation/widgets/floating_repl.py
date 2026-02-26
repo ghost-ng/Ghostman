@@ -274,22 +274,6 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
         super().mouseReleaseEvent(event)
         if self._window_state_ready:
             self.save_current_window_state()
-
-    def resizeEvent(self, event):
-        """Save window state when resized."""
-        super().resizeEvent(event)
-        if self._window_state_ready:
-            self.save_current_window_state()
-
-    def moveEvent(self, event):
-        """Save window state when moved."""
-        super().moveEvent(event)
-        if self._window_state_ready:
-            self.save_current_window_state()
-        try:
-            self.window_moved.emit(self.pos())
-        except Exception:
-            pass
     
     def closeEvent(self, event: QCloseEvent):
         """Handle window close event."""
@@ -542,14 +526,22 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
 
     # Window Event Handlers -----------------------------------------------
     def moveEvent(self, event):
-        """Handle window move events to update banner position."""
+        """Handle window move events — save state and update banner position."""
         super().moveEvent(event)
+        if self._window_state_ready:
+            self.save_current_window_state()
+        try:
+            self.window_moved.emit(self.pos())
+        except Exception:
+            pass
         if hasattr(self, 'floating_banner') and self.floating_banner:
             self.floating_banner.track_parent_movement()
 
     def resizeEvent(self, event):
-        """Handle window resize events to update banner width."""
+        """Handle window resize events — save state and update banner width."""
         super().resizeEvent(event)
+        if self._window_state_ready:
+            self.save_current_window_state()
         if hasattr(self, 'floating_banner') and self.floating_banner:
             self.floating_banner.track_parent_movement()
 

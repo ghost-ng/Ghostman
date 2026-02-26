@@ -148,7 +148,7 @@ class ToolCallingBridge:
 
         USAGE_EXAMPLES = {
             "web_search": "User asks 'search for penguins' or 'what is quantum computing' → call web_search with the query.",
-            "docx_formatter": "User says 'format my report.docx' or provides a .docx file path → call docx_formatter. Operations: standardize_fonts, fix_margins, normalize_spacing, fix_bullets, fix_spelling, fix_case, normalize_headings, find_replace, set_font_color, set_alignment, set_indent.",
+            "docx_formatter": "User explicitly asks to FORMAT, FIX FORMATTING, STANDARDIZE, or REFORMAT a .docx file → call docx_formatter. Operations: standardize_fonts, fix_margins, normalize_spacing, fix_bullets, fix_spelling, fix_case, normalize_headings, find_replace, set_font_color, set_alignment, set_indent. Do NOT use docx_formatter for summarizing, reading, analyzing, or asking questions about document content — those are normal AI tasks using file context.",
             "screen_capture": "User says 'take a screenshot' or 'capture my screen' → call screen_capture.",
             "task_tracker": "User says 'add a task' or 'show my tasks' → call task_tracker.",
             "outlook_email": (
@@ -180,7 +180,8 @@ class ToolCallingBridge:
         lines = [
             "\n## Your Tools",
             "You have access to tools that let you perform actions on the user's local computer.",
-            "When a user asks about files, searching the web, formatting documents, or capturing the screen — USE your tools.",
+            "When a user asks to search the web, format/reformat documents, capture the screen, draft/search email, or manage calendar — USE your tools.",
+            "When a user asks to summarize, analyze, read, or ask questions about an uploaded document — do NOT use tools; use the file context already provided to answer directly.",
             "IMPORTANT: You CAN access local files on the user's computer through your tools. "
             "When a user provides a file path (like C:/Users/.../file.docx), use the appropriate tool. "
             "Do NOT say you cannot access local files.",

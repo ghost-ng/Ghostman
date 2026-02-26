@@ -1273,6 +1273,19 @@ class AppCoordinator(QObject):
             except Exception:
                 pass
 
+        # Refresh REPL fonts — avatar/scale changes can trigger Qt relayout
+        if (hasattr(self, '_main_window') and self._main_window and
+            hasattr(self._main_window, 'floating_repl') and
+            self._main_window.floating_repl and
+            hasattr(self._main_window.floating_repl, 'repl_widget')):
+            repl_widget = self._main_window.floating_repl.repl_widget
+            if hasattr(repl_widget, 'refresh_fonts'):
+                try:
+                    repl_widget.refresh_fonts()
+                    logger.debug("🔤 REPL fonts refreshed after avatar change")
+                except Exception as e:
+                    logger.debug(f"Failed to refresh REPL fonts after avatar change: {e}")
+
         logger.info(f"🎭 Avatar applied: {avatar.name} ({avatar_id}), scale={scale:.0%}")
 
     def _update_window_flags(self, always_on_top: bool):
