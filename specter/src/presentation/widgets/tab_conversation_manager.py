@@ -402,26 +402,33 @@ class TabConversationManager(QObject):
     def _show_tab_context_menu(self, tab_id: str, position):
         """Show context menu for tab operations."""
         menu = QMenu()
-        
-        # Rename action
+
+        # Rename tab label (cosmetic, session-only)
         rename_action = QAction("Rename Tab", menu)
         rename_action.triggered.connect(lambda: self._rename_tab(tab_id))
         menu.addAction(rename_action)
-        
+
+        # Rename conversation title (persisted to DB, shown in conversation browser)
+        rename_conv_action = QAction("Rename Conversation", menu)
+        rename_conv_action.triggered.connect(lambda: self._rename_conversation(tab_id))
+        menu.addAction(rename_conv_action)
+
+        menu.addSeparator()
+
         # Close action (if not the last tab)
         if len(self.tabs) > 1:
             close_action = QAction("Close Tab", menu)
             close_action.triggered.connect(lambda: self.close_tab(tab_id))
             menu.addAction(close_action)
-            
+
             # Close others action
             close_others_action = QAction("Close Other Tabs", menu)
             close_others_action.triggered.connect(lambda: self._close_other_tabs(tab_id))
             menu.addAction(close_others_action)
-        
+
         # Apply theme-aware menu styling
         self._style_menu(menu)
-        
+
         menu.exec(position)
     
     def _style_menu(self, menu):
@@ -449,32 +456,105 @@ class TabConversationManager(QObject):
             # Silently handle errors to avoid breaking functionality
             pass
     
+    def _show_themed_input_dialog(self, title: str, label: str, default_text: str = ""):
+        """Show a themed input dialog matching the app's current theme.
+
+        Returns:
+            (text, accepted) tuple matching QInputDialog.getText signature.
+        """
+        from PyQt6.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton
+        )
+
+        dlg = QDialog(self.parent_repl)
+        dlg.setWindowTitle(title)
+        dlg.setMinimumWidth(340)
+
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+
+        lbl = QLabel(label)
+        layout.addWidget(lbl)
+
+        line_edit = QLineEdit(default_text)
+        line_edit.selectAll()
+        layout.addWidget(line_edit)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        ok_btn = QPushButton("OK")
+        cancel_btn = QPushButton("Cancel")
+        ok_btn.setDefault(True)
+        ok_btn.clicked.connect(dlg.accept)
+        cancel_btn.clicked.connect(dlg.reject)
+        btn_layout.addWidget(ok_btn)
+        btn_layout.addWidget(cancel_btn)
+        layout.addLayout(btn_layout)
+
+        # Apply theme styling
+        try:
+            theme_manager = getattr(self.parent_repl, 'theme_manager', None)
+            if theme_manager:
+                try:
+                    from specter.src.ui.themes.theme_manager import THEME_SYSTEM_AVAILABLE
+                    if not THEME_SYSTEM_AVAILABLE:
+                        theme_manager = None
+                except ImportError:
+                    theme_manager = None
+
+            if theme_manager:
+                colors = theme_manager.current_theme
+                if colors:
+                    from specter.src.ui.themes.style_templates import StyleTemplates
+                    dlg.setStyleSheet(StyleTemplates.get_dialog_style(colors))
+
+                    from specter.src.presentation.widgets.button_style_manager import ButtonStyleManager
+                    ButtonStyleManager.apply_unified_button_style(ok_btn, colors, "dialog", "text", "primary")
+                    ButtonStyleManager.apply_unified_button_style(cancel_btn, colors, "dialog", "text", "normal")
+        except Exception as e:
+            logger.debug(f"Could not apply theme to input dialog: {e}")
+
+        result = dlg.exec()
+        return (line_edit.text(), result == QDialog.DialogCode.Accepted)
+
     def _rename_tab(self, tab_id: str):
-        """Rename a tab with user input dialog. Also persists to conversation DB."""
+        """Rename a tab label (cosmetic only, does NOT persist to conversation DB)."""
         if tab_id not in self.tabs:
             return
 
         tab = self.tabs[tab_id]
         current_title = getattr(tab, 'full_title', tab.title)
 
-        # Show input dialog for new title
-        from PyQt6.QtWidgets import QInputDialog
-        new_title, ok = QInputDialog.getText(
-            self.parent_repl,
-            "Rename Tab",
-            "Enter new name:",
-            text=current_title
+        new_title, ok = self._show_themed_input_dialog(
+            "Rename Tab", "Enter new tab label:", current_title
         )
 
         if ok and new_title.strip():
             title = new_title.strip()
             self.update_tab_title(tab_id, title)
-            logger.info(f"Tab {tab_id} renamed to: {title}")
+            logger.info(f"Tab {tab_id} label renamed to: {title}")
 
-            # Persist the new title to the conversation database
-            conversation_id = tab.conversation_id
-            if conversation_id:
-                self._persist_conversation_title(conversation_id, title)
+    def _rename_conversation(self, tab_id: str):
+        """Rename the conversation title (persisted to DB, shown in conversation browser)."""
+        if tab_id not in self.tabs:
+            return
+
+        tab = self.tabs[tab_id]
+        conversation_id = tab.conversation_id
+        if not conversation_id:
+            logger.warning(f"Tab {tab_id} has no conversation to rename")
+            return
+
+        current_title = getattr(tab, 'full_title', tab.title)
+        new_title, ok = self._show_themed_input_dialog(
+            "Rename Conversation", "Enter new conversation title:", current_title
+        )
+
+        if ok and new_title.strip():
+            title = new_title.strip()
+            self._persist_conversation_title(conversation_id, title)
+            logger.info(f"Conversation {conversation_id[:8]} renamed to: {title}")
 
     def _persist_conversation_title(self, conversation_id: str, title: str):
         """Save renamed title to the conversation database."""

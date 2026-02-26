@@ -26,6 +26,7 @@ class AvatarPersona:
     initial: str        # Single letter for generated avatar circle
     thinking_phrases: tuple = ()   # Shown while AI is reasoning
     running_phrases: tuple = ()    # Shown while a skill/tool is executing
+    greeting_phrases: tuple = ()   # Shown when a new conversation starts
     avatar_image: str = ""  # Filename in assets/avatars/ (empty = painted circle fallback)
     card_image: str = ""    # Filename in assets/avatars/ for carousel card (empty = generated)
 
@@ -40,6 +41,12 @@ class AvatarPersona:
         if self.running_phrases:
             return random.choice(self.running_phrases)
         return "Working on it..."
+
+    def random_greeting_phrase(self) -> str:
+        """Return a random persona-appropriate greeting for new conversations."""
+        if self.greeting_phrases:
+            return random.choice(self.greeting_phrases)
+        return f"Ready when you are."
 
 
 DEFAULT_AVATAR_ID = "specter"
@@ -127,6 +134,12 @@ _AEGIS = AvatarPersona(
         "On task...",
         "Proceeding as planned...",
     ),
+    greeting_phrases=(
+        "Standing by. What's the objective?",
+        "Aegis online. Ready for your briefing.",
+        "Channel open. Give me the mission parameters.",
+        "Present and accounted for. What are we tackling?",
+    ),
     avatar_image="Aegis.png",
     card_image="Aegis_card.png",
 )
@@ -213,6 +226,12 @@ _OPUS = AvatarPersona(
         "Finalizing the architecture...",
         "Delivering the build...",
     ),
+    greeting_phrases=(
+        "Systems nominal. What are we building today?",
+        "Opus here. Walk me through the architecture.",
+        "Good to see you. Let's design something elegant.",
+        "Online and ready. What's the blueprint?",
+    ),
     avatar_image="Opus.png",
     card_image="Opus_card.png",
 )
@@ -297,6 +316,12 @@ _SPARK = AvatarPersona(
         "Watch this...",
         "Making it happen...",
         "Quick and clean...",
+    ),
+    greeting_phrases=(
+        "Hey! What are we diving into today?",
+        "Spark here, fully charged! What's the plan?",
+        "Ready to roll! Hit me with it.",
+        "Let's gooo! What are we working on?",
     ),
     avatar_image="Spark.png",
     card_image="Spark_card.png",
@@ -384,6 +409,12 @@ _SAGE = AvatarPersona(
         "Bringing it together...",
         "Almost ready, worth the wait...",
     ),
+    greeting_phrases=(
+        "Welcome. Take a breath \u2014 I\u2019m here when you\u2019re ready.",
+        "Good to connect. What\u2019s on your mind?",
+        "The space is yours. What shall we explore?",
+        "I\u2019m here. No rush \u2014 start wherever feels right.",
+    ),
     avatar_image="Sage.png",
     card_image="Sage_card.png",
 )
@@ -468,6 +499,12 @@ _VECTOR = AvatarPersona(
         "Mission active.",
         "Stand by for results.",
         "Done shortly.",
+    ),
+    greeting_phrases=(
+        "Vector online. State your task.",
+        "Ready. What needs doing?",
+        "Locked in. Give me the target.",
+        "Systems green. Awaiting directives.",
     ),
     avatar_image="Vector.png",
     card_image="Vector_card.png",
@@ -555,6 +592,12 @@ _NOVA = AvatarPersona(
         "Building something unique...",
         "The vision is crystallizing...",
     ),
+    greeting_phrases=(
+        "Oh, a blank canvas! What shall we create?",
+        "Nova here \u2014 let\u2019s make something unexpected.",
+        "Fresh conversation, infinite possibilities. What\u2019s the spark?",
+        "I\u2019ve been waiting for a new idea. What\u2019ve you got?",
+    ),
     avatar_image="Nova.png",
     card_image="Nova_card.png",
 )
@@ -641,6 +684,12 @@ _SIMON = AvatarPersona(
         "Delivering on time...",
         "Checking off the steps...",
         "Almost at the finish line...",
+    ),
+    greeting_phrases=(
+        "Simon here. What do we need to get organized?",
+        "Good to go. Walk me through what needs doing.",
+        "Present and ready. Let\u2019s keep things on track.",
+        "All systems steady. What\u2019s on the agenda?",
     ),
     avatar_image="Simon.png",
     card_image="Simon_card.png",
@@ -731,6 +780,12 @@ _SPECTER = AvatarPersona(
         "Spooky fast execution...",
         "Manifesting your request...",
         "Nearly materialized...",
+    ),
+    greeting_phrases=(
+        "Boo! \u2026just kidding. What are we getting into?",
+        "A wild Specter appears! What\u2019s the plan?",
+        "You rang? I\u2019ve been lurking. What\u2019s up?",
+        "Materialized and ready for mischief. What do you need?",
     ),
     avatar_image="Specter.png",
     card_image="Specter_card.png",

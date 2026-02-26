@@ -56,7 +56,8 @@ class SettingsManager:
             'repl_position': None,
             'repl_size': {'width': 520, 'height': 650},
             'repl_width': 520,
-            'repl_height': 650
+            'repl_height': 650,
+            'theme': 'cyber'
         },
         'interface': {
             'opacity': 97,  # percent (10-100)

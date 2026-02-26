@@ -39,6 +39,10 @@ class SafeRAGSession:
         """Query - delegate to simple session."""
         return self.simple_session.query(query_text, top_k, filters, timeout, conversation_id)
     
+    def remove_document(self, document_id, timeout=30.0):
+        """Remove document from FAISS - delegate to simple session."""
+        return self.simple_session.remove_document(document_id, timeout)
+
     def get_stats(self, timeout=5.0):
         """Get stats - delegate to simple session."""
         return self.simple_session.get_stats(timeout)

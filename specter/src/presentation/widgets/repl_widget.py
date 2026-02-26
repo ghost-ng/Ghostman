@@ -947,27 +947,28 @@ class MarkdownRenderer:
         # Get code font from font service
         code_font_css = font_service.get_css_font_style('code_snippets')
         
-        # Wrap entire content with base color and font configuration - explicitly remove backgrounds
-        styled_html = f'<div style="color: {base_color}; line-height: 1.4; {font_css}; background: none !important;">{html_content}</div>'
+        # Wrap entire content with base color and font configuration
+        # NOTE: Qt's QTextBrowser does NOT support !important — use background:transparent instead
+        styled_html = f'<div style="color: {base_color}; line-height: 1.4; {font_css}; background: transparent;">{html_content}</div>'
 
-        # Apply specific styling to elements - remove backgrounds to prevent line coloring
+        # Apply specific styling to elements
         replacements = {
-            '<code>': f'<code style="padding: 2px 4px; border-radius: 3px; color: {style_colors["code"]}; {code_font_css}; background: none !important;">',
+            '<code>': f'<code style="padding: 2px 4px; border-radius: 3px; color: {style_colors["code"]}; {code_font_css}; background: transparent;">',
             # Skip pre tag replacement to avoid overriding code snippet solid backgrounds
-            '<em>': f'<em style="color: {style_colors["em"]}; font-style: italic; background: none !important;">',
-            '<strong>': f'<strong style="color: {style_colors["strong"]}; font-weight: bold; background: none !important;">',
-            '<h1>': f'<h1 style="color: {style_colors["h1"]}; font-size: 1.4em; margin: 8px 0 4px 0; border-bottom: 2px solid {base_color}; background: none !important;">',
-            '<h2>': f'<h2 style="color: {style_colors["h2"]}; font-size: 1.3em; margin: 6px 0 3px 0; border-bottom: 1px solid {base_color}; background: none !important;">',
-            '<h3>': f'<h3 style="color: {style_colors["h3"]}; font-size: 1.2em; margin: 4px 0 2px 0; background: none !important;">',
-            '<blockquote>': f'<blockquote style="color: {style_colors["blockquote"]}; border-left: 3px solid {base_color}; padding-left: 12px; margin: 4px 0; font-style: italic; background: none !important;">',
-            '<ul>': '<ul style="margin: 4px 0; padding-left: 20px; background: none !important;">',
-            '<ol>': '<ol style="margin: 4px 0; padding-left: 20px; background: none !important;">',
-            '<li>': '<li style="margin: 2px 0; background: none !important;">',
-            '<table>': f'<table style="border-collapse: collapse; margin: 8px 0; border: 1px solid {base_color}; background: none !important;">',
-            '<th>': f'<th style="padding: 4px 8px; border: 1px solid {base_color}; font-weight: bold; background: none !important;">',
-            '<td>': f'<td style="padding: 4px 8px; border: 1px solid {base_color}; background: none !important;">',
-            '<p>': '<p style="background: none !important;">',
-            '<div>': '<div style="background: none !important;">',
+            '<em>': f'<em style="color: {style_colors["em"]}; font-style: italic; background: transparent;">',
+            '<strong>': f'<strong style="color: {style_colors["strong"]}; font-weight: bold; background: transparent;">',
+            '<h1>': f'<h1 style="color: {style_colors["h1"]}; font-size: 1.4em; margin: 8px 0 4px 0; border-bottom: 2px solid {base_color}; background: transparent;">',
+            '<h2>': f'<h2 style="color: {style_colors["h2"]}; font-size: 1.3em; margin: 6px 0 3px 0; border-bottom: 1px solid {base_color}; background: transparent;">',
+            '<h3>': f'<h3 style="color: {style_colors["h3"]}; font-size: 1.2em; margin: 4px 0 2px 0; background: transparent;">',
+            '<blockquote>': f'<blockquote style="color: {style_colors["blockquote"]}; border-left: 3px solid {base_color}; padding-left: 12px; margin: 4px 0; font-style: italic; background: transparent;">',
+            '<ul>': '<ul style="margin: 4px 0; padding-left: 20px; background: transparent;">',
+            '<ol>': '<ol style="margin: 4px 0; padding-left: 20px; background: transparent;">',
+            '<li>': '<li style="margin: 2px 0; background: transparent;">',
+            '<table>': f'<table style="border-collapse: collapse; margin: 8px 0; border: 1px solid {base_color}; background: transparent;">',
+            '<th>': f'<th style="padding: 4px 8px; border: 1px solid {base_color}; font-weight: bold; background: transparent;">',
+            '<td>': f'<td style="padding: 4px 8px; border: 1px solid {base_color}; background: transparent;">',
+            '<p>': '<p style="background: transparent;">',
+            '<div>': '<div style="background: transparent;">',
         }
         
         for old, new in replacements.items():
@@ -1325,7 +1326,8 @@ class REPLWidget(QWidget):
     attach_toggle_requested = pyqtSignal(bool)
     pin_toggle_requested = pyqtSignal(bool)
     startup_fully_complete = pyqtSignal()  # Emitted when all async startup tasks are done
-    
+    _greeting_text_ready = pyqtSignal(str)  # Thread-safe greeting delivery from background thread
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.command_history = []
@@ -1365,7 +1367,12 @@ class REPLWidget(QWidget):
         # Personality idle detector — in-character comment after 20-40 min
         self._personality_idle = PersonalityIdleDetector()
         self._personality_idle.idle_comment_requested.connect(self._on_personality_idle)
-        
+
+        # Thread-safe greeting signal (background thread → main thread)
+        self._greeting_text_ready.connect(
+            lambda text: self.append_output(text, "response")
+        )
+
         # Background summarization state
         self.summarization_queue: List[str] = []  # conversation IDs
         self.is_summarizing = False
@@ -1486,6 +1493,84 @@ class REPLWidget(QWidget):
         if avatar:
             return avatar.random_running_phrase()
         return "Working on it..."
+
+    def _generate_persona_greeting(self):
+        """Generate an AI-powered persona greeting for a new conversation.
+
+        Sends a lightweight one-off request to the AI with the persona's system
+        prompt, asking it to introduce itself in character. Falls back to the
+        static signature_phrase if the AI call fails.
+        """
+        try:
+            avatar = self._get_current_avatar()
+            if not avatar:
+                logger.warning("No avatar found for persona greeting")
+                self.append_output("New conversation started", "system")
+                return
+
+            static_greeting = f"{avatar.emoji} **{avatar.name}:** {avatar.random_greeting_phrase()}"
+
+            # Try to get AI service (triggers lazy init via get_ai_service)
+            ai_service = None
+            if self.conversation_manager:
+                ai_service = self.conversation_manager.get_ai_service()
+
+            if not ai_service or not ai_service.is_initialized:
+                logger.info("AI service not ready — using static persona greeting")
+                self.append_output(static_greeting, "response")
+                return
+
+            # Capture for closure
+            _avatar = avatar
+            _ai_service = ai_service
+            _static = static_greeting
+
+            import threading
+
+            def _fetch_greeting():
+                try:
+                    messages = [
+                        {"role": "system", "content": _avatar.system_prompt},
+                        {"role": "user", "content": (
+                            "Introduce yourself in 1-2 short sentences. "
+                            "Be brief, warm, and fully in character."
+                        )}
+                    ]
+
+                    model_name = _ai_service._config.get('model_name', 'gpt-3.5-turbo')
+                    api_params = {
+                        "model": model_name,
+                        "messages": messages,
+                        "temperature": 0.9,
+                        "max_tokens": 150,
+                        "stream": False
+                    }
+
+                    response = _ai_service.client.chat_completion(**api_params)
+
+                    if response.success:
+                        greeting_text = _ai_service._extract_response_content(response.data)
+                        if greeting_text and greeting_text.strip():
+                            # Use signal for thread-safe UI update
+                            self._greeting_text_ready.emit(
+                                f"{_avatar.emoji} **{_avatar.name}:** {greeting_text.strip()}"
+                            )
+                            return
+
+                    # Fallback to static phrase via signal
+                    logger.info("AI greeting call failed — using static fallback")
+                    self._greeting_text_ready.emit(_static)
+
+                except Exception as e:
+                    logger.warning(f"Persona greeting generation failed: {e}")
+                    self._greeting_text_ready.emit(_static)
+
+            thread = threading.Thread(target=_fetch_greeting, daemon=True)
+            thread.start()
+
+        except Exception as e:
+            logger.warning(f"Persona greeting error: {e}")
+            self.append_output("New conversation started", "system")
 
     def _init_dynamic_input_height(self):
         """Initialize dynamic input height system."""
@@ -2463,6 +2548,10 @@ class REPLWidget(QWidget):
             # Ensure state is valid
             self.conversations_list = []
             self.current_conversation = None
+
+        # Generate AI-powered persona greeting after conversations are loaded
+        # Use 800ms delay to ensure tab + AI service are fully ready
+        QTimer.singleShot(800, self._generate_persona_greeting)
     
     async def _load_conversations(self):
         """Load recent conversations into selector."""
@@ -3376,10 +3465,17 @@ class REPLWidget(QWidget):
                 self.file_browser_bar.file_viewed.connect(self._on_file_viewed)
                 self.file_browser_bar.file_toggled.connect(self._on_file_toggled)
                 self.file_browser_bar.upload_files_requested.connect(self._on_upload_files_from_browser)
+                self.file_browser_bar.hide_requested.connect(self._toggle_file_browser)
                 logger.info("✅ FileBrowserBar signals connected safely")
             except Exception as signal_error:
                 logger.error(f"⚠️ Failed to connect FileBrowserBar signals: {signal_error}")
             
+            # Apply dynamic button sizing to match toolbar
+            try:
+                self.file_browser_bar.update_button_sizes()
+            except Exception:
+                pass
+
             # Add to layout
             parent_layout.addWidget(self.file_browser_bar)
             logger.info("✅ File browser bar enabled with segfault prevention")
@@ -3401,6 +3497,11 @@ class REPLWidget(QWidget):
             file_browser.file_viewed.connect(self._on_file_viewed)
             file_browser.file_toggled.connect(self._on_file_toggled)
             file_browser.upload_files_requested.connect(self._on_upload_files_from_browser)
+            if hasattr(file_browser, 'hide_requested'):
+                file_browser.hide_requested.connect(self._toggle_file_browser)
+            # Apply dynamic button sizing to match toolbar
+            if hasattr(file_browser, 'update_button_sizes'):
+                file_browser.update_button_sizes()
             logger.debug("Connected file browser signals")
         except Exception as e:
             logger.error(f"Failed to connect file browser signals: {e}")
@@ -6380,8 +6481,9 @@ class REPLWidget(QWidget):
                     color: white;
                     border: none;
                     border-radius: 4px;
-                    padding: 4px 4px;
+                    padding: 2px 8px;
                     font-weight: bold;
+                    font-size: 11px;
                 }
                 QPushButton:hover {
                     background-color: #059669;
@@ -6392,10 +6494,13 @@ class REPLWidget(QWidget):
             """)
             return
         
-        # Use primary state for send button with theme colors
+        # Use primary state for send button with theme colors (extra_small = 48x28 base)
         ButtonStyleManager.apply_unified_button_style(
-            self.send_button, colors, "push", "small", "toggle"
+            self.send_button, colors, "push", "extra_small", "toggle"
         )
+        # Override to compact height — must come AFTER style manager sets constraints
+        self.send_button.setMinimumHeight(0)
+        self.send_button.setFixedHeight(24)
     
     def _style_stop_button(self):
         """Style the Stop button with unified danger styling."""
@@ -7062,6 +7167,13 @@ class REPLWidget(QWidget):
                     if button is not None:
                         button.setIconSize(icon_size)
 
+            # Update file browser bar buttons to match
+            if hasattr(self, 'file_browser_bar') and self.file_browser_bar:
+                try:
+                    self.file_browser_bar.update_button_sizes()
+                except Exception:
+                    pass
+
             logger.info(f"Applied icon size {base_size}px (slider {size}) to toolbar buttons")
 
         except Exception as e:
@@ -7242,7 +7354,7 @@ class REPLWidget(QWidget):
             QSizePolicy.Policy.Fixed
         )
         # Set fixed height to match typical button height for proper alignment
-        self.prompt_label.setFixedHeight(32)  # Standard button height
+        self.prompt_label.setFixedHeight(24)  # Compact height matching send button
         # Add to layout with center alignment to match button baseline
         input_layout.addWidget(self.prompt_label, 0, Qt.AlignmentFlag.AlignVCenter)
         
@@ -7275,7 +7387,7 @@ class REPLWidget(QWidget):
         self.send_button = QPushButton("Send")
         self.send_button.setToolTip("Send message (Ctrl+Enter)")
         self.send_button.clicked.connect(self._on_command_entered)
-        self.send_button.setFixedHeight(32)  # Match prompt label height
+        self.send_button.setFixedHeight(24)  # Compact height matching prompt row
         self._style_send_button()
         input_layout.addWidget(self.send_button, 0, Qt.AlignmentFlag.AlignVCenter)
         
@@ -12819,9 +12931,8 @@ def test_theme():
                         if save_current and current_id:
                             self.append_output("💾 Previous conversation saved with auto-generated title", "system")
                         
-                        # Add welcome message for new conversation
-                        #self.append_output("💬 Specter Conversation Manager v2.0", "system")
-                        self.append_output("🚀 New conversation started - type your message or 'help' for commands", "system")
+                        # Generate AI-powered persona greeting
+                        self._generate_persona_greeting()
                     else:
                         self.append_output("✗ Failed to start new conversation", "error")
                         

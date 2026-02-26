@@ -407,6 +407,56 @@ class SimpleFAISSSession:
             self.logger.error(f"❌ Get stats error: {e}")
             return {'session_ready': False, 'error': str(e)}
     
+    def remove_document(self, document_id: str, timeout: float = 30.0) -> bool:
+        """Remove a document and its chunks from the FAISS index.
+
+        Args:
+            document_id: Document ID returned from ingest_document()
+            timeout: Operation timeout in seconds
+
+        Returns:
+            True if chunks were removed, False otherwise
+        """
+        if not self.is_ready:
+            self.logger.warning("Session not ready — cannot remove document")
+            return False
+
+        try:
+            import asyncio
+            import threading
+            import queue
+
+            result_q: queue.Queue = queue.Queue()
+
+            def _delete():
+                loop = asyncio.new_event_loop()
+                try:
+                    count = loop.run_until_complete(
+                        self.faiss_client.delete_document(document_id)
+                    )
+                    result_q.put(count)
+                except Exception as e:
+                    self.logger.error(f"delete_document thread error: {e}")
+                    result_q.put(0)
+                finally:
+                    loop.close()
+
+            t = threading.Thread(target=_delete, daemon=True)
+            t.start()
+            t.join(timeout=timeout)
+
+            if not result_q.empty():
+                deleted = result_q.get(block=False)
+                self.logger.info(f"🗑️ Removed {deleted} chunks for document {document_id}")
+                return deleted > 0
+
+            self.logger.warning(f"remove_document timed out for {document_id}")
+            return False
+
+        except Exception as e:
+            self.logger.error(f"❌ remove_document error: {e}")
+            return False
+
     def health_check(self, timeout: float = 5.0) -> bool:
         """Check if session is healthy."""
         return self.is_ready

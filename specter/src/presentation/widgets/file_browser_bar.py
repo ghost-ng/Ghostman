@@ -970,6 +970,7 @@ class FileBrowserBar(QFrame):
     clear_all_requested = pyqtSignal()
     files_reordered = pyqtSignal(list)  # list of file_ids in new order
     upload_files_requested = pyqtSignal()  # Request file upload dialog
+    hide_requested = pyqtSignal()  # Request to hide the file browser toolbar
     processing_completed = pyqtSignal(str, str)  # file_id, status (completed/failed) - propagated from FileContextItem
     
     def __init__(self, theme_manager=None):
@@ -1013,24 +1014,19 @@ class FileBrowserBar(QFrame):
         header_layout.setContentsMargins(4, 0, 4, 0)  # No top or bottom margin
         header_layout.setSpacing(6)  # Reduced spacing for better alignment
         
-        # Title with file count
-        self.title_label = QLabel("📁 Attachments")
-        self.title_label.setObjectName("title_label")  # Set object name for CSS targeting
-        
-        # Apply theme-aware color using QPalette (works better than stylesheet due to CSS conflicts)
-        title_color = get_theme_primary_color(self.theme_manager)
+        # Status summary (compact, inline with title)
+        self.status_label = QLabel("No files loaded")
+        self.status_label.setObjectName("status_label")
+        status_color = get_theme_primary_color(self.theme_manager)
         from PyQt6.QtGui import QPalette, QColor
-        palette = self.title_label.palette()
-        palette.setColor(QPalette.ColorRole.WindowText, QColor(title_color))
-        self.title_label.setPalette(palette)
-        logger.info(f"🎨 Applied theme color via QPalette: {title_color}")
-        
-        font = self.title_label.font()
-        font.setBold(True)
-        font.setPointSize(10)
-        self.title_label.setFont(font)
-        header_layout.addWidget(self.title_label)
-        
+        palette = self.status_label.palette()
+        palette.setColor(QPalette.ColorRole.WindowText, QColor(status_color))
+        self.status_label.setPalette(palette)
+        status_font = self.status_label.font()
+        status_font.setPointSize(8)
+        self.status_label.setFont(status_font)
+        header_layout.addWidget(self.status_label)
+
         header_layout.addStretch()
         
         # Upload files button with icon (QToolButton for consistency)
@@ -1044,22 +1040,28 @@ class FileBrowserBar(QFrame):
 
         self.upload_files_btn.setToolTip("Open file dialog to select files for context")
         self.upload_files_btn.clicked.connect(self._on_upload_files_clicked)
-        self.upload_files_btn.setFixedSize(32, 32)  # Standard button size
+        self.upload_files_btn.setFixedSize(32, 32)  # Initial size, updated by update_button_sizes()
         header_layout.addWidget(self.upload_files_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
         logger.info("🔧 FB_INIT: Upload button added to layout")
-
-
-        # Removed toggle collapse/expand button as requested
-
-        # Settings button removed as requested
 
         # Clear all button with icon
         self.clear_all_btn = QToolButton()
         self.clear_all_btn.setToolTip("Clear all files")
         self.clear_all_btn.clicked.connect(self.clear_all_requested.emit)
-        self.clear_all_btn.setFixedSize(32, 32)  # Standard button size (consistent with upload)
+        self.clear_all_btn.setFixedSize(32, 32)  # Initial size, updated by update_button_sizes()
         # Icon will be loaded in _load_clear_icon() after UI init
         header_layout.addWidget(self.clear_all_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
+
+        # Minimize button — hides the file browser toolbar (same as toggle)
+        self.minimize_btn = QToolButton()
+        self.minimize_btn.setText("▁")
+        self.minimize_btn.setToolTip("Minimize file browser")
+        self.minimize_btn.clicked.connect(self._hide_toolbar)
+        self.minimize_btn.setFixedSize(32, 32)  # Initial size, updated by update_button_sizes()
+        header_layout.addWidget(self.minimize_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
+
+        # Track header buttons for uniform sizing
+        self._header_buttons = [self.upload_files_btn, self.clear_all_btn, self.minimize_btn]
         
         main_layout.addWidget(header_frame)
         
@@ -1090,32 +1092,6 @@ class FileBrowserBar(QFrame):
         self.pills_container.setStyleSheet("QWidget#pills_container { background-color: transparent; }")
 
         files_layout.addWidget(pills_scroll)
-        
-        # Status section (summary info)
-        self.status_frame = QFrame()
-        status_layout = QHBoxLayout(self.status_frame)
-        status_layout.setContentsMargins(4, 4, 4, 0)  # Top margin to separate from badges
-        status_layout.setSpacing(8)
-        
-        self.status_label = QLabel("No files loaded")
-        self.status_label.setObjectName("status_label")  # Set object name for CSS targeting
-        
-        # Apply theme-aware color using QPalette (works better than stylesheet due to CSS conflicts)
-        status_color = get_theme_primary_color(self.theme_manager)
-        from PyQt6.QtGui import QPalette, QColor
-        palette = self.status_label.palette()
-        palette.setColor(QPalette.ColorRole.WindowText, QColor(status_color))
-        self.status_label.setPalette(palette)
-        logger.info(f"🎨 Applied status color via QPalette: {status_color}")
-        
-        font = self.status_label.font()
-        font.setPointSize(8)
-        self.status_label.setFont(font)
-        status_layout.addWidget(self.status_label)
-        
-        status_layout.addStretch()
-        
-        files_layout.addWidget(self.status_frame)
         main_layout.addWidget(self.files_frame)
     
     def _apply_styling(self):
@@ -1190,11 +1166,7 @@ class FileBrowserBar(QFrame):
                 color: {text_color};
             }}
 
-            /* === "ATTACHMENTS" HEADER TEXT === */
-            QLabel#title_label {{
-                /* Attachments title text color */
-                color: {text_color};
-            }}
+            /* title_label removed — status_label is now in header */
             /* === PUSH BUTTONS (generic fallback, not used) === */
             QPushButton {{
                 /* Button background gradient */
@@ -1346,22 +1318,12 @@ class FileBrowserBar(QFrame):
             self.status_label.setObjectName("status_label")
             self.status_label.setStyleSheet(f"color: {text_color};")  # Use primary text color
             logger.info(f"🎨 Applied status_label stylesheet: color: {text_color};")
-        if hasattr(self, 'title_label'):
-            self.title_label.setObjectName("title_label")
-            self.title_label.setStyleSheet(f"color: {text_color}; font-weight: bold;")  # Use primary text color
-            logger.info(f"🎨 Applied title_label stylesheet: color: {text_color}; font-weight: bold;")
-    
     def _connect_signals(self):
         """Connect internal signals."""
         if self.theme_manager:
             # Connect to theme changes
             if hasattr(self.theme_manager, 'theme_changed'):
                 self.theme_manager.theme_changed.connect(self._on_theme_changed)
-    
-    def _on_theme_changed(self):
-        """Handle theme changes by reapplying styling."""
-        self._apply_styling()
-        self._refresh_label_colors()
     
     def _refresh_label_colors(self):
         """Force refresh label colors using QPalette approach."""
@@ -1373,13 +1335,6 @@ class FileBrowserBar(QFrame):
             logger.info(f"🎨 Retrieved primary text color: {text_color}")
             
             from PyQt6.QtGui import QPalette, QColor
-            
-            # Apply to title label using QPalette (proven to work)
-            if hasattr(self, 'title_label') and self.title_label:
-                palette = self.title_label.palette()
-                palette.setColor(QPalette.ColorRole.WindowText, QColor(text_color))
-                self.title_label.setPalette(palette)
-                logger.info(f"🎨 Applied theme color to title_label via QPalette: {text_color}")
             
             # Apply to status label using QPalette
             if hasattr(self, 'status_label') and self.status_label:
@@ -1495,9 +1450,41 @@ class FileBrowserBar(QFrame):
             logger.error(f"Failed to load clear icon: {e}")
             self.clear_all_btn.setText("Clear")
     
-    def _on_theme_changed(self, new_theme):
+    def _hide_toolbar(self):
+        """Request the parent to hide the file browser stack. Files remain tracked."""
+        self.hide_requested.emit()
+
+    def update_button_sizes(self):
+        """Update header button sizes to match the toolbar's dynamic sizing.
+
+        Uses the same formula as REPLWidget._auto_size_button_row():
+          scale = 0.6 + (slider-1) * 0.8/9
+          icon_size = slider * 3 + 1
+        """
+        try:
+            from ...infrastructure.storage.settings_manager import settings
+            from PyQt6.QtCore import QSize
+
+            user_slider = settings.get('interface.icon_size', 5)
+            user_slider = max(1, min(10, int(user_slider)))
+
+            scale = 0.6 + (user_slider - 1) * (0.8 / 9)
+            ideal = 28  # same ideal as toolbar
+            btn_size = max(16, int(ideal * scale))
+            icon_size = user_slider * 3 + 1
+
+            for btn in getattr(self, '_header_buttons', []):
+                btn.setFixedSize(btn_size, btn_size)
+                btn.setIconSize(QSize(icon_size, icon_size))
+
+            logger.debug(f"File browser buttons sized to {btn_size}px (icon {icon_size}px, slider {user_slider})")
+        except Exception as e:
+            logger.debug(f"update_button_sizes error: {e}")
+
+    def _on_theme_changed(self, new_theme=None):
         """Handle theme changes."""
         self._apply_styling()
+        self._refresh_label_colors()
         # Update upload button icon for new theme
         if hasattr(self, 'upload_files_btn'):
             self._load_upload_icon_for_button()
@@ -1848,13 +1835,11 @@ class FileBrowserBar(QFrame):
             
             status_text = " • ".join(status_parts)
         
-        self.status_label.setText(status_text)
-        
-        # Update title with count
+        # Status label now lives in header row — prefix with icon
         if total_files > 0:
-            self.title_label.setText(f"📁 Attachments ({total_files})")
+            self.status_label.setText(f"📁 {status_text}")
         else:
-            self.title_label.setText("📁 Attachments")
+            self.status_label.setText("📁 No files")
     
     def has_files(self) -> bool:
         """Check if any files are present."""
