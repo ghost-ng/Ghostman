@@ -175,7 +175,12 @@ class SettingsManager:
         'avatar': {
             'selected': 'specter',
             'scale': 1.0
-        }
+        },
+        'document_studio': {
+            'panel_visible': False,
+            'splitter_sizes': [600, 350],
+            'recipes': {},
+        },
     }
     
     APP_DIR_NAME = "Specter"

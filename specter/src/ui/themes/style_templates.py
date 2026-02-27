@@ -2655,3 +2655,65 @@ class StyleTemplates:
             border-color: {colors.border_secondary};
         }}
         """
+
+    @staticmethod
+    def get_document_studio_panel_style(colors: ColorSystem) -> str:
+        """Style template for the Document Studio panel container."""
+        if not colors:
+            return ""
+        return f"""
+        QWidget#document_studio_panel {{
+            background-color: {colors.background_primary};
+            border-left: 1px solid {colors.border_secondary};
+        }}
+        """
+
+    @staticmethod
+    def get_document_card_style(colors: ColorSystem, status: str = "pending") -> str:
+        """Style template for document cards with status-dependent border."""
+        if not colors:
+            return ""
+        border_map = {
+            "pending": colors.text_disabled,
+            "queued": colors.text_disabled,
+            "processing": colors.primary,
+            "completed": colors.status_success,
+            "failed": colors.status_error,
+        }
+        border = border_map.get(status, colors.border_primary)
+        return f"""
+        QFrame#document_card {{
+            background: {colors.background_secondary};
+            border: 1.5px solid {border};
+            border-radius: 6px;
+        }}
+        QFrame#document_card:hover {{
+            border-color: {colors.primary};
+            background: {colors.background_tertiary};
+        }}
+        """
+
+    @staticmethod
+    def get_studio_header_style(colors: ColorSystem) -> str:
+        """Style template for the Document Studio header bar."""
+        if not colors:
+            return ""
+        return f"""
+        QFrame#studio_header_bar {{
+            background: {colors.background_tertiary};
+            border: none;
+            border-bottom: 1px solid {colors.border_secondary};
+        }}
+        """
+
+    @staticmethod
+    def get_studio_status_bar_style(colors: ColorSystem) -> str:
+        """Style template for the Document Studio status bar."""
+        if not colors:
+            return ""
+        return f"""
+        QFrame#studio_status_bar {{
+            background: {colors.background_tertiary};
+            border-top: 1px solid {colors.border_secondary};
+        }}
+        """
