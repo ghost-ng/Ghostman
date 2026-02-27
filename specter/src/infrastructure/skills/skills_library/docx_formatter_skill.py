@@ -212,6 +212,18 @@ class DocxFormatterSkill(BaseSkill):
                 description="Indent per bullet level in inches (default 0.5)",
                 constraints={"min": 0.1, "max": 2.0},
             ),
+            SkillParameter(
+                name="recipe_name",
+                type=str,
+                required=False,
+                description="Name of a saved recipe to apply. Overrides individual operations/parameters.",
+            ),
+            SkillParameter(
+                name="extract_recipe",
+                type=bool,
+                required=False,
+                description="If true, extract formatting from this document as a reusable recipe instead of applying changes.",
+            ),
         ]
 
     async def execute(self, **params: Any) -> SkillResult:
@@ -258,6 +270,50 @@ class DocxFormatterSkill(BaseSkill):
                     message=f"Not a DOCX file: {file_path.name}",
                     error="Only .docx files are supported. Please provide a valid Word document.",
                 )
+
+            # --- Recipe extraction mode ---
+            if params.get("extract_recipe", False):
+                extracted = self.extract_recipe_from_document(str(file_path))
+                return SkillResult(
+                    success=True,
+                    message=f"Extracted formatting recipe from {file_path.name}",
+                    data=extracted,
+                )
+
+            # --- Recipe name lookup ---
+            recipe_name = params.get("recipe_name")
+            if recipe_name:
+                from ...storage.settings_manager import settings
+
+                recipes = settings.get("document_studio.recipes", {})
+                matched_id = None
+                for rid, rdata in recipes.items():
+                    if rdata.get("name", "").lower() == recipe_name.lower():
+                        matched_id = rid
+                        break
+
+                if matched_id is None:
+                    available = [
+                        rdata.get("name", rid)
+                        for rid, rdata in recipes.items()
+                    ]
+                    return SkillResult(
+                        success=False,
+                        message=f"Recipe not found: {recipe_name}",
+                        error=(
+                            f"No recipe named '{recipe_name}'. "
+                            f"Available recipes: {', '.join(available) if available else '(none)'}"
+                        ),
+                    )
+
+                recipe = recipes[matched_id]
+                # Override operations from recipe
+                params["operations"] = recipe.get("operations", list(ALL_OPERATIONS))
+                # Merge recipe parameters (explicit params take precedence)
+                recipe_params = recipe.get("parameters", {})
+                for key, value in recipe_params.items():
+                    if key not in params or params[key] is None:
+                        params[key] = value
 
             # --- Load document ---
             logger.info(f"Loading document: {file_path}")
