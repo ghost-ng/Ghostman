@@ -22,8 +22,8 @@ Layout:
 │  │  └────────────────────────────────┘ │ │
 │  │  QProgressBar (batch, hidden)      │ │
 │  └────────────────────────────────────┘ │
-│  View 1: Preview  (placeholder)         │
-│  View 2: Diff     (placeholder)         │
+│  View 1: DocumentPreviewView             │
+│  View 2: DiffView                        │
 │  View 3: RecipeEditor                   │
 ├─────────────────────────────────────────┤
 │  Status bar (file count · errors)       │
@@ -31,6 +31,8 @@ Layout:
 """
 
 import logging
+import os
+import sys
 from typing import Dict, List, Optional
 
 from PyQt6.QtCore import Qt, pyqtSignal
@@ -49,7 +51,9 @@ from PyQt6.QtWidgets import (
 )
 
 from .batch_processor import BatchProcessor
+from .diff_view import DiffView
 from .document_card import DocumentCard
+from .preview_view import DocumentPreviewView
 from .recipe_editor import RecipeEditor
 from .recipe_library import RecipeLibrary
 from .studio_header_bar import StudioHeaderBar
@@ -150,12 +154,18 @@ class DocumentStudioPanel(QFrame):
         # View 0 — list view
         self._stack.addWidget(self._build_list_view())
 
-        # Views 1-2 — placeholders (Preview, Diff)
-        for label_text in ("Preview", "Diff"):
-            placeholder = QLabel(f"{label_text} — coming soon")
-            placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            placeholder.setObjectName("StudioPlaceholder")
-            self._stack.addWidget(placeholder)
+        # View 1 — Document preview
+        self._preview_view = DocumentPreviewView()
+        self._preview_view.back_requested.connect(self._navigate_to_list)
+        self._preview_view.open_external_requested.connect(self._open_file_external)
+        self._stack.addWidget(self._preview_view)
+
+        # View 2 — Diff view
+        self._diff_view = DiffView()
+        self._diff_view.back_requested.connect(self._navigate_to_list)
+        self._diff_view.accept_requested.connect(self._on_diff_accepted)
+        self._diff_view.reject_requested.connect(self._on_diff_rejected)
+        self._stack.addWidget(self._diff_view)
 
         # View 3 — Recipe editor
         self._recipe_editor = RecipeEditor(self)
@@ -494,9 +504,60 @@ class DocumentStudioPanel(QFrame):
             self._state.selection_changed.emit()
 
     def _on_card_preview_requested(self, file_path: str) -> None:
-        """Switch to the preview view (placeholder for now)."""
-        logger.debug("Preview requested for: %s", file_path)
+        """Navigate to the diff view (if formatted) or preview view."""
+        entry = self._state.documents.get(file_path)
+        if entry and entry.formatted_path and entry.original_path:
+            self._navigate_to_diff(entry.original_path, entry.formatted_path)
+        else:
+            self._navigate_to_preview(file_path)
+
+    # ------------------------------------------------------------------
+    # Navigation helpers
+    # ------------------------------------------------------------------
+
+    def _navigate_to_list(self) -> None:
+        """Switch back to the document list view."""
+        self.set_view(VIEW_LIST)
+
+    def _navigate_to_preview(self, file_path: str) -> None:
+        """Load a document into the preview view and switch to it."""
+        logger.debug("Navigating to preview for: %s", file_path)
+        self._preview_view.load_document(file_path)
         self.set_view(VIEW_PREVIEW)
+
+    def _navigate_to_diff(self, original_path: str, formatted_path: str) -> None:
+        """Load a diff and switch to the diff view."""
+        logger.debug(
+            "Navigating to diff: original=%s, formatted=%s",
+            original_path, formatted_path,
+        )
+        self._diff_view.load_diff(original_path, formatted_path)
+        self.set_view(VIEW_DIFF)
+
+    def _open_file_external(self, file_path: str) -> None:
+        """Open a file in the system's default application."""
+        logger.info("Opening file externally: %s", file_path)
+        try:
+            if sys.platform == "win32":
+                os.startfile(file_path)
+            elif sys.platform == "darwin":
+                import subprocess
+                subprocess.Popen(["open", file_path])
+            else:
+                import subprocess
+                subprocess.Popen(["xdg-open", file_path])
+        except Exception:
+            logger.exception("Failed to open file externally: %s", file_path)
+
+    def _on_diff_accepted(self, formatted_path: str) -> None:
+        """Handle acceptance of formatted changes from the diff view."""
+        logger.info("Diff accepted — formatted file: %s", formatted_path)
+        self._navigate_to_list()
+
+    def _on_diff_rejected(self, original_path: str) -> None:
+        """Handle rejection of formatted changes from the diff view."""
+        logger.info("Diff rejected — keeping original: %s", original_path)
+        self._navigate_to_list()
 
     # ------------------------------------------------------------------
     # Toolbar button handlers
@@ -794,19 +855,9 @@ class DocumentStudioPanel(QFrame):
             }}
         """)
 
-        # Placeholder labels in stacked widget
-        for i in range(VIEW_PREVIEW, self._stack.count()):
-            widget = self._stack.widget(i)
-            if isinstance(widget, QLabel):
-                widget.setStyleSheet(f"""
-                    QLabel#StudioPlaceholder {{
-                        color: {text_disabled};
-                        font-size: 14px;
-                        font-style: italic;
-                        background-color: {bg_primary};
-                        border: none;
-                    }}
-                """)
+        # Preview and diff views
+        self._preview_view.apply_theme(colors)
+        self._diff_view.apply_theme(colors)
 
         # Batch progress bar
         self._batch_progress.setStyleSheet(f"""
