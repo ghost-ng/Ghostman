@@ -39,6 +39,7 @@ class MainWindow(QMainWindow):
         self.conversation_browser = None  # Simple conversation browser
         # Attach state (REPL snapped to avatar)
         self._repl_attached: bool = bool(settings.get('interface.repl_attached', False))
+        self._moving_from_repl: bool = False  # guard: prevent feedback loop
         off = settings.get('interface.repl_attach_offset', None)
         if isinstance(off, dict) and 'x' in off and 'y' in off:
             self._repl_attach_offset = QPoint(int(off['x']), int(off['y']))
@@ -253,9 +254,12 @@ class MainWindow(QMainWindow):
     def moveEvent(self, event):
         """Save window state when moved."""
         super().moveEvent(event)
-        # If REPL is attached, move it along with the avatar using stored offset
+        # If REPL is attached, move it along with the avatar using stored offset.
+        # Skip if this move was triggered by the REPL itself (feedback guard).
         try:
-            if self._repl_attached and self.floating_repl and self.floating_repl.isVisible():
+            if self._moving_from_repl:
+                pass  # Avatar moved because REPL dragged it — don't move REPL back
+            elif self._repl_attached and self.floating_repl and self.floating_repl.isVisible():
                 logger.debug(f"🔗 Avatar moved - moving attached REPL. Avatar at: {self.pos()}")
                 self._move_attached_repl()
             elif self._repl_attached:
@@ -653,7 +657,10 @@ class MainWindow(QMainWindow):
                 # Calculate where avatar should be based on REPL position and offset
                 new_avatar_pos = repl_pos - self._repl_attach_offset
                 logger.debug(f"🔗 REPL moved to {repl_pos}, moving avatar to {new_avatar_pos}")
+                # Guard flag prevents avatar moveEvent from clamping REPL back
+                self._moving_from_repl = True
                 self.move(new_avatar_pos)
+                self._moving_from_repl = False
                 # Update the offset for consistency
                 self._repl_attach_offset = repl_pos - new_avatar_pos
                 settings.set('interface.repl_attach_offset', {
@@ -661,6 +668,7 @@ class MainWindow(QMainWindow):
                     'y': int(self._repl_attach_offset.y()),
                 })
         except Exception as e:
+            self._moving_from_repl = False
             logger.debug(f"Failed to move avatar on REPL move: {e}")
     
     def _validate_attached_repl_position(self, repl_x, repl_y, repl_size, screen_geometry, avatar_pos):
