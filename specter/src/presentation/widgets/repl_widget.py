@@ -12980,11 +12980,10 @@ def test_theme():
     def _title_mouse_move(self, event):
         """Handle mouse move on title bar for drag functionality."""
         if self._dragging and self._drag_pos:
-            # Get the floating REPL window
-            floating_repl = self.parent()
-            while floating_repl and not hasattr(floating_repl, 'move'):
-                floating_repl = floating_repl.parent()
-            
+            # Get the top-level window (FloatingREPLWindow) — not an
+            # intermediate parent like QSplitter which is layout-managed.
+            floating_repl = self.window()
+
             if floating_repl:
                 # Calculate new position
                 diff = event.globalPosition().toPoint() - self._drag_pos
