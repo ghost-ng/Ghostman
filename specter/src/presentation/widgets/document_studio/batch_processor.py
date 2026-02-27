@@ -272,6 +272,7 @@ class BatchProcessor(QObject):
             self._state.update_status(file_path, DocumentStatus.COMPLETED)
             entry = self._state.documents.get(file_path)
             if entry:
+                entry.original_path = file_path
                 entry.formatted_path = formatted_path
         else:
             self._state.update_status(

@@ -536,18 +536,22 @@ class DocumentStudioPanel(QFrame):
 
     def _open_file_external(self, file_path: str) -> None:
         """Open a file in the system's default application."""
-        logger.info("Opening file externally: %s", file_path)
+        normalized = os.path.normpath(file_path)
+        if not os.path.isfile(normalized):
+            logger.warning("Cannot open — file does not exist: %s", file_path)
+            return
+        logger.info("Opening file externally: %s", normalized)
         try:
             if sys.platform == "win32":
-                os.startfile(file_path)
+                os.startfile(normalized)
             elif sys.platform == "darwin":
                 import subprocess
-                subprocess.Popen(["open", file_path])
+                subprocess.Popen(["open", normalized])
             else:
                 import subprocess
-                subprocess.Popen(["xdg-open", file_path])
+                subprocess.Popen(["xdg-open", normalized])
         except Exception:
-            logger.exception("Failed to open file externally: %s", file_path)
+            logger.exception("Failed to open file externally: %s", normalized)
 
     def _on_diff_accepted(self, formatted_path: str) -> None:
         """Handle acceptance of formatted changes from the diff view."""

@@ -188,7 +188,8 @@ class RecipeEditor(QFrame):
         form_layout.addWidget(self._desc_edit)
 
         # --- Operations group ---------------------------------------------
-        ops_group = QGroupBox("Operations")
+        self._ops_group = QGroupBox("Operations")
+        ops_group = self._ops_group
         ops_group.setObjectName("RecipeEditorOpsGroup")
         ops_layout = QVBoxLayout(ops_group)
         ops_layout.setContentsMargins(8, 12, 8, 8)
@@ -358,8 +359,11 @@ class RecipeEditor(QFrame):
             if cb.isChecked()
         ]
         if not operations:
+            self._ops_group.setTitle("Operations — select at least one!")
             logger.warning("Recipe save aborted: no operations selected")
             return
+        # Reset title in case it was previously set to error
+        self._ops_group.setTitle("Operations")
 
         # Build parameters dict
         parameters = {

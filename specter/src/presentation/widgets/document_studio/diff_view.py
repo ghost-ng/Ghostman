@@ -319,11 +319,33 @@ class DiffView(QWidget):
 
         root.addWidget(self._splitter, 1)  # stretch factor 1
 
-        # Synchronise scrolling between the two panes
+        # Synchronise scrolling between the two panes (with guard flag
+        # to prevent infinite signal recursion)
+        self._syncing_scroll = False
         left_sb = self._left_browser.verticalScrollBar()
         right_sb = self._right_browser.verticalScrollBar()
-        left_sb.valueChanged.connect(right_sb.setValue)
-        right_sb.valueChanged.connect(left_sb.setValue)
+        left_sb.valueChanged.connect(self._sync_scroll_right)
+        right_sb.valueChanged.connect(self._sync_scroll_left)
+
+    # ------------------------------------------------------------------
+    # Scroll synchronisation helpers
+    # ------------------------------------------------------------------
+
+    def _sync_scroll_right(self, value: int) -> None:
+        """Propagate left pane scroll to right, guarded against recursion."""
+        if self._syncing_scroll:
+            return
+        self._syncing_scroll = True
+        self._right_browser.verticalScrollBar().setValue(value)
+        self._syncing_scroll = False
+
+    def _sync_scroll_left(self, value: int) -> None:
+        """Propagate right pane scroll to left, guarded against recursion."""
+        if self._syncing_scroll:
+            return
+        self._syncing_scroll = True
+        self._left_browser.verticalScrollBar().setValue(value)
+        self._syncing_scroll = False
 
     # ------------------------------------------------------------------
     # Public API

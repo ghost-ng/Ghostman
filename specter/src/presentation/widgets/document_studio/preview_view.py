@@ -305,12 +305,14 @@ class DocumentPreviewView(QWidget):
         primary = getattr(colors, "primary", "#4CAF50")
 
         # Toolbar
-        self.findChild(QWidget, "PreviewToolbar").setStyleSheet(f"""
-            QWidget#PreviewToolbar {{
-                background-color: {bg_tertiary};
-                border-bottom: 1px solid {border_secondary};
-            }}
-        """)
+        toolbar = self.findChild(QWidget, "PreviewToolbar")
+        if toolbar:
+            toolbar.setStyleSheet(f"""
+                QWidget#PreviewToolbar {{
+                    background-color: {bg_tertiary};
+                    border-bottom: 1px solid {border_secondary};
+                }}
+            """)
 
         # Filename label
         self._filename_label.setStyleSheet(f"""
