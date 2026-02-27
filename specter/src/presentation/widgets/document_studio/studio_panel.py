@@ -12,6 +12,7 @@ Layout:
 │  QStackedWidget                         │
 │  ┌─ View 0: List ─────────────────────┐ │
 │  │  Batch controls toolbar            │ │
+│  │  RecipeLibrary                     │ │
 │  │  ┌────────────────────────────────┐ │ │
 │  │  │ QScrollArea                    │ │ │
 │  │  │   DocumentCard                 │ │ │
@@ -23,14 +24,13 @@ Layout:
 │  └────────────────────────────────────┘ │
 │  View 1: Preview  (placeholder)         │
 │  View 2: Diff     (placeholder)         │
-│  View 3: Recipe   (placeholder)         │
+│  View 3: RecipeEditor                   │
 ├─────────────────────────────────────────┤
 │  Status bar (file count · errors)       │
 └─────────────────────────────────────────┘
 """
 
 import logging
-import os
 from typing import Dict, List, Optional
 
 from PyQt6.QtCore import Qt, pyqtSignal
@@ -48,9 +48,12 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from .batch_processor import BatchProcessor
 from .document_card import DocumentCard
+from .recipe_editor import RecipeEditor
+from .recipe_library import RecipeLibrary
 from .studio_header_bar import StudioHeaderBar
-from .studio_state import DocumentEntry, DocumentStatus, DocumentStudioState
+from .studio_state import DocumentEntry, DocumentStatus, DocumentStudioState, Recipe
 
 # Theme imports — graceful fallback when running outside the full app.
 try:
@@ -119,6 +122,12 @@ class DocumentStudioPanel(QFrame):
         self._refresh_status_bar()
         self._apply_default_theme()
 
+        # Batch processor (manages QThread + BatchWorker)
+        self._batch_processor = BatchProcessor(self._state, self)
+
+        # Load saved recipes from settings
+        self._load_recipes_from_settings()
+
     # ------------------------------------------------------------------
     # UI construction
     # ------------------------------------------------------------------
@@ -141,12 +150,18 @@ class DocumentStudioPanel(QFrame):
         # View 0 — list view
         self._stack.addWidget(self._build_list_view())
 
-        # Views 1-3 — placeholders
-        for label_text in ("Preview", "Diff", "Recipe Editor"):
+        # Views 1-2 — placeholders (Preview, Diff)
+        for label_text in ("Preview", "Diff"):
             placeholder = QLabel(f"{label_text} — coming soon")
             placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
             placeholder.setObjectName("StudioPlaceholder")
             self._stack.addWidget(placeholder)
+
+        # View 3 — Recipe editor
+        self._recipe_editor = RecipeEditor(self)
+        self._recipe_editor.recipe_saved.connect(self._on_editor_recipe_saved)
+        self._recipe_editor.cancelled.connect(self._on_editor_cancelled)
+        self._stack.addWidget(self._recipe_editor)
 
         self._stack.setCurrentIndex(VIEW_LIST)
 
@@ -221,6 +236,14 @@ class DocumentStudioPanel(QFrame):
         tb_layout.addWidget(self._apply_recipe_btn)
 
         layout.addWidget(toolbar)
+
+        # --- Recipe library -----------------------------------------------
+        self._recipe_library = RecipeLibrary(self._state, container)
+        self._recipe_library.create_requested.connect(self._on_recipe_create)
+        self._recipe_library.edit_requested.connect(self._on_recipe_edit)
+        self._recipe_library.delete_requested.connect(self._on_recipe_delete)
+        self._recipe_library.apply_requested.connect(self._on_recipe_apply)
+        layout.addWidget(self._recipe_library)
 
         # --- Scroll area with card list -----------------------------------
         self._scroll_area = QScrollArea()
@@ -488,7 +511,7 @@ class DocumentStudioPanel(QFrame):
         self._state.deselect_all()
 
     def _on_apply_recipe(self) -> None:
-        """Emit ``apply_recipe_requested`` with the chosen recipe and selected files."""
+        """Start batch processing with the chosen recipe and selected files."""
         recipe_id = self._recipe_combo.currentData()
         if not recipe_id:
             logger.debug("No recipe selected — ignoring apply")
@@ -497,7 +520,105 @@ class DocumentStudioPanel(QFrame):
         if not selected:
             logger.debug("No files selected — ignoring apply")
             return
+        recipe = self._state.get_recipe(recipe_id)
+        if not recipe:
+            logger.warning("Recipe %s not found in state", recipe_id)
+            return
         self.apply_recipe_requested.emit(recipe_id, selected)
+        self._start_batch(selected, recipe)
+
+    # ------------------------------------------------------------------
+    # Recipe library signal handlers
+    # ------------------------------------------------------------------
+
+    def _on_recipe_create(self) -> None:
+        """Navigate to the recipe editor for a new recipe."""
+        self._recipe_editor.clear_form()
+        self.set_view(VIEW_RECIPE_EDITOR)
+
+    def _on_recipe_edit(self, recipe_id: str) -> None:
+        """Navigate to the recipe editor with an existing recipe loaded."""
+        recipe = self._state.get_recipe(recipe_id)
+        if not recipe:
+            logger.warning("Cannot edit: recipe %s not found", recipe_id)
+            return
+        self._recipe_editor.clear_form()
+        self._recipe_editor.load_recipe(recipe)
+        self.set_view(VIEW_RECIPE_EDITOR)
+
+    def _on_recipe_delete(self, recipe_id: str) -> None:
+        """Remove a recipe from state and persist to settings."""
+        self._state.remove_recipe(recipe_id)
+        self._save_recipes_to_settings()
+
+    def _on_recipe_apply(self, recipe_id: str) -> None:
+        """Apply a recipe from the library to the selected files."""
+        recipe = self._state.get_recipe(recipe_id)
+        if not recipe:
+            logger.warning("Cannot apply: recipe %s not found", recipe_id)
+            return
+        selected = self._state.get_selected_paths()
+        if not selected:
+            logger.debug("No files selected — ignoring apply from library")
+            return
+        self._start_batch(selected, recipe)
+
+    # ------------------------------------------------------------------
+    # Recipe editor signal handlers
+    # ------------------------------------------------------------------
+
+    def _on_editor_recipe_saved(self, recipe: object) -> None:
+        """Save the recipe from the editor to state and persist."""
+        if not isinstance(recipe, Recipe):
+            logger.warning("Editor emitted non-Recipe object: %r", recipe)
+            return
+        self._state.add_recipe(recipe)
+        self._save_recipes_to_settings()
+        # Navigate back to the list view
+        self.set_view(VIEW_LIST)
+
+    def _on_editor_cancelled(self) -> None:
+        """Navigate back to the list view when editing is cancelled."""
+        self.set_view(VIEW_LIST)
+
+    # ------------------------------------------------------------------
+    # Batch processing
+    # ------------------------------------------------------------------
+
+    def _start_batch(self, file_paths: List[str], recipe: Recipe) -> None:
+        """Start batch processing via the BatchProcessor."""
+        if self._batch_processor.is_running:
+            logger.warning("Batch already running — ignoring request")
+            return
+        try:
+            self._batch_processor.start_batch(file_paths, recipe)
+        except RuntimeError as exc:
+            logger.error("Failed to start batch: %s", exc)
+
+    # ------------------------------------------------------------------
+    # Settings persistence
+    # ------------------------------------------------------------------
+
+    def _save_recipes_to_settings(self) -> None:
+        """Persist all recipes to settings.json."""
+        try:
+            from specter.src.infrastructure.storage.settings_manager import settings
+            recipes_dict = self._state.get_all_recipes_as_dict()
+            settings.set("document_studio.recipes", recipes_dict)
+            logger.debug("Saved %d recipe(s) to settings", len(recipes_dict))
+        except Exception:
+            logger.exception("Failed to save recipes to settings")
+
+    def _load_recipes_from_settings(self) -> None:
+        """Load recipes from settings.json into state."""
+        try:
+            from specter.src.infrastructure.storage.settings_manager import settings
+            recipes_dict = settings.get("document_studio.recipes", {})
+            if recipes_dict:
+                count = self._state.load_recipes_from_settings(recipes_dict)
+                logger.info("Loaded %d recipe(s) from settings", count)
+        except Exception:
+            logger.exception("Failed to load recipes from settings")
 
     # ------------------------------------------------------------------
     # Status bar
@@ -721,6 +842,14 @@ class DocumentStudioPanel(QFrame):
         self._batch_status_label.setStyleSheet(
             f"color: {text_secondary}; font-size: 11px; background: transparent;"
         )
+
+        # Recipe library
+        if hasattr(self, "_recipe_library") and self._recipe_library:
+            self._recipe_library.apply_theme(colors)
+
+        # Recipe editor
+        if hasattr(self, "_recipe_editor") and self._recipe_editor:
+            self._recipe_editor.apply_theme(colors)
 
         # Apply theme to all existing cards
         for card in self._cards.values():
