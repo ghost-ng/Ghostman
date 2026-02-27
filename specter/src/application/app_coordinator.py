@@ -1289,56 +1289,54 @@ class AppCoordinator(QObject):
         logger.info(f"🎭 Avatar applied: {avatar.name} ({avatar_id}), scale={scale:.0%}")
 
     def _update_window_flags(self, always_on_top: bool):
-        """Update window flags for always on top behavior with minimal flicker."""
+        """Update window flags for always on top behavior without flicker.
+
+        Uses Win32 SetWindowPos to toggle TOPMOST directly on the native
+        handle, avoiding the window-destroy/recreate cycle that
+        Qt.setWindowFlags() triggers.
+        """
         if not self._main_window:
             return
-        
+
         try:
-            from PyQt6.QtCore import Qt
-            from PyQt6.QtWidgets import QApplication
-            
-            # Batch updates to minimize flicker
-            windows_to_update = []
-            
-            # Check main window (avatar)
-            current_flags = self._main_window.windowFlags()
-            if always_on_top:
-                new_flags = current_flags | Qt.WindowType.WindowStaysOnTopHint
-            else:
-                new_flags = current_flags & ~Qt.WindowType.WindowStaysOnTopHint
-                
-            # Only update if flags actually changed
-            if new_flags != current_flags:
-                windows_to_update.append((self._main_window, new_flags, self._main_window.isVisible(), "avatar"))
-            
-            # Check floating REPL
+            import ctypes
+            import sys
+
+            windows = [self._main_window]
             if hasattr(self._main_window, 'floating_repl') and self._main_window.floating_repl:
-                repl_flags = self._main_window.floating_repl.windowFlags()
-                if always_on_top:
-                    repl_new_flags = repl_flags | Qt.WindowType.WindowStaysOnTopHint
-                else:
-                    repl_new_flags = repl_flags & ~Qt.WindowType.WindowStaysOnTopHint
-                
-                # Only update if flags actually changed
-                if repl_new_flags != repl_flags:
-                    windows_to_update.append((self._main_window.floating_repl, repl_new_flags, self._main_window.floating_repl.isVisible(), "REPL"))
-            
-            # Apply all updates quickly in sequence to minimize flicker
-            if windows_to_update:
-                # Disable updates during flag changes
-                QApplication.setQuitOnLastWindowClosed(False)
-                
-                for window, flags, was_visible, window_type in windows_to_update:
-                    window.setWindowFlags(flags)
-                    if was_visible:
-                        window.show()
-                
-                QApplication.setQuitOnLastWindowClosed(True)
-                window_names = [item[3] for item in windows_to_update]
-                logger.debug(f"Updated {len(windows_to_update)} windows ({', '.join(window_names)}) with always_on_top={always_on_top}")
+                windows.append(self._main_window.floating_repl)
+
+            if sys.platform == "win32":
+                HWND_TOPMOST = -1
+                HWND_NOTOPMOST = -2
+                SWP_NOMOVE = 0x0002
+                SWP_NOSIZE = 0x0001
+                SWP_NOACTIVATE = 0x0010
+                insert_after = HWND_TOPMOST if always_on_top else HWND_NOTOPMOST
+                swp_flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
+
+                for window in windows:
+                    hwnd = int(window.winId())
+                    ctypes.windll.user32.SetWindowPos(
+                        hwnd, insert_after, 0, 0, 0, 0, swp_flags
+                    )
+
+                logger.debug(
+                    f"SetWindowPos applied to {len(windows)} window(s): "
+                    f"always_on_top={always_on_top}"
+                )
             else:
-                logger.debug(f"No window flag changes needed for always_on_top={always_on_top}")
-                logger.debug("Floating REPL window flags also updated")
-            
+                # Non-Windows fallback: use setWindowFlags (causes flicker)
+                from PyQt6.QtCore import Qt
+                for window in windows:
+                    flags = window.windowFlags()
+                    if always_on_top:
+                        flags |= Qt.WindowType.WindowStaysOnTopHint
+                    else:
+                        flags &= ~Qt.WindowType.WindowStaysOnTopHint
+                    window.setWindowFlags(flags)
+                    if window.isVisible():
+                        window.show()
+
         except Exception as e:
             logger.error(f"Failed to update window flags: {e}")
