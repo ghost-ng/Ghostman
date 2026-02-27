@@ -37,7 +37,9 @@ class TestOpenAICompatibleClient:
         """Setup for each test method."""
         self.base_url = "https://api.openai.com/v1"
         self.api_key = "test-api-key"
-        self.client = OpenAICompatibleClient(self.base_url, self.api_key)
+        self.client = OpenAICompatibleClient(
+            self.base_url, self.api_key, retry_delay=0.0
+        )
     
     def teardown_method(self):
         """Cleanup after each test method."""
@@ -67,88 +69,94 @@ class TestOpenAICompatibleClient:
         
         custom_client.close()
     
-    @patch('httpx.Client.request')
-    def test_successful_request(self, mock_request):
+    @patch('specter.src.infrastructure.ai.api_client.session_manager')
+    def test_successful_request(self, mock_sm):
         """Test successful API request."""
-        # Mock successful response
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"choices": [{"message": {"content": "Hello!"}}]}
         mock_response.headers = {"content-type": "application/json"}
-        mock_request.return_value = mock_response
-        
+        mock_response.text = '{"choices": [{"message": {"content": "Hello!"}}]}'
+        mock_sm.make_request.return_value = mock_response
+
         result = self.client._make_request("POST", "chat/completions", {"model": "gpt-3.5-turbo"})
-        
+
         assert result.success is True
         assert result.data == {"choices": [{"message": {"content": "Hello!"}}]}
         assert result.status_code == 200
-    
-    @patch('httpx.Client.request')
-    def test_authentication_error(self, mock_request):
+
+    @patch('specter.src.infrastructure.ai.api_client.session_manager')
+    def test_authentication_error(self, mock_sm):
         """Test authentication error handling."""
         mock_response = Mock()
         mock_response.status_code = 401
         mock_response.json.return_value = {"error": {"message": "Invalid API key"}}
-        mock_request.return_value = mock_response
-        
+        mock_response.headers = {}
+        mock_sm.make_request.return_value = mock_response
+
         result = self.client._make_request("POST", "chat/completions")
-        
+
         assert result.success is False
         assert "Authentication failed" in result.error
         assert result.status_code == 401
-    
-    @patch('httpx.Client.request')
-    def test_rate_limit_error(self, mock_request):
+
+    @patch('specter.src.infrastructure.ai.api_client.time.sleep')
+    @patch('specter.src.infrastructure.ai.api_client.session_manager')
+    def test_rate_limit_error(self, mock_sm, mock_sleep):
         """Test rate limit error handling."""
         mock_response = Mock()
         mock_response.status_code = 429
         mock_response.json.return_value = {"error": {"message": "Rate limit exceeded"}}
         mock_response.headers = {"retry-after": "60"}
-        mock_request.return_value = mock_response
-        
+        mock_sm.make_request.return_value = mock_response
+
+        # Client retries on 429 with retry-after, so after max_retries it returns error
         result = self.client._make_request("POST", "chat/completions")
-        
+
         assert result.success is False
         assert "Rate limit exceeded" in result.error
         assert result.status_code == 429
-    
-    @patch('httpx.Client.request')
-    def test_server_error_with_retry(self, mock_request):
+
+    @patch('specter.src.infrastructure.ai.api_client.time.sleep')
+    @patch('specter.src.infrastructure.ai.api_client.session_manager')
+    def test_server_error_with_retry(self, mock_sm, mock_sleep):
         """Test server error with retry logic."""
-        # First call returns server error, second succeeds
         mock_response_error = Mock()
         mock_response_error.status_code = 500
         mock_response_error.json.return_value = {"error": {"message": "Internal server error"}}
-        
+        mock_response_error.headers = {}
+
         mock_response_success = Mock()
         mock_response_success.status_code = 200
         mock_response_success.json.return_value = {"choices": [{"message": {"content": "Success"}}]}
-        
-        mock_request.side_effect = [mock_response_error, mock_response_success]
-        
-        with patch('time.sleep'):  # Mock sleep to speed up test
-            result = self.client._make_request("POST", "chat/completions")
-        
+        mock_response_success.headers = {"content-type": "application/json"}
+        mock_response_success.text = '{"choices": [{"message": {"content": "Success"}}]}'
+
+        mock_sm.make_request.side_effect = [mock_response_error, mock_response_success]
+
+        result = self.client._make_request("POST", "chat/completions")
+
         assert result.success is True
-        assert mock_request.call_count == 2  # Initial + 1 retry
-    
-    @patch('httpx.Client.request')
-    def test_timeout_with_retry(self, mock_request):
+        assert mock_sm.make_request.call_count == 2  # Initial + 1 retry
+
+    @patch('specter.src.infrastructure.ai.api_client.time.sleep')
+    @patch('specter.src.infrastructure.ai.api_client.session_manager')
+    def test_timeout_with_retry(self, mock_sm, mock_sleep):
         """Test timeout handling with retry."""
-        import httpx
-        
-        # First call times out, second succeeds
+        import requests as req
+
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"choices": [{"message": {"content": "Success"}}]}
-        
-        mock_request.side_effect = [httpx.TimeoutException("Timeout"), mock_response]
-        
-        with patch('time.sleep'):  # Mock sleep to speed up test
-            result = self.client._make_request("POST", "chat/completions")
-        
+        mock_response.headers = {"content-type": "application/json"}
+        mock_response.text = '{"choices": [{"message": {"content": "Success"}}]}'
+
+        mock_sm.make_request.side_effect = [req.Timeout("Timeout"), mock_response]
+
+        result = self.client._make_request("POST", "chat/completions")
+
         assert result.success is True
-        assert mock_request.call_count == 2
+        assert mock_sm.make_request.call_count == 2
     
     def test_chat_completion_parameters(self):
         """Test chat completion parameter handling."""
