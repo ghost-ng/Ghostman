@@ -6,7 +6,7 @@ A separate window that appears next to the avatar without moving it.
 
 import logging
 from typing import Optional
-from PyQt6.QtWidgets import QWidget, QMainWindow
+from PyQt6.QtWidgets import QWidget, QMainWindow, QSplitter
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint
 from PyQt6.QtGui import QCloseEvent, QMouseEvent, QShortcut, QKeySequence
 
@@ -196,12 +196,35 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
     
     def _init_ui(self):
         """Initialize the user interface."""
-        # Create REPL widget as central widget
+        # Create REPL widget
         self.repl_widget = REPLWidget()
-        self.setCentralWidget(self.repl_widget)
 
         # REPL widget already loads its own opacity from settings in its constructor
         # No need to override it here since REPLWidget._load_opacity_from_settings() handles this
+
+        # Try to create Document Studio panel alongside REPL in a splitter
+        self._studio_panel = None
+        try:
+            from .document_studio.studio_panel import DocumentStudioPanel
+            self._studio_panel = DocumentStudioPanel(parent=self)
+            self._studio_panel.collapse_requested.connect(self._collapse_studio)
+            self._studio_panel.hide()  # Start collapsed
+
+            # Wrap REPL + studio in a horizontal splitter
+            self._splitter = QSplitter(Qt.Orientation.Horizontal)
+            self._splitter.setHandleWidth(3)
+            self._splitter.addWidget(self.repl_widget)
+            self._splitter.addWidget(self._studio_panel)
+            self._splitter.setSizes([1, 0])
+            self.setCentralWidget(self._splitter)
+
+            logger.debug("Document Studio panel added to REPL splitter")
+
+        except Exception as e:
+            logger.warning(f"Document Studio panel not available, using plain REPL: {e}")
+            self._studio_panel = None
+            self._splitter = None
+            self.setCentralWidget(self.repl_widget)
 
         # Connect REPL signals
         self.repl_widget.minimize_requested.connect(self.close)
@@ -211,6 +234,40 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
         # Access it via self.repl_widget.api_error_banner if needed
 
         logger.debug("FloatingREPL UI initialized")
+
+    # -- Document Studio helpers -----------------------------------------
+
+    def toggle_studio_panel(self, visible=None):
+        """Toggle or explicitly set Document Studio panel visibility.
+
+        Args:
+            visible: If None, toggle current state. If bool, set to that state.
+        """
+        if self._studio_panel is None or self._splitter is None:
+            logger.debug("No studio panel available to toggle")
+            return
+
+        if visible is None:
+            visible = not self._studio_panel.isVisible()
+
+        if visible:
+            self._studio_panel.show()
+            total = self._splitter.width() or 1
+            self._splitter.setSizes([int(total * 0.6), int(total * 0.4)])
+        else:
+            self._studio_panel.hide()
+            self._splitter.setSizes([1, 0])
+
+        logger.debug(f"Studio panel visibility set to {visible}")
+
+    def _collapse_studio(self):
+        """Collapse the Document Studio panel (called from header bar)."""
+        self.toggle_studio_panel(False)
+
+    @property
+    def studio_panel(self):
+        """Access the Document Studio panel (may be None)."""
+        return self._studio_panel
     
     def _setup_window(self):
         """Setup window properties."""
@@ -252,8 +309,12 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
         # Ctrl+H to hide/close the REPL window
         hide_shortcut = QShortcut(QKeySequence("Ctrl+H"), self)
         hide_shortcut.activated.connect(self._hide_repl)
-        
-        logger.debug("REPL keyboard shortcuts configured: Ctrl+H to hide")
+
+        # Ctrl+Shift+D to toggle Document Studio panel
+        studio_shortcut = QShortcut(QKeySequence("Ctrl+Shift+D"), self)
+        studio_shortcut.activated.connect(lambda: self.toggle_studio_panel())
+
+        logger.debug("REPL keyboard shortcuts configured: Ctrl+H to hide, Ctrl+Shift+D for studio")
     
     def _hide_repl(self):
         """Hide/close the REPL window."""

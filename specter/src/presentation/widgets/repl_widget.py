@@ -5927,6 +5927,15 @@ class REPLWidget(QWidget):
         self._style_tool_button(self.settings_btn)
         toolbar_layout.addWidget(self.settings_btn)
 
+        # Document Studio toggle button
+        self.studio_btn = QToolButton()
+        self.studio_btn.setText("\U0001f4da")
+        self.studio_btn.setToolTip("Toggle Document Studio (Ctrl+Shift+D)")
+        self.studio_btn.setCheckable(True)
+        self.studio_btn.clicked.connect(self._toggle_studio_panel)
+        self._style_tool_button(self.studio_btn)
+        toolbar_layout.addWidget(self.studio_btn)
+
         # Collections attach widget
         db_manager = self.conversation_manager.db_manager if self.conversation_manager else None
         colors = self.theme_manager.current_theme if (self.theme_manager and THEME_SYSTEM_AVAILABLE) else None
@@ -5941,7 +5950,7 @@ class REPLWidget(QWidget):
         # Track toolbar buttons for dynamic resizing
         self._toolbar_buttons = [
             self.toolbar_new_conv_btn, self.browse_btn,
-            self.export_btn, self.settings_btn
+            self.export_btn, self.settings_btn, self.studio_btn
         ]
 
         # Allow buttons to shrink when toolbar is narrow
@@ -13251,7 +13260,20 @@ def test_theme():
             logger.error(f"Failed to toggle file browser: {e}")
             import traceback
             traceback.print_exc()
-    
+
+    def _toggle_studio_panel(self):
+        """Toggle the Document Studio panel via FloatingREPLWindow."""
+        try:
+            window = self.window()
+            if hasattr(window, 'toggle_studio_panel'):
+                window.toggle_studio_panel()
+                if hasattr(window, 'studio_panel') and window.studio_panel:
+                    self.studio_btn.setChecked(window.studio_panel.isVisible())
+            else:
+                logger.warning("Parent window doesn't support studio panel toggle")
+        except Exception as e:
+            logger.error(f"Failed to toggle studio panel: {e}")
+
     def _close_file_browser(self):
         """Close file browser bar."""
         try:
