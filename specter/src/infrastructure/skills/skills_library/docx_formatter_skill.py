@@ -1310,6 +1310,86 @@ class DocxFormatterSkill(BaseSkill):
         except Exception as e:
             logger.warning(f"Failed to remove temp file: {e}")
 
+    @staticmethod
+    def extract_recipe_from_document(file_path: str) -> dict:
+        """
+        Inspect a DOCX and extract its formatting properties as recipe parameters.
+
+        Returns a dict with keys: operations, parameters (font_name, font_size,
+        margin_inches, line_spacing), suitable for Recipe construction.
+        """
+        try:
+            from docx import Document
+            from docx.shared import Inches, Pt
+        except ImportError:
+            return {"operations": [], "parameters": {}, "error": "python-docx not installed"}
+
+        try:
+            doc = Document(file_path)
+        except Exception as e:
+            return {"operations": [], "parameters": {}, "error": str(e)}
+
+        operations = []
+        parameters = {}
+
+        # Extract font info from first 30 body paragraphs
+        fonts_seen = {}
+        sizes_seen = {}
+        for para in doc.paragraphs[:30]:
+            if para.style and para.style.name.startswith("Heading"):
+                continue
+            for run in para.runs:
+                if run.font.name:
+                    fonts_seen[run.font.name] = fonts_seen.get(run.font.name, 0) + len(run.text)
+                if run.font.size:
+                    pt = int(run.font.size.pt)
+                    sizes_seen[pt] = sizes_seen.get(pt, 0) + len(run.text)
+
+        if fonts_seen:
+            most_common_font = max(fonts_seen, key=fonts_seen.get)
+            parameters["font_name"] = most_common_font
+            operations.append("standardize_fonts")
+        if sizes_seen:
+            most_common_size = max(sizes_seen, key=sizes_seen.get)
+            parameters["font_size"] = most_common_size
+            if "standardize_fonts" not in operations:
+                operations.append("standardize_fonts")
+
+        # Extract margins
+        sections = doc.sections
+        if sections:
+            sec = sections[0]
+            try:
+                margin_inches = round(sec.left_margin.inches, 2) if sec.left_margin else 1.0
+                parameters["margin_inches"] = margin_inches
+                operations.append("fix_margins")
+            except Exception:
+                pass
+
+        # Extract line spacing from first 10 paragraphs
+        for para in doc.paragraphs[:10]:
+            pf = para.paragraph_format
+            if pf.line_spacing:
+                try:
+                    parameters["line_spacing"] = round(float(pf.line_spacing), 2)
+                    operations.append("normalize_spacing")
+                except (TypeError, ValueError):
+                    pass
+                break
+
+        # Check for headings
+        has_headings = any(
+            p.style and p.style.name.startswith("Heading")
+            for p in doc.paragraphs
+        )
+        if has_headings:
+            operations.append("normalize_headings")
+
+        return {
+            "operations": operations,
+            "parameters": parameters,
+        }
+
     # ------------------------------------------------------------------
     # Lifecycle hooks
     # ------------------------------------------------------------------
