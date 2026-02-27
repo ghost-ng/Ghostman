@@ -204,9 +204,12 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
 
         # Try to create Document Studio panel alongside REPL in a splitter
         self._studio_panel = None
+        self._studio_state = None
         try:
+            from .document_studio.studio_state import DocumentStudioState
             from .document_studio.studio_panel import DocumentStudioPanel
-            self._studio_panel = DocumentStudioPanel(parent=self)
+            self._studio_state = DocumentStudioState(parent=self)
+            self._studio_panel = DocumentStudioPanel(state=self._studio_state, parent=self)
             self._studio_panel.collapse_requested.connect(self._collapse_studio)
             self._studio_panel.hide()  # Start collapsed
 
@@ -222,6 +225,7 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
 
         except Exception as e:
             logger.warning(f"Document Studio panel not available, using plain REPL: {e}")
+            self._studio_state = None
             self._studio_panel = None
             self._splitter = None
             self.setCentralWidget(self.repl_widget)
@@ -268,6 +272,11 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
     def studio_panel(self):
         """Access the Document Studio panel (may be None)."""
         return self._studio_panel
+
+    @property
+    def studio_state(self):
+        """Access the Document Studio state (may be None)."""
+        return self._studio_state
     
     def _setup_window(self):
         """Setup window properties."""
