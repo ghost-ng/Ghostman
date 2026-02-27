@@ -1329,13 +1329,9 @@ class AppCoordinator(QObject):
                 QApplication.setQuitOnLastWindowClosed(False)
                 
                 for window, flags, was_visible, window_type in windows_to_update:
-                    # Save geometry before setWindowFlags — it resets position
-                    saved_geo = window.geometry()
                     window.setWindowFlags(flags)
                     if was_visible:
                         window.show()
-                        # Restore geometry AFTER show — setWindowFlags resets it
-                        window.setGeometry(saved_geo)
                 
                 QApplication.setQuitOnLastWindowClosed(True)
                 window_names = [item[3] for item in windows_to_update]
