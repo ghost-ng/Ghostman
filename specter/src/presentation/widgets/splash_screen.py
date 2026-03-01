@@ -19,6 +19,9 @@ from PyQt6.QtGui import (
 
 logger = logging.getLogger("specter.splash_screen")
 
+# Two-pi constant for glow phase wrapping
+_TWO_PI = 2.0 * math.pi
+
 
 class SplashScreen(QWidget):
     """
@@ -28,6 +31,18 @@ class SplashScreen(QWidget):
     an animated gradient progress bar with a pulsing glow at the
     leading edge, and a step-label describing the current operation.
     """
+
+    # ---- Static colors (avoid per-frame allocation) ----------------------
+    _BG_COLOR = QColor("#0a0a1a")
+    _BORDER_GLOW_COLOR = QColor(0, 212, 255, 40)
+    _PRIMARY = QColor("#00d4ff")
+    _TEXT_SUBTITLE = QColor(160, 160, 175)
+    _TEXT_VERSION = QColor(100, 100, 120)
+    _TEXT_LABEL = QColor(140, 140, 160)
+    _TRACK_COLOR = QColor(30, 30, 50)
+    _GRAD_START = QColor(30, 90, 255)
+    _GRAD_END = QColor(0, 212, 255)
+    _GLOW_TRANSPARENT = QColor(0, 212, 255, 0)
 
     # ------------------------------------------------------------------ #
     #  Construction
@@ -57,7 +72,7 @@ class SplashScreen(QWidget):
         self._progress: int = 0
         self._step_label: str = "Initializing..."
 
-        # Glow animation phase (0 → ∞, wraps via sin())
+        # Glow animation phase (wraps at 2*pi)
         self._glow_phase: float = 0.0
 
         # Opacity used for fade-out
@@ -71,9 +86,35 @@ class SplashScreen(QWidget):
         ver = app.applicationVersion() if app and app.applicationVersion() else ""
         self._version_text: str = f"v{ver}" if ver else ""
 
-        # ~30 fps timer to animate the progress-bar glow
+        # Pre-create fonts (avoid per-frame allocation in paintEvent)
+        self._title_font = QFont("Segoe UI", 18, QFont.Weight.Bold)
+        self._title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 4.0)
+        self._subtitle_font = QFont("Segoe UI", 9)
+        self._version_font = QFont("Segoe UI", 8)
+        self._label_font = QFont("Segoe UI", 8)
+
+        # Pre-create static pen / paths
+        self._border_pen = QPen(self._BORDER_GLOW_COLOR, 2)
+        self._bg_path = QPainterPath()
+        self._bg_path.addRoundedRect(QRectF(1, 1, 418, 318), 16, 16)
+
+        # Static progress bar track path
+        bar_margin = 50
+        bar_h = 6
+        bar_y = 320 - 50
+        bar_w = 420 - 2 * bar_margin
+        self._bar_x = bar_margin
+        self._bar_y = bar_y
+        self._bar_w = bar_w
+        self._bar_h = bar_h
+        self._track_path = QPainterPath()
+        self._track_path.addRoundedRect(
+            QRectF(bar_margin, bar_y, bar_w, bar_h), bar_h / 2, bar_h / 2
+        )
+
+        # ~33 fps timer to animate the progress-bar glow
         self._glow_timer = QTimer(self)
-        self._glow_timer.setInterval(30)  # ~33 fps
+        self._glow_timer.setInterval(30)
         self._glow_timer.timeout.connect(self._advance_glow)
         self._glow_timer.start()
 
@@ -143,7 +184,7 @@ class SplashScreen(QWidget):
     # ------------------------------------------------------------------ #
 
     def _advance_glow(self) -> None:
-        self._glow_phase += 0.12
+        self._glow_phase = (self._glow_phase + 0.12) % _TWO_PI
         self.update()
 
     # ------------------------------------------------------------------ #
@@ -155,18 +196,11 @@ class SplashScreen(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         w = self.width()
-        h = self.height()
 
         # ---- Background ------------------------------------------------
-        bg_rect = QRectF(1, 1, w - 2, h - 2)
-        bg_path = QPainterPath()
-        bg_path.addRoundedRect(bg_rect, 16, 16)
-
-        # Subtle cyan border glow
-        glow_pen = QPen(QColor(0, 212, 255, 40), 2)
-        painter.setPen(glow_pen)
-        painter.setBrush(QBrush(QColor("#0a0a1a")))
-        painter.drawPath(bg_path)
+        painter.setPen(self._border_pen)
+        painter.setBrush(self._BG_COLOR)
+        painter.drawPath(self._bg_path)
 
         # ---- App icon ---------------------------------------------------
         icon_y = 30
@@ -176,17 +210,14 @@ class SplashScreen(QWidget):
 
         # ---- Title: "SPECTER" -------------------------------------------
         title_y = icon_y + 128 + 18
-        title_font = QFont("Segoe UI", 18, QFont.Weight.Bold)
-        title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 4.0)
-        painter.setFont(title_font)
-        painter.setPen(QColor("#00d4ff"))
+        painter.setFont(self._title_font)
+        painter.setPen(self._PRIMARY)
         painter.drawText(QRect(0, title_y, w, 30), Qt.AlignmentFlag.AlignCenter, "SPECTER")
 
         # ---- Subtitle ---------------------------------------------------
         subtitle_y = title_y + 28
-        subtitle_font = QFont("Segoe UI", 9)
-        painter.setFont(subtitle_font)
-        painter.setPen(QColor(160, 160, 175))
+        painter.setFont(self._subtitle_font)
+        painter.setPen(self._TEXT_SUBTITLE)
         painter.drawText(
             QRect(0, subtitle_y, w, 20),
             Qt.AlignmentFlag.AlignCenter,
@@ -194,11 +225,10 @@ class SplashScreen(QWidget):
         )
 
         # ---- Version ----------------------------------------------------
-        version_y = subtitle_y + 18
         if self._version_text:
-            version_font = QFont("Segoe UI", 8)
-            painter.setFont(version_font)
-            painter.setPen(QColor(100, 100, 120))
+            version_y = subtitle_y + 18
+            painter.setFont(self._version_font)
+            painter.setPen(self._TEXT_VERSION)
             painter.drawText(
                 QRect(0, version_y, w, 16),
                 Qt.AlignmentFlag.AlignCenter,
@@ -206,30 +236,27 @@ class SplashScreen(QWidget):
             )
 
         # ---- Progress bar -----------------------------------------------
-        bar_margin = 50
-        bar_h = 6
-        bar_y = h - 50
-        bar_x = bar_margin
-        bar_w = w - 2 * bar_margin
+        bar_x = self._bar_x
+        bar_y = self._bar_y
+        bar_w = self._bar_w
+        bar_h = self._bar_h
 
         # Track (dark)
-        track_path = QPainterPath()
-        track_rect = QRectF(bar_x, bar_y, bar_w, bar_h)
-        track_path.addRoundedRect(track_rect, bar_h / 2, bar_h / 2)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(30, 30, 50))
-        painter.drawPath(track_path)
+        painter.setBrush(self._TRACK_COLOR)
+        painter.drawPath(self._track_path)
 
         # Filled portion (gradient: blue → cyan)
         fill_w = bar_w * (self._progress / 100.0)
         if fill_w > 0:
-            fill_rect = QRectF(bar_x, bar_y, fill_w, bar_h)
             fill_path = QPainterPath()
-            fill_path.addRoundedRect(fill_rect, bar_h / 2, bar_h / 2)
+            fill_path.addRoundedRect(
+                QRectF(bar_x, bar_y, fill_w, bar_h), bar_h / 2, bar_h / 2
+            )
 
             grad = QLinearGradient(bar_x, 0, bar_x + fill_w, 0)
-            grad.setColorAt(0.0, QColor(30, 90, 255))
-            grad.setColorAt(1.0, QColor(0, 212, 255))
+            grad.setColorAt(0.0, self._GRAD_START)
+            grad.setColorAt(1.0, self._GRAD_END)
             painter.setBrush(QBrush(grad))
             painter.drawPath(fill_path)
 
@@ -242,7 +269,7 @@ class SplashScreen(QWidget):
 
             radial = QRadialGradient(glow_cx, glow_cy, glow_radius)
             radial.setColorAt(0.0, QColor(0, 212, 255, glow_alpha))
-            radial.setColorAt(1.0, QColor(0, 212, 255, 0))
+            radial.setColorAt(1.0, self._GLOW_TRANSPARENT)
             painter.setBrush(QBrush(radial))
             painter.drawEllipse(
                 QRectF(
@@ -255,11 +282,10 @@ class SplashScreen(QWidget):
 
         # ---- Step label -------------------------------------------------
         label_y = bar_y + bar_h + 8
-        label_font = QFont("Segoe UI", 8)
-        painter.setFont(label_font)
-        painter.setPen(QColor(140, 140, 160))
+        painter.setFont(self._label_font)
+        painter.setPen(self._TEXT_LABEL)
         painter.drawText(
-            QRect(bar_margin, label_y, bar_w, 18),
+            QRect(bar_x, label_y, bar_w, 18),
             Qt.AlignmentFlag.AlignCenter,
             self._step_label,
         )

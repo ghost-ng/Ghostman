@@ -157,12 +157,19 @@ class SpecterApplication:
             # Connect application shutdown signal
             self.coordinator.app_shutdown.connect(self.app.quit)
             
-            # Initialize the coordinator
-            if not self.coordinator.initialize():
+            # Initialize the coordinator (pass splash callback if available)
+            progress_cb = self._splash.update_progress if getattr(self, '_splash', None) else None
+            if not self.coordinator.initialize(progress_callback=progress_cb):
                 logger.error("Failed to initialize app coordinator")
                 return False
-            
+
             logger.info("App coordinator initialized successfully")
+
+            # Close splash screen
+            if getattr(self, '_splash', None):
+                self._splash.finish()
+                self._splash = None
+
             return True
             
         except Exception as e:
@@ -195,9 +202,22 @@ class SpecterApplication:
             # Setup Qt application
             self.app = self.setup_qt_application()
 
+            # Show branded splash screen during startup
+            self._splash = None
+            try:
+                from specter.src.presentation.widgets.splash_screen import SplashScreen
+                self._splash = SplashScreen()
+                self._splash.show()
+                self.app.processEvents()
+            except Exception as e:
+                logger.debug(f"Could not show splash screen: {e}")
+
             # Initialize coordinator
             if not self.initialize_coordinator():
                 logger.error("Failed to initialize application")
+                if self._splash:
+                    self._splash.close()
+                    self._splash = None
                 return 1
 
             # Make coordinator accessible from QApplication for widgets
