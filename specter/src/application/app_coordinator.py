@@ -52,19 +52,34 @@ class AppCoordinator(QObject):
 
         logger.info("AppCoordinator created")
     
-    def initialize(self) -> bool:
+    def initialize(self, progress_callback=None) -> bool:
         """
         Initialize the application and all its components.
-        
+
+        Args:
+            progress_callback: Optional callable(percent: int, label: str)
+                for reporting startup progress to a splash screen.
+
         Returns:
             True if initialization successful, False otherwise
         """
+        def _progress(pct: int, msg: str):
+            if progress_callback:
+                progress_callback(pct, msg)
+                app = QApplication.instance()
+                if app:
+                    app.processEvents()
+
         try:
             logger.info("Initializing Specter application...")
-            
+
+            _progress(5, "Loading settings...")
+
             # Initialize single instance detection first
             self._single_instance = SingleInstanceDetector(app_name="Specter")
             
+            _progress(10, "Checking instances...")
+
             # Check if another instance is already running
             logger.info("Checking for existing instances...")
             try:
@@ -92,12 +107,18 @@ class AppCoordinator(QObject):
             # Initialize state machine
             self._state_machine = TwoStateMachine(settings)
             self._state_machine.state_changed.connect(self._on_state_changed)
-            
+
+            _progress(20, "Loading themes...")
+
             # Initialize UI components (will be implemented)
             self._initialize_ui_components()
 
+            _progress(35, "Building interface...")
+
             # Initialize periodic API validator
             self._initialize_api_validator()
+
+            _progress(45, "Validating API...")
 
             # Wire up settings-change listener so session_manager auto-reconfigures
             # when SSL/PKI settings are modified at runtime.
@@ -108,11 +129,17 @@ class AppCoordinator(QObject):
             except Exception as e:
                 logger.warning(f"Failed to wire settings change listener: {e}")
 
+            _progress(55, "Initializing RAG pipeline...")
+
             # Initialize RAG coordinator
             self._initialize_rag_system()
 
+            _progress(70, "Registering skills...")
+
             # Initialize skills system
             self._initialize_skills_system()
+
+            _progress(85, "Applying settings...")
 
             # Apply interface settings (opacity, always on top) immediately
             try:
@@ -123,6 +150,8 @@ class AppCoordinator(QObject):
                 self._apply_interface_settings(interface_cfg)
             except Exception as e:
                 logger.warning(f"Failed applying startup interface settings: {e}")
+
+            _progress(92, "Loading conversations...")
 
             # Set initial state based on settings (tray/avatar)
             initial_state = AppState(settings.get('app.current_state', 'tray'))
@@ -140,6 +169,8 @@ class AppCoordinator(QObject):
             logger.info("📍 BEFORE: Setting _initialized = True")
             self._initialized = True
             logger.info("✓ AFTER: _initialized set to True")
+
+            _progress(100, "Ready!")
 
             logger.info("📍 BEFORE: Emitting app_initialized signal")
             try:
