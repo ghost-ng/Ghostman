@@ -6,6 +6,7 @@ during application startup.
 """
 
 import logging
+import math
 from PyQt6.QtWidgets import QWidget, QApplication
 from PyQt6.QtCore import (
     Qt, QTimer, QRect, QRectF, QPropertyAnimation,
@@ -64,6 +65,11 @@ class SplashScreen(QWidget):
 
         # Load the app icon once
         self._icon_pixmap: QPixmap | None = self._load_icon()
+
+        # Cache version string (avoids per-frame QApplication lookup)
+        app = QApplication.instance()
+        ver = app.applicationVersion() if app and app.applicationVersion() else ""
+        self._version_text: str = f"v{ver}" if ver else ""
 
         # ~30 fps timer to animate the progress-bar glow
         self._glow_timer = QTimer(self)
@@ -145,8 +151,6 @@ class SplashScreen(QWidget):
     # ------------------------------------------------------------------ #
 
     def paintEvent(self, event) -> None:  # noqa: N802
-        import math
-
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -191,16 +195,14 @@ class SplashScreen(QWidget):
 
         # ---- Version ----------------------------------------------------
         version_y = subtitle_y + 18
-        version_font = QFont("Segoe UI", 8)
-        painter.setFont(version_font)
-        painter.setPen(QColor(100, 100, 120))
-        app = QApplication.instance()
-        version_text = f"v{app.applicationVersion()}" if app and app.applicationVersion() else ""
-        if version_text:
+        if self._version_text:
+            version_font = QFont("Segoe UI", 8)
+            painter.setFont(version_font)
+            painter.setPen(QColor(100, 100, 120))
             painter.drawText(
                 QRect(0, version_y, w, 16),
                 Qt.AlignmentFlag.AlignCenter,
-                version_text,
+                self._version_text,
             )
 
         # ---- Progress bar -----------------------------------------------
