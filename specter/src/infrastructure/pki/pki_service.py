@@ -1,15 +1,15 @@
 """
 PKI Service for Specter.
 
-Coordinates PKI operations between certificate management and 
-HTTP session configuration for seamless enterprise authentication.
+Simplified PKI service that auto-detects client certificates from the
+Windows certificate store. No manual P12 import or PEM extraction needed —
+the session manager handles cert store enumeration and export automatically.
 """
 
 import logging
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, List
 
-from .certificate_manager import CertificateManager, PKIError
-from ..ai.session_manager import session_manager
+from ..ai.session_manager import session_manager, enumerate_client_certs, find_best_client_cert, CertStoreEntry
 
 logger = logging.getLogger("specter.pki.service")
 
@@ -17,319 +17,259 @@ logger = logging.getLogger("specter.pki.service")
 class PKIService:
     """
     High-level PKI service for enterprise authentication.
-    
-    Coordinates between certificate management and HTTP session
-    configuration to provide seamless PKI authentication.
+
+    Uses the Windows certificate store for zero-config client auth:
+    - Auto-detects client certs with private keys
+    - Optional thumbprint override via settings
+    - Delegates all HTTP config to the unified SessionManager
     """
-    
+
     def __init__(self):
-        """Initialize PKI service."""
-        self.cert_manager = CertificateManager()
         self._initialized = False
+        self._detected_cert: Optional[CertStoreEntry] = None
         logger.info("PKI Service initialized")
-    
+
     def initialize(self) -> bool:
         """
-        Initialize PKI service and apply configuration.
-        
-        Returns:
-            True if PKI is enabled and configured
+        Initialize PKI service — triggers cert store detection and
+        applies config to the session manager.
+
+        Returns True if PKI is enabled (cert found or configured).
         """
-        # If already initialized, just return current status silently
         if self._initialized:
-            #logger.debug("PKI service already initialized, returning cached status")
-            return self.cert_manager.is_pki_enabled()
-        
+            return self.is_pki_enabled()
+
         try:
-            logger.debug("Initializing PKI service...")
-            
-            # Load current configuration
-            self.cert_manager.load_config()
-            
-            # Apply PKI configuration if enabled
-            if self.cert_manager.is_pki_enabled():
-                success = self._apply_pki_to_session()
-                if success:
-                    logger.info("✓ PKI service initialized with authentication")
-                else:
-                    logger.warning("⚠ PKI service initialized but authentication failed")
-                self._initialized = True
-                return success
-            else:
-                logger.info("PKI service initialized without authentication")
+            from ..storage.settings_manager import settings
+            pki = settings.get('pki', {})
+
+            if not pki.get('enabled', False):
+                logger.info("PKI service initialized — authentication disabled")
                 self._initialized = True
                 return True
-                
+
+            # Trigger session manager to detect / apply cert
+            session_manager.reconfigure_security()
+            self._detected_cert = session_manager.detected_cert
+
+            if self._detected_cert:
+                logger.info(f"PKI service initialized — using cert: {self._detected_cert.subject}")
+            else:
+                logger.warning("PKI enabled but no suitable cert found in Windows store")
+
+            self._initialized = True
+            return self._detected_cert is not None
+
         except Exception as e:
-            logger.error(f"✗ PKI service initialization failed: {e}")
+            logger.error(f"PKI service initialization failed: {e}")
             self._initialized = False
             return False
-    
+
     def reset_initialization(self):
-        """Reset initialization state to allow re-initialization after configuration changes."""
+        """Reset initialization state to allow re-initialization."""
         self._initialized = False
+        self._detected_cert = None
         logger.debug("PKI service initialization state reset")
-    
-    def setup_pki_authentication(
-        self, 
-        p12_path: str, 
-        password: str
-    ) -> Tuple[bool, Optional[str]]:
+
+    # ------------------------------------------------------------------
+    # Certificate store queries
+    # ------------------------------------------------------------------
+
+    def list_available_certs(self) -> List[CertStoreEntry]:
+        """List all client-auth certificates in the Windows cert store."""
+        return enumerate_client_certs()
+
+    def get_detected_cert(self) -> Optional[CertStoreEntry]:
+        """Get the currently detected / active certificate."""
+        return session_manager.detected_cert
+
+    def select_cert_by_thumbprint(self, thumbprint: str) -> Tuple[bool, Optional[str]]:
         """
-        Setup PKI authentication from P12 file.
-        
-        Args:
-            p12_path: Path to P12 certificate file
-            password: Password for P12 file
-            
-        Returns:
-            Tuple of (success, error_message)
+        Select a specific certificate by thumbprint and persist the choice.
+
+        Returns (success, error_message).
         """
         try:
-            logger.info("Setting up PKI authentication...")
-            
-            # Import P12 certificate
-            success = self.cert_manager.import_p12_file(p12_path, password)
-            if not success:
-                return False, "Failed to import P12 certificate"
-            
-            # Validate certificates
-            if not self.cert_manager.validate_certificates():
-                return False, "Certificate validation failed"
-            
-            # Apply to session manager
-            if not self._apply_pki_to_session():
-                return False, "Failed to configure session with PKI"
+            from ..storage.settings_manager import settings
 
-            # Reset initialization state to apply new configuration
-            self.reset_initialization()
-            
-            logger.info("✓ PKI authentication setup completed")
+            # Verify the cert exists
+            cert = find_best_client_cert(thumbprint_hint=thumbprint)
+            if not cert:
+                return False, f"No certificate found with thumbprint {thumbprint}"
+
+            # Persist
+            settings.set('pki.enabled', True)
+            settings.set('pki.thumbprint', thumbprint)
+            settings.set('pki.auto_detect', False)
+            settings.save()
+
+            # Apply
+            session_manager.reconfigure_security()
+            self._detected_cert = session_manager.detected_cert
+
+            logger.info(f"Selected cert: {cert.subject} ({thumbprint[:16]}...)")
             return True, None
-            
-        except Exception as e:
-            error_msg = f"PKI setup failed: {e}"
-            logger.error(f"✗ {error_msg}")
-            return False, error_msg
-    
-    def disable_pki_authentication(self) -> bool:
-        """
-        Disable PKI authentication.
-        
-        Returns:
-            True if successful
-        """
-        try:
-            logger.info("Disabling PKI authentication...")
-            
-            # Disable in certificate manager
-            self.cert_manager.disable_pki()
-            
-            # Reconfigure session manager (reads settings directly)
-            session_manager.reconfigure_security()
 
-            # Reset initialization state after disabling
-            self.reset_initialization()
-            
-            logger.info("✓ PKI authentication disabled")
-            return True
-            
         except Exception as e:
-            logger.error(f"✗ Failed to disable PKI: {e}")
-            return False
-    
-    def validate_current_certificates(self) -> bool:
-        """
-        Validate current certificates.
-        
-        Returns:
-            True if certificates are valid
-        """
+            return False, str(e)
+
+    def enable_auto_detect(self) -> Tuple[bool, Optional[str]]:
+        """Enable auto-detection (clear thumbprint override)."""
         try:
-            if not self.cert_manager.is_pki_enabled():
-                return False
-            
-            return self.cert_manager.validate_certificates()
-            
-        except Exception as e:
-            logger.error(f"Certificate validation failed: {e}")
-            return False
-    
-    def get_certificate_status(self) -> Dict[str, Any]:
-        """
-        Get comprehensive certificate status.
-        
-        Returns:
-            Dictionary with certificate status information
-        """
-        try:
-            status = self.cert_manager.get_pki_status()
-            
-            # Add session manager PKI info
-            session_pki_info = session_manager.get_pki_info()
-            status['session_pki_enabled'] = session_pki_info['pki_enabled']
-            
-            return status
-            
-        except Exception as e:
-            logger.error(f"Failed to get certificate status: {e}")
-            return {
-                'enabled': False,
-                'configured': False,
-                'valid': False,
-                'errors': [f"Status check failed: {e}"]
-            }
-    
-    def _apply_pki_to_session(self) -> bool:
-        """Apply PKI configuration to session manager."""
-        try:
-            # Get certificate files
-            cert_path, key_path = self.cert_manager.get_client_cert_files()
-            if not cert_path or not key_path:
-                logger.error("Client certificate files not available")
-                return False
-            
-            # Get CA chain (optional)
-            ca_path = self.cert_manager.get_ca_chain_file()
-            
-            # Reconfigure session manager (reads settings directly)
+            from ..storage.settings_manager import settings
+            settings.set('pki.enabled', True)
+            settings.set('pki.auto_detect', True)
+            settings.set('pki.thumbprint', None)
+            settings.save()
+
             session_manager.reconfigure_security()
-            
-            logger.debug("PKI configuration applied to session manager")
-            return True
-            
+            self._detected_cert = session_manager.detected_cert
+
+            if self._detected_cert:
+                return True, None
+            return False, "No suitable client cert found in Windows store"
+
         except Exception as e:
-            logger.error(f"Failed to apply PKI to session: {e}")
+            return False, str(e)
+
+    def disable_pki_authentication(self) -> bool:
+        """Disable PKI authentication."""
+        try:
+            from ..storage.settings_manager import settings
+            settings.set('pki.enabled', False)
+            settings.save()
+
+            session_manager.reconfigure_security()
+            self._detected_cert = None
+            self.reset_initialization()
+
+            logger.info("PKI authentication disabled")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to disable PKI: {e}")
             return False
-    
-    def test_pki_connection(self, test_url: str, max_attempts: int = 3, ignore_ssl: bool = False) -> Tuple[bool, Optional[str]]:
+
+    # ------------------------------------------------------------------
+    # Status / info
+    # ------------------------------------------------------------------
+
+    def is_pki_enabled(self) -> bool:
+        """Check if PKI is enabled in settings."""
+        try:
+            from ..storage.settings_manager import settings
+            return settings.get('pki.enabled', False)
+        except Exception:
+            return False
+
+    def get_certificate_status(self) -> Dict[str, Any]:
+        """Get comprehensive certificate status."""
+        status = {
+            'enabled': False,
+            'method': 'certstore',
+            'auto_detect': True,
+            'cert_found': False,
+            'subject': None,
+            'issuer': None,
+            'thumbprint': None,
+            'not_before': None,
+            'not_after': None,
+            'enhanced_key_usage': [],
+            'available_certs': 0,
+            'errors': [],
+            'warnings': [],
+        }
+
+        try:
+            from ..storage.settings_manager import settings
+            pki = settings.get('pki', {})
+
+            status['enabled'] = pki.get('enabled', False)
+            status['auto_detect'] = pki.get('auto_detect', True)
+
+            if not status['enabled']:
+                return status
+
+            # Get detected cert from session manager
+            detected = session_manager.detected_cert
+            if detected:
+                status['cert_found'] = True
+                status['subject'] = detected.subject
+                status['issuer'] = detected.issuer
+                status['thumbprint'] = detected.thumbprint
+                status['not_before'] = detected.not_before
+                status['not_after'] = detected.not_after
+                status['enhanced_key_usage'] = detected.enhanced_key_usage
+            else:
+                status['errors'].append("No suitable client certificate found in Windows store")
+
+            # Count available certs
+            try:
+                all_certs = enumerate_client_certs()
+                status['available_certs'] = len(all_certs)
+            except Exception:
+                pass
+
+        except Exception as e:
+            status['errors'].append(f"Status check failed: {e}")
+
+        return status
+
+    def test_pki_connection(self, test_url: str, max_attempts: int = 3) -> Tuple[bool, Optional[str]]:
         """
-        Test PKI authentication with a given URL with retry logic.
-        
-        Args:
-            test_url: URL to test PKI authentication against
-            max_attempts: Maximum number of test attempts (default: 3)
-            ignore_ssl: Whether to ignore SSL certificate verification (default: False)
-            
-        Returns:
-            Tuple of (success, error_message)
+        Test PKI authentication with a given URL.
+
+        Returns (success, error_message).
         """
-        logger.info(f"Testing PKI connection to: {test_url} (max {max_attempts} attempts, ignore_ssl={ignore_ssl})")
-        
-        if not self.cert_manager.is_pki_enabled():
+        if not self.is_pki_enabled():
             return False, "PKI is not enabled"
-        
+
+        detected = session_manager.detected_cert
+        if not detected:
+            return False, "No client certificate detected"
+
+        logger.info(f"Testing PKI connection to: {test_url}")
+
         last_error = None
-        
-        # Configure session for PKI test
-        # SSL settings are managed by ssl_service, not manually overridden here
-        session_manager.configure_session(
-            timeout=10,
-            max_retries=0  # Disable all lower-level retries - we handle retries here
-        )
-        # Note: SSL verification and CA bundle are automatically configured by
-        # reconfigure_security() which configure_session() calls internally
-        logger.info(f"PKI test session configured (ignore_ssl={ignore_ssl})")
-        
         for attempt in range(1, max_attempts + 1):
             try:
-                logger.info(f"PKI test attempt {attempt}/{max_attempts}")
-                
-                # Make a simple request to test PKI
                 response = session_manager.make_request(
-                    method="GET",
-                    url=test_url,
-                    timeout=10
+                    method="GET", url=test_url, timeout=10
                 )
-                
                 if response.status_code < 400:
-                    logger.info(f"✓ PKI connection test successful on attempt {attempt}")
+                    logger.info(f"PKI connection test successful on attempt {attempt}")
                     return True, None
-                else:
-                    last_error = f"HTTP {response.status_code}: {response.reason}"
-                    logger.warning(f"⚠ PKI test attempt {attempt} returned: {last_error}")
-                    
+                last_error = f"HTTP {response.status_code}: {response.reason}"
             except Exception as e:
-                last_error = f"PKI connection test failed: {e}"
-                logger.error(f"✗ PKI test attempt {attempt} error: {last_error}")
-            
-            # Wait before retry (except on last attempt)
+                last_error = str(e)
+                logger.warning(f"PKI test attempt {attempt} failed: {e}")
+
             if attempt < max_attempts:
                 import time
-                time.sleep(2)  # 2 second delay between attempts
-        
-        # All attempts failed - provide user-friendly error message
+                time.sleep(2)
+
         from ..ai.api_test_service import _get_user_friendly_error
-        friendly_error = _get_user_friendly_error(last_error) if last_error else "Unknown error"
-        
-        # Log technical error for debugging
-        logger.error(f"✗ PKI test failed after {max_attempts} attempts. Last technical error: {last_error}")
-        
-        # Return user-friendly error
-        return False, f"PKI connection failed after {max_attempts} attempts: {friendly_error}"
-    
+        friendly = _get_user_friendly_error(last_error) if last_error else "Unknown error"
+        return False, f"PKI connection failed after {max_attempts} attempts: {friendly}"
+
     def get_certificate_expiry_warning(self) -> Optional[str]:
-        """
-        Get certificate expiry warning if applicable.
-        
-        Returns:
-            Warning message or None
-        """
-        try:
-            cert_info = self.cert_manager.get_certificate_info()
-            if cert_info and cert_info.days_until_expiry <= 30:
-                return f"Certificate expires in {cert_info.days_until_expiry} days"
+        """Get expiry warning if cert is expiring soon."""
+        detected = session_manager.detected_cert
+        if not detected or not detected.not_after:
             return None
-            
-        except Exception as e:
-            logger.error(f"Failed to check certificate expiry: {e}")
-            return None
-    
-    def is_pki_required(self, test_url: str) -> bool:
-        """
-        Test if PKI authentication is required for a given URL.
-        
-        Args:
-            test_url: URL to test
-            
-        Returns:
-            True if PKI appears to be required
-        """
         try:
-            # First, try without PKI
-            session_manager.disable_pki()
-            
-            response = session_manager.make_request(
-                method="GET",
-                url=test_url,
-                timeout=5
-            )
-            
-            # If we get a client certificate error (status 400, 401, 403)
-            # it might indicate PKI is required
-            if response.status_code in [400, 401, 403]:
-                logger.debug(f"PKI might be required for {test_url} (status: {response.status_code})")
-                return True
-            
-            return False
-            
-        except Exception as e:
-            # Connection errors might indicate PKI is required
-            logger.debug(f"Connection test failed, PKI might be required: {e}")
-            return True
-        finally:
-            # Restore PKI configuration if it was enabled
-            if self.cert_manager.is_pki_enabled():
-                self._apply_pki_to_session()
-    
+            from datetime import datetime, timezone
+            expiry = datetime.fromisoformat(detected.not_after.replace('Z', '+00:00'))
+            days = (expiry - datetime.now(timezone.utc)).days
+            if days <= 30:
+                return f"Certificate expires in {days} days"
+        except Exception:
+            pass
+        return None
+
     def shutdown(self):
         """Shutdown PKI service."""
-        try:
-            if self.cert_manager:
-                self.cert_manager.shutdown()
-            logger.info("PKI service shut down")
-        except Exception as e:
-            logger.warning(f"Error during PKI service shutdown: {e}")
+        logger.info("PKI service shut down")
 
 
 # Global PKI service instance

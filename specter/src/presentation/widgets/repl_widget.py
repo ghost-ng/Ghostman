@@ -1328,6 +1328,10 @@ class REPLWidget(QWidget):
     startup_fully_complete = pyqtSignal()  # Emitted when all async startup tasks are done
     _greeting_text_ready = pyqtSignal(str)  # Thread-safe greeting delivery from background thread
 
+    # Single authoritative height for the entire input row (prompt label, text input, buttons).
+    # Every element in the input bar MUST use this constant — do NOT hardcode heights elsewhere.
+    INPUT_ROW_HEIGHT = 38
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.command_history = []
@@ -1680,17 +1684,13 @@ class REPLWidget(QWidget):
         # Calculate total internal padding (margins + frame + document margins)
         vertical_padding = margins.top() + margins.bottom() + (frame_width * 2) + 4  # 4px for document margins
         
-        # CRITICAL: For single line, force exactly 32px to match button height
-        # For multiple lines, calculate based on content
-        BUTTON_HEIGHT = 32  # This matches the button height from ButtonStyleManager "small" size
-        
         if effective_lines == 1:
-            # Single line: force exact button height for perfect alignment
-            new_height = BUTTON_HEIGHT
+            # Single line: force exact row height for perfect alignment with buttons/label
+            new_height = self.INPUT_ROW_HEIGHT
         else:
             # Multiple lines: calculate based on content but ensure minimum
             proposed_height = content_height + vertical_padding
-            new_height = max(proposed_height, BUTTON_HEIGHT)
+            new_height = max(proposed_height, self.INPUT_ROW_HEIGHT)
         
         # Enable/disable scrollbar based on line count
         if total_visual_lines > self.max_input_lines:
@@ -1913,20 +1913,20 @@ class REPLWidget(QWidget):
         try:
             colors = self.theme_manager.current_theme
             self.command_input.setStyleSheet(f"""
-                QLineEdit {{
+                QPlainTextEdit {{
                     background-color: {colors.background_secondary};
                     color: {colors.text_primary};
                     border: 2px solid {colors.border_secondary};
                     border-radius: 8px;
-                    padding: 8px 12px;
+                    padding: 4px 10px;
                     font-size: 13px;
                     selection-background-color: {colors.primary};
                     selection-color: {colors.background_primary};
                 }}
-                QLineEdit:focus {{
+                QPlainTextEdit:focus {{
                     border-color: {colors.border_focus};
                 }}
-                QLineEdit:hover {{
+                QPlainTextEdit:hover {{
                     border-color: {colors.primary};
                 }}
             """)
@@ -2268,17 +2268,17 @@ class REPLWidget(QWidget):
                 "border-radius: 4px; "
                 "font-family: Segoe UI Emoji, Consolas, monospace; "
                 "font-size: 11px; "
-                "padding: 5px 8px; "  # Consistent padding to prevent size changes
+                "padding: 5px 8px; "
                 "margin-right: 6px; "
                 "}"
             )
         else:
-            # Fallback to improved colors without background - keep transparent 
+            # Fallback to improved colors without background - keep transparent
             if processing:
                 color = "#FF9800"  # Material orange
             else:
                 color = "#4CAF50"  # Material green
-                
+
             # Use string formatting to avoid CSS syntax issues
             self.prompt_label.setStyleSheet(
                 f"color: {color}; "
@@ -2289,6 +2289,8 @@ class REPLWidget(QWidget):
                 f"background-color: transparent; "
                 f"opacity: 1.0;"
             )
+        # Enforce consistent height after any CSS change
+        self.prompt_label.setFixedHeight(self.INPUT_ROW_HEIGHT)
     
     def _hex_to_rgb(self, hex_color):
         """Convert hex color to RGB values for rgba()."""
@@ -4787,6 +4789,14 @@ class REPLWidget(QWidget):
 
             logger.info(f"🚀 Completed processing {len(file_paths)} files")
 
+            # Auto-open Document Studio panel when .docx files are uploaded
+            docx_files = [fp for fp in file_paths if fp.lower().endswith('.docx')]
+            if docx_files:
+                try:
+                    self._auto_open_studio(docx_files[0])
+                except Exception as e:
+                    logger.debug(f"Could not auto-open studio for docx upload: {e}")
+
             # Show error dialog if any files failed
             if failed_files:
                 from PyQt6.QtWidgets import QMessageBox
@@ -5929,7 +5939,7 @@ class REPLWidget(QWidget):
 
         # Document Studio toggle button
         self.studio_btn = QToolButton()
-        self.studio_btn.setText("\U0001f4da")
+        self.studio_btn.setText("\u2637")  # ☷ trigram (renders on Windows)
         self.studio_btn.setToolTip("Toggle Document Studio (Ctrl+Shift+D)")
         self.studio_btn.setCheckable(True)
         self.studio_btn.clicked.connect(self._toggle_studio_panel)
@@ -6480,7 +6490,7 @@ class REPLWidget(QWidget):
     def _style_send_button(self):
         """Style the Send button with unified primary styling."""
         colors = self.theme_manager.current_theme if self.theme_manager and THEME_SYSTEM_AVAILABLE else None
-        
+
         # If no theme is available yet, apply a basic style to avoid unstyled button
         if not colors:
             # Apply a basic green send button style as fallback
@@ -6501,20 +6511,20 @@ class REPLWidget(QWidget):
                     background-color: #047857;
                 }
             """)
+            self.send_button.setFixedHeight(self.INPUT_ROW_HEIGHT)
             return
-        
-        # Use primary state for send button with theme colors (extra_small = 48x28 base)
+
+        # Use primary state for send button with theme colors
         ButtonStyleManager.apply_unified_button_style(
-            self.send_button, colors, "push", "extra_small", "toggle"
+            self.send_button, colors, "push", "small", "toggle"
         )
-        # Override to compact height — must come AFTER style manager sets constraints
-        self.send_button.setMinimumHeight(0)
-        self.send_button.setFixedHeight(24)
+        # CRITICAL: Re-apply fixed height AFTER CSS to prevent min-height override
+        self.send_button.setFixedHeight(self.INPUT_ROW_HEIGHT)
     
     def _style_stop_button(self):
         """Style the Stop button with unified danger styling."""
         colors = self.theme_manager.current_theme if self.theme_manager and THEME_SYSTEM_AVAILABLE else None
-        
+
         # If no theme is available yet, apply a basic style to avoid unstyled button
         if not colors:
             # Apply a basic red stop button style as fallback
@@ -6534,12 +6544,15 @@ class REPLWidget(QWidget):
                     background-color: #b91c1c;
                 }
             """)
+            self.stop_button.setFixedHeight(self.INPUT_ROW_HEIGHT)
             return
-        
-        # Use danger state for stop button with theme colors
+
+        # Use danger state for stop button — same "small" size as send button
         ButtonStyleManager.apply_unified_button_style(
             self.stop_button, colors, "push", "small", "danger"
         )
+        # CRITICAL: Re-apply fixed height AFTER CSS to prevent min-height override
+        self.stop_button.setFixedHeight(self.INPUT_ROW_HEIGHT)
     
     def _style_menu(self, menu):
         """Apply theme-based styling to a QMenu."""
@@ -7362,8 +7375,7 @@ class REPLWidget(QWidget):
             QSizePolicy.Policy.Fixed, 
             QSizePolicy.Policy.Fixed
         )
-        # Set fixed height to match typical button height for proper alignment
-        self.prompt_label.setFixedHeight(24)  # Compact height matching send button
+        self.prompt_label.setFixedHeight(self.INPUT_ROW_HEIGHT)
         # Add to layout with center alignment to match button baseline
         input_layout.addWidget(self.prompt_label, 0, Qt.AlignmentFlag.AlignVCenter)
         
@@ -7375,12 +7387,10 @@ class REPLWidget(QWidget):
         # Enable word wrapping for long text
         self.command_input.setWordWrapMode(QTextOption.WrapMode.WordWrap)
         self.command_input.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
-        # Set initial height to match button height (32px) to prevent font squishing
-        # The dynamic height system will take over after initialization, but this ensures
-        # proper baseline alignment from the start
-        BUTTON_HEIGHT = 32  # Match the button height from ButtonStyleManager "small" size
-        self.command_input.setMinimumHeight(BUTTON_HEIGHT)
-        self.command_input.setMaximumHeight(BUTTON_HEIGHT)  # Start with fixed height, will be adjusted dynamically
+        # Start at the same height as prompt label and send button.
+        # The dynamic height system will grow it when the user types more lines.
+        self.command_input.setMinimumHeight(self.INPUT_ROW_HEIGHT)
+        self.command_input.setMaximumHeight(self.INPUT_ROW_HEIGHT)
         self.command_input.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         # Ensure field grows downward by setting size policy
         self.command_input.setSizePolicy(
@@ -7392,20 +7402,23 @@ class REPLWidget(QWidget):
         # Add with center alignment to match prompt and button baselines
         input_layout.addWidget(self.command_input, 1, Qt.AlignmentFlag.AlignVCenter)
         
-        # Send button - align to bottom baseline
+        # Send button
         self.send_button = QPushButton("Send")
         self.send_button.setToolTip("Send message (Ctrl+Enter)")
         self.send_button.clicked.connect(self._on_command_entered)
-        self.send_button.setFixedHeight(24)  # Compact height matching prompt row
         self._style_send_button()
+        # Set height AFTER styling so CSS min-height doesn't override
+        self.send_button.setFixedHeight(self.INPUT_ROW_HEIGHT)
         input_layout.addWidget(self.send_button, 0, Qt.AlignmentFlag.AlignVCenter)
-        
-        # Stop button (hidden by default) - align to bottom baseline
+
+        # Stop button (hidden by default)
         self.stop_button = QPushButton("Stop")
         self.stop_button.clicked.connect(self._on_stop_query)
         self.stop_button.setVisible(False)
         self._style_stop_button()
-        input_layout.addWidget(self.stop_button, 0, Qt.AlignmentFlag.AlignBottom)
+        # Set height AFTER styling so CSS min-height doesn't override
+        self.stop_button.setFixedHeight(self.INPUT_ROW_HEIGHT)
+        input_layout.addWidget(self.stop_button, 0, Qt.AlignmentFlag.AlignVCenter)
         
         layout.addLayout(input_layout)
         
@@ -7463,6 +7476,14 @@ class REPLWidget(QWidget):
 
             # Re-style autocomplete popups (they are top-level, not children)
             self._style_slash_completer_popup()
+
+            # Propagate theme to Document Studio panel (lives in FloatingREPLWindow)
+            try:
+                window = self.window()
+                if window and hasattr(window, "studio_panel") and window.studio_panel:
+                    window.studio_panel.apply_theme(colors)
+            except Exception:
+                pass  # Studio panel may not exist yet
 
         except Exception as e:
             logger.error(f"Failed to apply themed styles: {e}")
@@ -7593,17 +7614,17 @@ class REPLWidget(QWidget):
                 input_bg = colors.background_secondary
                 
                 self.command_input.setStyleSheet(f"""
-                    QLineEdit {{
+                    QPlainTextEdit {{
                         background-color: {input_bg} !important;
                         color: {colors.text_primary};
                         border: 2px solid {colors.border_secondary};
                         border-radius: 8px;
-                        padding: 8px 12px;
+                        padding: 4px 10px;
                         font-size: 13px;
                         selection-background-color: {colors.primary};
                         selection-color: {colors.background_primary};
                     }}
-                    QLineEdit:focus {{
+                    QPlainTextEdit:focus {{
                         border-color: {colors.border_focus};
                         background-color: {input_bg} !important;
                     }}
@@ -7612,15 +7633,15 @@ class REPLWidget(QWidget):
                 # Fallback styling without theme system - ALWAYS fully opaque
                 input_bg = "rgba(40, 40, 40, 1.0)"
                 self.command_input.setStyleSheet(f"""
-                    QLineEdit {{
+                    QPlainTextEdit {{
                         background-color: {input_bg} !important;
                         color: #ffffff;
                         border: 2px solid rgba(255, 255, 255, 0.3);
                         border-radius: 8px;
-                        padding: 8px 12px;
+                        padding: 4px 10px;
                         font-size: 13px;
                     }}
-                    QLineEdit:focus {{
+                    QPlainTextEdit:focus {{
                         border-color: #FFA500;
                         background-color: {input_bg} !important;
                     }}
@@ -9456,6 +9477,48 @@ class REPLWidget(QWidget):
         except Exception as e:
             logger.warning(f"Could not refresh docx tool-call preview: {e}")
 
+    def _auto_open_studio(self, file_path: str):
+        """Open the Document Studio panel and add a file to it."""
+        try:
+            window = self.window()
+            logger.info(f"Auto-open studio: window={type(window).__name__}, file={file_path}")
+            if not window or not hasattr(window, "toggle_studio_panel"):
+                logger.warning("Auto-open studio: window has no toggle_studio_panel")
+                return
+            # Open the panel if it's not already visible
+            studio = getattr(window, "studio_panel", None)
+            if studio and not studio.isVisible():
+                window.toggle_studio_panel(True)
+                # Sync the toolbar toggle button
+                if hasattr(self, "studio_btn"):
+                    self.studio_btn.setChecked(True)
+                logger.info("Auto-open studio: panel opened")
+            # Add the file to the state model (creates a card)
+            state = getattr(window, "studio_state", None)
+            if state:
+                state.add_document(file_path)
+                logger.info(f"Auto-open studio: added document {file_path}")
+            else:
+                logger.warning("Auto-open studio: no studio_state on window")
+        except Exception as e:
+            logger.error(f"Could not auto-open studio: {e}", exc_info=True)
+
+    def _auto_add_formatted_to_studio(self):
+        """Add the formatted output file to the Document Studio after skill completes."""
+        try:
+            original = getattr(self, "_docx_tool_call_path", None)
+            if not original:
+                return
+            p = Path(original)
+            formatted = p.parent / f"{p.stem}_formatted.docx"
+            if formatted.exists():
+                window = self.window()
+                state = getattr(window, "studio_state", None) if window else None
+                if state:
+                    state.add_document(str(formatted))
+        except Exception as e:
+            logger.debug(f"Could not add formatted file to studio: {e}")
+
     def _update_session_banner(self):
         """Show or hide a visual indicator that a skill session is active."""
         if not hasattr(self, "command_input"):
@@ -10798,6 +10861,8 @@ def test_theme():
                     if skill_id == "docx_formatter" and "file_path" in details:
                         self._docx_tool_call_path = details["file_path"]
                         self._open_docx_preview(details["file_path"])
+                        # Auto-open Document Studio panel and add the file
+                        self._auto_open_studio(details["file_path"])
                 # Add a temporary widget that we can remove later
                 self._add_tool_status_widget(skill_id, friendly_name, args_preview)
             elif status == "completed":
@@ -10810,6 +10875,8 @@ def test_theme():
                     # Refresh preview with formatted output when docx_formatter completes
                     if skill_id == "docx_formatter" and not self._skill_session:
                         self._refresh_docx_tool_call_preview()
+                        # Add the formatted file to the studio as well
+                        self._auto_add_formatted_to_studio()
                 else:
                     self.append_output(f"\n❌ **{friendly_name}** failed — {msg}\n", "error")
         except Exception as e:

@@ -201,6 +201,13 @@ class RecipeLibrary(QFrame):
 
         self._list_widget.blockSignals(False)
 
+        # Hide list + action buttons when there are no recipes
+        has_recipes = self._list_widget.count() > 0
+        self._list_widget.setVisible(has_recipes)
+        btn_bar = self.findChild(QFrame, "RecipeLibraryBtnBar")
+        if btn_bar:
+            btn_bar.setVisible(has_recipes)
+
         # Update button states
         if not restored:
             self._update_action_buttons(None)
@@ -286,6 +293,7 @@ class RecipeLibrary(QFrame):
         text_secondary = getattr(colors, "text_secondary", "#cccccc")
         text_disabled = getattr(colors, "text_disabled", "#888888")
         border_secondary = getattr(colors, "border_secondary", "#333333")
+        border_primary = getattr(colors, "border_primary", "#444444")
         primary = getattr(colors, "primary", "#4CAF50")
         interactive_hover = getattr(colors, "interactive_hover", "#5a5a5a")
 
@@ -294,6 +302,7 @@ class RecipeLibrary(QFrame):
             QFrame#RecipeLibrary {{
                 background-color: {bg_primary};
                 border: none;
+                border-bottom: 1px solid {border_secondary};
             }}
         """)
 
@@ -312,15 +321,27 @@ class RecipeLibrary(QFrame):
         title = self.findChild(QLabel, "RecipeLibraryTitle")
         if title:
             title.setStyleSheet(
-                f"color: {text_primary}; font-weight: bold; font-size: 13px; "
-                f"background: transparent; border: none;"
+                f"color: {text_secondary}; font-weight: bold; font-size: 12px; "
+                f"background: transparent; border: none; text-transform: uppercase; "
+                f"letter-spacing: 0.5px;"
             )
 
-        # "+" button
-        if THEME_AVAILABLE and colors:
-            ButtonStyleManager.apply_unified_button_style(
-                self._new_btn, colors, "tool", "icon", "normal"
-            )
+        # "+" button — custom themed style
+        self._new_btn.setStyleSheet(f"""
+            QToolButton {{
+                background: transparent;
+                border: 1px solid transparent;
+                border-radius: 4px;
+                color: {text_secondary};
+                font-size: 16px;
+                font-weight: bold;
+            }}
+            QToolButton:hover {{
+                background-color: {interactive_hover};
+                border-color: {border_secondary};
+                color: {primary};
+            }}
+        """)
 
         # List widget
         self._list_widget.setStyleSheet(f"""
@@ -333,14 +354,15 @@ class RecipeLibrary(QFrame):
                 outline: none;
             }}
             QListWidget#RecipeLibraryList::item {{
-                padding: 4px 10px;
+                padding: 5px 12px;
                 border: none;
+                border-radius: 0px;
             }}
             QListWidget#RecipeLibraryList::item:selected {{
                 background-color: {primary};
                 color: {text_primary};
             }}
-            QListWidget#RecipeLibraryList::item:hover {{
+            QListWidget#RecipeLibraryList::item:hover:!selected {{
                 background-color: {interactive_hover};
             }}
         """)
@@ -350,44 +372,54 @@ class RecipeLibrary(QFrame):
         if btn_bar:
             btn_bar.setStyleSheet(f"""
                 QFrame#RecipeLibraryBtnBar {{
-                    background-color: {bg_secondary};
+                    background-color: {bg_primary};
                     border: none;
                 }}
             """)
 
-        # Action buttons (Edit, Delete, Apply)
+        # Action buttons (Edit, Delete)
         btn_style = f"""
             QPushButton {{
                 background-color: {bg_tertiary};
-                color: {text_primary};
+                color: {text_secondary};
                 border: 1px solid {border_secondary};
-                border-radius: 3px;
-                padding: 3px 10px;
-                font-size: 12px;
+                border-radius: 4px;
+                padding: 4px 12px;
+                font-size: 11px;
             }}
             QPushButton:hover {{
                 background-color: {interactive_hover};
+                color: {text_primary};
+                border-color: {border_primary};
+            }}
+            QPushButton:pressed {{
+                background-color: {bg_secondary};
             }}
             QPushButton:disabled {{
                 color: {text_disabled};
+                border-color: {bg_tertiary};
             }}
         """
         self._edit_btn.setStyleSheet(btn_style)
         self._delete_btn.setStyleSheet(btn_style)
 
-        # Apply button -- use primary colour to emphasize
+        # Apply button — primary colour accent
         self._apply_btn.setStyleSheet(f"""
             QPushButton#RecipeLibraryApplyBtn {{
                 background-color: {primary};
                 color: {text_primary};
                 border: 1px solid {primary};
-                border-radius: 3px;
-                padding: 3px 10px;
-                font-size: 12px;
+                border-radius: 4px;
+                padding: 4px 12px;
+                font-size: 11px;
                 font-weight: bold;
             }}
             QPushButton#RecipeLibraryApplyBtn:hover {{
-                background-color: {interactive_hover};
+                border-color: {text_primary};
+            }}
+            QPushButton#RecipeLibraryApplyBtn:pressed {{
+                background-color: {bg_tertiary};
+                border-color: {primary};
             }}
             QPushButton#RecipeLibraryApplyBtn:disabled {{
                 color: {text_disabled};

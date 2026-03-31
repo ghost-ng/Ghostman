@@ -259,25 +259,35 @@ class DocumentCard(QFrame):
         colors : ColorSystem (or compatible object)
             Provides semantic colour attributes used for styling.
         """
-        border_color = self._border_color_for_status(colors, self._entry.status)
+        status = self._entry.status
+        border_color = self._border_color_for_status(colors, status)
         bg = getattr(colors, "background_tertiary", "#3a3a3a")
+        bg_secondary = getattr(colors, "background_secondary", "#333333")
         bg_hover = getattr(colors, "interactive_hover", "#5a5a5a")
         text_primary = getattr(colors, "text_primary", "#ffffff")
         text_secondary = getattr(colors, "text_secondary", "#cccccc")
         text_tertiary = getattr(colors, "text_tertiary", "#888888")
         primary = getattr(colors, "primary", "#4CAF50")
         border_sec = getattr(colors, "border_secondary", "#333333")
+        border_pri = getattr(colors, "border_primary", "#444444")
         status_error = getattr(colors, "status_error", "#F44336")
+
+        # Pending/queued cards get a subtle 1px border; active statuses get 2px
+        is_active = status in (
+            DocumentStatus.PROCESSING, DocumentStatus.COMPLETED, DocumentStatus.FAILED
+        )
+        border_width = "2px" if is_active else "1px"
 
         # Card frame
         self.setStyleSheet(f"""
             QFrame#DocumentCard {{
                 background-color: {bg};
-                border: 2px solid {border_color};
-                border-radius: 6px;
+                border: {border_width} solid {border_color};
+                border-radius: 8px;
             }}
             QFrame#DocumentCard:hover {{
                 background-color: {bg_hover};
+                border-color: {border_pri};
             }}
         """)
 
@@ -286,7 +296,7 @@ class DocumentCard(QFrame):
             QLabel#DocumentCardFilename {{
                 color: {text_primary};
                 font-weight: bold;
-                font-size: 13px;
+                font-size: 12px;
                 background: transparent;
                 border: none;
             }}
@@ -303,7 +313,7 @@ class DocumentCard(QFrame):
         """)
 
         # Status label — colour depends on status
-        status_color = self._status_text_color(colors, self._entry.status)
+        status_color = self._status_text_color(colors, status)
         self._status_label.setStyleSheet(f"""
             QLabel#DocumentCardStatus {{
                 color: {status_color};
@@ -314,10 +324,9 @@ class DocumentCard(QFrame):
         """)
 
         # Progress bar
-        progress_bg = getattr(colors, "interactive_normal", "#4a4a4a")
         self._progress_bar.setStyleSheet(f"""
             QProgressBar#DocumentCardProgress {{
-                background-color: {progress_bg};
+                background-color: {bg_secondary};
                 border: 1px solid {border_sec};
                 border-radius: 3px;
                 text-align: center;
@@ -330,17 +339,19 @@ class DocumentCard(QFrame):
             }}
         """)
 
-        # Remove button
+        # Remove button — transparent, shows X on hover as red
         self._remove_btn.setStyleSheet(f"""
             QPushButton#DocumentCardRemoveBtn {{
                 background: transparent;
-                border: none;
+                border: 1px solid transparent;
+                border-radius: 4px;
                 color: {text_tertiary};
-                font-size: 14px;
-                font-weight: bold;
+                font-size: 13px;
             }}
             QPushButton#DocumentCardRemoveBtn:hover {{
                 color: {status_error};
+                background-color: {bg_secondary};
+                border-color: {border_sec};
             }}
         """)
 
@@ -353,9 +364,12 @@ class DocumentCard(QFrame):
             QCheckBox::indicator {{
                 width: 16px;
                 height: 16px;
-                border: 2px solid {border_sec};
+                border: 1px solid {border_pri};
                 border-radius: 3px;
-                background-color: {bg};
+                background-color: {bg_secondary};
+            }}
+            QCheckBox::indicator:hover {{
+                border-color: {primary};
             }}
             QCheckBox::indicator:checked {{
                 background-color: {primary};
@@ -465,7 +479,7 @@ class DocumentCard(QFrame):
     def _border_color_for_status(colors, status: DocumentStatus) -> str:
         """Return the card border colour for the given *status*."""
         if status in (DocumentStatus.PENDING, DocumentStatus.QUEUED):
-            return getattr(colors, "text_disabled", "#555555")
+            return getattr(colors, "border_secondary", "#444444")
         if status == DocumentStatus.PROCESSING:
             return getattr(colors, "primary", "#4CAF50")
         if status == DocumentStatus.COMPLETED:

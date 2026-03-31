@@ -110,7 +110,20 @@ class AppCoordinator(QObject):
 
             _progress(20, "Loading themes...")
 
-            # Initialize UI components (will be implemented)
+            # Set per-theme progress callback so the splash bar advances
+            # smoothly through the 20 %–33 % range as each theme file loads.
+            try:
+                import specter.src.ui.themes.theme_manager as _tm_mod
+
+                def _theme_progress(index, total, name, phase):
+                    pct = 20 + int(13 * index / max(total, 1))
+                    _progress(pct, f"Loading themes ({index}/{total})...")
+
+                _tm_mod._loading_progress_callback = _theme_progress
+            except Exception:
+                pass
+
+            # Initialize UI components (triggers ThemeManager → loads all themes)
             self._initialize_ui_components()
 
             _progress(35, "Building interface...")
@@ -1146,22 +1159,7 @@ class AppCoordinator(QObject):
         """
         logger.info("🔄 Reinitializing SSL/PKI services...")
 
-        # Reset PKI service initialization to pick up new certificates/settings
-        try:
-            from ..infrastructure.pki import pki_service
-            logger.info("🔄 Resetting PKI service to apply new certificates...")
-            pki_service.reset_initialization()
-
-            # Reinitialize PKI to apply new settings
-            if pki_service.initialize():
-                logger.info("✓ PKI service reinitialized successfully")
-            else:
-                logger.warning("⚠ PKI service reinitialization completed without authentication")
-
-        except Exception as pki_e:
-            logger.error(f"Failed to reinitialize PKI service: {pki_e}")
-
-        # Ensure the shared session picks up any SSL/PKI changes
+        # Single entry point — session manager reads settings and reconfigures
         try:
             from ..infrastructure.ai.session_manager import session_manager
             session_manager.reconfigure_security()

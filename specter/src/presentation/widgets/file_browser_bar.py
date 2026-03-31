@@ -405,19 +405,15 @@ class FileContextItem(QFrame):
         self._update_type_icon()
         layout.addWidget(self.type_label, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        # Filename (main content)
+        # Filename (main content) — sized to fit text, not stretched
         self.filename_label = QLabel(self._get_pill_name())
         font = self.filename_label.font()
-        font.setPointSize(8)  # Increased by 1 for better readability
+        font.setPointSize(8)
         font.setBold(False)
         self.filename_label.setFont(font)
-        # Remove maximum width constraint - let it size naturally within badge constraints
-        # Use Expanding policy to fill available space and prevent clipping
-        self.filename_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.filename_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.filename_label.setTextFormat(Qt.TextFormat.PlainText)
-        # Note: QLabel doesn't support native eliding, but we handle truncation in _get_pill_name()
-        # Add with vertical center alignment for perfect centering
-        layout.addWidget(self.filename_label, 1, Qt.AlignmentFlag.AlignVCenter)  # Stretch factor allows it to use available space
+        layout.addWidget(self.filename_label, 0, Qt.AlignmentFlag.AlignVCenter)
 
         # Remove button (×) - very compact with no border
         self.remove_btn = QToolButton()
@@ -450,13 +446,9 @@ class FileContextItem(QFrame):
         # Add button with vertical center alignment
         layout.addWidget(self.remove_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        # Set size policy for grid pill layout
-        # Use Preferred policy to allow natural sizing within min/max constraints
-        # This allows the badge to grow to fit content up to max width
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.setFixedHeight(20)  # Thinner badge height
-        self.setMinimumWidth(150)  # Increased minimum to 150px for better readability
-        self.setMaximumWidth(220)  # Increased maximum to prevent clipping
+        # Badge sizes to its content — no fixed min/max width
+        self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        self.setFixedHeight(20)
 
         # No widget margins - spacing handled by CSS margin property
         self.setContentsMargins(0, 0, 0, 0)

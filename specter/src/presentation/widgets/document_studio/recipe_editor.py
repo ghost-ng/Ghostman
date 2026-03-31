@@ -453,7 +453,7 @@ class RecipeEditor(QFrame):
             f"background: transparent; border: none;"
         )
 
-        # Scroll area
+        # Scroll area — also style viewport to prevent white bleed
         scroll = self.findChild(QScrollArea, "RecipeEditorScroll")
         if scroll:
             scroll.setStyleSheet(f"""
@@ -462,6 +462,9 @@ class RecipeEditor(QFrame):
                     border: none;
                 }}
             """)
+            viewport = scroll.viewport()
+            if viewport:
+                viewport.setStyleSheet(f"background-color: {bg_primary};")
 
         # Form container
         form = self.findChild(QWidget, "RecipeEditorForm")
@@ -617,14 +620,16 @@ class RecipeEditor(QFrame):
         self._cancel_btn.setStyleSheet(f"""
             QPushButton#RecipeEditorCancelBtn {{
                 background-color: {bg_tertiary};
-                color: {text_primary};
+                color: {text_secondary};
                 border: 1px solid {border_secondary};
-                border-radius: 3px;
+                border-radius: 4px;
                 padding: 5px 16px;
                 font-size: 12px;
             }}
             QPushButton#RecipeEditorCancelBtn:hover {{
                 background-color: {interactive_hover};
+                color: {text_primary};
+                border-color: {border_primary};
             }}
         """)
 
@@ -634,12 +639,16 @@ class RecipeEditor(QFrame):
                 background-color: {primary};
                 color: {text_primary};
                 border: 1px solid {primary};
-                border-radius: 3px;
+                border-radius: 4px;
                 padding: 5px 16px;
                 font-size: 12px;
                 font-weight: bold;
             }}
             QPushButton#RecipeEditorSaveBtn:hover {{
-                background-color: {interactive_hover};
+                border-color: {text_primary};
+            }}
+            QPushButton#RecipeEditorSaveBtn:pressed {{
+                background-color: {bg_tertiary};
+                border-color: {primary};
             }}
         """)

@@ -148,7 +148,7 @@ class ToolCallingBridge:
 
         USAGE_EXAMPLES = {
             "web_search": "User asks 'search for penguins' or 'what is quantum computing' → call web_search with the query.",
-            "docx_formatter": "User explicitly asks to FORMAT, FIX FORMATTING, STANDARDIZE, or REFORMAT a .docx file → call docx_formatter. Operations: standardize_fonts, fix_margins, normalize_spacing, fix_bullets, fix_spelling, fix_case, normalize_headings, find_replace, set_font_color, set_alignment, set_indent. Do NOT use docx_formatter for summarizing, reading, analyzing, or asking questions about document content — those are normal AI tasks using file context.",
+            "docx_formatter": "User asks to FORMAT, EDIT, FIX, STANDARDIZE, REFORMAT, PROOFREAD, CLEAN UP, or POLISH a .docx file → call docx_formatter with the file_path and appropriate operations. Operations: standardize_fonts, fix_margins, normalize_spacing, fix_bullets, fix_spelling, fix_case, normalize_headings, find_replace, set_font_color, set_alignment, set_indent. IMPORTANT: When the user uploads a .docx and says 'edit this' or 'fix this' or 'help me with this document', call docx_formatter immediately with common operations like ['standardize_fonts', 'fix_margins', 'normalize_spacing', 'fix_spelling']. Do NOT use docx_formatter for summarizing, reading, analyzing, or asking questions about document content — those are normal AI tasks using file context.",
             "screen_capture": "User says 'take a screenshot' or 'capture my screen' → call screen_capture.",
             "task_tracker": "User says 'add a task' or 'show my tasks' → call task_tracker.",
             "outlook_email": (

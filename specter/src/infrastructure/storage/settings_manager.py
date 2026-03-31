@@ -136,12 +136,12 @@ class SettingsManager:
         },
         'pki': {
             'enabled': False,
+            'auto_detect': True,       # Auto-detect cert from Windows cert store
+            'thumbprint': None,        # Optional thumbprint override (None = auto)
+            # Legacy PEM paths (kept for backwards compat with old P12-extracted files)
             'client_cert_path': None,
             'client_key_path': None,
             'ca_chain_path': None,
-            'p12_file_hash': None,
-            'last_validation': None,
-            'certificate_info': None
         },
         'screen_capture': {
             'default_save_path': '',  # Empty string = use default %APPDATA%\Specter\captures

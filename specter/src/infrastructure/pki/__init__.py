@@ -1,27 +1,24 @@
 """
 PKI (Public Key Infrastructure) module for Specter.
 
-Provides enterprise-grade certificate management and authentication
-for secure API communications.
+Uses the Windows certificate store for zero-config enterprise authentication.
 """
 
-from .certificate_manager import (
-    CertificateManager,
-    CertificateInfo,
-    PKIConfig,
-    PKIError,
-    CertificateValidationError,
-    P12ImportError
-)
 from .pki_service import PKIService, pki_service
+from ..ai.session_manager import CertStoreEntry
+
+# Legacy exception kept for backwards compatibility with UI code
+class PKIError(Exception):
+    """Base PKI exception."""
+    pass
+
+# Legacy compat — CertificateInfo is now CertStoreEntry
+CertificateInfo = CertStoreEntry
 
 __all__ = [
-    'CertificateManager',
-    'CertificateInfo', 
-    'PKIConfig',
-    'PKIError',
-    'CertificateValidationError',
-    'P12ImportError',
     'PKIService',
-    'pki_service'
+    'pki_service',
+    'PKIError',
+    'CertStoreEntry',
+    'CertificateInfo',
 ]

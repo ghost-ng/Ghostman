@@ -310,6 +310,14 @@ class DocumentStudioPanel(QFrame):
         self._state.recipe_saved.connect(self._on_recipe_saved)
         self._state.recipe_removed.connect(self._on_recipe_removed)
 
+        # Connect our own files_dropped signal → state.add_document
+        self.files_dropped.connect(self._on_files_dropped)
+
+    def _on_files_dropped(self, file_paths: list) -> None:
+        """Add dropped files to the state model."""
+        for fp in file_paths:
+            self._state.add_document(fp)
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -718,10 +726,8 @@ class DocumentStudioPanel(QFrame):
             return
         try:
             tm = get_theme_manager()
-            if tm:
-                colors = tm.get_colors()
-                if colors:
-                    self.apply_theme(colors)
+            if tm and hasattr(tm, "current_theme") and tm.current_theme:
+                self.apply_theme(tm.current_theme)
         except Exception:
             logger.debug("Theme manager not available at panel construction")
 
@@ -748,7 +754,7 @@ class DocumentStudioPanel(QFrame):
         status_error = getattr(colors, "status_error", "#F44336")
         interactive_hover = getattr(colors, "interactive_hover", "#5a5a5a")
 
-        # Panel frame
+        # Panel frame — dark background with subtle left border
         self.setStyleSheet(f"""
             QFrame#DocumentStudioPanel {{
                 background-color: {bg_primary};
@@ -759,52 +765,60 @@ class DocumentStudioPanel(QFrame):
         # Header bar
         self._header.apply_theme(colors)
 
-        # Batch toolbar
-        toolbar_style = f"""
-            QFrame#StudioBatchToolbar {{
-                background-color: {bg_secondary};
-                border: none;
-                border-bottom: 1px solid {border_secondary};
-            }}
-        """
-        # Find the toolbar widget and apply
+        # Batch toolbar — slightly elevated background
         toolbar = self.findChild(QFrame, "StudioBatchToolbar")
         if toolbar:
-            toolbar.setStyleSheet(toolbar_style)
+            toolbar.setStyleSheet(f"""
+                QFrame#StudioBatchToolbar {{
+                    background-color: {bg_secondary};
+                    border: none;
+                    border-bottom: 1px solid {border_secondary};
+                }}
+            """)
 
-        # Toolbar buttons
-        btn_style = f"""
+        # Toolbar buttons — themed with rounded corners and hover
+        tb_btn_style = f"""
             QPushButton {{
                 background-color: {bg_tertiary};
-                color: {text_primary};
+                color: {text_secondary};
                 border: 1px solid {border_secondary};
-                border-radius: 3px;
-                padding: 3px 10px;
-                font-size: 12px;
+                border-radius: 4px;
+                padding: 4px 12px;
+                font-size: 11px;
             }}
             QPushButton:hover {{
                 background-color: {interactive_hover};
+                color: {text_primary};
+                border-color: {border_primary};
+            }}
+            QPushButton:pressed {{
+                background-color: {bg_secondary};
             }}
             QPushButton:disabled {{
                 color: {text_disabled};
+                border-color: {bg_tertiary};
             }}
         """
         for btn in (self._select_all_btn, self._select_none_btn):
-            btn.setStyleSheet(btn_style)
+            btn.setStyleSheet(tb_btn_style)
 
-        # Apply recipe button — use primary colour
+        # Apply recipe button — primary colour accent
         self._apply_recipe_btn.setStyleSheet(f"""
             QPushButton#StudioApplyRecipeBtn {{
                 background-color: {primary};
                 color: {text_primary};
                 border: 1px solid {primary};
-                border-radius: 3px;
-                padding: 3px 10px;
-                font-size: 12px;
+                border-radius: 4px;
+                padding: 4px 12px;
+                font-size: 11px;
                 font-weight: bold;
             }}
             QPushButton#StudioApplyRecipeBtn:hover {{
-                background-color: {interactive_hover};
+                border-color: {text_primary};
+            }}
+            QPushButton#StudioApplyRecipeBtn:pressed {{
+                background-color: {bg_tertiary};
+                border-color: {primary};
             }}
             QPushButton#StudioApplyRecipeBtn:disabled {{
                 color: {text_disabled};
@@ -819,43 +833,62 @@ class DocumentStudioPanel(QFrame):
                 background-color: {bg_tertiary};
                 color: {text_primary};
                 border: 1px solid {border_secondary};
-                border-radius: 3px;
-                padding: 3px 8px;
-                font-size: 12px;
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-size: 11px;
+                min-height: 20px;
             }}
             QComboBox#StudioRecipeCombo::drop-down {{
                 border: none;
+                width: 18px;
+            }}
+            QComboBox#StudioRecipeCombo::down-arrow {{
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 5px solid {text_secondary};
+                margin-right: 6px;
             }}
             QComboBox#StudioRecipeCombo QAbstractItemView {{
                 background-color: {bg_secondary};
                 color: {text_primary};
                 selection-background-color: {primary};
-                border: 1px solid {border_secondary};
+                border: 1px solid {border_primary};
+                outline: none;
             }}
         """)
 
-        # Scroll area and card container
+        # Scroll area — must also style the viewport to prevent white bleed
         self._scroll_area.setStyleSheet(f"""
             QScrollArea#StudioScrollArea {{
                 background-color: {bg_primary};
                 border: none;
             }}
+            QScrollArea#StudioScrollArea > QWidget > QWidget {{
+                background-color: {bg_primary};
+            }}
         """)
+        # Explicitly set viewport background (Qt creates it internally)
+        viewport = self._scroll_area.viewport()
+        if viewport:
+            viewport.setStyleSheet(f"background-color: {bg_primary};")
         self._card_container.setStyleSheet(f"""
             QWidget#StudioCardContainer {{
                 background-color: {bg_primary};
             }}
         """)
 
-        # Empty hint
+        # Empty hint — dashed border drop zone
         self._empty_hint.setStyleSheet(f"""
             QLabel#StudioEmptyHint {{
                 color: {text_disabled};
                 font-size: 13px;
                 font-style: italic;
                 background: transparent;
-                border: none;
-                padding: 20px;
+                border: 2px dashed {border_secondary};
+                border-radius: 8px;
+                padding: 24px 16px;
+                margin: 12px;
             }}
         """)
 
@@ -868,19 +901,19 @@ class DocumentStudioPanel(QFrame):
             QProgressBar#StudioBatchProgress {{
                 background-color: {bg_tertiary};
                 border: 1px solid {border_secondary};
-                border-radius: 3px;
+                border-radius: 4px;
                 text-align: center;
-                font-size: 11px;
+                font-size: 10px;
                 color: {text_primary};
                 margin: 4px 8px;
             }}
             QProgressBar#StudioBatchProgress::chunk {{
                 background-color: {primary};
-                border-radius: 2px;
+                border-radius: 3px;
             }}
         """)
 
-        # Status bar
+        # Status bar — subtle top border
         self._status_bar.setStyleSheet(f"""
             QFrame#StudioStatusBar {{
                 background-color: {bg_secondary};

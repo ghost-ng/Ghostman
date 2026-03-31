@@ -289,8 +289,8 @@ class APITestService(QObject):
                 if not ssl_status['initialized']:
                     # Initialize SSL service from settings if not done yet
                     try:
-                        from ...application.settings import settings
-                        ssl_service.configure_from_settings(settings.get_all_settings())
+                        from ..storage.settings_manager import settings
+                        ssl_service.configure_from_settings(settings.get_all())
                     except Exception as e:
                         logger.warning(f"Could not initialize SSL service from settings: {e}")
 
@@ -423,26 +423,11 @@ def test_network_connection_consolidated(
     logger.info(f"🌐 Starting consolidated network test: {base_url}")
     logger.info(f"🔧 Config: model={model_name}, pki={bool(pki_config)}, ignore_ssl={ignore_ssl}, attempts={max_attempts}")
     
-    # Configure PKI if provided
+    # PKI is now handled automatically by session_manager.reconfigure_security()
+    # which reads from settings and auto-detects from the Windows cert store.
     if pki_config:
-        try:
-            from ..pki.pki_service import pki_service
-            if pki_config.get('cert_path') and pki_config.get('key_path'):
-                logger.info(f"🔐 Configuring PKI with cert: {pki_config['cert_path']}")
-                # Use the session manager's configure_pki method
-                from .session_manager import session_manager
-                session_manager.configure_pki(
-                    cert_path=pki_config['cert_path'],
-                    key_path=pki_config['key_path'],
-                    ca_path=pki_config.get('ca_path')
-                )
-                logger.info("✓ PKI configuration applied to session manager")
-            else:
-                logger.warning("PKI config provided but missing cert_path or key_path")
-        except Exception as e:
-            logger.warning(f"Failed to configure PKI for test: {e}")
-            # Don't fail the entire test, just log the warning and continue
-    
+        logger.debug("Legacy pki_config argument ignored — PKI is auto-detected from cert store")
+
     # Create test configuration
     config = APITestConfig(
         model_name=model_name,

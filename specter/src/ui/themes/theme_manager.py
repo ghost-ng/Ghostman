@@ -50,31 +50,31 @@ class ThemeManager(QObject):
         self._custom_themes: Dict[str, ColorSystem] = {}
         self._theme_history: List[ColorSystem] = []
         self._max_history_size: int = 20
-        
+
         # Widget registry for comprehensive theme updates
         self._registered_widgets: Set[weakref.ReferenceType] = set()
         self._widget_update_methods: Dict[weakref.ReferenceType, str] = {}
-        
+
         # Performance optimization: Cache theme color dictionary
         self._theme_color_dict_cache: Optional[Dict[str, str]] = None
-        
+
         # Theme switch debouncing to prevent notification spam
         self._theme_switch_debounce_timer = None
         self._is_switching_theme = False
         self._pending_theme_name = None  # Track the most recent theme switch request
-        
+
         # Initialize theme directories
         self._init_theme_directories()
-        
-        # Load preset themes
-        self._load_preset_themes()
-        
-        # Load custom themes
-        self._load_custom_themes()
-        
+
+        # Load preset themes (with optional progress callback)
+        self._load_preset_themes(progress_callback=_loading_progress_callback)
+
+        # Load custom themes (with optional progress callback)
+        self._load_custom_themes(progress_callback=_loading_progress_callback)
+
         # Load current theme from settings
         self._load_current_theme()
-        
+
         logger.info("ThemeManager initialized")
     
     def _init_theme_directories(self):
@@ -90,31 +90,35 @@ class ThemeManager(QObject):
         
         logger.debug(f"Theme directories initialized: {self._themes_dir}")
     
-    def _load_preset_themes(self):
+    def _load_preset_themes(self, progress_callback=None):
         """Load built-in preset themes from JSON files."""
         self._preset_themes = {}
-        
+
         # Get the built-in themes directory (relative to this file)
         builtin_themes_dir = Path(__file__).parent / "json"
-        
+
         if not builtin_themes_dir.exists():
             logger.warning(f"Built-in themes directory not found: {builtin_themes_dir}")
             # Fall back to a default theme
             self._preset_themes = {"cyber": ColorSystem()}
             return
-        
+
+        # Collect theme files upfront so we know the total count
+        theme_files = sorted(builtin_themes_dir.glob("*.json"))
+        total = len(theme_files)
+
         # Load all JSON theme files from the built-in directory
-        for theme_file in builtin_themes_dir.glob("*.json"):
+        for idx, theme_file in enumerate(theme_files):
             try:
                 with open(theme_file, 'r', encoding='utf-8') as f:
                     theme_data = json.load(f)
-                
+
                 # Use 'name' field from JSON if available, otherwise use filename
                 theme_name = theme_data.get('name', theme_file.stem)
-                
+
                 # Create ColorSystem from colors data
                 color_system = ColorSystem.from_dict(theme_data.get('colors', {}))
-                
+
                 # Store additional metadata including theme mode
                 if not hasattr(color_system, '_metadata'):
                     color_system._metadata = {}
@@ -125,34 +129,42 @@ class ThemeManager(QObject):
                     'version': theme_data.get('version', '1.0.0'),
                     'mode': theme_data.get('mode', 'light')  # Store theme mode
                 })
-                
+
                 # Add to preset themes
                 self._preset_themes[theme_name] = color_system
                 logger.debug(f"Loaded built-in theme: {theme_name} (mode: {theme_data.get('mode', 'light')})")
-                    
+
+                # Report per-theme progress to splash screen
+                if progress_callback:
+                    progress_callback(idx + 1, total, theme_name, "preset")
+
             except Exception as e:
                 logger.error(f"Failed to load built-in theme {theme_file}: {e}")
-        
+
         logger.info(f"Loaded {len(self._preset_themes)} preset themes")
     
-    def _load_custom_themes(self):
+    def _load_custom_themes(self, progress_callback=None):
         """Load custom themes from disk (themes folder)."""
         self._custom_themes = {}
-        
+
         if not self._themes_dir.exists():
             return
-            
-        for theme_file in self._themes_dir.glob("*.json"):
+
+        # Collect theme files upfront so we know the total count
+        theme_files = sorted(self._themes_dir.glob("*.json"))
+        total = len(theme_files)
+
+        for idx, theme_file in enumerate(theme_files):
             try:
                 with open(theme_file, 'r', encoding='utf-8') as f:
                     theme_data = json.load(f)
-                
+
                 # Use 'name' field from JSON if available, otherwise use filename
                 theme_name = theme_data.get('name', theme_file.stem)
-                
+
                 # Create ColorSystem from colors data
                 color_system = ColorSystem.from_dict(theme_data.get('colors', {}))
-                
+
                 # Store additional metadata including theme mode
                 if not hasattr(color_system, '_metadata'):
                     color_system._metadata = {}
@@ -163,17 +175,21 @@ class ThemeManager(QObject):
                     'version': theme_data.get('version', '1.0.0'),
                     'mode': theme_data.get('mode', 'light')  # Store theme mode
                 })
-                
+
                 # Validate theme (but allow loading with warnings for custom themes)
                 is_valid, issues = color_system.validate()
                 self._custom_themes[theme_name] = color_system
-                
+
                 if is_valid:
                     logger.debug(f"Loaded custom theme: {theme_name} from {theme_file}")
                 else:
                     logger.warning(f"Loaded custom theme with accessibility warnings {theme_name}: {issues}")
                     logger.info(f"Custom theme '{theme_name}' loaded despite validation warnings")
-                    
+
+                # Report per-theme progress to splash screen
+                if progress_callback:
+                    progress_callback(idx + 1, total, theme_name, "custom")
+
             except Exception as e:
                 logger.error(f"Failed to load custom theme {theme_file}: {e}")
         
@@ -809,13 +825,23 @@ class ThemeManager(QObject):
                 logger.warning("Style templates not available")
 
 
-# Global theme manager instance
-theme_manager = ThemeManager()
+# Optional per-theme progress callback set by the coordinator before
+# the first ``get_theme_manager()`` call.  Signature:
+#   callback(index: int, total: int, theme_name: str, phase: str)
+# where *phase* is ``"preset"`` or ``"custom"``.
+_loading_progress_callback = None
+
+# Lazy global singleton — created on first access so the coordinator can
+# set ``_loading_progress_callback`` before any themes are loaded.
+_theme_manager_instance: Optional[ThemeManager] = None
 
 
 def get_theme_manager() -> ThemeManager:
-    """Get the global theme manager instance."""
-    return theme_manager
+    """Get the global theme manager instance (created on first call)."""
+    global _theme_manager_instance
+    if _theme_manager_instance is None:
+        _theme_manager_instance = ThemeManager()
+    return _theme_manager_instance
 
 # Performance-optimized theme color helpers
 # ========================================
@@ -848,8 +874,8 @@ def get_theme_primary_color(theme_manager_instance: Optional[ThemeManager] = Non
         return _DEFAULT_FALLBACK_COLORS['text_primary']
     
     # Use provided theme manager or get global instance
-    tm = theme_manager_instance or theme_manager
-    
+    tm = theme_manager_instance or get_theme_manager()
+
     # Check if theme manager and theme system are available
     if tm and hasattr(tm, 'current_theme') and tm.current_theme:
         try:
@@ -859,14 +885,14 @@ def get_theme_primary_color(theme_manager_instance: Optional[ThemeManager] = Non
                 # Cache that theme system is available
                 _theme_system_available_cache = True
                 return cached_colors['text_primary']
-            
+
             # Fallback to direct property access if cache is not available
             return tm.current_theme.text_primary
         except (AttributeError, KeyError):
             # Cache that theme system is not working properly
             _theme_system_available_cache = False
             pass
-    
+
     # Theme system unavailable - use fallback
     _theme_system_available_cache = False
     return _DEFAULT_FALLBACK_COLORS['text_primary']
@@ -901,8 +927,8 @@ def get_theme_color(color_name: str,
         return fallback
     
     # Use provided theme manager or get global instance
-    tm = theme_manager_instance or theme_manager
-    
+    tm = theme_manager_instance or get_theme_manager()
+
     # Check if theme manager and theme system are available
     if tm and hasattr(tm, 'current_theme') and tm.current_theme:
         try:
@@ -912,7 +938,7 @@ def get_theme_color(color_name: str,
                 # Cache that theme system is available
                 _theme_system_available_cache = True
                 return cached_colors[color_name]
-            
+
             # Fallback to direct property access if cache is not available
             if hasattr(tm.current_theme, color_name):
                 color_value = getattr(tm.current_theme, color_name)
@@ -922,7 +948,7 @@ def get_theme_color(color_name: str,
             # Cache that theme system is not working properly
             _theme_system_available_cache = False
             pass
-    
+
     # Theme system unavailable - use fallback
     _theme_system_available_cache = False
     return fallback
@@ -936,8 +962,8 @@ def get_theme_colors_dict(theme_manager_instance: Optional[ThemeManager] = None)
         return _DEFAULT_FALLBACK_COLORS.copy()
     
     # Use provided theme manager or get global instance
-    tm = theme_manager_instance or theme_manager
-    
+    tm = theme_manager_instance or get_theme_manager()
+
     # Check if theme manager and theme system are available
     if tm and hasattr(tm, 'current_theme') and tm.current_theme:
         try:
@@ -947,7 +973,7 @@ def get_theme_colors_dict(theme_manager_instance: Optional[ThemeManager] = None)
                 # Cache that theme system is available
                 _theme_system_available_cache = True
                 return cached_colors
-            
+
             # Fallback to direct theme object access
             theme_dict = tm.current_theme.to_dict()
             _theme_system_available_cache = True
@@ -956,7 +982,7 @@ def get_theme_colors_dict(theme_manager_instance: Optional[ThemeManager] = None)
             # Cache that theme system is not working properly
             _theme_system_available_cache = False
             pass
-    
+
     # Theme system unavailable - use fallback
     _theme_system_available_cache = False
     return _DEFAULT_FALLBACK_COLORS.copy()

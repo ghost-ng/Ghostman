@@ -202,27 +202,19 @@ class AIService:
         return True
     
     def _configure_pki_if_enabled(self):
-        """Configure PKI authentication if enabled."""
+        """Configure PKI authentication if enabled.
+
+        PKI is now handled centrally by session_manager.reconfigure_security()
+        which auto-detects certs from the Windows cert store.
+        """
         try:
-            from ..pki.pki_service import pki_service
-            
-            if pki_service.cert_manager.is_pki_enabled():
-                cert_info = pki_service.cert_manager.get_client_cert_files()
-                ca_bundle_path = pki_service.cert_manager.get_ca_chain_file()
-                
-                if cert_info:
-                    from .session_manager import session_manager
-                    session_manager.configure_pki(
-                        cert_path=cert_info[0],  # client cert path
-                        key_path=cert_info[1],   # client key path
-                        ca_path=ca_bundle_path   # CA bundle path (can be None)
-                    )
-                    logger.info(f"✓ PKI configured for AI service: cert={cert_info[0]}, ca={'Yes' if ca_bundle_path else 'Default'}")
-                else:
-                    logger.warning("PKI is enabled but certificate files not available")
+            from .session_manager import session_manager
+            session_manager.reconfigure_security()
+            pki_info = session_manager.get_pki_info()
+            if pki_info.get('pki_enabled'):
+                logger.info(f"PKI active for AI service: method={pki_info.get('method')}")
             else:
                 logger.debug("PKI not enabled, using default SSL configuration")
-                
         except Exception as e:
             logger.error(f"Failed to configure PKI for AI service: {e}")
     
