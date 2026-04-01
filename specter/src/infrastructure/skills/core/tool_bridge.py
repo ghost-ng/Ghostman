@@ -182,6 +182,7 @@ class ToolCallingBridge:
             "You have access to tools that let you perform actions on the user's local computer.",
             "When a user asks to search the web, format/reformat documents, capture the screen, draft/search email, or manage calendar — USE your tools.",
             "When a user asks to summarize, analyze, read, or ask questions about an uploaded document — do NOT use tools; use the file context already provided to answer directly.",
+            "IMPORTANT: For web_search, call it ONCE with a well-crafted query. Do NOT make multiple search calls for the same question — combine your information needs into one query. If the first search returns results, use them to respond immediately instead of searching again.",
             "IMPORTANT: You CAN access local files on the user's computer through your tools. "
             "When a user provides a file path (like C:/Users/.../file.docx), use the appropriate tool. "
             "Do NOT say you cannot access local files.",

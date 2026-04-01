@@ -70,9 +70,9 @@ setup(
     zip_safe=False,
     keywords=", ".join(__keywords__),
     project_urls={
-        "Bug Reports": "https://github.com/ghost-ng/ghost-ng/issues",
-        "Source": "https://github.com/ghost-ng/ghost-ng",
-        "Documentation": "https://github.com/ghost-ng/ghost-ng/tree/main/docs",
-        "Releases": "https://github.com/ghost-ng/ghost-ng/releases",
+        "Bug Reports": "https://github.com/ghost-ng/Ghostman/issues",
+        "Source": "https://github.com/ghost-ng/Ghostman",
+        "Documentation": "https://github.com/ghost-ng/Ghostman/tree/main/docs",
+        "Releases": "https://github.com/ghost-ng/Ghostman/releases",
     },
 )

@@ -25,8 +25,13 @@ from ..interfaces.base_skill import (
 
 logger = logging.getLogger("specter.skills.web_search")
 
-# Minimum seconds between consecutive DuckDuckGo searches to avoid rate-limits
-_MIN_DDG_DELAY = 3.0
+# Minimum seconds between consecutive DuckDuckGo searches to avoid rate-limits.
+# Kept low — ddgs handles its own backoff; we just avoid hammering.
+_MIN_DDG_DELAY = 1.0
+
+# Simple in-memory cache: {query_key: (timestamp, results)}
+_RESULT_CACHE: Dict[str, tuple] = {}
+_CACHE_TTL = 300  # 5 minutes
 
 
 class WebSearchSkill(BaseSkill):
@@ -105,8 +110,8 @@ class WebSearchSkill(BaseSkill):
         """
         Search via the ``ddgs`` library (DuckDuckGo).
 
-        Implements polite rate-limiting and retry-on-ratelimit to avoid
-        getting blocked by DuckDuckGo's anti-bot protections.
+        Implements polite rate-limiting, a hard timeout, and retry-on-ratelimit
+        to avoid getting blocked by DuckDuckGo's anti-bot protections.
         """
         try:
             from ddgs import DDGS
@@ -116,22 +121,37 @@ class WebSearchSkill(BaseSkill):
                 "Install it with: pip install ddgs"
             )
 
-        # Polite delay between searches
+        # Polite delay between searches (short — ddgs handles its own backoff)
         elapsed = time.time() - WebSearchSkill._last_ddg_search
         if elapsed < _MIN_DDG_DELAY:
-            wait = _MIN_DDG_DELAY - elapsed + random.uniform(0.5, 1.5)
+            wait = _MIN_DDG_DELAY - elapsed + random.uniform(0.1, 0.5)
             logger.debug("Rate-limiting: waiting %.1fs before DDG search", wait)
             time.sleep(wait)
 
+        def _do_search() -> list:
+            """Run the search in a thread with a hard timeout."""
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(DDGS().text, query, max_results=max_results)
+                return future.result(timeout=15)  # 15s hard timeout
+
         try:
-            raw = DDGS().text(query, max_results=max_results)
+            raw = _do_search()
             WebSearchSkill._last_ddg_search = time.time()
         except Exception as exc:
-            if "Ratelimit" in str(exc) or "202" in str(exc):
-                logger.warning("DuckDuckGo rate-limited, retrying in 30s …")
-                time.sleep(30)
-                raw = DDGS().text(query, max_results=max_results)
-                WebSearchSkill._last_ddg_search = time.time()
+            exc_str = str(exc)
+            if "Ratelimit" in exc_str or "202" in exc_str:
+                logger.warning("DuckDuckGo rate-limited, retrying in 5s …")
+                time.sleep(5)
+                try:
+                    raw = _do_search()
+                    WebSearchSkill._last_ddg_search = time.time()
+                except Exception:
+                    logger.warning("DuckDuckGo retry also failed")
+                    return []
+            elif "TimeoutError" in type(exc).__name__ or "timed out" in exc_str.lower():
+                logger.warning("DuckDuckGo search timed out after 15s")
+                return []
             else:
                 raise
 
@@ -189,11 +209,33 @@ class WebSearchSkill(BaseSkill):
 
         Tries the configured provider (Tavily if key set, else DuckDuckGo).
         If Tavily fails, automatically falls back to DuckDuckGo.
+        Results are cached for 5 minutes to avoid redundant lookups when
+        the model issues duplicate or near-identical queries.
         """
         try:
             query: str = params["query"]
             num_results: int = params.get("num_results", 5)
             provider = self._get_provider()
+
+            # Check cache (exact query match, same provider)
+            cache_key = f"{provider}:{query.strip().lower()}:{num_results}"
+            cached = _RESULT_CACHE.get(cache_key)
+            if cached:
+                ts, cached_results = cached
+                if time.time() - ts < _CACHE_TTL:
+                    logger.info("Cache hit for: %s (%d results)", query, len(cached_results))
+                    provider_name = "Tavily" if provider == "tavily" else "DuckDuckGo"
+                    return SkillResult(
+                        success=True,
+                        message=f"Search complete for '{query}'",
+                        data={
+                            "results": cached_results,
+                            "count": len(cached_results),
+                            "query": query,
+                            "provider": provider_name,
+                        },
+                        action_taken=f"Searched '{provider_name}' for: {query} (cached)",
+                    )
 
             results: List[Dict[str, str]] = []
 
@@ -211,6 +253,15 @@ class WebSearchSkill(BaseSkill):
                 logger.info("Searching with DuckDuckGo for: %s", query)
                 results = self._search_ddg(query, num_results)
                 provider_name = "DuckDuckGo"
+
+            # Cache results
+            if results:
+                _RESULT_CACHE[cache_key] = (time.time(), results)
+                # Evict old entries
+                now = time.time()
+                stale = [k for k, (t, _) in _RESULT_CACHE.items() if now - t > _CACHE_TTL]
+                for k in stale:
+                    del _RESULT_CACHE[k]
 
             if not results:
                 logger.info("Search returned no results for: %s", query)

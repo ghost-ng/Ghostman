@@ -2,7 +2,7 @@
 
 # Version components
 VERSION_MAJOR = 0
-VERSION_MINOR = 1
+VERSION_MINOR = 5
 VERSION_PATCH = 0
 VERSION_INFO = (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH)
 
@@ -13,6 +13,6 @@ __description__ = "A sleek AI-powered desktop assistant with floating widgets an
 __author__ = "ghost-ng team"
 __author_email__ = "team@ghost-ng.org"
 __license__ = "MIT"
-__url__ = "https://github.com/ghost-ng/ghost-ng"
+__url__ = "https://github.com/ghost-ng/Ghostman"
 __maintainer__ = "ghost-ng team"
 __keywords__ = ["ai", "assistant", "desktop", "chat", "openai", "qt", "gui"]
