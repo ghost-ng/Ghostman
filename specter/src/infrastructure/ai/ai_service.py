@@ -409,6 +409,36 @@ class AIService:
                 except Exception as e:
                     logger.warning(f"Could not load tool definitions: {e}")
 
+            # ── MemGPT integration ──────────────────────────────────────
+            # When enabled, inject core memory into system prompt and
+            # require function calling on every turn.
+            _memgpt_active = False
+            try:
+                if settings.get('memgpt.enabled', False):
+                    from ..memory.memory_orchestrator import MemoryOrchestrator
+                    _memgpt_orch = MemoryOrchestrator()
+                    _memgpt_active = True
+
+                    # Rebuild system prompt with core memory blocks
+                    for msg in api_messages:
+                        if msg.get("role") == "system":
+                            msg["content"] = _memgpt_orch.build_system_prompt(msg["content"])
+                            break
+
+                    # Force function calling (send_message is the only way to respond)
+                    if tool_definitions:
+                        api_params['tool_choice'] = 'required'
+                        logger.info("MemGPT mode active: tool_choice=required, core memory injected")
+
+                    # Check context eviction before sending
+                    if _memgpt_orch.should_evict(api_messages):
+                        _, api_messages = _memgpt_orch.summarize_and_evict(api_messages)
+                        api_params['messages'] = api_messages
+                        logger.info("MemGPT: context eviction triggered")
+            except Exception as e:
+                logger.warning(f"MemGPT initialization failed, using normal mode: {e}")
+                _memgpt_active = False
+
             # Make API request — use streaming path when callback is provided
             use_streaming = stream_callback is not None or stream
             if use_streaming and stream_callback is not None:
@@ -453,6 +483,50 @@ class AIService:
                     )
                     if not tool_calls:
                         break
+
+                    # ── MemGPT: check for send_message short-circuit ──
+                    if _memgpt_active:
+                        from ..memory.memory_orchestrator import MemoryOrchestrator as _MO
+                        for tc in tool_calls:
+                            raw_tc = {"function": {"name": tc.get("skill_id", ""), "arguments": str(tc.get("arguments", {}))}}
+                            # Route inner_thoughts to thinking callback
+                            thoughts = tc.get("arguments", {}).get("inner_thoughts", "")
+                            if thoughts and thinking_callback:
+                                try:
+                                    thinking_callback(thoughts)
+                                except Exception:
+                                    pass
+
+                            # Check if this is a send_message operation
+                            args = tc.get("arguments", {})
+                            if (tc.get("skill_id") == "memory"
+                                    and args.get("operation") == "send_message"):
+                                msg_text = args.get("message", "")
+                                if msg_text:
+                                    # Short-circuit: return the message directly
+                                    logger.info("MemGPT send_message short-circuit")
+                                    if stream_callback:
+                                        try:
+                                            stream_callback(msg_text)
+                                        except Exception:
+                                            pass
+                                    # Build a fake successful response
+                                    response = type(response)(
+                                        success=True,
+                                        data={
+                                            "choices": [{
+                                                "message": {"role": "assistant", "content": msg_text},
+                                                "finish_reason": "stop",
+                                            }]
+                                        },
+                                        status_code=200,
+                                    )
+                                    # Break out of the tool loop
+                                    tool_calls = []  # Clear to exit while loop
+                                    break
+
+                        if not tool_calls:
+                            break  # send_message was handled
 
                     # Append the assistant's tool-call message to the
                     # in-memory api_messages list (NOT to self.conversation).

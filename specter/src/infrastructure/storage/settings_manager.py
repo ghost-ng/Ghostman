@@ -147,6 +147,14 @@ class SettingsManager:
             'default_save_path': '',  # Empty string = use default %APPDATA%\Specter\captures
             'border_color': '#FF0000'  # Default red border color
         },
+        'memgpt': {
+            'enabled': False,                      # Master toggle for MemGPT memory mode
+            'core_memory_persona_limit': 2000,     # Max chars for persona block
+            'core_memory_human_limit': 2000,       # Max chars for human block
+            'context_eviction_threshold': 0.75,    # Evict context at 75% capacity
+            'show_inner_thoughts': False,           # Show LLM reasoning in UI
+            'max_memory_iterations': 10,           # Max tool-call iterations per turn
+        },
         'tools': {
             'enabled': True,                    # Master toggle for AI tool calling
             'max_tool_iterations': 5,           # Max tool-call loop iterations per message
