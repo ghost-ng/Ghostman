@@ -184,12 +184,19 @@ class MemoryOrchestrator:
         if not messages:
             return self._summary, messages
 
-        if evict_count is None:
-            evict_count = max(2, len(messages) // 4)
+        # Separate system messages (must never be evicted) from the rest
+        system_msgs = [m for m in messages if m.get("role") == "system"]
+        non_system = [m for m in messages if m.get("role") != "system"]
 
-        evict_count = min(evict_count, len(messages))
-        to_evict = messages[:evict_count]
-        remaining = messages[evict_count:]
+        if not non_system:
+            return self._summary, messages
+
+        if evict_count is None:
+            evict_count = max(2, len(non_system) // 4)
+
+        evict_count = min(evict_count, len(non_system))
+        to_evict = non_system[:evict_count]
+        remaining = system_msgs + non_system[evict_count:]
 
         # Build a simple extractive summary from evicted messages
         evicted_text = []
@@ -207,7 +214,7 @@ class MemoryOrchestrator:
             else:
                 self._summary = new_addition
 
-            # Keep summary under ~1000 chars (will get re-summarized by LLM later)
+            # Keep summary under ~2000 chars (will get re-summarized by LLM later)
             if len(self._summary) > 2000:
                 self._summary = self._summary[-2000:]
 

@@ -1,82 +1,80 @@
 """
 Archival Memory Service for the MemGPT-style memory system.
 
-Provides long-term semantic storage backed by the existing FAISS vector
-store and embedding service. The LLM can insert and search memories
-via tool calls.
+Provides long-term semantic storage using a simple JSON + embedding
+approach. Each memory is stored with its text and embedding vector
+for similarity search.
 
-Archival entries are stored with ``memory_type: "archival"`` metadata
-to keep them separate from file-context RAG documents.
+Storage: ``%APPDATA%/Specter/memory/archival.json``
 """
 
+import json
 import logging
+import os
+from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+import numpy as np
 
 logger = logging.getLogger("specter.memory.archival")
 
-_ARCHIVAL_METADATA = {"memory_type": "archival", "source": "memgpt"}
 _PAGE_SIZE = 5
 
 
 class ArchivalMemoryService:
     """
-    Long-term semantic memory backed by FAISS.
+    Long-term semantic memory with embedding-based search.
 
-    Uses the existing RAG infrastructure (FaissClient + EmbeddingService)
-    with metadata filtering to separate archival memories from file
-    context documents.
+    Uses the existing EmbeddingService for vectorization and stores
+    entries in a simple JSON file with numpy arrays serialized as lists.
+    This avoids dependency on the full RAG FAISS pipeline.
     """
 
-    def __init__(self):
-        self._initialized = False
-        self._faiss_client = None
+    def __init__(self, storage_path: Optional[Path] = None):
+        if storage_path is None:
+            appdata = os.environ.get("APPDATA", "")
+            storage_path = Path(appdata) / "Specter" / "memory" / "archival.json"
+        self._storage_path = storage_path
+        self._entries: List[Dict[str, Any]] = []
         self._embedding_service = None
+        self._load()
 
-    def _ensure_initialized(self) -> bool:
-        """Lazy-initialize FAISS and embedding service."""
-        if self._initialized:
-            return self._faiss_client is not None
-
-        self._initialized = True
+    def _ensure_embedding_service(self) -> bool:
+        """Lazy-initialize the embedding service."""
+        if self._embedding_service is not None:
+            return True
         try:
-            from ..rag_pipeline.vector_store.faiss_client import FaissClient
             from ..rag_pipeline.services.embedding_service import EmbeddingService
-
             self._embedding_service = EmbeddingService()
-            self._faiss_client = FaissClient()
-            logger.info("Archival memory service initialized")
             return True
         except Exception as e:
-            logger.warning(f"Archival memory not available: {e}")
+            logger.warning(f"Embedding service not available: {e}")
             return False
 
     async def insert(self, content: str, metadata: Optional[Dict[str, Any]] = None) -> str:
         """
         Embed and store a memory passage.
 
-        Returns a confirmation string with the total archival count.
+        Returns a confirmation string.
         """
-        if not self._ensure_initialized():
-            return "Error: Archival memory not available (FAISS/embeddings not configured)"
+        if not self._ensure_embedding_service():
+            return "Error: Embedding service not available"
 
         try:
-            combined_meta = dict(_ARCHIVAL_METADATA)
-            if metadata:
-                combined_meta.update(metadata)
-
-            # Generate embedding
             embedding = await self._embedding_service.get_embedding(content)
             if embedding is None:
-                return "Error: Failed to generate embedding for archival entry"
+                return "Error: Failed to generate embedding"
 
-            # Store in FAISS
-            from langchain.schema import Document
-            doc = Document(page_content=content, metadata=combined_meta)
-            self._faiss_client.add_documents([doc])
+            entry = {
+                "content": content,
+                "embedding": embedding.tolist() if isinstance(embedding, np.ndarray) else list(embedding),
+                "metadata": metadata or {},
+            }
+            self._entries.append(entry)
+            self._save()
 
-            count = self.get_count()
-            logger.info(f"Stored archival memory ({count} total)")
-            return f"Stored in archival memory. Total entries: {count}"
+            logger.info(f"Stored archival memory ({len(self._entries)} total)")
+            return f"Stored in archival memory. Total entries: {len(self._entries)}"
 
         except Exception as e:
             logger.error(f"Failed to insert archival memory: {e}")
@@ -84,31 +82,44 @@ class ArchivalMemoryService:
 
     async def search(self, query: str, top_k: int = _PAGE_SIZE) -> List[Dict]:
         """
-        Semantic search over archival memory.
-
-        Returns a list of matching passages with scores.
+        Semantic search over archival memory via cosine similarity.
         """
-        if not self._ensure_initialized():
+        if not self._entries:
+            return []
+        if not self._ensure_embedding_service():
             return []
 
         try:
-            results = self._faiss_client.similarity_search_with_score(
-                query, k=top_k * 2  # Over-fetch to filter
-            )
+            query_embedding = await self._embedding_service.get_embedding(query)
+            if query_embedding is None:
+                return []
 
-            archival_results = []
-            for doc, score in results:
-                meta = doc.metadata or {}
-                if meta.get("memory_type") == "archival":
-                    archival_results.append({
-                        "content": doc.page_content,
-                        "score": float(score),
-                        "metadata": meta,
-                    })
-                    if len(archival_results) >= top_k:
-                        break
+            query_vec = np.array(query_embedding, dtype=np.float32)
+            norm_q = np.linalg.norm(query_vec)
+            if norm_q > 0:
+                query_vec = query_vec / norm_q
 
-            return archival_results
+            # Compute cosine similarity against all entries
+            scored = []
+            for entry in self._entries:
+                vec = np.array(entry["embedding"], dtype=np.float32)
+                norm_v = np.linalg.norm(vec)
+                if norm_v > 0:
+                    vec = vec / norm_v
+                score = float(np.dot(query_vec, vec))
+                scored.append((score, entry))
+
+            scored.sort(key=lambda x: x[0], reverse=True)
+
+            results = []
+            for score, entry in scored[:top_k]:
+                results.append({
+                    "content": entry["content"],
+                    "score": score,
+                    "metadata": entry.get("metadata", {}),
+                })
+
+            return results
 
         except Exception as e:
             logger.error(f"Archival memory search failed: {e}")
@@ -126,12 +137,30 @@ class ArchivalMemoryService:
         return "\n".join(lines)
 
     def get_count(self) -> int:
-        """Return approximate count of archival entries."""
-        if not self._faiss_client:
-            return 0
+        return len(self._entries)
+
+    # ------------------------------------------------------------------
+    # Persistence
+    # ------------------------------------------------------------------
+
+    def _load(self) -> None:
+        if self._storage_path.exists():
+            try:
+                with open(self._storage_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                self._entries = data.get("entries", [])
+                logger.info(f"Loaded {len(self._entries)} archival memory entries")
+            except Exception as e:
+                logger.warning(f"Failed to load archival memory: {e}")
+                self._entries = []
+        else:
+            self._entries = []
+
+    def _save(self) -> None:
         try:
-            # Approximate — count all documents in the store
-            # (no easy way to filter by metadata without searching)
-            return getattr(self._faiss_client, '_document_count', 0)
-        except Exception:
-            return 0
+            self._storage_path.parent.mkdir(parents=True, exist_ok=True)
+            data = {"entries": self._entries}
+            with open(self._storage_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"Failed to save archival memory: {e}")

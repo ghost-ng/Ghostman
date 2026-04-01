@@ -1,9 +1,9 @@
 """
 Recall Memory Service for the MemGPT-style memory system.
 
-Provides searchable access to the full conversation history stored
-in the SQLite database. Supports text search (SQL LIKE) and
-date-range queries with pagination.
+Provides searchable access to the full conversation history using
+the existing SQLAlchemy models and DatabaseManager singleton.
+Supports text search and date-range queries with pagination.
 """
 
 import logging
@@ -12,76 +12,70 @@ from typing import Dict, List, Optional
 
 logger = logging.getLogger("specter.memory.recall")
 
-# Page size for paginated search results
 _PAGE_SIZE = 5
 
 
 class RecallMemoryService:
     """
-    Searchable conversation history backed by the existing SQLite DB.
+    Searchable conversation history using the existing SQLAlchemy ORM.
 
-    Uses the existing ``messages`` table via direct SQL queries for
-    text and date-range searches. Falls back to LIKE when FTS is
-    not available.
+    Uses ``DatabaseManager`` (singleton) and ``MessageModel`` to query
+    the conversations database without raw SQL.
     """
 
     def __init__(self):
-        self._db_path: Optional[str] = None
-        self._resolve_db_path()
+        self._db_manager = None
 
-    def _resolve_db_path(self) -> None:
-        """Find the conversations database path."""
-        import os
-        appdata = os.environ.get("APPDATA", "")
-        if appdata:
-            from pathlib import Path
-            db = Path(appdata) / "Specter" / "db" / "conversations.db"
-            if db.exists():
-                self._db_path = str(db)
-                return
-        logger.warning("Could not resolve conversations database path")
+    def _ensure_db(self) -> bool:
+        """Lazy-initialize the database manager."""
+        if self._db_manager is not None:
+            return True
+        try:
+            from ..conversation_management.repositories.database import DatabaseManager
+            self._db_manager = DatabaseManager()
+            self._db_manager.initialize()
+            return True
+        except Exception as e:
+            logger.warning(f"Could not initialize database for recall memory: {e}")
+            return False
 
     def search_by_text(self, query: str, page: int = 0) -> List[Dict]:
         """
-        Search messages by text content.
+        Search messages by text content using SQLAlchemy LIKE.
 
-        Returns a paginated list of matching messages with timestamp,
-        role, and content (truncated to 300 chars).
+        Returns paginated results with timestamp, role, and content.
         """
-        if not self._db_path or not query.strip():
+        if not query.strip() or not self._ensure_db():
             return []
 
         try:
-            import sqlite3
-            conn = sqlite3.connect(self._db_path)
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
+            from ..conversation_management.models.database_models import MessageModel
 
-            offset = page * _PAGE_SIZE
-            # Use LIKE for compatibility (FTS would be faster but may not exist)
-            cursor.execute(
-                """
-                SELECT id, conversation_id, role, content, timestamp
-                FROM messages
-                WHERE content LIKE ?
-                ORDER BY timestamp DESC
-                LIMIT ? OFFSET ?
-                """,
-                (f"%{query}%", _PAGE_SIZE, offset),
-            )
+            session = self._db_manager.get_session()
+            try:
+                offset = page * _PAGE_SIZE
+                rows = (
+                    session.query(MessageModel)
+                    .filter(MessageModel.content.ilike(f"%{query}%"))
+                    .order_by(MessageModel.timestamp.desc())
+                    .limit(_PAGE_SIZE)
+                    .offset(offset)
+                    .all()
+                )
 
-            results = []
-            for row in cursor.fetchall():
-                content = row["content"] or ""
-                results.append({
-                    "message_id": row["id"],
-                    "conversation_id": row["conversation_id"],
-                    "role": row["role"],
-                    "content": content[:300],
-                    "timestamp": row["timestamp"],
-                })
+                results = []
+                for row in rows:
+                    content = row.content or ""
+                    results.append({
+                        "message_id": row.id,
+                        "conversation_id": row.conversation_id,
+                        "role": row.role,
+                        "content": content[:300],
+                        "timestamp": str(row.timestamp) if row.timestamp else "",
+                    })
+            finally:
+                session.close()
 
-            conn.close()
             logger.debug(f"Recall search '{query}' page={page}: {len(results)} results")
             return results
 
@@ -97,39 +91,43 @@ class RecallMemoryService:
 
         Dates should be ISO 8601 format (e.g., "2026-03-01").
         """
-        if not self._db_path:
+        if not self._ensure_db():
             return []
 
         try:
-            import sqlite3
-            conn = sqlite3.connect(self._db_path)
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
+            from ..conversation_management.models.database_models import MessageModel
 
-            offset = page * _PAGE_SIZE
-            cursor.execute(
-                """
-                SELECT id, conversation_id, role, content, timestamp
-                FROM messages
-                WHERE timestamp >= ? AND timestamp <= ?
-                ORDER BY timestamp DESC
-                LIMIT ? OFFSET ?
-                """,
-                (start_date, end_date + "T23:59:59", _PAGE_SIZE, offset),
-            )
+            start_dt = datetime.fromisoformat(start_date)
+            end_dt = datetime.fromisoformat(end_date).replace(hour=23, minute=59, second=59)
 
-            results = []
-            for row in cursor.fetchall():
-                content = row["content"] or ""
-                results.append({
-                    "message_id": row["id"],
-                    "conversation_id": row["conversation_id"],
-                    "role": row["role"],
-                    "content": content[:300],
-                    "timestamp": row["timestamp"],
-                })
+            session = self._db_manager.get_session()
+            try:
+                offset = page * _PAGE_SIZE
+                rows = (
+                    session.query(MessageModel)
+                    .filter(
+                        MessageModel.timestamp >= start_dt,
+                        MessageModel.timestamp <= end_dt,
+                    )
+                    .order_by(MessageModel.timestamp.desc())
+                    .limit(_PAGE_SIZE)
+                    .offset(offset)
+                    .all()
+                )
 
-            conn.close()
+                results = []
+                for row in rows:
+                    content = row.content or ""
+                    results.append({
+                        "message_id": row.id,
+                        "conversation_id": row.conversation_id,
+                        "role": row.role,
+                        "content": content[:300],
+                        "timestamp": str(row.timestamp) if row.timestamp else "",
+                    })
+            finally:
+                session.close()
+
             logger.debug(f"Recall date search {start_date}..{end_date} page={page}: {len(results)} results")
             return results
 
@@ -139,15 +137,17 @@ class RecallMemoryService:
 
     def get_message_count(self) -> int:
         """Return total number of messages in the database."""
-        if not self._db_path:
+        if not self._ensure_db():
             return 0
         try:
-            import sqlite3
-            conn = sqlite3.connect(self._db_path)
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM messages")
-            count = cursor.fetchone()[0]
-            conn.close()
+            from ..conversation_management.models.database_models import MessageModel
+            from sqlalchemy import func
+
+            session = self._db_manager.get_session()
+            try:
+                count = session.query(func.count(MessageModel.id)).scalar() or 0
+            finally:
+                session.close()
             return count
         except Exception:
             return 0

@@ -32,6 +32,10 @@ logger = logging.getLogger("specter.skills.memory")
 class MemorySkill(BaseSkill):
     """AI-callable skill for MemGPT-style memory management."""
 
+    _shared_core_memory = None
+    _shared_recall = None
+    _shared_archival = None
+
     metadata = SkillMetadata(
         skill_id="memory",
         name="Memory Management",
@@ -45,6 +49,39 @@ class MemorySkill(BaseSkill):
         requires_confirmation=False,
         ai_callable=True,
     )
+
+    @property
+    def parameters(self) -> list:
+        from ..interfaces.base_skill import SkillParameter
+        return [
+            SkillParameter("operation", str, required=True,
+                          description="Memory operation to perform",
+                          constraints={"choices": [
+                              "send_message", "core_memory_append", "core_memory_replace",
+                              "conversation_search", "conversation_search_date",
+                              "archival_memory_insert", "archival_memory_search",
+                          ]}),
+            SkillParameter("inner_thoughts", str, required=True,
+                          description="Private reasoning (not shown to user)"),
+            SkillParameter("message", str, required=False,
+                          description="For send_message: text to show user"),
+            SkillParameter("block_name", str, required=False,
+                          description="Core memory block name (persona or human)"),
+            SkillParameter("content", str, required=False,
+                          description="Text to append or store"),
+            SkillParameter("old_content", str, required=False,
+                          description="Text to find for replacement"),
+            SkillParameter("new_content", str, required=False,
+                          description="Replacement text"),
+            SkillParameter("query", str, required=False,
+                          description="Search query"),
+            SkillParameter("start_date", str, required=False,
+                          description="Start date (ISO 8601)"),
+            SkillParameter("end_date", str, required=False,
+                          description="End date (ISO 8601)"),
+            SkillParameter("page", int, required=False,
+                          description="Pagination page number", default=0),
+        ]
 
     def get_parameter_schema(self) -> dict:
         """Return the JSON schema for tool calling."""
@@ -162,6 +199,27 @@ class MemorySkill(BaseSkill):
             data={"type": "send_message", "message": message},
         )
 
+    def _get_core_memory(self):
+        """Get the shared CoreMemoryManager singleton."""
+        if not hasattr(MemorySkill, '_shared_core_memory') or MemorySkill._shared_core_memory is None:
+            from ...memory.core_memory import CoreMemoryManager
+            MemorySkill._shared_core_memory = CoreMemoryManager()
+        return MemorySkill._shared_core_memory
+
+    def _get_recall_memory(self):
+        """Get the shared RecallMemoryService singleton."""
+        if not hasattr(MemorySkill, '_shared_recall') or MemorySkill._shared_recall is None:
+            from ...memory.recall_memory import RecallMemoryService
+            MemorySkill._shared_recall = RecallMemoryService()
+        return MemorySkill._shared_recall
+
+    def _get_archival_memory(self):
+        """Get the shared ArchivalMemoryService singleton."""
+        if not hasattr(MemorySkill, '_shared_archival') or MemorySkill._shared_archival is None:
+            from ...memory.archival_memory import ArchivalMemoryService
+            MemorySkill._shared_archival = ArchivalMemoryService()
+        return MemorySkill._shared_archival
+
     def _op_core_memory_append(self, kwargs: Dict[str, Any]) -> SkillResult:
         """Append text to a core memory block."""
         block_name = kwargs.get("block_name", "")
@@ -170,8 +228,7 @@ class MemorySkill(BaseSkill):
             return SkillResult(success=False, message="block_name and content required", error="Missing params")
 
         try:
-            from ..memory.core_memory import CoreMemoryManager
-            mgr = CoreMemoryManager()
+            mgr = self._get_core_memory()
             updated = mgr.append_to_block(block_name, content)
             block = mgr.get_block(block_name)
             return SkillResult(
@@ -191,8 +248,7 @@ class MemorySkill(BaseSkill):
             return SkillResult(success=False, message="block_name and old_content required", error="Missing params")
 
         try:
-            from ..memory.core_memory import CoreMemoryManager
-            mgr = CoreMemoryManager()
+            mgr = self._get_core_memory()
             updated = mgr.replace_in_block(block_name, old_content, new_content)
             block = mgr.get_block(block_name)
             return SkillResult(
@@ -210,8 +266,7 @@ class MemorySkill(BaseSkill):
         if not query:
             return SkillResult(success=False, message="query is required", error="Missing query")
 
-        from ..memory.recall_memory import RecallMemoryService
-        svc = RecallMemoryService()
+        svc = self._get_recall_memory()
         results = svc.search_by_text(query, page=page)
         formatted = svc.format_results(results)
         return SkillResult(
@@ -228,8 +283,7 @@ class MemorySkill(BaseSkill):
         if not start or not end:
             return SkillResult(success=False, message="start_date and end_date required", error="Missing dates")
 
-        from ..memory.recall_memory import RecallMemoryService
-        svc = RecallMemoryService()
+        svc = self._get_recall_memory()
         results = svc.search_by_date(start, end, page=page)
         formatted = svc.format_results(results)
         return SkillResult(
@@ -244,8 +298,7 @@ class MemorySkill(BaseSkill):
         if not content:
             return SkillResult(success=False, message="content is required", error="Missing content")
 
-        from ..memory.archival_memory import ArchivalMemoryService
-        svc = ArchivalMemoryService()
+        svc = self._get_archival_memory()
         result_msg = await svc.insert(content)
         success = not result_msg.startswith("Error")
         return SkillResult(success=success, message=result_msg)
@@ -256,8 +309,7 @@ class MemorySkill(BaseSkill):
         if not query:
             return SkillResult(success=False, message="query is required", error="Missing query")
 
-        from ..memory.archival_memory import ArchivalMemoryService
-        svc = ArchivalMemoryService()
+        svc = self._get_archival_memory()
         results = await svc.search(query)
         formatted = svc.format_results(results)
         return SkillResult(

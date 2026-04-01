@@ -416,7 +416,10 @@ class AIService:
             try:
                 if settings.get('memgpt.enabled', False):
                     from ..memory.memory_orchestrator import MemoryOrchestrator
-                    _memgpt_orch = MemoryOrchestrator()
+                    # Reuse orchestrator across calls to preserve summary state
+                    if not hasattr(self, '_memgpt_orchestrator') or self._memgpt_orchestrator is None:
+                        self._memgpt_orchestrator = MemoryOrchestrator()
+                    _memgpt_orch = self._memgpt_orchestrator
                     _memgpt_active = True
 
                     # Rebuild system prompt with core memory blocks
@@ -486,9 +489,7 @@ class AIService:
 
                     # ── MemGPT: check for send_message short-circuit ──
                     if _memgpt_active:
-                        from ..memory.memory_orchestrator import MemoryOrchestrator as _MO
                         for tc in tool_calls:
-                            raw_tc = {"function": {"name": tc.get("skill_id", ""), "arguments": str(tc.get("arguments", {}))}}
                             # Route inner_thoughts to thinking callback
                             thoughts = tc.get("arguments", {}).get("inner_thoughts", "")
                             if thoughts and thinking_callback:
@@ -510,8 +511,8 @@ class AIService:
                                             stream_callback(msg_text)
                                         except Exception:
                                             pass
-                                    # Build a fake successful response
-                                    response = type(response)(
+                                    from .api_client import APIResponse
+                                    response = APIResponse(
                                         success=True,
                                         data={
                                             "choices": [{
@@ -521,7 +522,6 @@ class AIService:
                                         },
                                         status_code=200,
                                     )
-                                    # Break out of the tool loop
                                     tool_calls = []  # Clear to exit while loop
                                     break
 
