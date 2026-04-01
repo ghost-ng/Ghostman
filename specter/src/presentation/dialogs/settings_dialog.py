@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QLabel, QLineEdit, QPushButton, QComboBox, QTextEdit,
     QGroupBox, QFormLayout, QCheckBox, QSpinBox, QDoubleSpinBox,
     QFileDialog, QMessageBox, QSplitter, QListWidget, QListWidgetItem,
-    QAbstractSpinBox, QSlider, QInputDialog
+    QAbstractSpinBox, QSlider, QInputDialog, QScrollArea, QFrame, QToolButton
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QStandardPaths, QTimer
 from PyQt6.QtGui import QFont, QIcon
@@ -117,6 +117,25 @@ class SettingsDialog(QDialog):
 
         logger.debug("Settings UI initialized")
     
+    def _wrap_tab_in_scroll(self, tab: QWidget, tab_name: str) -> None:
+        """Wrap a tab widget in a QScrollArea and add to tab widget."""
+        scroll = QScrollArea()
+        scroll.setWidget(tab)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # Transparent backgrounds so the dialog theme shows through.
+        # Use QPalette to avoid stylesheet cascading into child widgets.
+        from PyQt6.QtGui import QPalette, QColor
+        transparent = QColor(0, 0, 0, 0)
+        for widget in (scroll, scroll.viewport(), tab):
+            pal = widget.palette()
+            pal.setColor(QPalette.ColorRole.Window, transparent)
+            pal.setColor(QPalette.ColorRole.Base, transparent)
+            widget.setPalette(pal)
+            widget.setAutoFillBackground(False)
+        self.tab_widget.addTab(scroll, tab_name)
+
     def _create_ai_model_tab(self):
         """Create AI Settings configuration tab."""
         tab = QWidget()
@@ -337,7 +356,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(import_export_group)
 
         layout.addStretch()
-        self.tab_widget.addTab(tab, "AI Settings")
+        self._wrap_tab_in_scroll(tab, "AI Settings")
     
     def _create_interface_tab(self):
         """Create Interface settings tab."""
@@ -471,7 +490,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(screen_capture_group)
 
         layout.addStretch()
-        self.tab_widget.addTab(tab, "Interface")
+        self._wrap_tab_in_scroll(tab, "Interface")
     
     def _create_font_tab(self):
         """Create Font settings tab."""
@@ -633,7 +652,7 @@ class SettingsDialog(QDialog):
         self.user_font_style_combo.currentTextChanged.connect(self._on_font_manually_changed)
 
         layout.addStretch()
-        self.tab_widget.addTab(tab, "Fonts")
+        self._wrap_tab_in_scroll(tab, "Fonts")
     
     def _apply_preview_label_style(self, label):
         """Apply theme-aware style to preview labels matching REPL background."""
@@ -1013,6 +1032,10 @@ class SettingsDialog(QDialog):
                 self.opacity_increase_btn.setStyleSheet(plus_minus_style)
                 self.log_retention_decrease_btn.setStyleSheet(plus_minus_style)
                 self.log_retention_increase_btn.setStyleSheet(plus_minus_style)
+                if hasattr(self, 'icon_size_decrease_btn'):
+                    self.icon_size_decrease_btn.setStyleSheet(plus_minus_style)
+                if hasattr(self, 'icon_size_increase_btn'):
+                    self.icon_size_increase_btn.setStyleSheet(plus_minus_style)
                 
                 # Modern scroll bar styling
                 scrollbar_style = f"""
@@ -1111,9 +1134,11 @@ class SettingsDialog(QDialog):
                 }}
                 QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{
                     image: none;
-                    border: none;
-                    width: 10px;
-                    height: 10px;
+                    width: 0px;
+                    height: 0px;
+                    border-left: 5px solid transparent;
+                    border-right: 5px solid transparent;
+                    border-bottom: 5px solid {colors.text_primary};
                 }}
                 QSpinBox::down-button, QDoubleSpinBox::down-button {{
                     subcontrol-origin: padding;
@@ -1133,9 +1158,11 @@ class SettingsDialog(QDialog):
                 }}
                 QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{
                     image: none;
-                    border: none;
-                    width: 10px;
-                    height: 10px;
+                    width: 0px;
+                    height: 0px;
+                    border-left: 5px solid transparent;
+                    border-right: 5px solid transparent;
+                    border-top: 5px solid {colors.text_primary};
                 }}
                 """
 
@@ -1394,6 +1421,42 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(ai_intent_group)
 
+        # MemGPT Memory System Group
+        memgpt_group = QGroupBox("Memory System (MemGPT)")
+        memgpt_layout = QFormLayout(memgpt_group)
+
+        self.memgpt_enabled_check = QCheckBox("Enable Persistent Memory")
+        self.memgpt_enabled_check.setChecked(False)
+        self.memgpt_enabled_check.setToolTip(
+            "When enabled, the AI manages its own memory across conversations.\n"
+            "It remembers user preferences, past discussions, and important facts.\n"
+            "Requires a model with function/tool calling support."
+        )
+        memgpt_layout.addRow("", self.memgpt_enabled_check)
+
+        self.memgpt_desc_label = QLabel(
+            "The AI will use core memory (always visible), recall memory (conversation search), "
+            "and archival memory (long-term storage) to maintain context beyond the context window."
+        )
+        self.memgpt_desc_label.setWordWrap(True)
+        self.memgpt_desc_label.setStyleSheet("font-size: 10px; font-style: italic;")
+        self.memgpt_desc_label.setObjectName("memgptDescLabel")
+        memgpt_layout.addRow("", self.memgpt_desc_label)
+
+        self.memgpt_thoughts_check = QCheckBox("Show AI Inner Thoughts")
+        self.memgpt_thoughts_check.setChecked(False)
+        self.memgpt_thoughts_check.setToolTip(
+            "Display the AI's private reasoning in the chat.\n"
+            "Useful for debugging but can be verbose."
+        )
+        self.memgpt_thoughts_check.setVisible(False)
+        memgpt_layout.addRow("", self.memgpt_thoughts_check)
+
+        # Show/hide inner thoughts checkbox based on memgpt enabled
+        self.memgpt_enabled_check.toggled.connect(self.memgpt_thoughts_check.setVisible)
+
+        layout.addWidget(memgpt_group)
+
         # Data Storage Group
         storage_group = QGroupBox("Data Storage")
         storage_layout = QFormLayout(storage_group)
@@ -1459,7 +1522,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(embedding_group)
 
         layout.addStretch()
-        self.tab_widget.addTab(tab, "Advanced")
+        self._wrap_tab_in_scroll(tab, "Advanced")
         
         # Create theme tab
         self._create_theme_tab()
@@ -1664,7 +1727,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(docx_group)
 
         layout.addStretch()
-        self.tab_widget.addTab(tab, "Tools")
+        self._wrap_tab_in_scroll(tab, "Tools")
 
     def _create_pki_tab(self):
         """Create PKI Authentication settings tab."""
@@ -1677,8 +1740,8 @@ class SettingsDialog(QDialog):
             # Connect PKI status changes
             self.pki_widget.pki_status_changed.connect(self._on_pki_status_changed)
             
-            # Add as tab
-            self.tab_widget.addTab(self.pki_widget, "PKI Auth")
+            # Add as tab (wrapped in scroll for responsiveness)
+            self._wrap_tab_in_scroll(self.pki_widget, "PKI Auth")
             
         except ImportError as e:
             logger.warning(f"PKI settings not available: {e}")
@@ -1705,7 +1768,7 @@ class SettingsDialog(QDialog):
             self.pki_placeholder = placeholder
             self.pki_placeholder_label = info_label
             
-            self.tab_widget.addTab(placeholder, "PKI Auth")
+            self._wrap_tab_in_scroll(placeholder, "PKI Auth")
     
     def _on_pki_status_changed(self, enabled: bool):
         """Handle PKI authentication status changes."""
@@ -2680,7 +2743,7 @@ class SettingsDialog(QDialog):
 
         layout.addStretch()
         tab.setLayout(layout)
-        self.tab_widget.addTab(tab, "Themes")
+        self._wrap_tab_in_scroll(tab, "Themes")
 
     def _apply_theme_tab_colors(self, colors):
         """Apply theme-aware inline styles to dynamic Themes-tab widgets.
@@ -4109,6 +4172,10 @@ class SettingsDialog(QDialog):
             "avatar": {
                 "selected": getattr(self, '_selected_avatar_id', 'specter'),
                 "scale": getattr(self, '_avatar_scale_slider', None) and self._avatar_scale_slider.value() / 100.0 or 1.0
+            },
+            "memgpt": {
+                "enabled": self.memgpt_enabled_check.isChecked() if hasattr(self, 'memgpt_enabled_check') else False,
+                "show_inner_thoughts": self.memgpt_thoughts_check.isChecked() if hasattr(self, 'memgpt_thoughts_check') else False,
             }
         }
     
@@ -4358,6 +4425,14 @@ class SettingsDialog(QDialog):
         scale = avatar_config.get("scale", 1.0)
         if hasattr(self, '_avatar_scale_slider'):
             self._avatar_scale_slider.setValue(int(scale * 100))
+
+        # MemGPT settings
+        memgpt_config = config.get("memgpt", {})
+        if hasattr(self, 'memgpt_enabled_check'):
+            self.memgpt_enabled_check.setChecked(memgpt_config.get("enabled", False))
+        if hasattr(self, 'memgpt_thoughts_check'):
+            self.memgpt_thoughts_check.setChecked(memgpt_config.get("show_inner_thoughts", False))
+            self.memgpt_thoughts_check.setVisible(memgpt_config.get("enabled", False))
 
     def _load_current_settings(self):
         """Load current settings from settings manager."""
