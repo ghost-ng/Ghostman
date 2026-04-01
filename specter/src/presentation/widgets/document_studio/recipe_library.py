@@ -71,6 +71,7 @@ class RecipeLibrary(QFrame):
     edit_requested = pyqtSignal(str)
     delete_requested = pyqtSignal(str)
     apply_requested = pyqtSignal(str)
+    duplicate_requested = pyqtSignal(str)
 
     def __init__(
         self,
@@ -154,6 +155,13 @@ class RecipeLibrary(QFrame):
         self._delete_btn.setEnabled(False)
         self._delete_btn.clicked.connect(self._on_delete_clicked)
         btn_layout.addWidget(self._delete_btn)
+
+        self._duplicate_btn = QPushButton("Duplicate")
+        self._duplicate_btn.setObjectName("RecipeLibraryDuplicateBtn")
+        self._duplicate_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._duplicate_btn.setEnabled(False)
+        self._duplicate_btn.clicked.connect(self._on_duplicate_clicked)
+        btn_layout.addWidget(self._duplicate_btn)
 
         btn_layout.addStretch()
 
@@ -254,6 +262,12 @@ class RecipeLibrary(QFrame):
         if recipe_id:
             self.delete_requested.emit(recipe_id)
 
+    def _on_duplicate_clicked(self) -> None:
+        """Emit duplicate_requested for the selected recipe."""
+        recipe_id = self._selected_recipe_id()
+        if recipe_id:
+            self.duplicate_requested.emit(recipe_id)
+
     def _on_apply_clicked(self) -> None:
         """Emit ``apply_requested`` for the selected recipe."""
         recipe_id = self._selected_recipe_id()
@@ -269,6 +283,7 @@ class RecipeLibrary(QFrame):
         has_selection = recipe_id is not None
         self._edit_btn.setEnabled(has_selection)
         self._delete_btn.setEnabled(has_selection)
+        self._duplicate_btn.setEnabled(has_selection)
 
     # ------------------------------------------------------------------
     # Theme support
@@ -402,6 +417,7 @@ class RecipeLibrary(QFrame):
         """
         self._edit_btn.setStyleSheet(btn_style)
         self._delete_btn.setStyleSheet(btn_style)
+        self._duplicate_btn.setStyleSheet(btn_style)
 
         # Empty label
         self._empty_label.setStyleSheet(

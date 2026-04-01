@@ -199,6 +199,7 @@ class RecipeEditor(QFrame):
             cb = QCheckBox(op_label)
             cb.setObjectName(f"RecipeEditorOp_{op_key}")
             self._op_checkboxes[op_key] = cb
+            cb.toggled.connect(self._update_param_visibility)
             ops_layout.addWidget(cb)
 
         form_layout.addWidget(ops_group)
@@ -265,6 +266,7 @@ class RecipeEditor(QFrame):
         find_row.setSpacing(8)
         find_label = QLabel("Find")
         find_label.setFixedWidth(70)
+        self._find_label = find_label
         find_row.addWidget(find_label)
         self._find_edit = QLineEdit()
         self._find_edit.setObjectName("RecipeEditorFindEdit")
@@ -276,6 +278,7 @@ class RecipeEditor(QFrame):
         replace_row.setSpacing(8)
         replace_label = QLabel("Replace")
         replace_label.setFixedWidth(70)
+        self._replace_label = replace_label
         replace_row.addWidget(replace_label)
         self._replace_edit = QLineEdit()
         self._replace_edit.setObjectName("RecipeEditorReplaceEdit")
@@ -288,6 +291,7 @@ class RecipeEditor(QFrame):
         color_row.setSpacing(8)
         color_label = QLabel("Font Color")
         color_label.setFixedWidth(70)
+        self._color_label = color_label
         color_row.addWidget(color_label)
         self._color_edit = QLineEdit()
         self._color_edit.setObjectName("RecipeEditorColorEdit")
@@ -302,6 +306,7 @@ class RecipeEditor(QFrame):
         align_row.setSpacing(8)
         align_label = QLabel("Alignment")
         align_label.setFixedWidth(70)
+        self._align_label = align_label
         align_row.addWidget(align_label)
         self._align_combo = QComboBox()
         self._align_combo.setObjectName("RecipeEditorAlignCombo")
@@ -317,6 +322,7 @@ class RecipeEditor(QFrame):
         indent_row.setSpacing(8)
         indent_label = QLabel("Indent")
         indent_label.setFixedWidth(70)
+        self._indent_label = indent_label
         indent_row.addWidget(indent_label)
         self._indent_spin = QDoubleSpinBox()
         self._indent_spin.setObjectName("RecipeEditorIndentSpin")
@@ -407,6 +413,7 @@ class RecipeEditor(QFrame):
                 self._indent_spin.setValue(float(params["indentation"]))
             except (ValueError, TypeError):
                 pass
+        self._update_param_visibility()
 
     def clear_form(self) -> None:
         """Reset the form to its default (new recipe) state."""
@@ -424,6 +431,7 @@ class RecipeEditor(QFrame):
         self._color_edit.clear()
         self._align_combo.setCurrentIndex(0)
         self._indent_spin.setValue(0.0)
+        self._update_param_visibility()
 
     # ------------------------------------------------------------------
     # Save logic
@@ -485,6 +493,32 @@ class RecipeEditor(QFrame):
 
         logger.info("Recipe saved: %s (%s)", recipe.name, recipe.recipe_id)
         self.recipe_saved.emit(recipe)
+
+    # ------------------------------------------------------------------
+    # Conditional parameter visibility
+    # ------------------------------------------------------------------
+
+    def _update_param_visibility(self) -> None:
+        """Show/hide parameter fields based on which operations are checked."""
+        checked = {k for k, cb in self._op_checkboxes.items() if cb.isChecked()}
+
+        show_find = "find_replace" in checked
+        self._find_edit.setVisible(show_find)
+        self._find_label.setVisible(show_find)
+        self._replace_edit.setVisible(show_find)
+        self._replace_label.setVisible(show_find)
+
+        show_color = "set_font_color" in checked
+        self._color_edit.setVisible(show_color)
+        self._color_label.setVisible(show_color)
+
+        show_align = "set_alignment" in checked
+        self._align_combo.setVisible(show_align)
+        self._align_label.setVisible(show_align)
+
+        show_indent = "set_indent" in checked
+        self._indent_spin.setVisible(show_indent)
+        self._indent_label.setVisible(show_indent)
 
     # ------------------------------------------------------------------
     # Theme support

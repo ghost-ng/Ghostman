@@ -265,6 +265,29 @@ class DocumentStudioPanel(QFrame):
         sb_layout.addStretch()
         layout.addWidget(select_bar)
 
+        # --- Output directory row -----------------------------------------------
+        output_bar = QFrame()
+        output_bar.setObjectName("StudioOutputBar")
+        output_bar.setFixedHeight(28)
+        ob_layout = QHBoxLayout(output_bar)
+        ob_layout.setContentsMargins(8, 2, 8, 2)
+        ob_layout.setSpacing(6)
+
+        self._output_dir_label = QLabel("Output: same as source")
+        self._output_dir_label.setObjectName("StudioOutputDirLabel")
+        ob_layout.addWidget(self._output_dir_label, 1)
+
+        self._output_dir_btn = QPushButton("Change\u2026")
+        self._output_dir_btn.setObjectName("StudioOutputDirBtn")
+        self._output_dir_btn.setFixedHeight(22)
+        self._output_dir_btn.setMaximumWidth(80)
+        self._output_dir_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._output_dir_btn.setFlat(True)
+        self._output_dir_btn.clicked.connect(self._on_change_output_dir)
+        ob_layout.addWidget(self._output_dir_btn)
+
+        layout.addWidget(output_bar)
+
         # --- Recipe library -----------------------------------------------
         self._recipe_library = RecipeLibrary(self._state, container)
         self._recipe_library.create_requested.connect(self._on_recipe_create)
@@ -272,6 +295,7 @@ class DocumentStudioPanel(QFrame):
         self._recipe_library.delete_requested.connect(self._on_recipe_delete)
         self._recipe_library.apply_requested.connect(self._on_recipe_apply)
         self._recipe_library.recipe_selected.connect(self._on_library_recipe_selected)
+        self._recipe_library.duplicate_requested.connect(self._on_recipe_duplicate)
         layout.addWidget(self._recipe_library)
 
         # --- Scroll area with card list -----------------------------------
@@ -313,6 +337,15 @@ class DocumentStudioPanel(QFrame):
         self._batch_progress.setFixedHeight(18)
         self._batch_progress.setVisible(False)
         layout.addWidget(self._batch_progress)
+
+        # --- Retry failed button (hidden until batch completes with errors) ---
+        self._retry_failed_btn = QPushButton("Retry Failed")
+        self._retry_failed_btn.setObjectName("StudioRetryFailedBtn")
+        self._retry_failed_btn.setFixedHeight(28)
+        self._retry_failed_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._retry_failed_btn.setVisible(False)
+        self._retry_failed_btn.clicked.connect(self._on_retry_failed)
+        layout.addWidget(self._retry_failed_btn)
 
         return container
 
@@ -517,6 +550,9 @@ class DocumentStudioPanel(QFrame):
         self._apply_recipe_btn.setEnabled(True)
         status = "Batch complete" if all_success else "Batch finished with errors"
         self._batch_status_label.setText(status)
+        # Show retry button if there were failures
+        has_failures = len(self._state.get_failed_paths()) > 0
+        self._retry_failed_btn.setVisible(has_failures)
         logger.info("Batch completed: success=%s, summary=%s", all_success, summary)
 
     def _on_recipe_saved(self, recipe_id: str) -> None:
@@ -603,13 +639,41 @@ class DocumentStudioPanel(QFrame):
             logger.exception("Failed to open file externally: %s", normalized)
 
     def _on_diff_accepted(self, formatted_path: str) -> None:
-        """Handle acceptance of formatted changes from the diff view."""
+        """Accept formatted changes — copy to output location."""
+        import shutil
         logger.info("Diff accepted — formatted file: %s", formatted_path)
+        try:
+            # Find the entry with this formatted_path
+            for path, entry in self._state.documents.items():
+                if entry.formatted_path == formatted_path:
+                    output_dir = self._state.output_directory
+                    if output_dir:
+                        dest = os.path.join(output_dir, entry.filename)
+                        shutil.copy2(formatted_path, dest)
+                        logger.info("Copied formatted file to: %s", dest)
+                    self._state.update_status(path, DocumentStatus.ACCEPTED)
+                    break
+        except Exception:
+            logger.exception("Failed to accept diff")
         self._navigate_to_list()
 
     def _on_diff_rejected(self, original_path: str) -> None:
-        """Handle rejection of formatted changes from the diff view."""
+        """Reject formatted changes — discard formatted file."""
         logger.info("Diff rejected — keeping original: %s", original_path)
+        try:
+            for path, entry in self._state.documents.items():
+                if entry.original_path == original_path or entry.file_path == original_path:
+                    # Clean up formatted temp file
+                    if entry.formatted_path and os.path.exists(entry.formatted_path):
+                        try:
+                            os.remove(entry.formatted_path)
+                        except OSError:
+                            pass
+                        entry.formatted_path = None
+                    self._state.update_status(path, DocumentStatus.REJECTED)
+                    break
+        except Exception:
+            logger.exception("Failed to reject diff")
         self._navigate_to_list()
 
     # ------------------------------------------------------------------
@@ -623,6 +687,35 @@ class DocumentStudioPanel(QFrame):
     def _on_select_none(self) -> None:
         """Deselect all documents via state."""
         self._state.deselect_all()
+
+    def _on_change_output_dir(self) -> None:
+        """Open folder picker for output directory."""
+        from PyQt6.QtWidgets import QFileDialog
+        folder = QFileDialog.getExistingDirectory(
+            self, "Select Output Folder", "",
+        )
+        if folder:
+            self._state.output_directory = folder
+            # Truncate long paths for display
+            display = folder if len(folder) <= 35 else "\u2026" + folder[-32:]
+            self._output_dir_label.setText(f"Output: {display}")
+            self._output_dir_label.setToolTip(folder)
+
+    def _on_retry_failed(self) -> None:
+        """Retry all failed documents with the last-used recipe."""
+        failed = self._state.get_failed_paths()
+        if not failed:
+            return
+        recipe_id = self._state.last_recipe_id
+        if not recipe_id:
+            recipe_id = self._recipe_combo.currentData()
+        recipe = self._state.get_recipe(recipe_id)
+        if not recipe:
+            logger.warning("Cannot retry: no recipe available")
+            return
+        self._state.reset_failed_to_pending()
+        self._retry_failed_btn.setVisible(False)
+        self._start_batch(failed, recipe)
 
     def _on_apply_recipe(self) -> None:
         """Start batch processing with the chosen recipe and selected files."""
@@ -689,6 +782,22 @@ class DocumentStudioPanel(QFrame):
             return
         self._start_batch(selected, recipe)
 
+    def _on_recipe_duplicate(self, recipe_id: str) -> None:
+        """Duplicate a recipe with a new ID and '(Copy)' suffix."""
+        import uuid
+        recipe = self._state.get_recipe(recipe_id)
+        if not recipe:
+            return
+        new_recipe = Recipe(
+            recipe_id=str(uuid.uuid4()),
+            name=f"{recipe.name} (Copy)",
+            description=recipe.description,
+            operations=list(recipe.operations),
+            parameters=dict(recipe.parameters),
+        )
+        self._state.add_recipe(new_recipe)
+        self._save_recipes_to_settings()
+
     # ------------------------------------------------------------------
     # Recipe editor signal handlers
     # ------------------------------------------------------------------
@@ -717,6 +826,7 @@ class DocumentStudioPanel(QFrame):
 
     def _start_batch(self, file_paths: List[str], recipe: Recipe) -> None:
         """Start batch processing via the BatchProcessor."""
+        self._state.last_recipe_id = recipe.recipe_id
         if self._batch_processor.is_running:
             logger.warning("Batch already running — ignoring request")
             return
@@ -740,13 +850,20 @@ class DocumentStudioPanel(QFrame):
             logger.exception("Failed to save recipes to settings")
 
     def _load_recipes_from_settings(self) -> None:
-        """Load recipes from settings.json into state."""
+        """Load recipes from settings.json into state, seeding builtins if empty."""
         try:
             from specter.src.infrastructure.storage.settings_manager import settings
+            from .studio_state import BUILTIN_RECIPES
             recipes_dict = settings.get("document_studio.recipes", {})
             if recipes_dict:
                 count = self._state.load_recipes_from_settings(recipes_dict)
                 logger.info("Loaded %d recipe(s) from settings", count)
+            else:
+                # Seed with built-in template recipes on first run
+                count = self._state.load_recipes_from_settings(BUILTIN_RECIPES)
+                if count > 0:
+                    self._save_recipes_to_settings()
+                    logger.info("Seeded %d built-in recipe(s)", count)
         except Exception:
             logger.exception("Failed to load recipes from settings")
 
@@ -991,6 +1108,41 @@ class DocumentStudioPanel(QFrame):
                 border-radius: 3px;
             }}
         """)
+
+        # Output directory bar
+        output_bar = self.findChild(QFrame, "StudioOutputBar")
+        if output_bar:
+            output_bar.setStyleSheet(f"""
+                QFrame#StudioOutputBar {{
+                    background-color: {bg_primary};
+                    border: none;
+                    border-bottom: 1px solid {border_secondary};
+                }}
+            """)
+        if hasattr(self, '_output_dir_label'):
+            self._output_dir_label.setStyleSheet(
+                f"color: {text_disabled}; font-size: 10px; background: transparent; border: none;"
+            )
+        if hasattr(self, '_output_dir_btn'):
+            self._output_dir_btn.setStyleSheet(
+                f"color: {primary}; font-size: 10px; background: transparent; border: none;"
+            )
+
+        # Retry failed button
+        if hasattr(self, '_retry_failed_btn'):
+            self._retry_failed_btn.setStyleSheet(f"""
+                QPushButton#StudioRetryFailedBtn {{
+                    background-color: {status_error};
+                    color: {text_primary};
+                    border: none;
+                    border-radius: 0px;
+                    font-size: 11px;
+                    font-weight: bold;
+                }}
+                QPushButton#StudioRetryFailedBtn:hover {{
+                    background-color: {interactive_hover};
+                }}
+            """)
 
         # Status bar — subtle top border
         self._status_bar.setStyleSheet(f"""

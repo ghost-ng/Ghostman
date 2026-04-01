@@ -23,6 +23,8 @@ class DocumentStatus(Enum):
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
 
 
 @dataclass
@@ -48,6 +50,7 @@ class Recipe:
     description: str
     operations: List[str]
     parameters: Dict[str, Any] = field(default_factory=dict)
+    builtin: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dict for settings.json storage."""
@@ -56,6 +59,7 @@ class Recipe:
             "description": self.description,
             "operations": list(self.operations),
             "parameters": dict(self.parameters),
+            "builtin": self.builtin,
         }
 
     @classmethod
@@ -67,7 +71,48 @@ class Recipe:
             description=data.get("description", ""),
             operations=data.get("operations", []),
             parameters=data.get("parameters", {}),
+            builtin=data.get("builtin", False),
         )
+
+
+BUILTIN_RECIPES = {
+    "builtin_clean_professional": {
+        "name": "Clean & Professional",
+        "description": "Calibri 11pt, 1in margins, normalized spacing",
+        "operations": ["standardize_fonts", "fix_margins", "normalize_spacing"],
+        "parameters": {"font_name": "Calibri", "font_size": 11, "margins": 1.0},
+    },
+    "builtin_apa_format": {
+        "name": "APA Format",
+        "description": "Times New Roman 12pt, 1in margins, double spacing, 0.5in indent",
+        "operations": ["standardize_fonts", "fix_margins", "normalize_spacing", "set_indent"],
+        "parameters": {"font_name": "Times New Roman", "font_size": 12, "margins": 1.0, "indentation": 0.5},
+    },
+    "builtin_mla_format": {
+        "name": "MLA Format",
+        "description": "Times New Roman 12pt, 1in margins, double spacing",
+        "operations": ["standardize_fonts", "fix_margins", "normalize_spacing"],
+        "parameters": {"font_name": "Times New Roman", "font_size": 12, "margins": 1.0},
+    },
+    "builtin_corporate_memo": {
+        "name": "Corporate Memo",
+        "description": "Calibri 11pt, narrow margins, headings normalized",
+        "operations": ["standardize_fonts", "fix_margins", "normalize_headings"],
+        "parameters": {"font_name": "Calibri", "font_size": 11, "margins": 0.75},
+    },
+    "builtin_quick_cleanup": {
+        "name": "Quick Cleanup",
+        "description": "Fix spelling, case, and bullet formatting",
+        "operations": ["fix_spelling", "fix_case", "fix_bullets"],
+        "parameters": {},
+    },
+    "builtin_presentation_ready": {
+        "name": "Presentation Ready",
+        "description": "Arial 14pt, justified alignment, headings normalized",
+        "operations": ["standardize_fonts", "set_alignment", "normalize_headings"],
+        "parameters": {"font_name": "Arial", "font_size": 14, "alignment": "justify"},
+    },
+}
 
 
 class DocumentStudioState(QObject):
@@ -103,6 +148,8 @@ class DocumentStudioState(QObject):
         self.recipes: Dict[str, Recipe] = {}
         self.active_recipe_id: Optional[str] = None
         self.is_batch_running: bool = False
+        self.output_directory: Optional[str] = None
+        self.last_recipe_id: Optional[str] = None
 
     # -- Document operations --
 
@@ -216,3 +263,19 @@ class DocumentStudioState(QObject):
     def get_all_recipes_as_dict(self) -> Dict[str, Dict]:
         """Serialize all recipes for settings.json storage."""
         return {rid: recipe.to_dict() for rid, recipe in self.recipes.items()}
+
+    def get_failed_paths(self) -> List[str]:
+        """Return file paths of all documents with FAILED status."""
+        return [
+            path for path, entry in self.documents.items()
+            if entry.status == DocumentStatus.FAILED
+        ]
+
+    def reset_failed_to_pending(self) -> None:
+        """Reset all FAILED documents back to PENDING for retry."""
+        for path, entry in self.documents.items():
+            if entry.status == DocumentStatus.FAILED:
+                entry.status = DocumentStatus.PENDING
+                entry.error_message = ""
+                entry.progress = 0.0
+                self.document_status_changed.emit(path, DocumentStatus.PENDING.value)

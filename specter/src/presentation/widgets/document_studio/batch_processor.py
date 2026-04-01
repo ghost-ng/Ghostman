@@ -48,11 +48,13 @@ class BatchWorker(QObject):
         self,
         file_paths: List[str],
         recipe: Recipe,
+        output_directory: Optional[str] = None,
         parent: Optional[QObject] = None,
     ):
         super().__init__(parent)
         self._file_paths = list(file_paths)
         self._recipe = recipe
+        self._output_directory = output_directory
         self._cancelled = False
 
     # -- Public API --
@@ -138,6 +140,9 @@ class BatchWorker(QObject):
         params = dict(self._recipe.parameters)  # copy overrides
         params["file_path"] = file_path
         params["operations"] = list(self._recipe.operations)
+
+        if self._output_directory:
+            params["output_directory"] = self._output_directory
 
         logger.debug(
             f"Processing {file_path} with operations={params['operations']}"
@@ -226,7 +231,7 @@ class BatchProcessor(QObject):
 
         # Create thread and worker
         self._thread = QThread()
-        self._worker = BatchWorker(file_paths, recipe)
+        self._worker = BatchWorker(file_paths, recipe, output_directory=self._state.output_directory)
         self._worker.moveToThread(self._thread)
 
         # Wire worker signals -> state updates
