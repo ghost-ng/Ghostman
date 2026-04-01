@@ -1501,6 +1501,8 @@ class FileBrowserBar(QFrame):
         """Handle theme changes."""
         self._apply_styling()
         self._refresh_label_colors()
+        # Preserve button sizes from settings (prevent reset to 32px default)
+        self.update_button_sizes()
         # Update upload button icon for new theme
         if hasattr(self, 'upload_files_btn'):
             self._load_upload_icon_for_button()

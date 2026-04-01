@@ -1471,6 +1471,11 @@ class SettingsDialog(QDialog):
         """Create Tools settings tab for AI tool calling configuration."""
         tab = QWidget()
         layout = QVBoxLayout(tab)
+        layout.setSpacing(12)
+
+        # Helper to constrain spin/combo widths
+        _SPIN_W = 120
+        _COMBO_W = 280
 
         # ── Global Settings Group ──────────────────────────────────────
         global_group = QGroupBox("Global Tool Settings")
@@ -1487,6 +1492,7 @@ class SettingsDialog(QDialog):
         self.tools_max_iterations_spin = QSpinBox()
         self.tools_max_iterations_spin.setRange(1, 20)
         self.tools_max_iterations_spin.setValue(5)
+        self.tools_max_iterations_spin.setMaximumWidth(_SPIN_W)
         self.tools_max_iterations_spin.setToolTip(
             "Maximum number of tool-call loop iterations per message."
         )
@@ -1509,15 +1515,16 @@ class SettingsDialog(QDialog):
         self.web_search_max_results_spin = QSpinBox()
         self.web_search_max_results_spin.setRange(1, 20)
         self.web_search_max_results_spin.setValue(5)
+        self.web_search_max_results_spin.setMaximumWidth(_SPIN_W)
         self.web_search_max_results_spin.setToolTip(
             "Maximum number of search results to retrieve per query."
         )
         web_search_layout.addRow("Max Results:", self.web_search_max_results_spin)
 
-        # Search provider selection
         self.web_search_provider_combo = QComboBox()
         self.web_search_provider_combo.addItem("DuckDuckGo (Free, no API key)")
         self.web_search_provider_combo.addItem("Tavily (API key required)")
+        self.web_search_provider_combo.setMaximumWidth(_COMBO_W)
         self.web_search_provider_combo.setToolTip(
             "DuckDuckGo is free and requires no setup.\n"
             "Tavily provides higher-quality AI-optimised results (1,000 free searches/month)."
@@ -1525,16 +1532,15 @@ class SettingsDialog(QDialog):
         self.web_search_provider_combo.currentIndexChanged.connect(self._on_search_provider_changed)
         web_search_layout.addRow("Provider:", self.web_search_provider_combo)
 
-        # Tavily API key (hidden by default, shown when Tavily selected)
         self.tavily_api_key_edit = QLineEdit()
         self.tavily_api_key_edit.setPlaceholderText("Enter your Tavily API key")
         self.tavily_api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.tavily_api_key_edit.setMaximumWidth(_COMBO_W)
         self.tavily_api_key_edit.setToolTip(
             "Get a free API key at https://tavily.com (1,000 searches/month free tier)."
         )
         self.tavily_api_key_label = QLabel("Tavily API Key:")
         web_search_layout.addRow(self.tavily_api_key_label, self.tavily_api_key_edit)
-        # Hide Tavily fields by default (DuckDuckGo is selected)
         self.tavily_api_key_label.setVisible(False)
         self.tavily_api_key_edit.setVisible(False)
 
@@ -1557,11 +1563,13 @@ class SettingsDialog(QDialog):
             "Calibri", "Arial", "Times New Roman", "Verdana", "Georgia", "Courier New"
         ])
         self.docx_font_combo.setCurrentText("Calibri")
+        self.docx_font_combo.setMaximumWidth(_COMBO_W)
         docx_layout.addRow("Default Font:", self.docx_font_combo)
 
         self.docx_font_size_spin = QSpinBox()
         self.docx_font_size_spin.setRange(8, 28)
         self.docx_font_size_spin.setValue(11)
+        self.docx_font_size_spin.setMaximumWidth(_SPIN_W)
         docx_layout.addRow("Font Size:", self.docx_font_size_spin)
 
         self.docx_line_spacing_spin = QDoubleSpinBox()
@@ -1569,19 +1577,24 @@ class SettingsDialog(QDialog):
         self.docx_line_spacing_spin.setSingleStep(0.05)
         self.docx_line_spacing_spin.setDecimals(2)
         self.docx_line_spacing_spin.setValue(1.15)
+        self.docx_line_spacing_spin.setMaximumWidth(_SPIN_W)
         docx_layout.addRow("Line Spacing:", self.docx_line_spacing_spin)
 
-        # Margins sub-group
+        # Margins — compact 2x2 grid instead of tall column
         margins_group = QGroupBox("Margins")
-        margins_layout = QFormLayout(margins_group)
+        margins_grid = QHBoxLayout(margins_group)
+        margins_grid.setSpacing(12)
 
+        # Left column: Top + Bottom
+        left_col = QFormLayout()
         self.docx_margin_top_spin = QDoubleSpinBox()
         self.docx_margin_top_spin.setRange(0.0, 3.0)
         self.docx_margin_top_spin.setSingleStep(0.1)
         self.docx_margin_top_spin.setDecimals(2)
         self.docx_margin_top_spin.setValue(1.0)
         self.docx_margin_top_spin.setSuffix(" in")
-        margins_layout.addRow("Top:", self.docx_margin_top_spin)
+        self.docx_margin_top_spin.setMaximumWidth(_SPIN_W)
+        left_col.addRow("Top:", self.docx_margin_top_spin)
 
         self.docx_margin_bottom_spin = QDoubleSpinBox()
         self.docx_margin_bottom_spin.setRange(0.0, 3.0)
@@ -1589,15 +1602,20 @@ class SettingsDialog(QDialog):
         self.docx_margin_bottom_spin.setDecimals(2)
         self.docx_margin_bottom_spin.setValue(1.0)
         self.docx_margin_bottom_spin.setSuffix(" in")
-        margins_layout.addRow("Bottom:", self.docx_margin_bottom_spin)
+        self.docx_margin_bottom_spin.setMaximumWidth(_SPIN_W)
+        left_col.addRow("Bottom:", self.docx_margin_bottom_spin)
+        margins_grid.addLayout(left_col)
 
+        # Right column: Left + Right
+        right_col = QFormLayout()
         self.docx_margin_left_spin = QDoubleSpinBox()
         self.docx_margin_left_spin.setRange(0.0, 3.0)
         self.docx_margin_left_spin.setSingleStep(0.1)
         self.docx_margin_left_spin.setDecimals(2)
         self.docx_margin_left_spin.setValue(1.0)
         self.docx_margin_left_spin.setSuffix(" in")
-        margins_layout.addRow("Left:", self.docx_margin_left_spin)
+        self.docx_margin_left_spin.setMaximumWidth(_SPIN_W)
+        right_col.addRow("Left:", self.docx_margin_left_spin)
 
         self.docx_margin_right_spin = QDoubleSpinBox()
         self.docx_margin_right_spin.setRange(0.0, 3.0)
@@ -1605,41 +1623,44 @@ class SettingsDialog(QDialog):
         self.docx_margin_right_spin.setDecimals(2)
         self.docx_margin_right_spin.setValue(1.0)
         self.docx_margin_right_spin.setSuffix(" in")
-        margins_layout.addRow("Right:", self.docx_margin_right_spin)
+        self.docx_margin_right_spin.setMaximumWidth(_SPIN_W)
+        right_col.addRow("Right:", self.docx_margin_right_spin)
+        margins_grid.addLayout(right_col)
+        margins_grid.addStretch()
 
         docx_layout.addRow(margins_group)
 
-        # Default operations checkboxes
+        # Default operations — two columns to save vertical space
         ops_group = QGroupBox("Default Operations")
-        ops_layout = QVBoxLayout(ops_group)
+        ops_outer = QHBoxLayout(ops_group)
 
+        ops_col1 = QVBoxLayout()
         self.docx_op_fonts_check = QCheckBox("Standardize Fonts")
         self.docx_op_fonts_check.setChecked(True)
-        ops_layout.addWidget(self.docx_op_fonts_check)
-
+        ops_col1.addWidget(self.docx_op_fonts_check)
         self.docx_op_margins_check = QCheckBox("Fix Margins")
         self.docx_op_margins_check.setChecked(True)
-        ops_layout.addWidget(self.docx_op_margins_check)
-
+        ops_col1.addWidget(self.docx_op_margins_check)
         self.docx_op_spacing_check = QCheckBox("Normalize Spacing")
         self.docx_op_spacing_check.setChecked(True)
-        ops_layout.addWidget(self.docx_op_spacing_check)
-
+        ops_col1.addWidget(self.docx_op_spacing_check)
         self.docx_op_bullets_check = QCheckBox("Fix Bullets")
         self.docx_op_bullets_check.setChecked(True)
-        ops_layout.addWidget(self.docx_op_bullets_check)
+        ops_col1.addWidget(self.docx_op_bullets_check)
+        ops_outer.addLayout(ops_col1)
 
+        ops_col2 = QVBoxLayout()
         self.docx_op_spelling_check = QCheckBox("Fix Spelling")
         self.docx_op_spelling_check.setChecked(True)
-        ops_layout.addWidget(self.docx_op_spelling_check)
-
+        ops_col2.addWidget(self.docx_op_spelling_check)
         self.docx_op_case_check = QCheckBox("Fix Case")
         self.docx_op_case_check.setChecked(True)
-        ops_layout.addWidget(self.docx_op_case_check)
-
+        ops_col2.addWidget(self.docx_op_case_check)
         self.docx_op_headings_check = QCheckBox("Normalize Headings")
         self.docx_op_headings_check.setChecked(True)
-        ops_layout.addWidget(self.docx_op_headings_check)
+        ops_col2.addWidget(self.docx_op_headings_check)
+        ops_col2.addStretch()
+        ops_outer.addLayout(ops_col2)
 
         docx_layout.addRow(ops_group)
 
@@ -2575,51 +2596,56 @@ class SettingsDialog(QDialog):
         
         # Refresh themes button
         self.refresh_themes_btn = QPushButton("Refresh Themes")
+        self.refresh_themes_btn.setFixedHeight(32)
+        self.refresh_themes_btn.setMaximumWidth(200)
         self.refresh_themes_btn.clicked.connect(self._refresh_themes)
         theme_layout.addRow("", self.refresh_themes_btn)
-        
+
         theme_group.setLayout(theme_layout)
         layout.addWidget(theme_group)
-        
+
         # Theme Management group
         management_group = QGroupBox("Theme Management")
         management_layout = QVBoxLayout()
-        
-        # Load theme button
+        management_layout.setSpacing(8)
+
+        # Load theme + Open folder — side by side
         load_theme_layout = QHBoxLayout()
         self.load_theme_btn = QPushButton("Load Theme from File")
+        self.load_theme_btn.setFixedHeight(32)
         self.load_theme_btn.clicked.connect(self._load_theme_from_file)
         load_theme_layout.addWidget(self.load_theme_btn)
-        
-        # Open themes folder button
+
         self.open_themes_folder_btn = QPushButton("Open Themes Folder")
+        self.open_themes_folder_btn.setFixedHeight(32)
         self.open_themes_folder_btn.clicked.connect(self._open_themes_folder)
         load_theme_layout.addWidget(self.open_themes_folder_btn)
-        
+
         management_layout.addLayout(load_theme_layout)
-        
+
         # Export theme button
-        export_theme_layout = QHBoxLayout()
         self.export_theme_btn = QPushButton("Export Current Theme")
+        self.export_theme_btn.setFixedHeight(32)
+        self.export_theme_btn.setMaximumWidth(250)
         self.export_theme_btn.clicked.connect(self._export_current_theme)
-        export_theme_layout.addWidget(self.export_theme_btn)
-        
-        management_layout.addLayout(export_theme_layout)
-        
+        management_layout.addWidget(self.export_theme_btn)
+
         # Theme info
         info_label = QLabel("Place .json theme files in the themes folder and click 'Refresh Themes' to load them.")
         info_label.setWordWrap(True)
         info_label.setStyleSheet("color: #888; font-style: italic;")
         management_layout.addWidget(info_label)
-        
+
         management_group.setLayout(management_layout)
         layout.addWidget(management_group)
-        
-        # Theme editor button (keep existing)
+
+        # Theme editor button
         editor_group = QGroupBox("Theme Customization")
         editor_layout = QVBoxLayout()
-        
+
         self.open_theme_editor_btn = QPushButton("Open Theme Editor")
+        self.open_theme_editor_btn.setFixedHeight(32)
+        self.open_theme_editor_btn.setMaximumWidth(250)
         self.open_theme_editor_btn.clicked.connect(self._open_theme_editor)
         editor_layout.addWidget(self.open_theme_editor_btn)
         
