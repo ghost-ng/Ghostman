@@ -9490,9 +9490,6 @@ class REPLWidget(QWidget):
             studio = getattr(window, "studio_panel", None)
             if studio and not studio.isVisible():
                 window.toggle_studio_panel(True)
-                # Sync the toolbar toggle button
-                if hasattr(self, "studio_btn"):
-                    self.studio_btn.setChecked(True)
                 logger.info("Auto-open studio: panel opened")
             # Add the file to the state model (creates a card)
             state = getattr(window, "studio_state", None)
@@ -13334,12 +13331,25 @@ def test_theme():
             window = self.window()
             if hasattr(window, 'toggle_studio_panel'):
                 window.toggle_studio_panel()
-                if hasattr(window, 'studio_panel') and window.studio_panel:
-                    self.studio_btn.setChecked(window.studio_panel.isVisible())
+                self._sync_studio_buttons()
             else:
                 logger.warning("Parent window doesn't support studio panel toggle")
         except Exception as e:
             logger.error(f"Failed to toggle studio panel: {e}")
+
+    def _sync_studio_buttons(self, visible=None):
+        """Sync all studio toggle buttons with panel visibility state."""
+        try:
+            if visible is None:
+                window = self.window()
+                studio = getattr(window, 'studio_panel', None) if window else None
+                visible = studio.isVisible() if studio else False
+            if hasattr(self, 'studio_btn'):
+                self.studio_btn.setChecked(visible)
+            if hasattr(self, 'file_browser_bar') and hasattr(self.file_browser_bar, 'studio_toggle_btn'):
+                self.file_browser_bar.studio_toggle_btn.setChecked(visible)
+        except Exception:
+            pass
 
     def _close_file_browser(self):
         """Close file browser bar."""

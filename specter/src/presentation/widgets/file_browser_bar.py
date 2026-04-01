@@ -993,6 +993,7 @@ class FileBrowserBar(QFrame):
         # Load button icons after UI is fully initialized
         self._load_upload_icon_for_button()
         self._load_clear_icon()
+        self._load_minimize_icon()
         
         logger.debug("FileBrowserBar initialized")
     
@@ -1454,7 +1455,35 @@ class FileBrowserBar(QFrame):
         except Exception as e:
             logger.error(f"Failed to load clear icon: {e}")
             self.clear_all_btn.setText("Clear")
-    
+
+    def _load_minimize_icon(self):
+        """Load theme-appropriate minimize icon for the minimize button."""
+        try:
+            if not hasattr(self, 'minimize_btn'):
+                return
+
+            from ...utils.resource_resolver import resolve_icon
+            variant = self._get_icon_variant()
+
+            minimize_icon_path = resolve_icon("minimize", variant)
+
+            if minimize_icon_path and minimize_icon_path.exists():
+                minimize_icon = QIcon(str(minimize_icon_path))
+                if not minimize_icon.isNull():
+                    self.minimize_btn.setIcon(minimize_icon)
+                    from PyQt6.QtCore import QSize
+                    self.minimize_btn.setIconSize(QSize(16, 16))
+                    self.minimize_btn.setText("")  # Clear text fallback
+                    logger.debug(f"Loaded minimize icon: minimize_{variant}.png")
+                    return
+            # Fallback to text
+            self.minimize_btn.setText("\u25c1")
+            logger.debug(f"Minimize icon not found for variant: {variant}, using text fallback")
+
+        except Exception as e:
+            logger.error(f"Failed to load minimize icon: {e}")
+            self.minimize_btn.setText("\u25c1")
+
     def _on_studio_toggle(self):
         """Toggle Document Studio panel via signal."""
         self.studio_toggle_requested.emit()
@@ -1511,6 +1540,9 @@ class FileBrowserBar(QFrame):
         # Update clear button icon for new theme
         if hasattr(self, 'clear_all_btn'):
             self._load_clear_icon()
+        # Update minimize button icon for new theme
+        if hasattr(self, 'minimize_btn'):
+            self._load_minimize_icon()
         # Update all file items
         for item in self.file_items.values():
             item._apply_styling()

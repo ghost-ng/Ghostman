@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QLabel, QLineEdit, QPushButton, QComboBox, QTextEdit,
     QGroupBox, QFormLayout, QCheckBox, QSpinBox, QDoubleSpinBox,
     QFileDialog, QMessageBox, QSplitter, QListWidget, QListWidgetItem,
-    QAbstractSpinBox, QSlider, QInputDialog, QScrollArea, QFrame, QToolButton
+    QAbstractSpinBox, QSlider, QInputDialog, QScrollArea, QFrame
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QStandardPaths, QTimer
 from PyQt6.QtGui import QFont, QIcon
@@ -56,8 +56,8 @@ class SettingsDialog(QDialog):
         """Initialize the user interface."""
         self.setWindowTitle("Specter Settings")
         self.setModal(False)
-        self.setMinimumSize(420, 350)
-        self.resize(600, 500)
+        self.setMinimumSize(530, 450)
+        self.resize(620, 550)
         # Non-modal tool window that doesn't block main app interaction
         self.setWindowFlags(
             Qt.WindowType.Window |
@@ -82,34 +82,43 @@ class SettingsDialog(QDialog):
         self._create_pki_tab()
         self._create_avatar_tab()
 
-        # Buttons layout
+        # Buttons layout — responsive: all buttons use minimum size with
+        # SizePolicy so they shrink/grow gracefully at narrow widths.
         button_layout = QHBoxLayout()
-        
+        button_layout.setSpacing(6)
+
         # Config management buttons
-        self.save_config_btn = QPushButton("Save Config...")
+        self.save_config_btn = QPushButton("Save Config\u2026")
         self.save_config_btn.clicked.connect(self._save_config)
         button_layout.addWidget(self.save_config_btn)
-        
-        self.load_config_btn = QPushButton("Load Config...")
+
+        self.load_config_btn = QPushButton("Load Config\u2026")
         self.load_config_btn.clicked.connect(self._load_config)
         button_layout.addWidget(self.load_config_btn)
-        
+
         button_layout.addStretch()
-        
+
         # Dialog buttons
         self.apply_btn = QPushButton("Apply")
         self.apply_btn.clicked.connect(self._apply_settings)
         button_layout.addWidget(self.apply_btn)
-        
+
         self.cancel_btn = QPushButton("Cancel")
         self.cancel_btn.setObjectName("cancel_btn")
         self.cancel_btn.clicked.connect(self.reject)
         button_layout.addWidget(self.cancel_btn)
-        
+
         self.ok_btn = QPushButton("OK")
         self.ok_btn.clicked.connect(self._ok_clicked)
         button_layout.addWidget(self.ok_btn)
-        
+
+        # Make all bottom buttons responsive — shrink text when tight
+        from PyQt6.QtWidgets import QSizePolicy as _QSP
+        for btn in (self.save_config_btn, self.load_config_btn,
+                    self.apply_btn, self.cancel_btn, self.ok_btn):
+            btn.setSizePolicy(_QSP.Policy.Preferred, _QSP.Policy.Fixed)
+            btn.setMinimumWidth(50)
+
         layout.addLayout(button_layout)
 
         # Apply theme styling AFTER all widgets are created
@@ -124,16 +133,6 @@ class SettingsDialog(QDialog):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        # Transparent backgrounds so the dialog theme shows through.
-        # Use QPalette to avoid stylesheet cascading into child widgets.
-        from PyQt6.QtGui import QPalette, QColor
-        transparent = QColor(0, 0, 0, 0)
-        for widget in (scroll, scroll.viewport(), tab):
-            pal = widget.palette()
-            pal.setColor(QPalette.ColorRole.Window, transparent)
-            pal.setColor(QPalette.ColorRole.Base, transparent)
-            widget.setPalette(pal)
-            widget.setAutoFillBackground(False)
         self.tab_widget.addTab(scroll, tab_name)
 
     def _create_ai_model_tab(self):
@@ -983,6 +982,50 @@ class SettingsDialog(QDialog):
         except Exception as e:
             logger.error(f"Failed to apply font changes immediately: {e}")
     
+    def _generate_spinbox_arrow_images(self, text_color: str) -> dict:
+        """Generate small up/down arrow PNGs for spinbox buttons.
+
+        Qt CSS requires ``image:`` for arrows once ``::up-button`` is styled;
+        native arrows and CSS border-triangles don't work.  We paint tiny
+        triangles onto QPixmaps and save them to temp files.
+
+        Returns dict with 'up' and 'down' absolute file paths.
+        """
+        import tempfile, os
+        from PyQt6.QtGui import QPixmap, QPainter, QColor, QPolygonF
+        from PyQt6.QtCore import QPointF
+
+        cache_attr = "_spinbox_arrow_cache"
+        if hasattr(self, cache_attr):
+            cached = getattr(self, cache_attr)
+            if cached.get("color") == text_color:
+                return cached
+
+        temp_dir = tempfile.gettempdir()
+        color = QColor(text_color)
+        paths = {}
+
+        for direction in ("up", "down"):
+            pix = QPixmap(10, 8)
+            pix.fill(QColor(0, 0, 0, 0))
+            painter = QPainter(pix)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(color)
+            if direction == "up":
+                triangle = QPolygonF([QPointF(5, 1), QPointF(1, 7), QPointF(9, 7)])
+            else:
+                triangle = QPolygonF([QPointF(5, 7), QPointF(1, 1), QPointF(9, 1)])
+            painter.drawPolygon(triangle)
+            painter.end()
+            path = os.path.join(temp_dir, f"specter_arrow_{direction}.png")
+            pix.save(path)
+            paths[direction] = path
+
+        paths["color"] = text_color
+        setattr(self, cache_attr, paths)
+        return paths
+
     def _apply_uniform_button_styles(self):
         """Apply uniform styling to all buttons in the settings dialog."""
         try:
@@ -1100,9 +1143,13 @@ class SettingsDialog(QDialog):
                 # Apply scroll bar styling to the dialog
                 self.setStyleSheet(self.styleSheet() + scrollbar_style)
                 
-                # Style spinboxes with visible, theme-aware up/down buttons
-                # NOTE: Qt CSS does not support border-triangle tricks for arrows.
-                # We style the buttons and let Qt draw native arrows via palette.
+                # Style spinboxes with visible, theme-aware up/down buttons.
+                # Generate small arrow PNGs at runtime so Qt can display them
+                # (Qt CSS doesn't support border-triangle or native arrows when
+                # ::up-button is styled).
+                arrow_paths = self._generate_spinbox_arrow_images(colors.text_primary)
+                up_arrow_path = arrow_paths["up"].replace("\\", "/")
+                down_arrow_path = arrow_paths["down"].replace("\\", "/")
                 spinbox_style = f"""
                 QSpinBox, QDoubleSpinBox {{
                     background-color: {colors.background_tertiary};
@@ -1133,12 +1180,9 @@ class SettingsDialog(QDialog):
                     background-color: {colors.secondary};
                 }}
                 QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{
-                    image: none;
-                    width: 0px;
-                    height: 0px;
-                    border-left: 5px solid transparent;
-                    border-right: 5px solid transparent;
-                    border-bottom: 5px solid {colors.text_primary};
+                    image: url({up_arrow_path});
+                    width: 10px;
+                    height: 8px;
                 }}
                 QSpinBox::down-button, QDoubleSpinBox::down-button {{
                     subcontrol-origin: padding;
@@ -1157,12 +1201,9 @@ class SettingsDialog(QDialog):
                     background-color: {colors.secondary};
                 }}
                 QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{
-                    image: none;
-                    width: 0px;
-                    height: 0px;
-                    border-left: 5px solid transparent;
-                    border-right: 5px solid transparent;
-                    border-top: 5px solid {colors.text_primary};
+                    image: url({down_arrow_path});
+                    width: 10px;
+                    height: 8px;
                 }}
                 """
 
@@ -1912,8 +1953,8 @@ class SettingsDialog(QDialog):
         self._carousel_order = list(AVATAR_ORDER)
         total = len(self._carousel_order)
 
-        # Card dimensions
-        self._card_w, self._card_h = 280, 420
+        # Card dimensions — base size, carousel paints scaled to fit
+        self._card_w, self._card_h = 220, 330
 
         # Pre-load all card pixmaps at full resolution
         self._card_pixmaps_raw = {}
@@ -1946,8 +1987,9 @@ class SettingsDialog(QDialog):
                 self._anim_offset = 0.0  # fractional offset during rotation
                 self._anim = None
                 self._selected_id = DEFAULT_AVATAR_ID
-                self.setFixedHeight(dialog_ref._card_h + 30)
-                self.setMinimumWidth(dialog_ref._card_w * 2 + 120)
+                self.setMinimumHeight(200)
+                self.setMinimumWidth(300)
+                self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
                 self.setCursor(Qt.CursorShape.PointingHandCursor)
 
             def set_index(self, idx):
@@ -2011,8 +2053,12 @@ class SettingsDialog(QDialog):
                 order = dialog_ref._carousel_order
                 total = len(order)
                 offset = self._anim_offset
-                cw = dialog_ref._card_w
-                ch = dialog_ref._card_h
+                # Scale cards to fit available height (with padding)
+                base_cw = dialog_ref._card_w
+                base_ch = dialog_ref._card_h
+                fit_scale = min(1.0, (h - 20) / base_ch, (w * 0.45) / base_cw)
+                cw = int(base_cw * fit_scale)
+                ch = int(base_ch * fit_scale)
 
                 # Collect visible cards with 3D properties
                 cards = []
@@ -2098,7 +2144,10 @@ class SettingsDialog(QDialog):
                     return
                 cx = self.width() / 2.0
                 click_x = event.pos().x()
-                half_w = dialog_ref._card_w * 0.45
+                h = self.height()
+                w = self.width()
+                fit = min(1.0, (h - 20) / dialog_ref._card_h, (w * 0.45) / dialog_ref._card_w)
+                half_w = dialog_ref._card_w * fit * 0.45
                 if abs(click_x - cx) < half_w:
                     # Clicked center card — select it
                     aid = dialog_ref._carousel_order[self._index]
@@ -2112,7 +2161,8 @@ class SettingsDialog(QDialog):
 
         # Carousel row with arrow buttons
         carousel_container = QWidget()
-        carousel_container.setFixedHeight(self._card_h + 30)
+        carousel_container.setMinimumHeight(200)
+        carousel_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         carousel_container.setStyleSheet("background: transparent; border: none;")
         carousel_h_layout = QHBoxLayout()
         carousel_h_layout.setContentsMargins(0, 0, 0, 0)
@@ -2153,7 +2203,7 @@ class SettingsDialog(QDialog):
         carousel_h_layout.addWidget(btn_right, 0, Qt.AlignmentFlag.AlignVCenter)
 
         carousel_container.setLayout(carousel_h_layout)
-        tab_layout.addWidget(carousel_container)
+        tab_layout.addWidget(carousel_container, 1)  # stretch factor — carousel gets extra space
 
         # ── Dot indicators ──
         dots_widget = QWidget()
@@ -2322,7 +2372,6 @@ class SettingsDialog(QDialog):
         scale_frame.setLayout(scale_layout)
         tab_layout.addWidget(scale_frame)
 
-        tab_layout.addStretch()
         tab.setLayout(tab_layout)
         scroll.setWidget(tab)
         self.tab_widget.addTab(scroll, "Avatar")
@@ -4756,7 +4805,16 @@ class SettingsDialog(QDialog):
             QTabBar::tab:hover {
                 background-color: #4a4a4a;
             }
-            
+
+            /* Scroll areas (tab wrappers) */
+            QScrollArea {
+                background-color: #2b2b2b;
+                border: none;
+            }
+            QScrollArea > QWidget > QWidget {
+                background-color: #2b2b2b;
+            }
+
             /* Group box styling */
             QGroupBox {
                 color: #ffffff;

@@ -234,6 +234,12 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
         self.repl_widget.minimize_requested.connect(self.close)
         self.repl_widget.command_entered.connect(self.command_entered.emit)
 
+        # Sync REPL toggle buttons when studio visibility changes (e.g. collapse button)
+        if self._studio_state:
+            self._studio_state.panel_visibility_changed.connect(
+                self.repl_widget._sync_studio_buttons
+            )
+
         # API error banner will be managed by REPLWidget
         # Access it via self.repl_widget.api_error_banner if needed
 
@@ -261,6 +267,10 @@ class FloatingREPLWindow(SimpleREPLArrowMixin, REPLResizableMixin, QMainWindow):
         else:
             self._studio_panel.hide()
             self._splitter.setSizes([1, 0])
+
+        # Notify state so REPL/file-browser buttons can sync
+        if self._studio_state:
+            self._studio_state.panel_visibility_changed.emit(visible)
 
         logger.debug(f"Studio panel visibility set to {visible}")
 

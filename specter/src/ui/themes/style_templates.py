@@ -1961,6 +1961,15 @@ class StyleTemplates:
             color: {colors.text_tertiary};
         }}
         
+        /* Scroll areas (tab wrappers) inherit dialog background */
+        QScrollArea {{
+            background-color: {colors.background_primary};
+            border: none;
+        }}
+        QScrollArea > QWidget > QWidget {{
+            background-color: {colors.background_primary};
+        }}
+
         /* Modern scroll bar styling */
         QScrollBar:vertical {{
             background-color: {colors.background_secondary};
