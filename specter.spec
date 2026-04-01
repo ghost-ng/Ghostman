@@ -18,6 +18,11 @@ datas = [
     (str(base_path / 'specter' / '__version__.py'), 'specter'),
     # Help documentation
     (str(base_path / 'specter' / 'assets' / 'help'), 'specter/assets/help'),
+    # Theme JSON files (required at runtime for 39+ themes)
+    (str(base_path / 'specter' / 'src' / 'ui' / 'themes' / 'json'), 'specter/src/ui/themes/json'),
+    # Alembic migrations (required for database upgrades)
+    (str(base_path / 'specter' / 'src' / 'infrastructure' / 'conversation_management' / 'migrations'),
+     'specter/src/infrastructure/conversation_management/migrations'),
 ]
 
 # Hidden imports - modules that PyInstaller might miss
