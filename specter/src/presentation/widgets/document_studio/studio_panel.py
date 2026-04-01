@@ -378,6 +378,12 @@ class DocumentStudioPanel(QFrame):
     # Public API
     # ------------------------------------------------------------------
 
+    def showEvent(self, event) -> None:
+        """Re-apply theme when panel becomes visible (handles late theme init)."""
+        super().showEvent(event)
+        if self._current_colors is None:
+            self._apply_default_theme()
+
     @property
     def state(self) -> DocumentStudioState:
         """The backing state object."""
@@ -864,8 +870,24 @@ class DocumentStudioPanel(QFrame):
                 if count > 0:
                     self._save_recipes_to_settings()
                     logger.info("Seeded %d built-in recipe(s)", count)
+            # Populate the combo box and recipe library from loaded recipes
+            # (load_recipes_from_settings doesn't emit recipe_saved signals)
+            self._sync_recipe_ui()
         except Exception:
             logger.exception("Failed to load recipes from settings")
+
+    def _sync_recipe_ui(self) -> None:
+        """Sync recipe combo box and library with current state recipes."""
+        for recipe_id, recipe in self._state.recipes.items():
+            # Add to combo if not already present
+            idx = self._recipe_combo.findData(recipe_id)
+            if idx < 0:
+                self._recipe_combo.addItem(recipe.name, recipe_id)
+            else:
+                self._recipe_combo.setItemText(idx, recipe.name)
+        # Refresh the recipe library list
+        if hasattr(self, '_recipe_library'):
+            self._recipe_library._refresh_list()
 
     # ------------------------------------------------------------------
     # Status bar
