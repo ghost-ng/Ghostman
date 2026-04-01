@@ -260,6 +260,75 @@ class RecipeEditor(QFrame):
         margin_row.addStretch()
         params_layout.addLayout(margin_row)
 
+        # Find & Replace
+        find_row = QHBoxLayout()
+        find_row.setSpacing(8)
+        find_label = QLabel("Find")
+        find_label.setFixedWidth(70)
+        find_row.addWidget(find_label)
+        self._find_edit = QLineEdit()
+        self._find_edit.setObjectName("RecipeEditorFindEdit")
+        self._find_edit.setPlaceholderText("Text to find")
+        find_row.addWidget(self._find_edit, 1)
+        params_layout.addLayout(find_row)
+
+        replace_row = QHBoxLayout()
+        replace_row.setSpacing(8)
+        replace_label = QLabel("Replace")
+        replace_label.setFixedWidth(70)
+        replace_row.addWidget(replace_label)
+        self._replace_edit = QLineEdit()
+        self._replace_edit.setObjectName("RecipeEditorReplaceEdit")
+        self._replace_edit.setPlaceholderText("Replacement text")
+        replace_row.addWidget(self._replace_edit, 1)
+        params_layout.addLayout(replace_row)
+
+        # Font color
+        color_row = QHBoxLayout()
+        color_row.setSpacing(8)
+        color_label = QLabel("Font Color")
+        color_label.setFixedWidth(70)
+        color_row.addWidget(color_label)
+        self._color_edit = QLineEdit()
+        self._color_edit.setObjectName("RecipeEditorColorEdit")
+        self._color_edit.setPlaceholderText("#000000 or color name")
+        self._color_edit.setMaximumWidth(160)
+        color_row.addWidget(self._color_edit)
+        color_row.addStretch()
+        params_layout.addLayout(color_row)
+
+        # Alignment
+        align_row = QHBoxLayout()
+        align_row.setSpacing(8)
+        align_label = QLabel("Alignment")
+        align_label.setFixedWidth(70)
+        align_row.addWidget(align_label)
+        self._align_combo = QComboBox()
+        self._align_combo.setObjectName("RecipeEditorAlignCombo")
+        for val in ("", "left", "center", "right", "justify"):
+            label = val.title() if val else "(unchanged)"
+            self._align_combo.addItem(label, val)
+        align_row.addWidget(self._align_combo)
+        align_row.addStretch()
+        params_layout.addLayout(align_row)
+
+        # Indent
+        indent_row = QHBoxLayout()
+        indent_row.setSpacing(8)
+        indent_label = QLabel("Indent")
+        indent_label.setFixedWidth(70)
+        indent_row.addWidget(indent_label)
+        self._indent_spin = QDoubleSpinBox()
+        self._indent_spin.setObjectName("RecipeEditorIndentSpin")
+        self._indent_spin.setRange(0.0, 3.0)
+        self._indent_spin.setValue(0.0)
+        self._indent_spin.setSingleStep(0.25)
+        self._indent_spin.setDecimals(2)
+        self._indent_spin.setSuffix(" in")
+        indent_row.addWidget(self._indent_spin)
+        indent_row.addStretch()
+        params_layout.addLayout(indent_row)
+
         form_layout.addWidget(params_group)
 
         form_layout.addStretch()
@@ -326,6 +395,18 @@ class RecipeEditor(QFrame):
                 self._margin_spin.setValue(float(params["margins"]))
             except (ValueError, TypeError):
                 pass
+        self._find_edit.setText(str(params.get("find_text", "")))
+        self._replace_edit.setText(str(params.get("replace_text", "")))
+        self._color_edit.setText(str(params.get("font_color", "")))
+        alignment = params.get("alignment", "")
+        idx = self._align_combo.findData(alignment)
+        if idx >= 0:
+            self._align_combo.setCurrentIndex(idx)
+        if "indentation" in params:
+            try:
+                self._indent_spin.setValue(float(params["indentation"]))
+            except (ValueError, TypeError):
+                pass
 
     def clear_form(self) -> None:
         """Reset the form to its default (new recipe) state."""
@@ -338,6 +419,11 @@ class RecipeEditor(QFrame):
         self._font_combo.setCurrentText("Calibri")
         self._font_size_spin.setValue(11)
         self._margin_spin.setValue(1.0)
+        self._find_edit.clear()
+        self._replace_edit.clear()
+        self._color_edit.clear()
+        self._align_combo.setCurrentIndex(0)
+        self._indent_spin.setValue(0.0)
 
     # ------------------------------------------------------------------
     # Save logic
@@ -365,12 +451,26 @@ class RecipeEditor(QFrame):
         # Reset title in case it was previously set to error
         self._ops_group.setTitle("Operations")
 
-        # Build parameters dict
+        # Build parameters dict — only include non-default values
         parameters = {
             "font_name": self._font_combo.currentText().strip(),
             "font_size": self._font_size_spin.value(),
             "margins": self._margin_spin.value(),
         }
+        find_text = self._find_edit.text().strip()
+        replace_text = self._replace_edit.text().strip()
+        if find_text:
+            parameters["find_text"] = find_text
+            parameters["replace_text"] = replace_text
+        font_color = self._color_edit.text().strip()
+        if font_color:
+            parameters["font_color"] = font_color
+        alignment = self._align_combo.currentData()
+        if alignment:
+            parameters["alignment"] = alignment
+        indent_val = self._indent_spin.value()
+        if indent_val > 0:
+            parameters["indentation"] = indent_val
 
         # Reuse existing ID for edits, generate new UUID for new recipes.
         recipe_id = self._editing_recipe_id or str(uuid.uuid4())
@@ -502,6 +602,9 @@ class RecipeEditor(QFrame):
         """
         self._name_edit.setStyleSheet(line_edit_style)
         self._desc_edit.setStyleSheet(line_edit_style)
+        self._find_edit.setStyleSheet(line_edit_style)
+        self._replace_edit.setStyleSheet(line_edit_style)
+        self._color_edit.setStyleSheet(line_edit_style)
 
         # Group boxes
         group_style = f"""
@@ -604,6 +707,28 @@ class RecipeEditor(QFrame):
         """
         self._font_size_spin.setStyleSheet(spin_style)
         self._margin_spin.setStyleSheet(spin_style)
+        self._indent_spin.setStyleSheet(spin_style)
+
+        # Alignment combo — same style as font combo
+        self._align_combo.setStyleSheet(f"""
+            QComboBox#RecipeEditorAlignCombo {{
+                background-color: {bg_tertiary};
+                color: {text_primary};
+                border: 1px solid {border_secondary};
+                border-radius: 3px;
+                padding: 4px 8px;
+                font-size: 12px;
+            }}
+            QComboBox#RecipeEditorAlignCombo::drop-down {{
+                border: none;
+            }}
+            QComboBox#RecipeEditorAlignCombo QAbstractItemView {{
+                background-color: {bg_secondary};
+                color: {text_primary};
+                selection-background-color: {primary};
+                border: 1px solid {border_secondary};
+            }}
+        """)
 
         # Bottom button bar
         btn_bar = self.findChild(QFrame, "RecipeEditorBtnBar")

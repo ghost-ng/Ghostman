@@ -245,6 +245,14 @@ class DocumentStudioPanel(QFrame):
         self._apply_recipe_btn.clicked.connect(self._on_apply_recipe)
         tb_layout.addWidget(self._apply_recipe_btn)
 
+        self._cancel_batch_btn = QPushButton("Cancel")
+        self._cancel_batch_btn.setObjectName("StudioCancelBatchBtn")
+        self._cancel_batch_btn.setToolTip("Cancel the running batch")
+        self._cancel_batch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._cancel_batch_btn.clicked.connect(self._on_cancel_batch)
+        self._cancel_batch_btn.setVisible(False)
+        tb_layout.addWidget(self._cancel_batch_btn)
+
         layout.addWidget(toolbar)
 
         # --- Recipe library -----------------------------------------------
@@ -253,6 +261,7 @@ class DocumentStudioPanel(QFrame):
         self._recipe_library.edit_requested.connect(self._on_recipe_edit)
         self._recipe_library.delete_requested.connect(self._on_recipe_delete)
         self._recipe_library.apply_requested.connect(self._on_recipe_apply)
+        self._recipe_library.recipe_selected.connect(self._on_library_recipe_selected)
         layout.addWidget(self._recipe_library)
 
         # --- Scroll area with card list -----------------------------------
@@ -455,11 +464,27 @@ class DocumentStudioPanel(QFrame):
             if entry:
                 card.set_selected(entry.selected)
 
+    def _on_library_recipe_selected(self, recipe_id: str) -> None:
+        """Sync the toolbar combo box when a recipe is selected in the library."""
+        idx = self._recipe_combo.findData(recipe_id)
+        if idx >= 0:
+            self._recipe_combo.blockSignals(True)
+            self._recipe_combo.setCurrentIndex(idx)
+            self._recipe_combo.blockSignals(False)
+
+    def _on_cancel_batch(self) -> None:
+        """Cancel the running batch."""
+        if self._batch_processor.is_running:
+            self._batch_processor.cancel()
+            self._batch_status_label.setText("Cancelling\u2026")
+            logger.info("Batch cancel requested by user")
+
     def _on_batch_started(self, recipe_id: str) -> None:
         """Show the batch progress bar and disable controls."""
         self._batch_progress.setValue(0)
         self._batch_progress.setVisible(True)
-        self._apply_recipe_btn.setEnabled(False)
+        self._apply_recipe_btn.setVisible(False)
+        self._cancel_batch_btn.setVisible(True)
         self._batch_status_label.setText("Batch running\u2026")
 
     def _on_batch_progress(self, completed: int, total: int) -> None:
@@ -473,6 +498,8 @@ class DocumentStudioPanel(QFrame):
     def _on_batch_completed(self, all_success: bool, summary: str) -> None:
         """Hide batch progress and re-enable controls."""
         self._batch_progress.setVisible(False)
+        self._cancel_batch_btn.setVisible(False)
+        self._apply_recipe_btn.setVisible(True)
         self._apply_recipe_btn.setEnabled(True)
         status = "Batch complete" if all_success else "Batch finished with errors"
         self._batch_status_label.setText(status)
@@ -620,7 +647,19 @@ class DocumentStudioPanel(QFrame):
         self.set_view(VIEW_RECIPE_EDITOR)
 
     def _on_recipe_delete(self, recipe_id: str) -> None:
-        """Remove a recipe from state and persist to settings."""
+        """Remove a recipe from state after confirmation."""
+        from PyQt6.QtWidgets import QMessageBox
+        recipe = self._state.get_recipe(recipe_id)
+        name = recipe.name if recipe else recipe_id
+        reply = QMessageBox.question(
+            self,
+            "Delete Recipe",
+            f"Delete recipe \"{name}\"?\n\nThis cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
         self._state.remove_recipe(recipe_id)
         self._save_recipes_to_settings()
 
@@ -647,6 +686,10 @@ class DocumentStudioPanel(QFrame):
             return
         self._state.add_recipe(recipe)
         self._save_recipes_to_settings()
+        # Auto-select the saved recipe in the combo box
+        idx = self._recipe_combo.findData(recipe.recipe_id)
+        if idx >= 0:
+            self._recipe_combo.setCurrentIndex(idx)
         # Navigate back to the list view
         self.set_view(VIEW_LIST)
 
@@ -824,6 +867,26 @@ class DocumentStudioPanel(QFrame):
                 color: {text_disabled};
                 background-color: {bg_tertiary};
                 border-color: {border_secondary};
+            }}
+        """)
+
+        # Cancel batch button — warning style
+        self._cancel_batch_btn.setStyleSheet(f"""
+            QPushButton#StudioCancelBatchBtn {{
+                background-color: {status_error};
+                color: {text_primary};
+                border: 1px solid {status_error};
+                border-radius: 4px;
+                padding: 4px 12px;
+                font-size: 11px;
+                font-weight: bold;
+            }}
+            QPushButton#StudioCancelBatchBtn:hover {{
+                border-color: {text_primary};
+            }}
+            QPushButton#StudioCancelBatchBtn:pressed {{
+                background-color: {bg_tertiary};
+                border-color: {status_error};
             }}
         """)
 

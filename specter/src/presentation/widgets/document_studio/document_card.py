@@ -460,12 +460,19 @@ class DocumentCard(QFrame):
         label = _STATUS_LABELS.get(status, status.value.title())
 
         if status == DocumentStatus.FAILED and self._entry.error_message:
-            label = f"Failed: {self._entry.error_message}"
+            # Show the error directly on the card — truncate long messages
+            error_text = self._entry.error_message
+            if len(error_text) > 80:
+                error_text = error_text[:77] + "\u2026"
+            label = f"Failed: {error_text}"
+            # Keep full error in tooltip for long messages
             self._status_label.setToolTip(self._entry.error_message)
+            self._status_label.setWordWrap(True)
         else:
             self._status_label.setToolTip("")
+            self._status_label.setWordWrap(False)
 
-        self._status_label.setText(f"Status: {label}")
+        self._status_label.setText(label)
 
         # Hide status for pending (default state) — cleaner look
         show_status = status != DocumentStatus.PENDING
