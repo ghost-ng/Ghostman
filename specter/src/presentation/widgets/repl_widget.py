@@ -3468,6 +3468,7 @@ class REPLWidget(QWidget):
                 self.file_browser_bar.file_toggled.connect(self._on_file_toggled)
                 self.file_browser_bar.upload_files_requested.connect(self._on_upload_files_from_browser)
                 self.file_browser_bar.hide_requested.connect(self._toggle_file_browser)
+                self.file_browser_bar.studio_toggle_requested.connect(self._toggle_studio_panel)
                 logger.info("✅ FileBrowserBar signals connected safely")
             except Exception as signal_error:
                 logger.error(f"⚠️ Failed to connect FileBrowserBar signals: {signal_error}")

@@ -122,16 +122,23 @@ class RecipeLibrary(QFrame):
         # --- Recipe list --------------------------------------------------
         self._list_widget = QListWidget()
         self._list_widget.setObjectName("RecipeLibraryList")
-        self._list_widget.setMaximumHeight(120)
+        self._list_widget.setMaximumHeight(100)
         self._list_widget.setAlternatingRowColors(False)
         self._list_widget.currentItemChanged.connect(self._on_item_changed)
         root.addWidget(self._list_widget)
+
+        # --- Empty hint (shown when no recipes) ---------------------------
+        self._empty_label = QLabel("No recipes yet")
+        self._empty_label.setObjectName("RecipeLibraryEmpty")
+        self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_label.setFixedHeight(28)
+        root.addWidget(self._empty_label)
 
         # --- Action buttons -----------------------------------------------
         btn_bar = QFrame()
         btn_bar.setObjectName("RecipeLibraryBtnBar")
         btn_layout = QHBoxLayout(btn_bar)
-        btn_layout.setContentsMargins(10, 4, 10, 6)
+        btn_layout.setContentsMargins(10, 3, 10, 5)
         btn_layout.setSpacing(6)
 
         self._edit_btn = QPushButton("Edit")
@@ -147,13 +154,6 @@ class RecipeLibrary(QFrame):
         self._delete_btn.setEnabled(False)
         self._delete_btn.clicked.connect(self._on_delete_clicked)
         btn_layout.addWidget(self._delete_btn)
-
-        self._apply_btn = QPushButton("Apply")
-        self._apply_btn.setObjectName("RecipeLibraryApplyBtn")
-        self._apply_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._apply_btn.setEnabled(False)
-        self._apply_btn.clicked.connect(self._on_apply_clicked)
-        btn_layout.addWidget(self._apply_btn)
 
         btn_layout.addStretch()
 
@@ -201,9 +201,10 @@ class RecipeLibrary(QFrame):
 
         self._list_widget.blockSignals(False)
 
-        # Hide list + action buttons when there are no recipes
+        # Show empty label or recipe list
         has_recipes = self._list_widget.count() > 0
         self._list_widget.setVisible(has_recipes)
+        self._empty_label.setVisible(not has_recipes)
         btn_bar = self.findChild(QFrame, "RecipeLibraryBtnBar")
         if btn_bar:
             btn_bar.setVisible(has_recipes)
@@ -268,7 +269,6 @@ class RecipeLibrary(QFrame):
         has_selection = recipe_id is not None
         self._edit_btn.setEnabled(has_selection)
         self._delete_btn.setEnabled(has_selection)
-        self._apply_btn.setEnabled(has_selection)
 
     # ------------------------------------------------------------------
     # Theme support
@@ -403,27 +403,8 @@ class RecipeLibrary(QFrame):
         self._edit_btn.setStyleSheet(btn_style)
         self._delete_btn.setStyleSheet(btn_style)
 
-        # Apply button — primary colour accent
-        self._apply_btn.setStyleSheet(f"""
-            QPushButton#RecipeLibraryApplyBtn {{
-                background-color: {primary};
-                color: {text_primary};
-                border: 1px solid {primary};
-                border-radius: 4px;
-                padding: 4px 12px;
-                font-size: 11px;
-                font-weight: bold;
-            }}
-            QPushButton#RecipeLibraryApplyBtn:hover {{
-                border-color: {text_primary};
-            }}
-            QPushButton#RecipeLibraryApplyBtn:pressed {{
-                background-color: {bg_tertiary};
-                border-color: {primary};
-            }}
-            QPushButton#RecipeLibraryApplyBtn:disabled {{
-                color: {text_disabled};
-                background-color: {bg_tertiary};
-                border-color: {border_secondary};
-            }}
-        """)
+        # Empty label
+        self._empty_label.setStyleSheet(
+            f"color: {text_disabled}; font-size: 11px; font-style: italic; "
+            f"background: transparent; border: none;"
+        )

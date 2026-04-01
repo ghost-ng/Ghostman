@@ -1323,12 +1323,14 @@ class AppCoordinator(QObject):
         Uses Win32 SetWindowPos to toggle TOPMOST directly on the native
         handle, avoiding the window-destroy/recreate cycle that
         Qt.setWindowFlags() triggers.
+
+        Also applies to the floating REPL window — which uses
+        Qt.WindowType.Tool and must be handled explicitly.
         """
         if not self._main_window:
             return
 
         try:
-            import ctypes
             import sys
 
             windows = [self._main_window]
@@ -1336,19 +1338,39 @@ class AppCoordinator(QObject):
                 windows.append(self._main_window.floating_repl)
 
             if sys.platform == "win32":
+                import ctypes
                 HWND_TOPMOST = -1
                 HWND_NOTOPMOST = -2
                 SWP_NOMOVE = 0x0002
                 SWP_NOSIZE = 0x0001
                 SWP_NOACTIVATE = 0x0010
+                SWP_SHOWWINDOW = 0x0040
                 insert_after = HWND_TOPMOST if always_on_top else HWND_NOTOPMOST
-                swp_flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
+                swp_flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW
 
                 for window in windows:
+                    if not window.isVisible():
+                        continue
                     hwnd = int(window.winId())
                     ctypes.windll.user32.SetWindowPos(
                         hwnd, insert_after, 0, 0, 0, 0, swp_flags
                     )
+
+                # For Tool windows (floating_repl), also re-apply after a short
+                # delay to work around Win32 z-order race with Tool windows.
+                from PyQt6.QtCore import QTimer
+                def _reapply():
+                    try:
+                        for window in windows:
+                            if not window.isVisible():
+                                continue
+                            hwnd = int(window.winId())
+                            ctypes.windll.user32.SetWindowPos(
+                                hwnd, insert_after, 0, 0, 0, 0, swp_flags
+                            )
+                    except Exception:
+                        pass
+                QTimer.singleShot(100, _reapply)
 
                 logger.debug(
                     f"SetWindowPos applied to {len(windows)} window(s): "

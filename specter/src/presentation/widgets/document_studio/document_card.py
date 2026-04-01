@@ -136,7 +136,7 @@ class DocumentCard(QFrame):
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.setMinimumHeight(80)
+        self.setMinimumHeight(60)
 
         self._build_ui()
         self._refresh_from_entry()
@@ -147,62 +147,66 @@ class DocumentCard(QFrame):
 
     def _build_ui(self) -> None:
         """Construct the card's widget tree."""
-        root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(10, 8, 10, 8)
-        root_layout.setSpacing(4)
+        root_layout = QHBoxLayout(self)
+        root_layout.setContentsMargins(10, 10, 10, 10)
+        root_layout.setSpacing(8)
 
-        # --- Row 1: checkbox, icon+filename, remove button ----------------
-        row1 = QHBoxLayout()
-        row1.setSpacing(6)
-
+        # Checkbox — left edge
         self._checkbox = QCheckBox()
         self._checkbox.setToolTip("Select for batch processing")
         self._checkbox.stateChanged.connect(self._on_checkbox_toggled)
-        row1.addWidget(self._checkbox)
+        root_layout.addWidget(self._checkbox, 0, Qt.AlignmentFlag.AlignTop)
 
+        # Centre content column
+        content = QVBoxLayout()
+        content.setSpacing(3)
+        content.setContentsMargins(0, 0, 0, 0)
+
+        # Row 1: icon + filename
+        name_row = QHBoxLayout()
+        name_row.setSpacing(5)
         self._icon_label = QLabel()
-        self._icon_label.setFixedWidth(22)
+        self._icon_label.setFixedWidth(18)
         self._icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        row1.addWidget(self._icon_label)
+        name_row.addWidget(self._icon_label)
 
         self._filename_label = QLabel()
         self._filename_label.setObjectName("DocumentCardFilename")
         self._filename_label.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
         )
-        row1.addWidget(self._filename_label)
+        name_row.addWidget(self._filename_label)
+        content.addLayout(name_row)
 
-        self._remove_btn = QPushButton("\u2715")  # ✕
-        self._remove_btn.setObjectName("DocumentCardRemoveBtn")
-        self._remove_btn.setFixedSize(22, 22)
-        self._remove_btn.setToolTip("Remove document from studio")
-        self._remove_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._remove_btn.clicked.connect(self._on_remove_clicked)
-        row1.addWidget(self._remove_btn)
-
-        root_layout.addLayout(row1)
-
-        # --- Row 2: metadata (page count, file size) ----------------------
+        # Row 2: metadata
         self._meta_label = QLabel()
         self._meta_label.setObjectName("DocumentCardMeta")
-        self._meta_label.setContentsMargins(28, 0, 0, 0)  # indent under filename
-        root_layout.addWidget(self._meta_label)
+        content.addWidget(self._meta_label)
 
-        # --- Row 3: progress bar ------------------------------------------
+        # Row 3: progress bar (hidden until processing)
         self._progress_bar = QProgressBar()
         self._progress_bar.setObjectName("DocumentCardProgress")
         self._progress_bar.setRange(0, 100)
         self._progress_bar.setTextVisible(True)
-        self._progress_bar.setFixedHeight(14)
-        self._progress_bar.setContentsMargins(28, 0, 0, 0)
-        self._progress_bar.setVisible(False)  # hidden until processing starts
-        root_layout.addWidget(self._progress_bar)
+        self._progress_bar.setFixedHeight(12)
+        self._progress_bar.setVisible(False)
+        content.addWidget(self._progress_bar)
 
-        # --- Row 4: status label ------------------------------------------
+        # Row 4: status label
         self._status_label = QLabel()
         self._status_label.setObjectName("DocumentCardStatus")
-        self._status_label.setContentsMargins(28, 0, 0, 0)
-        root_layout.addWidget(self._status_label)
+        content.addWidget(self._status_label)
+
+        root_layout.addLayout(content, 1)
+
+        # Remove button — right edge
+        self._remove_btn = QPushButton("\u2715")
+        self._remove_btn.setObjectName("DocumentCardRemoveBtn")
+        self._remove_btn.setFixedSize(20, 20)
+        self._remove_btn.setToolTip("Remove document")
+        self._remove_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._remove_btn.clicked.connect(self._on_remove_clicked)
+        root_layout.addWidget(self._remove_btn, 0, Qt.AlignmentFlag.AlignTop)
 
     # ------------------------------------------------------------------
     # Public API

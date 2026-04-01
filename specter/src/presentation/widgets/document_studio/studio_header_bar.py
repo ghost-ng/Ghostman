@@ -34,7 +34,7 @@ class StudioHeaderBar(QFrame):
         layout.setContentsMargins(12, 6, 8, 6)
         layout.setSpacing(8)
 
-        self._title = QLabel("\U0001f4da Document Studio")
+        self._title = QLabel("DOCUMENT STUDIO")
         self._title.setObjectName("studio_title")
         self._title.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         layout.addWidget(self._title)

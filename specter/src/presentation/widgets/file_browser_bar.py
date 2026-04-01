@@ -964,6 +964,7 @@ class FileBrowserBar(QFrame):
     upload_files_requested = pyqtSignal()  # Request file upload dialog
     hide_requested = pyqtSignal()  # Request to hide the file browser toolbar
     processing_completed = pyqtSignal(str, str)  # file_id, status (completed/failed) - propagated from FileContextItem
+    studio_toggle_requested = pyqtSignal()  # Request to toggle Document Studio panel
     
     def __init__(self, theme_manager=None):
         super().__init__()
@@ -1044,16 +1045,26 @@ class FileBrowserBar(QFrame):
         # Icon will be loaded in _load_clear_icon() after UI init
         header_layout.addWidget(self.clear_all_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
 
+        # Document Studio toggle — shows when .docx files are present
+        self.studio_toggle_btn = QToolButton()
+        self.studio_toggle_btn.setText("\u2637")  # ☷ trigram icon (matches REPL toolbar)
+        self.studio_toggle_btn.setToolTip("Toggle Document Studio")
+        self.studio_toggle_btn.setCheckable(True)
+        self.studio_toggle_btn.clicked.connect(self._on_studio_toggle)
+        self.studio_toggle_btn.setFixedSize(32, 32)
+        self.studio_toggle_btn.setVisible(False)  # hidden until a .docx is uploaded
+        header_layout.addWidget(self.studio_toggle_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
+
         # Minimize button — hides the file browser toolbar (same as toggle)
         self.minimize_btn = QToolButton()
-        self.minimize_btn.setText("▁")
+        self.minimize_btn.setText("\u25c1")  # ◁
         self.minimize_btn.setToolTip("Minimize file browser")
         self.minimize_btn.clicked.connect(self._hide_toolbar)
-        self.minimize_btn.setFixedSize(32, 32)  # Initial size, updated by update_button_sizes()
+        self.minimize_btn.setFixedSize(32, 32)
         header_layout.addWidget(self.minimize_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
 
         # Track header buttons for uniform sizing
-        self._header_buttons = [self.upload_files_btn, self.clear_all_btn, self.minimize_btn]
+        self._header_buttons = [self.upload_files_btn, self.clear_all_btn, self.studio_toggle_btn, self.minimize_btn]
         
         main_layout.addWidget(header_frame)
         
@@ -1442,6 +1453,19 @@ class FileBrowserBar(QFrame):
             logger.error(f"Failed to load clear icon: {e}")
             self.clear_all_btn.setText("Clear")
     
+    def _on_studio_toggle(self):
+        """Toggle Document Studio panel via signal."""
+        self.studio_toggle_requested.emit()
+
+    def _update_studio_button_visibility(self):
+        """Show the studio toggle button when any .docx file is present."""
+        has_docx = any(
+            item.filename.lower().endswith(".docx")
+            for item in self.file_items.values()
+            if hasattr(item, "filename")
+        )
+        self.studio_toggle_btn.setVisible(has_docx)
+
     def _hide_toolbar(self):
         """Request the parent to hide the file browser stack. Files remain tracked."""
         self.hide_requested.emit()
@@ -1580,6 +1604,7 @@ class FileBrowserBar(QFrame):
             self.setVisible(True)
         
         self._update_status_display()
+        self._update_studio_button_visibility()
         logger.debug(f"Added file item: {file_id} ({filename})")
     
     def _on_file_remove_requested(self, file_id: str):
@@ -1622,6 +1647,7 @@ class FileBrowserBar(QFrame):
             # The files section will just show "No files loaded" status
 
             self._update_status_display()
+            self._update_studio_button_visibility()
             logger.debug(f"Removed file item: {file_id}")
     
     def update_file_status(self, file_id: str, status: str, progress: float = 0.0) -> str:

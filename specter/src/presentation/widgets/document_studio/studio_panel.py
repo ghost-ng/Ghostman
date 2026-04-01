@@ -207,53 +207,63 @@ class DocumentStudioPanel(QFrame):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # --- Batch controls toolbar --------------------------------------
-        toolbar = QFrame()
-        toolbar.setObjectName("StudioBatchToolbar")
-        toolbar.setFixedHeight(36)
-        tb_layout = QHBoxLayout(toolbar)
-        tb_layout.setContentsMargins(8, 4, 8, 4)
-        tb_layout.setSpacing(6)
-
-        self._select_all_btn = QPushButton("Select All")
-        self._select_all_btn.setObjectName("StudioSelectAllBtn")
-        self._select_all_btn.setToolTip("Select all documents")
-        self._select_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._select_all_btn.clicked.connect(self._on_select_all)
-        tb_layout.addWidget(self._select_all_btn)
-
-        self._select_none_btn = QPushButton("None")
-        self._select_none_btn.setObjectName("StudioSelectNoneBtn")
-        self._select_none_btn.setToolTip("Deselect all documents")
-        self._select_none_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._select_none_btn.clicked.connect(self._on_select_none)
-        tb_layout.addWidget(self._select_none_btn)
-
-        tb_layout.addStretch()
+        # --- Action bar: recipe combo + apply/cancel -----------------------
+        action_bar = QFrame()
+        action_bar.setObjectName("StudioActionBar")
+        action_bar.setFixedHeight(38)
+        ab_layout = QHBoxLayout(action_bar)
+        ab_layout.setContentsMargins(8, 4, 8, 4)
+        ab_layout.setSpacing(6)
 
         self._recipe_combo = QComboBox()
         self._recipe_combo.setObjectName("StudioRecipeCombo")
         self._recipe_combo.setToolTip("Choose a recipe to apply")
-        self._recipe_combo.setMinimumWidth(100)
-        self._recipe_combo.addItem("(no recipe)", "")
-        tb_layout.addWidget(self._recipe_combo)
+        self._recipe_combo.addItem("\u25bd  Select recipe\u2026", "")
+        ab_layout.addWidget(self._recipe_combo, 1)
 
-        self._apply_recipe_btn = QPushButton("Apply Recipe")
+        self._apply_recipe_btn = QPushButton("\u25b6  Apply")
         self._apply_recipe_btn.setObjectName("StudioApplyRecipeBtn")
-        self._apply_recipe_btn.setToolTip("Apply selected recipe to checked documents")
+        self._apply_recipe_btn.setToolTip("Apply recipe to selected documents")
         self._apply_recipe_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._apply_recipe_btn.clicked.connect(self._on_apply_recipe)
-        tb_layout.addWidget(self._apply_recipe_btn)
+        ab_layout.addWidget(self._apply_recipe_btn)
 
-        self._cancel_batch_btn = QPushButton("Cancel")
+        self._cancel_batch_btn = QPushButton("\u25a0  Cancel")
         self._cancel_batch_btn.setObjectName("StudioCancelBatchBtn")
         self._cancel_batch_btn.setToolTip("Cancel the running batch")
         self._cancel_batch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._cancel_batch_btn.clicked.connect(self._on_cancel_batch)
         self._cancel_batch_btn.setVisible(False)
-        tb_layout.addWidget(self._cancel_batch_btn)
+        ab_layout.addWidget(self._cancel_batch_btn)
 
-        layout.addWidget(toolbar)
+        layout.addWidget(action_bar)
+
+        # --- Selection bar: select all / none -----------------------------
+        select_bar = QFrame()
+        select_bar.setObjectName("StudioSelectBar")
+        select_bar.setFixedHeight(28)
+        sb_layout = QHBoxLayout(select_bar)
+        sb_layout.setContentsMargins(8, 2, 8, 2)
+        sb_layout.setSpacing(6)
+
+        self._select_all_btn = QPushButton("Select All")
+        self._select_all_btn.setObjectName("StudioSelectAllBtn")
+        self._select_all_btn.setToolTip("Select all documents")
+        self._select_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._select_all_btn.setFlat(True)
+        self._select_all_btn.clicked.connect(self._on_select_all)
+        sb_layout.addWidget(self._select_all_btn)
+
+        self._select_none_btn = QPushButton("Deselect All")
+        self._select_none_btn.setObjectName("StudioSelectNoneBtn")
+        self._select_none_btn.setToolTip("Deselect all documents")
+        self._select_none_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._select_none_btn.setFlat(True)
+        self._select_none_btn.clicked.connect(self._on_select_none)
+        sb_layout.addWidget(self._select_none_btn)
+
+        sb_layout.addStretch()
+        layout.addWidget(select_bar)
 
         # --- Recipe library -----------------------------------------------
         self._recipe_library = RecipeLibrary(self._state, container)
@@ -281,11 +291,15 @@ class DocumentStudioPanel(QFrame):
         self._card_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         # Empty-state hint
-        self._empty_hint = QLabel("Drop DOCX files here\u2026")
+        self._empty_hint = QLabel(
+            "Drop .docx files here\n\n"
+            "Create a recipe with the + button above,\n"
+            "then select files and click Apply."
+        )
         self._empty_hint.setObjectName("StudioEmptyHint")
         self._empty_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty_hint.setWordWrap(True)
-        self._empty_hint.setMinimumHeight(80)
+        self._empty_hint.setMinimumHeight(120)
         self._card_layout.addWidget(self._empty_hint)
 
         self._scroll_area.setWidget(self._card_container)
@@ -808,51 +822,53 @@ class DocumentStudioPanel(QFrame):
         # Header bar
         self._header.apply_theme(colors)
 
-        # Batch toolbar — slightly elevated background
-        toolbar = self.findChild(QFrame, "StudioBatchToolbar")
-        if toolbar:
-            toolbar.setStyleSheet(f"""
-                QFrame#StudioBatchToolbar {{
+        # Action bar
+        action_bar = self.findChild(QFrame, "StudioActionBar")
+        if action_bar:
+            action_bar.setStyleSheet(f"""
+                QFrame#StudioActionBar {{
                     background-color: {bg_secondary};
                     border: none;
                     border-bottom: 1px solid {border_secondary};
                 }}
             """)
 
-        # Toolbar buttons — themed with rounded corners and hover
-        tb_btn_style = f"""
+        # Selection bar
+        select_bar = self.findChild(QFrame, "StudioSelectBar")
+        if select_bar:
+            select_bar.setStyleSheet(f"""
+                QFrame#StudioSelectBar {{
+                    background-color: {bg_primary};
+                    border: none;
+                    border-bottom: 1px solid {border_secondary};
+                }}
+            """)
+
+        # Select all / deselect — flat link-style buttons
+        link_btn_style = f"""
             QPushButton {{
-                background-color: {bg_tertiary};
-                color: {text_secondary};
-                border: 1px solid {border_secondary};
-                border-radius: 4px;
-                padding: 4px 12px;
+                background: transparent;
+                color: {primary};
+                border: none;
                 font-size: 11px;
+                padding: 2px 6px;
             }}
             QPushButton:hover {{
-                background-color: {interactive_hover};
                 color: {text_primary};
-                border-color: {border_primary};
-            }}
-            QPushButton:pressed {{
-                background-color: {bg_secondary};
-            }}
-            QPushButton:disabled {{
-                color: {text_disabled};
-                border-color: {bg_tertiary};
+                text-decoration: underline;
             }}
         """
         for btn in (self._select_all_btn, self._select_none_btn):
-            btn.setStyleSheet(tb_btn_style)
+            btn.setStyleSheet(link_btn_style)
 
-        # Apply recipe button — primary colour accent
+        # Apply recipe button — primary colour, bold
         self._apply_recipe_btn.setStyleSheet(f"""
             QPushButton#StudioApplyRecipeBtn {{
                 background-color: {primary};
                 color: {text_primary};
                 border: 1px solid {primary};
                 border-radius: 4px;
-                padding: 4px 12px;
+                padding: 5px 16px;
                 font-size: 11px;
                 font-weight: bold;
             }}
@@ -870,14 +886,14 @@ class DocumentStudioPanel(QFrame):
             }}
         """)
 
-        # Cancel batch button — warning style
+        # Cancel batch button — error/red style
         self._cancel_batch_btn.setStyleSheet(f"""
             QPushButton#StudioCancelBatchBtn {{
                 background-color: {status_error};
                 color: {text_primary};
                 border: 1px solid {status_error};
                 border-radius: 4px;
-                padding: 4px 12px;
+                padding: 5px 16px;
                 font-size: 11px;
                 font-weight: bold;
             }}
@@ -941,17 +957,17 @@ class DocumentStudioPanel(QFrame):
             }}
         """)
 
-        # Empty hint — dashed border drop zone
+        # Empty hint — prominent drop zone
         self._empty_hint.setStyleSheet(f"""
             QLabel#StudioEmptyHint {{
                 color: {text_disabled};
-                font-size: 13px;
-                font-style: italic;
+                font-size: 12px;
+                line-height: 1.6;
                 background: transparent;
                 border: 2px dashed {border_secondary};
-                border-radius: 8px;
-                padding: 24px 16px;
-                margin: 12px;
+                border-radius: 10px;
+                padding: 28px 20px;
+                margin: 16px 12px;
             }}
         """)
 
