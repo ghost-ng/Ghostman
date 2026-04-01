@@ -30,7 +30,10 @@ env/
 
 # PyInstaller
 *.manifest
+# Ignore generated spec files but keep our build spec
 *.spec
+!specter.spec
+
 
 # IDE
 .vscode/
