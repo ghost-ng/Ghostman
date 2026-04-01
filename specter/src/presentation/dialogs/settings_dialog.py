@@ -2522,52 +2522,52 @@ class SettingsDialog(QDialog):
         """Create theme customization tab."""
         tab = QWidget()
         layout = QVBoxLayout()
-        
-        # Theme selection group
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
+
+        # ── Theme Selection group ─────────────────────────────────────────
         theme_group = QGroupBox("Theme Selection")
         theme_layout = QFormLayout()
-        
-        # Current theme label
+        theme_layout.setVerticalSpacing(8)
+        theme_layout.setHorizontalSpacing(12)
+
+        # Current theme label — value portion styled at apply-time
+        current_label_prefix = QLabel("Current Theme:")
         self.current_theme_label = QLabel()
-        self.current_theme_label.setStyleSheet("font-weight: bold; color: #4CAF50;")
-        
-        # Built-in theme selector
+        self.current_theme_label.setObjectName("themeActiveLabel")
+
+        # Built-in theme selector — capped width so it never stretches the dialog
         self.builtin_theme_selector = QComboBox()
         self.builtin_theme_selector.setMinimumWidth(200)
-        
+        self.builtin_theme_selector.setMaximumWidth(320)
+
         # Custom theme selector
         self.custom_theme_selector = QComboBox()
         self.custom_theme_selector.setMinimumWidth(200)
-        
+        self.custom_theme_selector.setMaximumWidth(320)
+
         try:
-            # Try to import theme manager
             from ...ui.themes.theme_manager import get_theme_manager
             theme_manager = get_theme_manager()
-            themes = theme_manager.get_available_themes()
-            
-            # Get built-in and custom themes directly from theme manager
+
             preset_themes = theme_manager.get_preset_themes()
             custom_themes = theme_manager.get_custom_themes()
-            
-            # Populate built-in themes dropdown
+
             if preset_themes:
                 self.builtin_theme_selector.addItems(sorted(preset_themes))
             else:
                 self.builtin_theme_selector.addItem("No built-in themes")
                 self.builtin_theme_selector.setEnabled(False)
-            
-            # Populate custom themes dropdown
+
             if custom_themes:
                 self.custom_theme_selector.addItems(sorted(custom_themes))
             else:
                 self.custom_theme_selector.addItem("No custom themes found")
                 self.custom_theme_selector.setEnabled(False)
-            
-            # Set current theme label and selection
+
             current_theme = theme_manager.current_theme_name
             self.current_theme_label.setText(f"Active: {current_theme}")
-            
-            # Select current theme in appropriate dropdown
+
             if current_theme in preset_themes:
                 index = self.builtin_theme_selector.findText(current_theme)
                 if index >= 0:
@@ -2576,92 +2576,185 @@ class SettingsDialog(QDialog):
                 index = self.custom_theme_selector.findText(current_theme)
                 if index >= 0:
                     self.custom_theme_selector.setCurrentIndex(index)
-            
-            # Connect signals
+
             self.builtin_theme_selector.currentTextChanged.connect(
                 lambda theme: self._on_theme_selected(theme, "builtin"))
             self.custom_theme_selector.currentTextChanged.connect(
                 lambda theme: self._on_theme_selected(theme, "custom"))
-                
+
         except ImportError:
             self.builtin_theme_selector.addItem("Theme system not available")
             self.builtin_theme_selector.setEnabled(False)
             self.custom_theme_selector.setEnabled(False)
             self.current_theme_label.setText("Theme system not available")
-        
-        # Add to layout
+
         theme_layout.addRow("Current Theme:", self.current_theme_label)
         theme_layout.addRow("Built-in Themes:", self.builtin_theme_selector)
         theme_layout.addRow("Custom Themes:", self.custom_theme_selector)
-        
-        # Refresh themes button
+
+        # Refresh button — secondary action, constrained width, right-aligned
+        refresh_row = QHBoxLayout()
         self.refresh_themes_btn = QPushButton("Refresh Themes")
         self.refresh_themes_btn.setFixedHeight(32)
-        self.refresh_themes_btn.setMaximumWidth(200)
+        self.refresh_themes_btn.setMaximumWidth(160)
+        self.refresh_themes_btn.setObjectName("themeRefreshBtn")
         self.refresh_themes_btn.clicked.connect(self._refresh_themes)
-        theme_layout.addRow("", self.refresh_themes_btn)
+        refresh_row.addStretch()
+        refresh_row.addWidget(self.refresh_themes_btn)
+        theme_layout.addRow("", refresh_row)
 
         theme_group.setLayout(theme_layout)
         layout.addWidget(theme_group)
 
-        # Theme Management group
+        # ── Theme Management group ────────────────────────────────────────
         management_group = QGroupBox("Theme Management")
         management_layout = QVBoxLayout()
-        management_layout.setSpacing(8)
+        management_layout.setContentsMargins(10, 10, 10, 10)
+        management_layout.setSpacing(10)
 
-        # Load theme + Open folder — side by side
-        load_theme_layout = QHBoxLayout()
+        # Load + Open folder side by side, each capped in width
+        load_row = QHBoxLayout()
+        load_row.setSpacing(8)
         self.load_theme_btn = QPushButton("Load Theme from File")
         self.load_theme_btn.setFixedHeight(32)
+        self.load_theme_btn.setMaximumWidth(200)
+        self.load_theme_btn.setObjectName("themeSecondaryBtn")
         self.load_theme_btn.clicked.connect(self._load_theme_from_file)
-        load_theme_layout.addWidget(self.load_theme_btn)
+        load_row.addWidget(self.load_theme_btn)
 
         self.open_themes_folder_btn = QPushButton("Open Themes Folder")
         self.open_themes_folder_btn.setFixedHeight(32)
+        self.open_themes_folder_btn.setMaximumWidth(200)
+        self.open_themes_folder_btn.setObjectName("themeSecondaryBtn")
         self.open_themes_folder_btn.clicked.connect(self._open_themes_folder)
-        load_theme_layout.addWidget(self.open_themes_folder_btn)
+        load_row.addWidget(self.open_themes_folder_btn)
+        load_row.addStretch()
+        management_layout.addLayout(load_row)
 
-        management_layout.addLayout(load_theme_layout)
-
-        # Export theme button
+        # Export button — standalone, constrained width
+        export_row = QHBoxLayout()
         self.export_theme_btn = QPushButton("Export Current Theme")
         self.export_theme_btn.setFixedHeight(32)
-        self.export_theme_btn.setMaximumWidth(250)
+        self.export_theme_btn.setMaximumWidth(200)
+        self.export_theme_btn.setObjectName("themeSecondaryBtn")
         self.export_theme_btn.clicked.connect(self._export_current_theme)
-        management_layout.addWidget(self.export_theme_btn)
+        export_row.addWidget(self.export_theme_btn)
+        export_row.addStretch()
+        management_layout.addLayout(export_row)
 
-        # Theme info
-        info_label = QLabel("Place .json theme files in the themes folder and click 'Refresh Themes' to load them.")
-        info_label.setWordWrap(True)
-        info_label.setStyleSheet("color: #888; font-style: italic;")
-        management_layout.addWidget(info_label)
+        # Info hint — styled at apply-time via objectName
+        self.management_info_label = QLabel(
+            "Place .json theme files in the themes folder and click 'Refresh Themes' to load them."
+        )
+        self.management_info_label.setWordWrap(True)
+        self.management_info_label.setObjectName("themeHintLabel")
+        management_layout.addWidget(self.management_info_label)
 
         management_group.setLayout(management_layout)
         layout.addWidget(management_group)
 
-        # Theme editor button
+        # ── Theme Customization group ─────────────────────────────────────
         editor_group = QGroupBox("Theme Customization")
         editor_layout = QVBoxLayout()
+        editor_layout.setContentsMargins(10, 10, 10, 10)
+        editor_layout.setSpacing(10)
 
+        # Open Theme Editor — the most prominent action on this tab
+        editor_row = QHBoxLayout()
         self.open_theme_editor_btn = QPushButton("Open Theme Editor")
-        self.open_theme_editor_btn.setFixedHeight(32)
-        self.open_theme_editor_btn.setMaximumWidth(250)
+        self.open_theme_editor_btn.setFixedHeight(36)
+        self.open_theme_editor_btn.setMaximumWidth(220)
+        self.open_theme_editor_btn.setObjectName("themeEditorBtn")
         self.open_theme_editor_btn.clicked.connect(self._open_theme_editor)
-        editor_layout.addWidget(self.open_theme_editor_btn)
-        
-        # Theme info label
-        self.theme_info_label = QLabel("Use the theme editor to customize colors, create new themes, and import/export theme configurations.")
+        editor_row.addWidget(self.open_theme_editor_btn)
+        editor_row.addStretch()
+        editor_layout.addLayout(editor_row)
+
+        self.theme_info_label = QLabel(
+            "Use the theme editor to customize colors, create new themes, "
+            "and import/export theme configurations."
+        )
         self.theme_info_label.setWordWrap(True)
-        self.theme_info_label.setStyleSheet("color: #888; font-style: italic;")
+        self.theme_info_label.setObjectName("themeHintLabel")
         editor_layout.addWidget(self.theme_info_label)
-        
+
         editor_group.setLayout(editor_layout)
         layout.addWidget(editor_group)
-        
+
         layout.addStretch()
         tab.setLayout(layout)
         self.tab_widget.addTab(tab, "Themes")
-    
+
+    def _apply_theme_tab_colors(self, colors):
+        """Apply theme-aware inline styles to dynamic Themes-tab widgets.
+
+        Called from _apply_theme() after the global stylesheet is set so that
+        widgets whose color must reflect runtime theme values (active theme
+        name, hint labels, action buttons) are updated individually.
+        """
+        try:
+            # "Active: <name>" label — success color so it reads as a status
+            if hasattr(self, 'current_theme_label') and self.current_theme_label:
+                self.current_theme_label.setStyleSheet(
+                    f"font-weight: bold; color: {colors.status_success};"
+                )
+
+            # Hint / info labels — use text_tertiary for de-emphasised hints
+            hint_style = (
+                f"color: {colors.text_tertiary}; font-style: italic;"
+            )
+            if hasattr(self, 'management_info_label') and self.management_info_label:
+                self.management_info_label.setStyleSheet(hint_style)
+            if hasattr(self, 'theme_info_label') and self.theme_info_label:
+                self.theme_info_label.setStyleSheet(hint_style)
+
+            # Refresh — secondary action: interactive background, normal text
+            secondary_btn_style = f"""
+                QPushButton {{
+                    background-color: {colors.interactive_normal};
+                    color: {colors.text_primary};
+                    border: 1px solid {colors.border_primary};
+                    border-radius: 4px;
+                    padding: 4px 12px;
+                    font-size: 12px;
+                }}
+                QPushButton:hover {{
+                    background-color: {colors.interactive_hover};
+                    border-color: {colors.secondary};
+                }}
+                QPushButton:pressed {{
+                    background-color: {colors.interactive_active};
+                }}
+            """
+            for btn_attr in ('refresh_themes_btn', 'load_theme_btn',
+                             'open_themes_folder_btn', 'export_theme_btn'):
+                btn = getattr(self, btn_attr, None)
+                if btn:
+                    btn.setStyleSheet(secondary_btn_style)
+
+            # Open Theme Editor — primary accent, most prominent button
+            if hasattr(self, 'open_theme_editor_btn') and self.open_theme_editor_btn:
+                self.open_theme_editor_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {colors.primary};
+                        color: {colors.text_primary};
+                        border: 1px solid {colors.primary_hover};
+                        border-radius: 4px;
+                        padding: 4px 16px;
+                        font-size: 13px;
+                        font-weight: bold;
+                    }}
+                    QPushButton:hover {{
+                        background-color: {colors.primary_hover};
+                        border-color: {colors.primary};
+                    }}
+                    QPushButton:pressed {{
+                        background-color: {colors.interactive_active};
+                    }}
+                """)
+        except Exception as e:
+            logger.debug(f"Failed to apply theme tab colors: {e}")
+
     def _on_theme_selected(self, theme_name: str, source: str):
         """Handle theme selection change from either dropdown."""
         # Skip invalid selections
@@ -4516,6 +4609,9 @@ class SettingsDialog(QDialog):
 
             # Update button styles to match new theme
             self._apply_uniform_button_styles()
+
+            # Update Themes tab widget-level colors (active label, hint labels, buttons)
+            self._apply_theme_tab_colors(theme_manager.current_theme)
 
             logger.debug(f"Applied theme: {theme_manager.current_theme_name}")
         except ImportError:
