@@ -772,8 +772,10 @@ class FileContextItem(QFrame):
         )
         self.type_label.setStyleSheet(
             f"QLabel {{ color: {pill_text}; background: transparent; border: none; "
-            f"margin: 0; padding: 0; }}"
+            f"margin: 0; padding: 0; font-size: 8pt; }}"
         )
+        # Re-apply the icon after styling to preserve it
+        self._update_type_icon()
     
     def update_status(self, status: str, progress: float = 0.0, already_processed: bool = False):
         """Update processing status and progress."""
