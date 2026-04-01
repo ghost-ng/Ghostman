@@ -44,11 +44,20 @@ env/
 logs/
 *.log
 
-# Local configuration
+# Local / AI tool configuration
 .env
 .env.local
 settings.local.json
 .claude/
+opencode.json
+
+# Backup files
+*.bak
+*.backup
+backup/
+
+# Design source files
+*.pptx
 
 # Test coverage
 htmlcov/
@@ -81,5 +90,3 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
-
-opencode.json
