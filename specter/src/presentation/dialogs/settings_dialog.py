@@ -56,6 +56,7 @@ class SettingsDialog(QDialog):
         """Initialize the user interface."""
         self.setWindowTitle("Specter Settings")
         self.setModal(False)
+        self.setMinimumSize(420, 350)
         self.resize(600, 500)
         # Non-modal tool window that doesn't block main app interaction
         self.setWindowFlags(
@@ -1110,11 +1111,9 @@ class SettingsDialog(QDialog):
                 }}
                 QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{
                     image: none;
-                    border-left: 5px solid transparent;
-                    border-right: 5px solid transparent;
-                    border-bottom: 6px solid {colors.text_primary};
-                    width: 0px;
-                    height: 0px;
+                    border: none;
+                    width: 10px;
+                    height: 10px;
                 }}
                 QSpinBox::down-button, QDoubleSpinBox::down-button {{
                     subcontrol-origin: padding;
@@ -1134,11 +1133,9 @@ class SettingsDialog(QDialog):
                 }}
                 QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{
                     image: none;
-                    border-left: 5px solid transparent;
-                    border-right: 5px solid transparent;
-                    border-top: 6px solid {colors.text_primary};
-                    width: 0px;
-                    height: 0px;
+                    border: none;
+                    width: 10px;
+                    height: 10px;
                 }}
                 """
 
@@ -4732,11 +4729,9 @@ class SettingsDialog(QDialog):
             }
             QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {
                 image: none;
-                border-left: 5px solid transparent;
-                border-right: 5px solid transparent;
-                border-bottom: 6px solid #ffffff;
-                width: 0px;
-                height: 0px;
+                border: none;
+                width: 10px;
+                height: 10px;
             }
             QSpinBox::down-button, QDoubleSpinBox::down-button {
                 subcontrol-origin: padding;
@@ -4753,11 +4748,9 @@ class SettingsDialog(QDialog):
             }
             QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
                 image: none;
-                border-left: 5px solid transparent;
-                border-right: 5px solid transparent;
-                border-top: 6px solid #ffffff;
-                width: 0px;
-                height: 0px;
+                border: none;
+                width: 10px;
+                height: 10px;
             }
 
             /* ComboBox styling */
