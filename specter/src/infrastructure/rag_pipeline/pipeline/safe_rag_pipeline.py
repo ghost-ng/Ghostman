@@ -19,7 +19,6 @@ import os
 import tempfile
 
 import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
 
 from ..config.rag_config import RAGPipelineConfig, get_config, validate_config
 from ..document_loaders.loader_factory import DocumentLoaderFactory, load_document
@@ -80,14 +79,16 @@ class InMemoryVectorStore:
         if not self.documents:
             return []
         
-        # Extract embeddings and calculate similarities
+        # Extract embeddings and calculate cosine similarities via numpy
         embeddings = np.array([doc[2] for doc in self.documents])
-        
-        # Ensure query_embedding is 2D for sklearn
+
         if query_embedding.ndim == 1:
             query_embedding = query_embedding.reshape(1, -1)
-        
-        similarities = cosine_similarity(query_embedding, embeddings)[0]
+
+        # cosine_similarity = (A · B) / (||A|| * ||B||)
+        query_norm = query_embedding / (np.linalg.norm(query_embedding, axis=1, keepdims=True) + 1e-10)
+        emb_norm = embeddings / (np.linalg.norm(embeddings, axis=1, keepdims=True) + 1e-10)
+        similarities = (query_norm @ emb_norm.T)[0]
         
         # Get top-k indices
         top_indices = np.argsort(similarities)[::-1][:top_k]

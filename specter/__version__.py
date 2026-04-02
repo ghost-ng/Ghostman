@@ -3,7 +3,7 @@
 # Version components
 VERSION_MAJOR = 0
 VERSION_MINOR = 5
-VERSION_PATCH = 4
+VERSION_PATCH = 5
 VERSION_INFO = (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH)
 
 # Dynamically construct version string

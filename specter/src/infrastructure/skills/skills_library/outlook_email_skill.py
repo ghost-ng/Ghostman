@@ -582,29 +582,42 @@ class OutlookEmailSkill(BaseSkill):
 
     @staticmethod
     def _semantic_rank(items: list, query: str) -> list:
-        """Rank items by semantic relevance using TF-IDF or word overlap."""
-        try:
-            from sklearn.feature_extraction.text import TfidfVectorizer
-            from sklearn.metrics.pairwise import cosine_similarity
+        """Rank items by semantic relevance using weighted word overlap."""
+        import math
+        query_words = set(query.lower().split())
+        if not query_words or not items:
+            return items
 
-            texts = [
-                f"{item.get('subject', '')} {item.get('body_preview', '')} "
-                f"{item.get('sender_name', '')}"
-                for item in items
-            ]
-            texts.insert(0, query)
-            vectorizer = TfidfVectorizer(stop_words='english', max_features=5000)
-            tfidf_matrix = vectorizer.fit_transform(texts)
-            similarities = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:]).flatten()
-            ranked = sorted(zip(items, similarities), key=lambda x: x[1], reverse=True)
-            return [item for item, _ in ranked]
-        except ImportError:
-            # Fallback: simple word overlap
-            query_words = set(query.lower().split())
-            def score(item):
-                text = f"{item.get('subject', '')} {item.get('body_preview', '')}".lower()
-                return sum(1 for w in query_words if w in text)
-            return sorted(items, key=score, reverse=True)
+        # Build simple IDF from the corpus for better ranking
+        texts = [
+            f"{item.get('subject', '')} {item.get('body_preview', '')} "
+            f"{item.get('sender_name', '')}".lower()
+            for item in items
+        ]
+        n = len(texts)
+        doc_freq: dict = {}
+        for text in texts:
+            seen = set(text.split())
+            for w in seen:
+                doc_freq[w] = doc_freq.get(w, 0) + 1
+
+        def score(item, text):
+            words = text.split()
+            if not words:
+                return 0.0
+            total = 0.0
+            for w in query_words:
+                if w in text:
+                    idf = math.log((n + 1) / (doc_freq.get(w, 0) + 1)) + 1
+                    total += idf
+            return total
+
+        ranked = sorted(
+            zip(items, texts),
+            key=lambda pair: score(pair[0], pair[1]),
+            reverse=True,
+        )
+        return [item for item, _ in ranked]
 
     async def on_success(self, result: SkillResult) -> None:
         logger.info(f"Outlook email operation succeeded: {result.message}")
