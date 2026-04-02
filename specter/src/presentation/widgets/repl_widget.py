@@ -2453,9 +2453,6 @@ class REPLWidget(QWidget):
             self.conversation_manager = ConversationManager()
             if self.conversation_manager.initialize():
                 logger.info("✓ Conversation manager initialized successfully")
-
-                # OPTIMIZATION: Set file browser reference in AI service for RAG query optimization
-                self._set_file_browser_reference_in_ai_service()
             else:
                 logger.error("✗ Failed to initialize conversation manager")
                 self.conversation_manager = None
