@@ -13,6 +13,7 @@ import atexit
 import faulthandler
 from typing import Optional
 from PyQt6.QtWidgets import QApplication
+from specter.__version__ import __version__
 from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QIcon
 
@@ -50,7 +51,7 @@ class SpecterApplication:
         # Create Qt application
         app = QApplication(sys.argv)
         app.setApplicationName("SpecterApp")
-        app.setApplicationVersion("1.0.0")
+        app.setApplicationVersion(__version__)
         app.setOrganizationName("Specter")
         app.setQuitOnLastWindowClosed(False)  # Keep running when main window closes
         
@@ -336,7 +337,7 @@ def parse_arguments():
     parser.add_argument(
         "--version",
         action="version",
-        version="Specter 1.0.0"
+        version=f"Specter {__version__}"
     )
     parser.add_argument(
         "--new",

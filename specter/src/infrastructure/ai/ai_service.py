@@ -428,10 +428,12 @@ class AIService:
                             msg["content"] = _memgpt_orch.build_system_prompt(msg["content"])
                             break
 
-                    # Force function calling (send_message is the only way to respond)
+                    # Let the model decide when to use tools (auto) rather than
+                    # forcing a tool call on every message — 'required' caused
+                    # spurious web_search / outlook calls for casual messages.
                     if tool_definitions:
-                        api_params['tool_choice'] = 'required'
-                        logger.info("MemGPT mode active: tool_choice=required, core memory injected")
+                        api_params['tool_choice'] = 'auto'
+                        logger.info("MemGPT mode active: tool_choice=auto, core memory injected")
 
                     # Check context eviction before sending
                     if _memgpt_orch.should_evict(api_messages):

@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Git Rules
+
+**NEVER commit or push unless the user explicitly asks you to.** Stage changes and prepare commit messages, but wait for the user's go-ahead before running `git commit` or `git push`.
+
 ## Project Overview
 
 Specter is a PyQt6-based desktop AI assistant featuring a floating avatar interface ("Spector"), multi-provider AI chat, tabbed conversations, RAG file context, and 39 themes. Windows AppData storage for all configuration, databases, and logs.
