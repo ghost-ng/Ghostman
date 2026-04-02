@@ -1373,9 +1373,9 @@ class REPLWidget(QWidget):
         self._personality_idle.idle_comment_requested.connect(self._on_personality_idle)
 
         # Thread-safe greeting signal (background thread → main thread)
-        self._greeting_text_ready.connect(
-            lambda text: self.append_output(text, "response")
-        )
+        def _show_greeting(text):
+            self.append_output(f"`{self._timestamp_line()}`\n{text}", "response")
+        self._greeting_text_ready.connect(_show_greeting)
 
         # Background summarization state
         self.summarization_queue: List[str] = []  # conversation IDs
@@ -1477,6 +1477,12 @@ class REPLWidget(QWidget):
         except Exception:
             return None
 
+    @staticmethod
+    def _timestamp_line() -> str:
+        """Return a small readable local-time timestamp for chat messages."""
+        from datetime import datetime
+        return datetime.now().strftime("%I:%M %p").lstrip("0")
+
     def _get_avatar_label(self) -> str:
         """Get current avatar's response label (e.g., '\U0001f47b **Specter:**')."""
         avatar = self._get_current_avatar()
@@ -1521,7 +1527,7 @@ class REPLWidget(QWidget):
 
             if not ai_service or not ai_service.is_initialized:
                 logger.info("AI service not ready — using static persona greeting")
-                self.append_output(static_greeting, "response")
+                self.append_output(f"`{self._timestamp_line()}`\n{static_greeting}", "response")
                 return
 
             # Capture for closure
@@ -8312,15 +8318,15 @@ class REPLWidget(QWidget):
             
             if message.role == MessageRole.USER:
                 # User messages - show with timestamp and icon
-                timestamp = message.timestamp.strftime("%m/%d %H:%M")
-                self.append_output(f"[{timestamp}] 👤 You:", "input")
+                timestamp = message.timestamp.strftime("%m/%d %I:%M %p").lstrip("0")
+                self.append_output(f"`{timestamp}`\n👤 **You:**", "input")
                 # Render the actual message content preserving markdown
                 self.append_output(message.content, "input")
-                
+
             elif message.role == MessageRole.ASSISTANT:
                 # AI messages - show with timestamp and proper markdown rendering
-                timestamp = message.timestamp.strftime("%m/%d %H:%M")
-                self.append_output(f"[{timestamp}] 👻 AI:", "response")
+                timestamp = message.timestamp.strftime("%m/%d %I:%M %p").lstrip("0")
+                self.append_output(f"`{timestamp}`\n{self._get_avatar_label()}", "response")
                 # Render the AI response with full markdown support (including code blocks)
                 self.append_output(message.content, "response")
             
@@ -8704,7 +8710,7 @@ class REPLWidget(QWidget):
         # Display command in output with better separation
         # Show original command with mentions for context
         display_command = original_command if original_command != command else command
-        self.append_output(f"👤 **You:**\n{display_command}", "input")
+        self.append_output(f"`{self._timestamp_line()}`\n👤 **You:**\n{display_command}", "input")
         self.append_output("", "normal")  # Add spacing
 
         # Clear input
@@ -10914,10 +10920,10 @@ def test_theme():
                     self._thinking_started = False
                     self.output_display._append_raw_html('</div><br>')
 
-                # First chunk — show avatar label, then start streaming area
+                # First chunk — show timestamp + avatar label, then start streaming area
                 self._streaming_started = True
                 self._streaming_text = ""
-                self.append_output(self._get_avatar_label(), "response")
+                self.append_output(f"`{self._timestamp_line()}`\n{self._get_avatar_label()}", "response")
 
                 # Record cursor position for later markdown re-render
                 browser = self.output_display.text_browser
@@ -11081,7 +11087,7 @@ def test_theme():
                         logger.debug("Empty AI response after tool calls, skipping display")
                 elif not is_empty_response:
                     # Non-streaming path — display full response
-                    self.append_output(self._get_avatar_label(), "response")
+                    self.append_output(f"`{self._timestamp_line()}`\n{self._get_avatar_label()}", "response")
                     self.append_output(response, "response")
                 else:
                     # Empty non-streamed response after tool calls — skip
@@ -11451,15 +11457,23 @@ def test_theme():
                             # Unescape HTML entities that may have been stored in the database
                             clean_content = html.unescape(clean_content)
 
-                            # Display user message with role label, matching normal conversation format
-                            self.append_output(f"👤 **You:**\n{clean_content}", "input")
+                            # Display user message with timestamp and role label
+                            if hasattr(message, 'timestamp') and message.timestamp:
+                                ts = message.timestamp.strftime("%m/%d %I:%M %p").lstrip("0")
+                            else:
+                                ts = ""
+                            ts_prefix = f"`{ts}`\n" if ts else ""
+                            self.append_output(f"{ts_prefix}👤 **You:**\n{clean_content}", "input")
                             self.append_output("", "normal")  # Add spacing after user message
                         elif message.role.value == 'assistant':
                             # Unescape HTML entities that may have been stored in the database
                             clean_content = html.unescape(message.content)
 
-                            # Display assistant message with role label, matching normal conversation format
-                            self.append_output(self._get_avatar_label(), "response")
+                            # Display assistant message with timestamp and role label
+                            ts_prefix = ""
+                            if hasattr(message, 'timestamp') and message.timestamp:
+                                ts_prefix = f"`{message.timestamp.strftime('%m/%d %I:%M %p').lstrip('0')}`\n"
+                            self.append_output(f"{ts_prefix}{self._get_avatar_label()}", "response")
                             self.append_output(clean_content, "response")
                             # Add spacing and divider after assistant message (matching active REPL format)
                             self.append_output("", "normal")
