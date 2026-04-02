@@ -147,7 +147,7 @@ class ToolCallingBridge:
             return ""
 
         USAGE_EXAMPLES = {
-            "web_search": "User asks 'search for penguins' or 'what is quantum computing' → call web_search with the query.",
+            "web_search": "ONLY when user explicitly says 'search for X', 'look up X', 'find information about X', or asks a specific factual question you cannot answer. Do NOT search for greetings, casual chat, 'test', opinions, or anything you can answer yourself.",
             "docx_formatter": "User asks to FORMAT, EDIT, FIX, STANDARDIZE, REFORMAT, PROOFREAD, CLEAN UP, or POLISH a .docx file → call docx_formatter with the file_path and appropriate operations. Operations: standardize_fonts, fix_margins, normalize_spacing, fix_bullets, fix_spelling, fix_case, normalize_headings, find_replace, set_font_color, set_alignment, set_indent. IMPORTANT: When the user uploads a .docx and says 'edit this' or 'fix this' or 'help me with this document', call docx_formatter immediately with common operations like ['standardize_fonts', 'fix_margins', 'normalize_spacing', 'fix_spelling']. Do NOT use docx_formatter for summarizing, reading, analyzing, or asking questions about document content — those are normal AI tasks using file context.",
             "screen_capture": "User says 'take a screenshot' or 'capture my screen' → call screen_capture.",
             "task_tracker": "User says 'add a task' or 'show my tasks' → call task_tracker.",
@@ -182,7 +182,13 @@ class ToolCallingBridge:
             "You have access to tools that let you perform actions on the user's local computer.",
             "When a user asks to search the web, format/reformat documents, capture the screen, draft/search email, or manage calendar — USE your tools.",
             "When a user asks to summarize, analyze, read, or ask questions about an uploaded document — do NOT use tools; use the file context already provided to answer directly.",
-            "IMPORTANT: For web_search, call it ONCE with a well-crafted query. Do NOT make multiple search calls for the same question — combine your information needs into one query. If the first search returns results, use them to respond immediately instead of searching again.",
+            "",
+            "CRITICAL — web_search rules:",
+            "- ONLY call web_search when the user EXPLICITLY asks to search the web or asks a factual question you cannot answer from your training data.",
+            "- Do NOT call web_search for greetings, small talk, 'test', 'hello', opinions, coding help, creative writing, or general conversation.",
+            "- When you DO search, call it ONCE with a well-crafted query. Do NOT make multiple search calls for the same question.",
+            "- If unsure whether to search, just respond normally — do NOT search.",
+            "",
             "IMPORTANT: You CAN access local files on the user's computer through your tools. "
             "When a user provides a file path (like C:/Users/.../file.docx), use the appropriate tool. "
             "Do NOT say you cannot access local files.",
