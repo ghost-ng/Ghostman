@@ -13,7 +13,6 @@ import atexit
 import faulthandler
 from typing import Optional
 from PyQt6.QtWidgets import QApplication
-from specter.__version__ import __version__
 from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QIcon
 
@@ -21,6 +20,7 @@ from PyQt6.QtGui import QIcon
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
+from specter.__version__ import __version__
 from specter.src.infrastructure.logging.logging_config import setup_logging, get_performance_logger
 from specter.src.application.app_coordinator import AppCoordinator
 
